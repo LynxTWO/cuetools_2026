@@ -266,6 +266,11 @@ namespace CUETools.Processor
                         try { Returns(sb, Path.GetFileNameWithoutExtension(GetArg(sb, 0))); }
                         catch { return false; }
                         return true;
+                    case "replace":
+                        if (positions.Count != 3)
+                            return false;
+                        Returns(sb, GetArg(sb, 0).Replace(GetArg(sb, 1), GetArg(sb, 2)));
+                        return true;
                 }
                 return false;
             }
