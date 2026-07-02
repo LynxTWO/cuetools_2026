@@ -107,6 +107,13 @@ namespace CUETools.Codecs
 			fill();
 		}
 
+		// Refills the bit cache to at least 56 bits by reading raw bytes through bptr_m.
+		// INVARIANT (unchecked here): this dereferences *bptr_m++ with no comparison against
+		// buffer_len_m, so it will read past the end of the input if the decoder asks for
+		// more bits than the buffer holds. Every caller must guarantee the backing buffer has
+		// enough trailing bytes (frame length known ahead, or padding) before decoding
+		// attacker-controlled data. Adding a bounds check here is behavior-affecting (it would
+		// change the hot decode loop) and is tracked as an unknown, not fixed in this pass.
 		public void fill()
 		{
             while (have_bits_m < 56)

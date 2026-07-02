@@ -88,6 +88,10 @@ namespace CUETools.Codecs.libFLAC
             m_initialized = false;
             m_finalSampleCount = -1;
             m_samplesWritten = 0;
+            // These delegates are handed to native libFLAC and stored in instance fields on
+            // purpose: the GC must not collect them while the native encoder can still call
+            // back. A local variable would be reclaimed and the next native callback would
+            // jump into freed memory. Keep them field-rooted for the encoder's whole lifetime.
             m_write_callback = StreamEncoderWriteCallback;
             m_seek_callback = StreamEncoderSeekCallback;
             m_tell_callback = StreamEncoderTellCallback;
