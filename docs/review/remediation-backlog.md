@@ -82,7 +82,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Scope (user):** improve the LAME MP3 encoder enough to justify a version 4 release (stuck at 3.100 since 2017). Source at `C:\Users\usaft\Downloads\lame-3.100`. Separate from CUETools; start after the CUETools decisions are resolved. Permission granted to run any tests needed.
 - **Next step:** build 3.100 as a baseline; assess plausible 20-year gains (AVX2 SIMD for FFT/psychoacoustics/quantization hot loops — Zen 3 is AVX2, not AVX-512; multithreaded frame encoding; build/CI modernization; VBR/reservoir quality tuning) and quantify with speed + quality benchmarks before proposing a v4 feature set. Bench on the 5950X (see hardware note).
 - **Confidence:** unscoped; needs the baseline build + benchmark pass first.
-- **Status:** open (not started; queued after CUETools)
+- **Status 2026-07-02:** baseline BUILT + BENCHMARKED + proposed (`docs/review/lame-v4-proposal.md`). Measured: LAME 3.100 is single-threaded (uses 1/32 cores), SIMD stuck at SSE1, `-q0` only 17× realtime. v4 case: first multithreaded LAME (flagship), AVX2 SIMD, CMake/CI/tests, fuzz mpglib, loudness updates. Awaiting user's pick of where to start (recommended: frontend/batch multithreading).
 
 ## Ordering
 
