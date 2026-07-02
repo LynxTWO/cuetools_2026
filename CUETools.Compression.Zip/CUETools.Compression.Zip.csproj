@@ -31,7 +31,14 @@
     <ProjectReference Include="..\CUETools.Compression\CUETools.Compression.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- SharpZipLib upgrade (decision D4 / R6). net47 and netstandard2.0 use the current NuGet
+       package (0.85.5 from 2010 predated every modern security fix). net20 is kept on the
+       vendored DLL because modern SharpZipLib dropped net20 support; that target ships for the
+       legacy plugin surface and is unchanged. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net20'">
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net20'">
     <Reference Include="ICSharpCode.SharpZipLib">
       <HintPath>..\ThirdParty\ICSharpCode.SharpZipLib.dll</HintPath>
     </Reference>

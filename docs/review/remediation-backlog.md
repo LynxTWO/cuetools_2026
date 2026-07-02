@@ -34,9 +34,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Note:** traversal CVE vector not reachable (Test-based in-memory read, pass 07). Still upgrade for hygiene.
 - **Next step:** replace Win32+x64 DLL with current unrar; confirm P/Invoke signatures; re-test RAR-input flow.
 
-### R6. SharpZipLib upgrade (decision D4) — bucket B, approved
+### R6. SharpZipLib upgrade (decision D4) — DONE 2026-07-02
 
-- **Next step:** replace vendored 0.85.5 DLL with current NuGet package; adapt `CUETools.Compression.Zip` API; re-test.
+- SharpZipLib 1.4.2 via NuGet for net47/netstandard2.0 (net20 keeps vendored 0.85.5). Password path adapted for the modern API (up-front password for AES). Packaging scripts fixed. Verified with a net8 round-trip harness (6/6 checks incl. AES).
 
 ### R7. MusicBrainz client replacement (decision D6) — bucket B, approved conditional
 

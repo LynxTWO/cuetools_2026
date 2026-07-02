@@ -70,13 +70,10 @@ namespace CUETools.Compression.Zip
 
 		public override int Read(byte[] buffer, int offset, int count)
 		{
-			if (position == 0 && zipEntry.IsCrypted && ((ZipInputStream)zipStream).Password == null && PasswordRequired != null)
-			{
-				CompressionPasswordRequiredEventArgs e = new CompressionPasswordRequiredEventArgs();
-				PasswordRequired(this, e);
-				if (e.ContinueOperation && e.Password.Length > 0)
-					((ZipInputStream)zipStream).Password = e.Password;
-			}
+			// Encryption note: the password must already be set on the ZipFile before the entry
+			// stream is opened (modern SharpZipLib needs it up front for AES; GetInputStream on
+			// an encrypted entry fails otherwise). ZipCompressionProvider.Decompress requests and
+			// sets it before constructing this stream, so no lazy password handling happens here.
 			// TODO: always save to a local temp circular buffer for optimization of the backwards seek.
 			int total = zipStream.Read(buffer, offset, count);
 			position += total;
