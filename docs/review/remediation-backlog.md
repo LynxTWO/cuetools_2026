@@ -42,11 +42,10 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Next step:** write a scope first (call sites, consumed data shape, MB v2 JSON + Cover Art Archive, rate-limit/user-agent). Go/no-go from the scope. Highest-risk item; do last.
 
-### R8. CUEControls resgen under dotnet build (decision D7) — bucket A, approved
+### R8. CUEControls resgen under dotnet build (decision D7) — PARTIAL, 2026-07-02
 
-- **Where:** WinForms projects (`CUEControls.csproj` et al.): MSB3822/MSB3823.
-- **Next step:** add `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions`; confirm clean `dotnet build` of the GUI chain and that devenv/CI still build identically.
-- **Verify:** `dotnet build` of CUETools GUI succeeds locally; CI stays green.
+- **Done:** repo-root `Directory.Build.targets` (Core-MSBuild-gated) makes all SDK-style net47 first-party projects build under `dotnet build`; zero impact on the shipping devenv/CI build.
+- **Remaining (folded into R12):** SDK-style conversion of the old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`, old-style `CLParity`/`FLACCL`) so they too `dotnet build`. Needs GUI runtime verification; not a blind headless change.
 
 ### R9. ProxyPassword stored plaintext at rest (F1) — bucket B, risk medium
 

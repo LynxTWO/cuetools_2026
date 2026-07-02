@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Build modernization (decision D7 / remediation R8): let first-party WinForms projects that
+    hold binary .resx resources build under the .NET SDK (`dotnet build`), not only full Visual
+    Studio / devenv. Core MSBuild's GenerateResource cannot serialize non-string resources
+    without the preserialized path plus System.Resources.Extensions (errors MSB3822/MSB3823).
+
+    Gated on $(MSBuildRuntimeType) == 'Core' ON PURPOSE: this applies ONLY to `dotnet build`.
+    Under full MSBuild (devenv / the CI + release workflows that produce the shipping binaries)
+    this file is a complete no-op, so the shipping build's resource format and runtime
+    dependencies are provably unchanged. The classic full-framework resgen keeps handling
+    binary resources there with no extra runtime DLL. This keeps the local-dev affordance from
+    leaking into what users download.
+
+    Further scope:
+      - net47 only. net20 cannot consume System.Resources.Extensions.
+      - ThirdParty excluded by path (taglib-sharp already has its own Directory.Build.* and is
+        excluded automatically; this covers the rest).
+      - C++ (.vcxproj) and the .vdproj installer never set these TFM properties.
+
+    Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here, so
+    the old-style WinForms GUIs (CUETools, CUERipper, CUEPlayer, eac3ui, and the old-style
+    CLParity/FLACCL) still need `dotnet build` support via SDK-style conversion (tracked under
+    R12). SDK-style first-party net47 projects build under `dotnet build` with this in place.
+  -->
+
+  <PropertyGroup>
+    <_AdcCoreNet47Resx Condition="'$(MSBuildRuntimeType)' == 'Core' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcCoreNet47Resx>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

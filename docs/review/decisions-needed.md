@@ -39,11 +39,12 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Evidence:** `MusicBrainz/` mirrors the abandoned musicbrainz-sharp (v1.1-era XML API). `MusicBrainzObject.cs:393` uses the old API.
 - **Plan:** first produce a written scope (call sites, data shape consumed by CUERipper/eac3ui, the current MB web service v2 JSON endpoints, Cover Art Archive for art, rate-limit + user-agent rules). Decide go/no-go from that scope. This is the highest-risk item; keep it last.
 
-### D7. CUEControls resgen under dotnet build — APPROVED (fix)
+### D7. CUEControls resgen under dotnet build — PARTIALLY DONE; old-style GUIs deferred to R12
 
 - **Decision:** fix so the solution builds without full Visual Studio.
-- **Evidence:** `CUEControls.csproj` (and likely other WinForms projects) fails `dotnet build` with MSB3822/MSB3823 (non-string resources need `System.Resources.Extensions` + `GenerateResourceUsePreserializedResources=true`). Main GUI also needs `al.exe` for satellite assemblies.
-- **Plan:** add `GenerateResourceUsePreserializedResources=true` and the `System.Resources.Extensions` package to the WinForms projects; confirm a clean `dotnet build` of the GUI chain. Verify devenv/CI still builds identically.
+- **What shipped 2026-07-02:** `Directory.Build.targets` at repo root adds `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions` for net47 first-party projects, **gated on `$(MSBuildRuntimeType) == 'Core'`** so it applies ONLY to `dotnet build` and is a provable no-op under devenv/CI (the shipping build's resource format and runtime deps are unchanged — important because CUEControls loads binary icons at runtime, and forcing preserialized resources into the shipping build would have required deploying a new DLL). Result: all **SDK-style** net47 first-party projects (CUEControls + the codec/lib projects) now build under `dotnet build`.
+- **Why not complete:** the old-style (non-SDK) csproj do not restore a PackageReference injected via the shared targets, so the old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`, and old-style `CLParity`/`FLACCL`) still cannot `dotnet build`. The clean fix is SDK-style conversion of those projects — real work that needs the GUI run to verify resource loading (cannot be done headless) and belongs to the modernization program (R12), not a blind headless change to the shipping GUIs.
+- **Verified:** CUEControls builds under `dotnet build`; TestParity 18/18, TestCodecs 34/34 green; devenv/CI unaffected by construction (Core-gated).
 
 ## Still deferred (your earlier call)
 
