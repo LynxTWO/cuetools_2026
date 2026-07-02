@@ -24,6 +24,7 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 - **Decision:** upgrade the bundled unrar DLL.
 - **Evidence:** `unrar.dll` is 6.11 (2022-05-28), predating the 6.12 fix for CVE-2022-30333 (path traversal). `CUETools.Compression.Rar\Unrar.cs` wraps it.
+- **Urgency note (adversarial pass 07, 2026-07-02):** the RAR *input* path (`RarStream` → `Unrar.Test()` + `DataAvailable` callback) streams into memory and never extracts to a filesystem path, so the CVE-2022-30333 traversal vector is NOT reachable via normal use. Upgrade is hygiene (the DLL still decompresses untrusted data in memory), not an urgent fix.
 - **Plan:** drop in the current unrar DLL (Win32 + x64), confirm the P/Invoke signatures still match, re-test the "read from RAR without unpacking" flow.
 
 ### D4. SharpZipLib upgrade — APPROVED
