@@ -830,7 +830,11 @@ namespace CUETools.AccurateRip
 			discId2 = UInt32.Parse(n[1], NumberStyles.HexNumber);
 			cddbDiscId = UInt32.Parse(n[2], NumberStyles.HexNumber);
 
-			string url = String.Format("http://www.accuraterip.com/accuraterip/{0:x}/{1:x}/{2:x}/dBAR-{3:d3}-{4:x8}-{5:x8}-{6:x8}.bin",
+			// HTTPS: the server supports TLS (verified 2026-07) and payloads are unsigned, so
+			// TLS is the only in-transit integrity. No http fallback: a failed lookup degrades
+			// gracefully to "not verified" (AR is corroborative, never proof), so there is no
+			// data-loss reason to retry over cleartext.
+			string url = String.Format("https://www.accuraterip.com/accuraterip/{0:x}/{1:x}/{2:x}/dBAR-{3:d3}-{4:x8}-{5:x8}-{6:x8}.bin",
 				discId1 & 0xF, discId1 >> 4 & 0xF, discId1 >> 8 & 0xF, _toc.AudioTracks, discId1, discId2, cddbDiscId);
 
 			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
@@ -1233,14 +1237,15 @@ namespace CUETools.AccurateRip
 
 		// Resolves the drive's read offset from AccurateRip's DriveOffsets.bin, cached for
 		// ten days under %APPDATA%\CUE Tools. A wrong offset shifts every sample of every
-		// rip by that amount, and the file arrives over plain HTTP unsigned - a false entry
-		// only surfaces as offsetted rips failing AR verification later.
+		// rip by that amount. Fetched over HTTPS (server supports TLS, verified 2026-07); the
+		// file is unsigned, so TLS is the only in-transit integrity. On failure the cached
+		// copy (if any) is reused and a missing offset surfaces later as failed verification.
 		public static bool FindDriveReadOffset(string driveName, out int driveReadOffset)
 		{
 			string fileName = System.IO.Path.Combine(CachePath, "DriveOffsets.bin");
 			if (!File.Exists(fileName) || (DateTime.Now - File.GetLastWriteTime(fileName) > TimeSpan.FromDays(10)))
 			{
-				HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://www.accuraterip.com/accuraterip/DriveOffsets.bin");
+				HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://www.accuraterip.com/accuraterip/DriveOffsets.bin");
 				req.Method = "GET";
 				try
 				{
