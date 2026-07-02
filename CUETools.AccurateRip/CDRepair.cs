@@ -156,6 +156,15 @@ namespace CUETools.AccurateRip
             return false;
         }
 
+        // Computes the Reed-Solomon fix for the local rip against CTDB parity (syn2) and,
+        // critically, self-checks it. `crc` starts as the expected corrected-audio CRC. For
+        // every located error the Forney magnitude's effect on the CRC is folded in
+        // (line ~220), then the CRC of the actual local audio is XORed in (line ~228). The
+        // fix is accepted only if the residual is exactly zero (line ~229). This is the
+        // invariant that makes parity fetched over unauthenticated HTTP safe to apply:
+        // corrections that do not reproduce the expected CRC when applied to THIS rip are
+        // rejected as unrecoverable, so corrupted or forged parity cannot silently rewrite
+        // audio. Do not remove the crc==0 gate or apply forneysorted without it.
         public unsafe CDRepairFix VerifyParity(ushort[,] syn2, uint crc, int actualOffset)
 		{
             int npar2 = syn2.GetLength(1);

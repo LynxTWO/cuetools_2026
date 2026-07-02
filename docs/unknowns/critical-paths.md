@@ -4,18 +4,6 @@ Open questions from critical-path comment passes (pass 03). Entry shape and voca
 
 ## Entries
 
-### Is repaired audio re-verified after a CTDB parity repair?
-
-- **Area or file:** `CUETools.CDRepair/`, `CUETools.CTDB\CUEToolsDB.cs` (FetchDB, Repair paths), `CUETools.Processor\CUEToolsVerifyTask.cs`
-- **Concern:** parity syndromes arrive over unauthenticated HTTP. `FetchDB` checks the first syndrome row against the lookup entry (drift detection), but both come from the same channel. Whether the decoder's output is confirmed against an independent locally-derived checksum before being written was not traced in this pass.
-- **Why it matters:** if repair output is not independently confirmed, forged or corrupted parity could rewrite audio while reporting a successful repair.
-- **Evidence found so far:** `FetchDB` conflict check read 2026-07-02; `DoSubmit` has DEBUG-only CRC sanity checks; the repair decode path in `CUETools.CDRepair` not yet read.
-- **Confidence:** unknown
-- **Likely owner:** upstream maintainer
-- **Next best check:** trace the repair flow in `CUETools.CDRepair` decode and the Processor verify task for a post-repair CRC comparison (slice S5 comment pass).
-- **Risk level:** high
-- **Status:** open
-
 ### Reserved device names and trailing dots survive metadata cleansing
 
 - **Area or file:** `CUETools.Processor\CUEConfig.cs:565` (`CleanseString`), path construction in `CUESheet.cs`
@@ -42,4 +30,4 @@ Open questions from critical-path comment passes (pass 03). Entry shape and voca
 
 ## Closed items
 
-(none yet)
+- **Is repaired audio re-verified after a CTDB parity repair?** — resolved 2026-07-02 (verified). Yes. `CUETools.AccurateRip\CDRepair.cs` `VerifyParity` (the implementation wired into the live CTDB repair flow, not the standalone `CUETools.CDRepair` copy) folds each Forney correction's effect into a running CRC, XORs in `ar.CTDBCRC(-actualOffset)` (the CRC of the actual local rip), and sets `canRecover = false` unless the residual CRC is exactly zero. So a correction set is accepted only if applying it to *this* rip reproduces the expected CRC. Parity fetched over unauthenticated HTTP therefore cannot silently rewrite audio: corrupted or forged parity fails the CRC gate. Caveat worth noting for a future threat-model pass: CRC32 is not collision-resistant, so an adversary who fully controls the parity blob is bounded by the RS structure plus a 32-bit check, not by a cryptographic hash - adequate against corruption and casual tampering, not a signature. Commented at the gate.
