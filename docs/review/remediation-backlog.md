@@ -37,9 +37,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - SharpZipLib 1.4.2 via NuGet for net47/netstandard2.0 (net20 keeps vendored 0.85.5). Password path adapted for the modern API (up-front password for AES). Packaging scripts fixed. Verified with a net8 round-trip harness (6/6 checks incl. AES).
 
-### R7. MusicBrainz client replacement (decision D6) — bucket B, approved conditional
+### R7. MusicBrainz client replacement (decision D6) — SCOPED; STOPPED FOR USER DECISION 2026-07-02
 
-- **Next step:** write a scope first (call sites, consumed data shape, MB v2 JSON + Cover Art Archive, rate-limit/user-agent). Go/no-go from the scope. Highest-risk item; do last.
+- **Finding:** no live MusicBrainz client exists to replace — the `MusicBrainz/` library is dead (unbuilt, unreferenced) and CUERipper's direct query is commented out; MB metadata comes via CTDB's proxy + Freedb fallback. Full scope + MB v2/CoverArtArchive reference + options in `docs/review/musicbrainz-replacement-scope.md`. Awaiting the user's choice: (A) rely on CTDB, delete dead lib [recommended]; (B) add a new direct MB v2 provider; (C) leave as-is.
 
 ### R8. CUEControls resgen under dotnet build (decision D7) — PARTIAL, 2026-07-02
 
@@ -75,7 +75,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
 - **Next step:** produce a per-codec version-vs-latest table (current pin → latest stable) and a patch-reapply risk note; get the user's list of missing codecs to add; then upgrade one codec at a time with round-trip verification. Sequence after R8 (buildable) and ideally after golden-corpus tests (R10/idea 3).
 - **Confidence:** the FlaCuda→FLACCL supersession is `inferred` from the orphaned-project evidence plus the user's note; the specific latest versions need a lookup pass.
-- **Status:** open (scoping)
+- **Status 2026-07-02:** version table DONE (`docs/review/codec-refresh-scope.md`): libFLAC/WavPack/LAME/ffmpeg are current, taglib-sharp/MAC are behind, FlaCuda retires under D5. Additions (Opus/Vorbis/AAC/DSD/etc.) BLOCKED on the user's list. Native bumps queued after golden-corpus tests.
 
 ### R14. LAME v4 modernization initiative (user request 2026-07-02) — bucket B, large, separate project
 
