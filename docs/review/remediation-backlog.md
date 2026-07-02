@@ -29,10 +29,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Next step:** open a tracking issue on LynxTWO/cuetools_2026 for the db.cuetools.net TLS request; revisit `CUEToolsDB.cs:74` when the server answers TLS. No client change now.
 
-### R5. unrar.dll upgrade (decision D3) — bucket B, approved (hygiene)
+### R5. unrar.dll upgrade (decision D3) — SCOPED, DEFERRED 2026-07-02 (hygiene)
 
-- **Note:** traversal CVE vector not reachable (Test-based in-memory read, pass 07). Still upgrade for hygiene.
-- **Next step:** replace Win32+x64 DLL with current unrar; confirm P/Invoke signatures; re-test RAR-input flow.
+- Current: both DLLs 6.11.0. rarlab's old direct download URL 404s (now versioned). Hygiene-only (CVE vector not reachable, pass 07) and can't be functionally verified headless (no RAR encoder for a test archive), so not swapped blind. Full plan + verification steps in `decisions-needed.md` (D3). Pick up with the codec refresh (R13) when a test RAR is available.
 
 ### R6. SharpZipLib upgrade (decision D4) — DONE 2026-07-02
 
@@ -77,6 +76,13 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Next step:** produce a per-codec version-vs-latest table (current pin → latest stable) and a patch-reapply risk note; get the user's list of missing codecs to add; then upgrade one codec at a time with round-trip verification. Sequence after R8 (buildable) and ideally after golden-corpus tests (R10/idea 3).
 - **Confidence:** the FlaCuda→FLACCL supersession is `inferred` from the orphaned-project evidence plus the user's note; the specific latest versions need a lookup pass.
 - **Status:** open (scoping)
+
+### R14. LAME v4 modernization initiative (user request 2026-07-02) — bucket B, large, separate project
+
+- **Scope (user):** improve the LAME MP3 encoder enough to justify a version 4 release (stuck at 3.100 since 2017). Source at `C:\Users\usaft\Downloads\lame-3.100`. Separate from CUETools; start after the CUETools decisions are resolved. Permission granted to run any tests needed.
+- **Next step:** build 3.100 as a baseline; assess plausible 20-year gains (AVX2 SIMD for FFT/psychoacoustics/quantization hot loops — Zen 3 is AVX2, not AVX-512; multithreaded frame encoding; build/CI modernization; VBR/reservoir quality tuning) and quantify with speed + quality benchmarks before proposing a v4 feature set. Bench on the 5950X (see hardware note).
+- **Confidence:** unscoped; needs the baseline build + benchmark pass first.
+- **Status:** open (not started; queued after CUETools)
 
 ## Ordering
 
