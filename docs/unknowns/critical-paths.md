@@ -16,16 +16,16 @@ Open questions from critical-path comment passes (pass 03). Entry shape and voca
 - **Risk level:** high
 - **Status:** open
 
-### How thoroughly is network metadata sanitized before filename templating?
+### Reserved device names and trailing dots survive metadata cleansing
 
-- **Area or file:** `Freedb/`, `MusicBrainz/`, `CUETools.CTDB` metadata, `CUETools.Processor\CUESheet.cs` (`CleanseString`, path construction)
-- **Concern:** artist/title strings from gnudb, MusicBrainz, and CTDB flow into filename templates. `CUEConfig.CleanseString` exists, but its coverage (path separators, reserved device names, dot-dot sequences, alternate data streams) was not audited in this pass.
-- **Why it matters:** unsanitized remote strings in path construction can escape the output directory or produce unwritable or misleading filenames.
-- **Evidence found so far:** `CleanseString` call sites in `CUESheet.cs:2151` seen during mapping; implementation not read.
-- **Confidence:** inferred
+- **Area or file:** `CUETools.Processor\CUEConfig.cs:565` (`CleanseString`), path construction in `CUESheet.cs`
+- **Concern:** `CleanseString` (read 2026-07-02) strips every `Path.GetInvalidFileNameChars()` char, which on Windows includes `\`, `/`, and `:`, so per-field separator injection and `..` traversal from remote metadata are blocked. It does not handle Windows reserved device names (CON, PRN, NUL, COM1..9, LPT1..9) or trailing dots/spaces.
+- **Why it matters:** a track titled e.g. `NUL` produces a path Windows treats as the null device; trailing dots/spaces get silently trimmed by the OS, causing surprising or failed writes. Not a traversal risk, but a correctness/robustness gap on attacker- or typo-supplied metadata.
+- **Evidence found so far:** implementation read and commented; separator handling verified via the invalid-chars set; reserved-name handling absent.
+- **Confidence:** verified
 - **Likely owner:** upstream maintainer
-- **Next best check:** read `CleanseString` and every path-building site in `CUESheet.cs` that consumes metadata (slice S3 comment pass).
-- **Risk level:** medium
+- **Next best check:** decide whether to add reserved-name and trailing-dot handling to `CleanseString` (a small, safe hardening change; candidate for a future remediation batch).
+- **Risk level:** low
 - **Status:** open
 
 ### MusicBrainz client library provenance
