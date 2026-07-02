@@ -647,6 +647,13 @@ namespace JDP
 
             try
             {
+                // Message-of-the-day: fetches a JPEG and text from cuetools.net over plain
+                // HTTP (once/day, only when checkForUpdates is on) and renders the image
+                // in-process via Image.FromStream below. Trust boundary: the bytes are
+                // remote-controlled and unauthenticated, and GDI+ image decoding has a
+                // history of parser vulnerabilities, so this hands attacker-influenceable
+                // input to a native decoder. Kept behind the config flag; a hardening pass
+                // should move it to HTTPS and consider dropping the remote image entirely.
                 if (_profile._config.checkForUpdates && DateTime.UtcNow - lastMOTD > TimeSpan.FromDays(1) && _batchReport.Length == 0)
                 {
                     this.Invoke((MethodInvoker)(() => toolStripStatusLabel1.Text = "Checking for updates..."));
