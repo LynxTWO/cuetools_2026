@@ -58,6 +58,12 @@ namespace CUETools.Processor
             }
         }
   
+        // Trust boundary: every CUETools.*.dll in the plugins folder is loaded and its
+        // exported types are instantiated by reflection, with no signature, publisher, or
+        // origin check. Anything that can write to <exe>\plugins runs in-process with the
+        // app's privileges. Load failures are swallowed to Trace on purpose so one bad DLL
+        // does not break startup, which also means a tampered plugin fails silently. Do not
+        // widen the search beyond CUETools.*.dll or add auto-download without gating this.
         private static void AddPlugin(string plugin_path)
         {
             AssemblyName name = AssemblyName.GetAssemblyName(plugin_path);

@@ -78,6 +78,13 @@ namespace CUETools.Processor
             }
         }
 
+        // Local verification-history cache (DeflateStream-compressed XML). Written
+        // temp-then-move so a crash mid-serialize cannot corrupt the live file. Note the
+        // gap: File.Delete then File.Move is not atomic (Move will not overwrite on
+        // Windows, hence the delete). A crash between the two leaves no LocalDBPath, but
+        // the .tmp file survives under a ticks-named path and holds the complete new DB, so
+        // recovery is a manual rename, not data loss. The Dirty guard keeps unchanged runs
+        // from rewriting the file.
         public void Save()
         {
             if (!this.Dirty) return;
