@@ -562,6 +562,14 @@ namespace CUETools.Processor
             return proxy;
         }
 
+        // Sanitizes one metadata field (artist, album, title) before it is joined into an
+        // output path via the filename template. This is the trust boundary for remote
+        // metadata from gnudb/MusicBrainz/CTDB: Path.GetInvalidFileNameChars() includes the
+        // path separators and ':', so a single field cannot inject a directory or drive and
+        // cannot traverse with '..' (the separators are gone). Two gaps remain by design of
+        // this routine: Windows reserved device names (CON, PRN, NUL, COM1..9, LPT1..9) pass
+        // through unchanged, and trailing dots/spaces are not trimmed. Any caller that builds
+        // a full path from template output must not assume those are handled here.
         public string CleanseString(string s)
         {
             StringBuilder sb = new StringBuilder();
