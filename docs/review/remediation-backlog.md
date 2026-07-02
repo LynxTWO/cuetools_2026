@@ -75,7 +75,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
 - **Next step:** produce a per-codec version-vs-latest table (current pin → latest stable) and a patch-reapply risk note; get the user's list of missing codecs to add; then upgrade one codec at a time with round-trip verification. Sequence after R8 (buildable) and ideally after golden-corpus tests (R10/idea 3).
 - **Confidence:** the FlaCuda→FLACCL supersession is `inferred` from the orphaned-project evidence plus the user's note; the specific latest versions need a lookup pass.
-- **Status 2026-07-02:** version table DONE (`docs/review/codec-refresh-scope.md`): libFLAC/WavPack/LAME/ffmpeg are current, taglib-sharp/MAC are behind, FlaCuda retires under D5. Additions (Opus/Vorbis/AAC/DSD/etc.) BLOCKED on the user's list. Native bumps queued after golden-corpus tests.
+- **Status 2026-07-02:** full audit DONE (`docs/review/codec-audit.md`) — every codec's format/engine/version/works status, plus the version table (`codec-refresh-scope.md`). Key results: no AAC *encoder* (decode-only via ffmpeg); test coverage only spans WAV/FLAC/ALAC (build golden-corpus suite to make all "works" verified); highest-value additions are Opus and AAC-encode. libFLAC/WavPack/LAME/ffmpeg current; MAC/taglib-sharp behind; FlaCuda dead (retire under D5). Additions still BLOCKED on the user's format list.
 
 ### R14. LAME v4 modernization initiative (user request 2026-07-02) — bucket B, large, separate project
 
