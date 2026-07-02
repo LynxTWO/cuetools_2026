@@ -103,6 +103,9 @@ namespace CUETools.Ripper.SCSI
                 if (m_failedSectors == null)
                 {
                     m_failedSectors = new BitArray((int)_toc.AudioLength);
+                    // A sector is "failed" only when it exhausted the retry budget without the
+                    // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
+                    // the +1 marking give-up rather than "resolved on the last allowed pass".
                     for (int i = 0; i < m_failedSectors.Length; i++)
                         m_failedSectors[i] = m_retryCount[i] == (16 << _correctionQuality) + 1;
                 }
@@ -935,6 +938,14 @@ namespace CUETools.Ripper.SCSI
 		//int dbg_pass;
 		//FileStream fs_d, fs_c;
 
+		// Folds one freshly read pass into the per-sample accumulators used by the secure
+		// vote in CorrectSectors. For each byte, byte2long spreads its 8 bits into 8 lanes of
+		// a long so bit-level tallies can be summed with one add. Samples the drive's C2
+		// pointer flagged as erroneous go into the c2==1 plane (UserData[.,1,.]); clean
+		// samples into the c2==0 plane. C2Count tracks how many passes flagged each sample.
+		// The Mode296 branch works around drives (e.g. PIONEER 215D) that place the block C2
+		// byte after the per-sample C2 bytes instead of before as MMC-6 specifies; offs is
+		// derived by testing which layout makes the block byte equal the OR of the rest.
 		private unsafe void ReorganiseSectors(int sector, int Sectors2Read)
 		{
 			int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
@@ -1067,6 +1078,17 @@ namespace CUETools.Ripper.SCSI
 			throw ex;
 		}
 
+		// The secure-ripping decision. For each sample byte it runs a weighted majority vote
+		// over all passes read so far: a C2-clean read of a bit counts c2div (128) times, a
+		// C2-flagged read counts once, so clean reads dominate but flagged reads still break
+		// ties. sig = sum >> 31 extracts the winning bit from the sign of the vote; bestValue
+		// reassembles the byte. A sample is only trusted when its winning margin clears
+		// er_limit = 128 * (1 + correctionQuality) - 1, i.e. it needs at least
+		// (1 + correctionQuality) clean agreeing passes. Samples that fall short set fError,
+		// which bumps m_retryCount so the sector is read again; sectors that never converge
+		// within (16 << correctionQuality)+1 passes end up in m_failedSectors. This is the
+		// algorithm TestRipper exercises offline. Changing c2div, er_limit, or the sign trick
+		// changes which rips are declared secure.
 		private unsafe void CorrectSectors(int pass, int sector, int Sectors2Read)
 		{
 			for (int iSector = 0; iSector < Sectors2Read; iSector++)
