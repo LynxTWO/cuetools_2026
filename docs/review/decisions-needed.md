@@ -14,11 +14,10 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Evidence:** `www.accuraterip.com` answered HTTPS 200 in a 2026-07 probe. Client hardcodes `http://` at `CUETools.AccurateRip\AccurateRip.cs:829,1230`.
 - **Plan:** change the two scheme literals; keep an http fallback on TLS failure; verify a real lookup still parses and DriveOffsets.bin still downloads.
 
-### D2. CTDB HTTPS — APPROVED (file upstream, revisit client later)
+### D2. CTDB HTTPS — DONE 2026-07-02 (tracking issue filed)
 
 - **Decision:** file an issue / ask upstream to enable TLS on db.cuetools.net; revisit the client once the server answers TLS.
-- **Evidence:** `db.cuetools.net` failed the TLS handshake (`CUEToolsDB.cs:74` hardcodes http).
-- **Plan:** open a tracking issue on LynxTWO/cuetools_2026 documenting the request and the upstream ask (do not modify the client yet).
+- **Done:** filed tracking issue LynxTWO/cuetools_2026#1 (had to enable Issues on the fork first; the third-party gchudov repo was NOT posted to). Includes upstream-ready ask text. Client `CUEToolsDB.cs` left unchanged until the server answers TLS.
 
 ### D3. unrar.dll upgrade — APPROVED
 
