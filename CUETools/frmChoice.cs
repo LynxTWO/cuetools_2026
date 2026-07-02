@@ -526,7 +526,7 @@ namespace JDP
         private void buttonMusicBrainz_Click(object sender, EventArgs e)
         {
             if (CUE == null) return;
-            System.Diagnostics.Process.Start($"http://musicbrainz.org/bare/cdlookup.html?toc={CUE.TOC.MusicBrainzTOC}");
+            System.Diagnostics.Process.Start($"https://musicbrainz.org/bare/cdlookup.html?toc={CUE.TOC.MusicBrainzTOC}");
         }
 
         private void buttonNavigateCTDB_Click(object sender, EventArgs e)
