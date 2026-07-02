@@ -40,3 +40,5 @@ Status values, classification labels, and risk levels come from `.claude/skills/
 - 2026-07-02 — ledger created by pass 05; S1-S14 defined; exclusions recorded; CUERipper.WPF and unreferenced ThirdParty DLLs deferred by user decision.
 - 2026-07-02 — comment loop (03+06) completed across S1, S2, S3, S5, S6/S7, S9, S11, S12; S10 reviewed light. Test migration + CI gating landed (S13/S14).
 - 2026-07-02 — pass 04 logging audit completed (`docs/security/logging-audit.md`): no secret values logged; proxy password stored plaintext at rest (F1) is the main finding. Small telemetry surface (no analytics/crash SDK).
+- 2026-07-02 — pass 07 adversarial review + pass 08 scenario stress-test completed; S4 archive path reviewed (in-memory Test read, no extract-to-disk). Integrity axis strong; untrusted-parser axis (BitReader OOB, GDI+ MOTD) is the open exposure.
+- 2026-07-02 — pass 10 maintenance harness installed (`.github/pull_request_template.md`, `docs/review/maintenance-harness.md`): protected-area PR gate + reviewer checklist; test gate already live in CI/release.
