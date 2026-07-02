@@ -17,21 +17,11 @@ The entry shape, confidence levels, risk levels, and status values come from `.c
 - **Next best check:** confirm whether `CUETools.Compression.Rar` actually extracts to disk (path traversal reach) and decide replace-vs-upgrade for SharpZipLib and unrar. Reference scan 2026-07-02: `ICSharpCode.SharpZipLib.dll` is live in `CUETools.Compression.Zip.csproj:36`; `CSScriptLibrary.v1.1.dll` only in `CUETools.TestCodecs.csproj:60`; `Freedb.dll`, `MusicBrainz.dll`, `CUDA.NET.dll` are referenced by no csproj HintPath (dead-weight candidates; CUDA.NET may load at runtime, unverified).
 - **Risk level:** high
 - **Status:** in progress
-
-### CUERipper.WPF intent
-
-- **Area or file:** `CUERipper.WPF/`
-- **Concern:** single-window WPF stub referencing .NET 3.0/3.5-era assemblies; unclear if it is historical debris or a planned direction.
-- **Why it matters:** modernization planning needs to know whether to delete it or build on it.
-- **Evidence found so far:** project contains only `App.xaml`, `Window1.xaml`, `depprop.txt`. Upstream history now available for a date check.
-- **Confidence:** verified (contents), unknown (intent)
-- **Likely owner:** repo owner
-- **Next best check:** ask the user; if unwanted, remove from the solution.
-- **Risk level:** low
-- **Status:** open
+- **Notes:** 2026-07-02 — user decision: the unreferenced DLLs (`Freedb.dll`, `MusicBrainz.dll`, `CUDA.NET.dll`) stay in the tree until the initial anti-dark-code rollout completes. The CUDA.NET runtime-load question is tracked in `docs/unknowns/coverage-pass.md`.
 
 ## Closed items
 
+- **CUERipper.WPF intent** — resolved 2026-07-02 by user decision: keep the stub untouched until the initial anti-dark-code rollout completes, then revisit. Recorded as `deferred` in the coverage ledger.
 - **Git history and remote were dropped** — resolved 2026-07-02. `https://github.com/LynxTWO/cuetools_2026` turned out to be a full mirror of upstream `gchudov/cuetools.net` history. Local `master` was reconnected to it at upstream HEAD `e90b1a86`; the working tree matched that commit exactly.
 - **ThirdParty submodules are empty** — resolved 2026-07-02. `git submodule update --init --recursive` restored all five submodules at their pinned commits (flac `1507800d`, taglib-sharp `b5ae84f2`, openclnet `4a10612b`, WavPack `4827b988`, WindowsMediaLib `46d46042`), and all five `ThirdParty/*.patch` files applied cleanly per the README build steps.
 - **freedb service status** — resolved 2026-07-02. The default host is `gnudb.gnudb.org` (`Freedb\FreedbHelper.cs:33`), the live community mirror, not the dead freedb.org. Still plain HTTP.
