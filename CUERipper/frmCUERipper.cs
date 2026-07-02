@@ -890,33 +890,10 @@ namespace CUERipper
             {
                 loadAllMetadata = false;
 
-                //this.BeginInvoke((MethodInvoker)delegate() { toolStripStatusLabel1.Text = Properties.Resources.LookingUpVia + " MusicBrainz..."; });
-
-                //ReleaseQueryParameters p = new ReleaseQueryParameters();
-                //p.DiscId = audioSource.TOC.MusicBrainzId;
-                //Query<Release> results = Release.Query(p);
-                //MusicBrainzService.Proxy = _config.GetProxy();
-                //MusicBrainzService.XmlRequest += new EventHandler<XmlRequestEventArgs>(MusicBrainz_LookupProgress);
-
-                //try
-                //{
-                //    foreach (Release release in results)
-                //    {
-                //        release.GetEvents();
-                //        release.GetTracks();
-                //        data.Releases.Add(CreateCUESheet(audioSource, release));
-                //    }
-                //    mbresults_count = results.Count;
-                //}
-                //catch (Exception ex)
-                //{
-                //    System.Diagnostics.Trace.WriteLine(ex.Message);
-                //    if (!(ex is MusicBrainzNotFoundException))
-                //        musicbrainzError = ex.Message;
-                //}
-                //MusicBrainzService.Proxy = null;
-                //MusicBrainzService.XmlRequest -= new EventHandler<XmlRequestEventArgs>(MusicBrainz_LookupProgress);
-
+                // Direct MusicBrainz lookup was retired 2026-07-02 (decision D6, option A): MB
+                // metadata now arrives via CTDB's server-side proxy (cueSheet.CTDB.Metadata
+                // above), with Freedb/gnudb as the fallback below. The old musicbrainz-sharp
+                // client library was removed; see docs/review/musicbrainz-replacement-scope.md.
                 this.BeginInvoke((MethodInvoker)delegate() { toolStripStatusLabel1.Text = Properties.Resources.LookingUpVia + " Freedb..."; });
 
                 FreedbHelper m_freedb = new FreedbHelper();
@@ -1251,7 +1228,7 @@ namespace CUERipper
 		{
 			if (selectedDriveInfo == null)
 				return;
-			System.Diagnostics.Process.Start("http://musicbrainz.org/bare/cdlookup.html?toc=" + selectedDriveInfo.drive.TOC.MusicBrainzTOC);
+			System.Diagnostics.Process.Start("https://musicbrainz.org/bare/cdlookup.html?toc=" + selectedDriveInfo.drive.TOC.MusicBrainzTOC);
 		}
 
 		private void frmCUERipper_KeyDown(object sender, KeyEventArgs e)
