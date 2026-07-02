@@ -66,6 +66,19 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Reference:** the 14-item modernization list delivered 2026-07-02. Sequence: foundation (already: git/submodules/tests/CI) → framework migration → async → the rest. D5 (delete FlaCuda/dead DLLs) revisit with D6's outcome.
 
+### R13. Codec version refresh + FlaCuda retirement + add missing codecs (user request 2026-07-02) — bucket B, large
+
+- **Scope (user):** upgrade all codecs to their latest versions/builds, add any missing/wanted ones, and note that FlaCuda has effectively been superseded by FLACCL (OpenCL), which confirms the CUDA path is a dead ancestor rather than a parallel feature.
+- **What this touches:**
+  - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0 pinned; check for newer), `WavPack` (5.8.1; check newer), MAC_SDK (10.86; APE), taglib-sharp, `libmp3lame` (3.100, already current), ffmpeg (built on demand by `build_ffmpeg_dlls.yml`). Each bump means re-checking that `ThirdParty/*.patch` still applies.
+  - Managed wrappers in S6/S7 that must match new native ABIs (P/Invoke signatures, struct layouts).
+  - FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`): confirmed orphaned (absent from sln) and superseded by FLACCL; retire under D5 once D6 lands. Verify FLACCL itself builds/runs on current OpenCL runtimes and consider whether it should replace FlaCuda outright or be modernized to managed SIMD (idea 14).
+  - Missing/desired codecs: enumerate against current CUETools upstream and user wants (e.g. Opus, newer ALAC, DSD?) — needs a requirements list from the user before implementation.
+- **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
+- **Next step:** produce a per-codec version-vs-latest table (current pin → latest stable) and a patch-reapply risk note; get the user's list of missing codecs to add; then upgrade one codec at a time with round-trip verification. Sequence after R8 (buildable) and ideally after golden-corpus tests (R10/idea 3).
+- **Confidence:** the FlaCuda→FLACCL supersession is `inferred` from the orphaned-project evidence plus the user's note; the specific latest versions need a lookup pass.
+- **Status:** open (scoping)
+
 ## Ordering
 
 1. R8 (unblocks local builds — do first, enables verifying everything else)
