@@ -26,7 +26,7 @@ A factual map of what runs in this repo, how it is entered, what data it holds, 
 
 Core libraries: `CUETools.Processor` (engine; `CUESheet.cs` is a 212 KB god class), `CUETools.Codecs` (+ ~15 codec plugin projects), `CUETools.CDImage`, `CUETools.AccurateRip`, `CUETools.CTDB(.Types)`, `CUETools.Parity` / `CDRepair` / `CLParity` (Reed-Solomon repair), `CUETools.Ripper(.SCSI)` + `Bwg.Scsi/Hardware/Logging` (drive I/O), `CUETools.Compression(.Rar/.Zip)`, `CUETools.DSP.*`, `MusicBrainz`, `Freedb`, `CUEControls`, `ProgressODoom`.
 
-Native and GPU: `ttalib-1.1` (C++), `CUETools.Codecs.TTA` (C++/CLI), `CUETools.AVX` (C++), FLACCL (OpenCL via OpenCLNet), FlaCuda (CUDA via bundled `CUDA.NET.dll`), plus ThirdParty native codecs (libFLAC, MAC_SDK, libwavpack) built from submodules with local patches.
+Native and GPU: `ttalib-1.1` (C++), `CUETools.Codecs.TTA` (C++/CLI), `CUETools.AVX` (C++), FLACCL (OpenCL via OpenCLNet), plus ThirdParty native codecs (libFLAC, MAC_SDK, libwavpack) built from submodules with local patches. The FlaCuda CUDA projects are orphaned: absent from `CUETools.sln`, referencing `CUDA.NET` from outside the repo (verified 2026-07-02).
 
 ## 3. Plugin discovery (hidden control surface)
 
