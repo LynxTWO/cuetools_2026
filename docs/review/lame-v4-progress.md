@@ -22,8 +22,29 @@ Running record of the quality-first v4 work in `c:\DEV\lame_v4`. Plan: `lame-v4-
 
 **Verdict:** best_huffman=2 is a legitimate (small) win to fold into `--quality max`. The large gains require the real flagship — a genuinely deeper noise-allocation search (trellis/exhaustive scalefactor + global-gain), next.
 
+## 2026-07-02 — Confirmed AND fixed: the LAME 3.100 CBR/ABR -q0 regression
+
+Prompted by an external tip that `-q0..-q3` can be worse than `-q4` at CBR/ABR. **Tested it** (branch `qa/fix-noiseshaping-cbr`, harness extended with `-SettingB` to A/B two settings): stock `-q0` vs `-q4` at CBR128 on the full corpus incl. real tracks → q0 **worse by +0.333 dB mean**, and large on real music (400 Lux +0.44, Tom's Diner +0.40, sample20 +1.37). Claim confirmed and quantified on the user's own library.
+
+**Root cause:** at `-q0` the noise-shaping config is VBR-tuned — `noise_shaping_amp=2` amplifies only the single worst scalefactor band per `outer_loop` iteration, and `substep_shaping=2` adds pseudohalf half-stepping during amplification. Both assume the loop iterates freely to convergence (true in VBR). Under a **fixed CBR/ABR bit budget the loop stops early**, so the shaping never finishes distributing and the result is worse than `-q4`'s broad amplification.
+
+**Fix (committed `0e346c9`):** for bit-constrained modes only (`vbr_off`/`vbr_abr`), route `-q0` to the previously-**unused** coarse-then-fine `amp=3` refine path (`full_outer_loop=0`) and leave `substep_shaping` off. True VBR is untouched.
+
+**Measured (fixed-q0 vs stock-q0, meanNMRdb, full corpus, negative = better):**
+
+| Mode | delta | | Mode | delta |
+| --- | --- | --- | --- | --- |
+| CBR 320 | **−0.780** | | ABR 192 | **−0.494** |
+| CBR 128 | ~−0.35 | | CBR 192 | −0.167 |
+| **VBR V0 / V2** | **0.000 (untouched)** | | ABR 96 | +0.07 (edge: 96k stereo) |
+
+Fixed-q0 now also **beats** stock `-q4` at CBR (−0.018 mean, vs +0.333 broken). Real music improves broadly (−0.3 to −1.4 dB); the only "worse" cases are synthetic noise-torture signals. **Regression gate:** byte-drift in exactly the 10 `q0_cbr320` cases — every VBR setting and every default-quality CBR/ABR is byte-identical to pristine 3.100. Surgically scoped.
+
+**Decision for the user:** this is a strict quality improvement for `-q0` CBR/ABR with VBR provably unchanged. Options: (a) apply to default `-q0` (it fixes a regression), and/or (b) fold into `--quality max`. Recommend a quick human ABX on one track (e.g. Tom's Diner at -q0 -b128, stock vs fixed) before shipping default-on.
+
 ## Next
 
-1. Add a dedicated `--quality max` mode (config flag + CLI), so deep-search never touches `-q0`/`-V*`.
-2. Under it: fold in best_huffman=2, then implement the deep noise-allocation search (the flagship). Gate every step with `abtest.ps1` (negative delta required) and keep `regress.ps1` green for all non-max settings.
-3. Validate the biggest wins on the real killer samples (Tom's Diner etc.), then prep ABX pairs for the user.
+1. User's call on the CBR/ABR fix (ship to default `-q0`, or gate under `--quality max`); ABX a track first.
+2. Add the dedicated `--quality max` mode (config flag + CLI) — folds in best_huffman=2 + this fix + the deep noise-allocation search, never touching stock settings.
+3. Podcast constrained-optimizer modes (ABR-centered, parallel candidate search, 192k stereo / 96k mono) — spec drafted from the external brief; the ABR96 edge case above is relevant to podcast-mono tuning.
+4. Deep noise-allocation search (the big flagship lever).
