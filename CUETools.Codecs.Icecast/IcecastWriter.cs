@@ -42,6 +42,15 @@ namespace CUETools.Codecs.Icecast
 			}
 		}
 
+		// Opens an Icecast SOURCE stream. Two things to know before touching this:
+		// 1) The source password is sent as HTTP Basic (base64, not encryption) over plain
+		//    HTTP, so anyone on-path can recover it. That is inherent to the Icecast SOURCE
+		//    protocol; the mitigation is to point settings.Server at a TLS-terminating proxy,
+		//    not to treat Basic as protection.
+		// 2) The reflection below pokes private HttpWebRequest/HttpWebResponse internals to
+		//    force the legacy SOURCE/chunked streaming behavior. This is tightly coupled to
+		//    .NET Framework's internal field names and will not survive the move to modern
+		//    .NET (HttpClient) - it is a known migration landmine, not a stable API.
 		public void Connect()
 		{
 			Uri uri = new Uri("http://" + settings.Server + ":" + settings.Port + settings.Mount);

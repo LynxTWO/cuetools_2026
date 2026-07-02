@@ -24,6 +24,14 @@ namespace AudioDataPlugIn
     // to be named AudioDataTransfer and must be in the
     // namespace AudioDataPlugIn
 
+    // Trust boundary: EAC (a third-party host, .NET 2.0 runtime) discovers this class by COM
+    // and drives its lifecycle - it instantiates us, streams ripped audio in, and calls the
+    // interface methods. We run inside EAC's process with EAC's privileges. The GUID, class
+    // name, and namespace are a hard contract with EAC's discovery; changing any of them
+    // makes the plugin invisible. Audio and metadata arrive from EAC unvalidated, so treat
+    // buffer sizes and counts defensively. CTDB submissions made from here are the main
+    // inbound path to the CTDB database, which raises the stakes on getting the TOC and
+    // offset right before Submit.
     public class AudioDataTransfer : IAudioDataTransfer
     {
         int m_start_pos = 0, m_length = 0;
