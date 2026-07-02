@@ -32,11 +32,18 @@ Replace the weak internal resampler (only matters for non-44.1k input — CD rip
 
 ## Measurement ladder (built before touching encode code)
 
-1. **Bit-exact regression baseline** — corpus encoded with pristine 3.100 at reference settings; SHA-256 of MP3 bytes and of decoded PCM. Any refactor/threading change must reproduce it exactly.
-2. **Objective perceptual metrics** — PEAQ ODG (BS.1387) and/or ViSQOL-Audio scored decoded-vs-original per corpus item. Gains must show here before listening tests are requested.
-   **Cost note:** open PEAQ implementations (GstPEAQ, peaqb) are Linux-leaning; getting a trustworthy Windows build may take real effort or a WSL step. If neither proves trustworthy, an interim in-house NMR meter (noise-to-mask via an independent psymodel) is a planned fallback — more work, stated now.
-3. **Killer-sample corpus** — synthetic critical signals first (impulse trains/pre-echo traps, sparse high tonals, plucked harmonics, noise, sweeps), then real music: **you supplying a handful of personal killer tracks (castanets/harpsichord/percussion) would materially improve the corpus** — copyright keeps me from downloading the classic HydrogenAudio samples.
-4. **Human ABX** — final gate for any default-behavior change (Q-D especially). Your time; I prepare the pairs.
+**Status 2026-07-02: rungs 1 and 3 (synthetic) are BUILT and committed in `c:\DEV\lame_v4`** — pristine 3.100 imported to git, `tests/corpusgen` generates a deterministic critical-signal corpus, and `tests/regress.ps1` locks a 70-case bit-exact baseline (verified green). Details below.
+
+1. **Bit-exact regression baseline** *(built)* — corpus encoded with pristine 3.100 at V0/V2/V5, CBR 320/128, q0-CBR320, ABR192; SHA-256 of MP3 bytes **and** decoded PCM. Any refactor/threading/SIMD change must reproduce it exactly (`regress.ps1`). This is the behavior-preserving gate.
+
+2. **Primary quality signal — LAME's own noise-to-mask objective (refined approach).** The sharpest, most honest feedback loop for the deep-search flagship is LAME's *own* psychoacoustic model: it already computes masking thresholds per scalefactor band and the quantization noise the encoder achieves. A deeper search that lowers LAME's aggregate noise-to-mask (NMR) at **equal bitrate** is better *by the encoder's own definition of quality* — deterministic, no external dependency, and it directly targets what Q-A optimizes. Plan: a small instrumentation build of LAME that reports achieved total/median NMR per encode, so every search improvement is quantified against 3.100 on the corpus. **This becomes the day-to-day optimization metric.**
+
+3. **Independent cross-validation — external perceptual metrics.** Confirm that lowering LAME's internal NMR actually tracks *perceived* quality, using a decoded-vs-original metric independent of LAME's model: PEAQ ODG (BS.1387) and/or ViSQOL-Audio.
+   **Cost note (stated per the mandate):** open PEAQ builds (GstPEAQ, peaqb) are Linux-leaning; a trustworthy Windows build may need real effort or a WSL step. Mitigation: this is a *cross-check*, not the primary loop (rung 2 is), so a delay here does not block Q-A progress. A seeded in-house segmental-NMR meter over the decoded PCM (independent psymodel) is the fallback cross-check if PEAQ/ViSQOL prove impractical on Windows.
+
+4. **Killer-sample corpus** *(synthetic built)* — 10 seeded critical signals (impulse trains/pre-echo traps, castanet-like transients, sparse HF tonals, log sweep, pink/white noise, plucked harmonics, near-Nyquist square, silence+clicks, busy music mix). **Real music would materially strengthen it: a handful of your personal killer tracks (castanets/harpsichord/percussion/massed strings) dropped into `tests/corpus/` are picked up automatically** — copyright keeps me from fetching the classic HydrogenAudio problem samples.
+
+5. **Human ABX** — final gate for any default-behavior change (Q-D especially). Your time; I prepare the paired clips.
 
 ## Execution order
 
