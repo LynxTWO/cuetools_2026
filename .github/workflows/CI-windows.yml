@@ -49,3 +49,10 @@ jobs:
       - name: Build Release|Win32
         run: |
           "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|Win32"
+      # Release|x64 above produced ThirdParty\x64\libFLAC_dynamic.dll, which the codec tests copy into their output.
+      - name: Run parity tests
+        run: |
+          dotnet test CUETools\CUETools.TestParity\CUETools.TestParity.csproj -c Release --nologo
+      - name: Run codec tests
+        run: |
+          dotnet test CUETools\CUETools.TestCodecs\CUETools.TestCodecs.csproj -c Release --nologo
