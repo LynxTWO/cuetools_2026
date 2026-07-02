@@ -15,7 +15,10 @@ REM /D xcopy copies all Source files that are newer than existing Destination fi
 REM xcopy /Y /D %base_dir%\CUETools\user_profiles_enabled %debug_dir%
 
 REM ThirdParty
-xcopy /Y /D %base_dir%\ThirdParty\ICSharpCode.SharpZipLib.dll %debug_dir%\plugins\
+REM SharpZipLib now ships from the NuGet package (1.4.x) already built into
+REM %debug_dir%\plugins; do not overwrite it with the old vendored 0.85.5 copy.
+REM (decision D4 / remediation R6)
+REM xcopy /Y /D %base_dir%\ThirdParty\ICSharpCode.SharpZipLib.dll %debug_dir%\plugins\
 
 REM ThirdParty\Win32 plugins
 xcopy /Y /D %base_dir%\ThirdParty\Win32\hdcd.dll %debug_dir%\plugins\win32\

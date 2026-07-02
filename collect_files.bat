@@ -99,8 +99,9 @@ REM plugins translation files
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\de-DE\* %release_dir%\plugins\de-DE\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\ru-RU\* %release_dir%\plugins\ru-RU\
 
-REM ThirdParty
-xcopy /Y /D %base_dir%\ThirdParty\ICSharpCode.SharpZipLib.dll %release_dir%\plugins\
+REM SharpZipLib now comes from the NuGet package restored into the build output (1.4.x),
+REM not the old vendored ThirdParty copy (0.85.5). See decision D4 / remediation R6.
+xcopy /Y /D %base_dir%\bin\Release\net47\plugins\ICSharpCode.SharpZipLib.dll %release_dir%\plugins\
 
 REM ThirdParty\Win32 plugins
 xcopy /Y /D %base_dir%\ThirdParty\Win32\hdcd.dll %release_dir%\plugins\win32\

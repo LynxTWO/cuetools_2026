@@ -26,11 +26,10 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Urgency note (adversarial pass 07, 2026-07-02):** the RAR *input* path (`RarStream` → `Unrar.Test()` + `DataAvailable` callback) streams into memory and never extracts to a filesystem path, so the CVE-2022-30333 traversal vector is NOT reachable via normal use. Upgrade is hygiene (the DLL still decompresses untrusted data in memory), not an urgent fix.
 - **Plan:** drop in the current unrar DLL (Win32 + x64), confirm the P/Invoke signatures still match, re-test the "read from RAR without unpacking" flow.
 
-### D4. SharpZipLib upgrade — APPROVED
+### D4. SharpZipLib upgrade — DONE 2026-07-02
 
-- **Decision:** upgrade SharpZipLib.
-- **Evidence:** `ICSharpCode.SharpZipLib.dll` 0.85.5 (2010); live in `CUETools.Compression.Zip`.
-- **Plan:** replace the vendored DLL with the current NuGet package, adapt the Zip wrapper API, re-test.
+- **Done:** `CUETools.Compression.Zip` now uses the SharpZipLib 1.4.2 NuGet package for net47 + netstandard2.0; net20 keeps the vendored 0.85.5 DLL (modern SharpZipLib dropped net20). Adapted the password path for the modern API: `GetInputStream` returns a plain `Stream` (not `ZipInputStream`) and AES needs the password on the `ZipFile` *before* opening the entry, so `ZipCompressionProvider.Decompress` now requests and sets the password up front instead of lazily on first read. Both `collect_files.bat` and `collect_files_debug.bat` fixed to ship the modern DLL from the build output, not the old vendored copy.
+- **Verified:** net47 + netstandard2.0 build; a net8 round-trip harness against the built provider passes all 6 checks (contents list, full read byte-exact, Length, forward seek, backward-seek reopen, and AES-encrypted read via the PasswordRequired event).
 
 ### D6. MusicBrainz client replacement — APPROVED (conditional on confidence)
 
