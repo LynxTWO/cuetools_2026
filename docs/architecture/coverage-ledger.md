@@ -10,8 +10,8 @@ Status values, classification labels, and risk levels come from `.claude/skills/
 
 | Slice | Paths | Risk | Status | Label | Evidence used | Next pass |
 | --- | --- | --- | --- | --- | --- | --- |
-| S1 Network clients | `CUETools.AccurateRip/`, `CUETools.CTDB*/`, `Freedb/`, `MusicBrainz/` | high | mapped | owned-risky / legacy-unclear | system map §5-6; HTTPS probes; `CUEToolsDB.cs`, `AccurateRip.cs`, `FreedbHelper.cs` reads | 04 logging audit |
-| S2 Ripping/SCSI | `CUETools.Ripper*/`, `Bwg.*/` | high | mapped | legacy-unclear | system map §2,6; upstream C2 commit history; no code-level read of `Device.cs` internals yet | 03 comments |
+| S1 Network clients | `CUETools.AccurateRip/`, `CUETools.CTDB*/`, `Freedb/`, `MusicBrainz/` | high | commented | owned-risky / legacy-unclear | 03+06 loop 2026-07-02: trust-boundary and invariant comments on `CUEToolsDB.cs` (HTTP scheme, parity fetch/Range layout, syndrome conflict check, submitter UUID), `AccurateRip.cs` (unsigned lookup, dBAR format, drive-offset fetch), `FreedbHelper.cs` (gnudb mirror). MusicBrainz withheld (mirrored tree). Open questions in `docs/unknowns/critical-paths.md` | 04 logging audit |
+| S2 Ripping/SCSI | `CUETools.Ripper*/`, `Bwg.*/` | high | mapped | legacy-unclear | system map §2,6; upstream C2 commit history; hardware smoke 2026-07-02: `Ripper.Console --test` on a real drive (K:) negotiated BEh read command against a live disc; `Device.cs` internals still unread | 03 comments |
 | S3 Processor engine | `CUETools.Processor/` | high | mapped | owned-risky | system map §2-4; `CUEProcessorPlugins.cs`, `SettingsReader.cs` reads; `CUESheet.cs` internals unread | 03 comments |
 | S4 Archive handling | `CUETools.Compression*/` + unrar/SharpZipLib binaries | high | mapped | owned-risky / third-party mirror | binary inventory; csproj reference scan; extraction behavior unread | 07 focused review |
 | S5 Parity/repair | `CUETools.Parity/`, `CUETools.CDRepair/` | high | mapped | owned-risky | system map §2; test projects located; math unread | 03 comments (after S14) |
