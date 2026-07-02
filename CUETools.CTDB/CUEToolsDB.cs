@@ -71,6 +71,11 @@ namespace CUETools.CTDB
 		{
 			this.driveName = driveName;
 			this.userAgent = userAgent + " (" + Environment.OSVersion.VersionString + ")" + (driveName != null ? " (" + driveName + ")" : "");
+			// Plain HTTP is deliberate: db.cuetools.net did not answer TLS as of 2026-07,
+			// so the scheme is hardcoded. Everything this method receives - match entries,
+			// metadata, parity locations - is unauthenticated. An on-path attacker can forge
+			// match confidence, so treat CTDB results as corroboration of locally computed
+			// CRCs and syndromes, never as independent proof of rip quality.
 			this.urlbase = "http://" + (server ?? defaultServer);
 			this.total = 0;
 
@@ -197,6 +202,11 @@ namespace CUETools.CTDB
             return false;
         }
 
+		// Fetches Reed-Solomon parity (as syndromes) for repair. entry.hasParity is either
+		// a path on the CTDB server or an absolute mirror URL from the lookup response.
+		// The Range request resumes after the syndrome rows already held in syn, so every
+		// offset below assumes rows of entry.stride * 2 bytes; changing the row layout
+		// breaks resumed fetches quietly.
 		public ushort[,] FetchDB(DBEntry entry, int npar, ushort[,] syn)
 		{
 			string url = entry.hasParity[0] == '/' ? urlbase + entry.hasParity : entry.hasParity;
@@ -252,6 +262,10 @@ namespace CUETools.CTDB
                         }
 
                         syn = ParityToSyndrome.Bytes2Syndrome(entry.stride, npar, contents);
+                        // The first syndrome row must match the row carried by the lookup
+                        // entry. A mismatch means the parity blob on the server drifted from
+                        // the entry we negotiated against; repairing with mismatched parity
+                        // would corrupt audio, so surface Conflict instead.
                         for (int i = 0; i < npar; i++)
                             if (syn[0, i] != entry.syndrome[0, i])
                             {
@@ -279,6 +293,10 @@ namespace CUETools.CTDB
 
 		static string uuidInfo = null;
 
+		// Pseudonymous submitter id: a hash of machine identifiers (never the raw values)
+		// sent as "userid" with submissions so the server can de-duplicate and weigh them.
+		// Changing the inputs or the hash forks every user's identity and silently resets
+		// their submission history server-side.
 		public static string GetUUID()
 		{
 			if (uuidInfo == null)

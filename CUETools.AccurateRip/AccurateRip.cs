@@ -809,6 +809,10 @@ namespace CUETools.AccurateRip
 		static readonly TimeSpan min_interval = new TimeSpan(5000000); // 0.5 second
 		static readonly object server_mutex = new object();
 
+		// Looks up the AccurateRip verification database. The binary payload is unsigned
+		// and fetched over plain HTTP (the server also answered HTTPS in a 2026-07 probe),
+		// so an on-path attacker can forge track confidences. Treat AR matches as
+		// corroboration of locally computed CRCs, never as independent proof.
 		public void ContactAccurateRip(string accurateRipId)
 		{
 			// Calculate the three disc ids used by AR
@@ -860,6 +864,11 @@ namespace CUETools.AccurateRip
 							byte[] urlData = new byte[13];
 							int urlDataLen, bytesRead;
 
+							// dBAR binary format: 13-byte disc header (count byte, then
+							// discId1, discId2, cddbId as little-endian uints), followed by
+							// 9 bytes per track (count byte, CRC, frame-450 CRC). A short
+							// read is a truncated response; bail with ReceiveFailure rather
+							// than keep a partial disk list that would misreport confidence.
 							_accDisks.Clear();
 							while (true)
 							{
@@ -1222,6 +1231,10 @@ namespace CUETools.AccurateRip
 			}
 		}
 
+		// Resolves the drive's read offset from AccurateRip's DriveOffsets.bin, cached for
+		// ten days under %APPDATA%\CUE Tools. A wrong offset shifts every sample of every
+		// rip by that amount, and the file arrives over plain HTTP unsigned - a false entry
+		// only surfaces as offsetted rips failing AR verification later.
 		public static bool FindDriveReadOffset(string driveName, out int driveReadOffset)
 		{
 			string fileName = System.IO.Path.Combine(CachePath, "DriveOffsets.bin");
