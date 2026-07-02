@@ -28,6 +28,18 @@ Things that block honest coverage claims, found while building the slice plan an
 - **Risk level:** low
 - **Status:** open
 
+### TestRipper fixtures were never committed
+
+- **Area or file:** `CUETools/TestRipper/CDDriveReaderTest.cs:75-110`
+- **Concern:** despite its name, the test never touches a CD drive; `ClassInitialize` loads 64 passes of raw sector dumps plus C2 data from a hardcoded `Y:\Temp\dbg\960\` path on the original author's machine, then unit-tests the C2 error-correction voting math offline.
+- **Why it matters:** the C2 voting algorithm (the heart of secure ripping) has a real test that cannot run anywhere; and the project cannot be CI-gated until fixtures exist or the test is rewritten against synthetic dumps.
+- **Evidence found so far:** source read 2026-07-02. Separately, a live hardware smoke test the same day (drive K:, `CUETools.Ripper.Console --test --drive K`) succeeded: read command negotiated (BEh, 12h, 16 blocks) against a real disc, so the SCSI stack itself works on current Windows.
+- **Confidence:** verified
+- **Likely owner:** upstream maintainer
+- **Next best check:** generate synthetic multi-pass dumps with injected C2 patterns (the commented-out `Random`-based generator at `CDDriveReaderTest.cs:68-69,97-108` shows the original intent) and commit them or the generator.
+- **Risk level:** medium
+- **Status:** open
+
 ### TestProcessor fixtures were never committed
 
 - **Area or file:** `CUETools/CUETools.TestProcessor/`, `Test Images/`
