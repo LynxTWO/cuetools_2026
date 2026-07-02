@@ -32,11 +32,11 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Done:** `CUETools.Compression.Zip` now uses the SharpZipLib 1.4.2 NuGet package for net47 + netstandard2.0; net20 keeps the vendored 0.85.5 DLL (modern SharpZipLib dropped net20). Adapted the password path for the modern API: `GetInputStream` returns a plain `Stream` (not `ZipInputStream`) and AES needs the password on the `ZipFile` *before* opening the entry, so `ZipCompressionProvider.Decompress` now requests and sets the password up front instead of lazily on first read. Both `collect_files.bat` and `collect_files_debug.bat` fixed to ship the modern DLL from the build output, not the old vendored copy.
 - **Verified:** net47 + netstandard2.0 build; a net8 round-trip harness against the built provider passes all 6 checks (contents list, full read byte-exact, Length, forward seek, backward-seek reopen, and AES-encrypted read via the PasswordRequired event).
 
-### D6. MusicBrainz client replacement — APPROVED (conditional on confidence)
+### D6. MusicBrainz client replacement — SCOPED; STOPPED FOR YOUR DECISION 2026-07-02
 
-- **Decision:** think hard, scope carefully against the current MusicBrainz web service + Cover Art Archive, and implement the replacement **only if confident it can be done and any breakage fixed**. Otherwise scope it and stop for review.
-- **Evidence:** `MusicBrainz/` mirrors the abandoned musicbrainz-sharp (v1.1-era XML API). `MusicBrainzObject.cs:393` uses the old API.
-- **Plan:** first produce a written scope (call sites, data shape consumed by CUERipper/eac3ui, the current MB web service v2 JSON endpoints, Cover Art Archive for art, rate-limit + user-agent rules). Decide go/no-go from that scope. This is the highest-risk item; keep it last.
+- **Premise changed — there is no live MusicBrainz client to replace.** Full analysis in `docs/review/musicbrainz-replacement-scope.md`. In short: the `MusicBrainz/` musicbrainz-sharp library is dead code (not built, referenced by no project), and CUERipper's direct MusicBrainz query is commented out (`frmCUERipper.cs:893-918`). CUETools gets MusicBrainz metadata via **CTDB's server-side proxy** (`cueSheet.CTDB.Metadata`) plus a Freedb/gnudb fallback. So a "replacement" would reintroduce a direct-to-MusicBrainz path the project deliberately removed — a product decision, not a mechanical swap.
+- **I stopped rather than implement**, per your conditional approval: I'm confident I *could* build a modern MB v2 JSON provider, but whether it *should* exist (vs. relying on CTDB's proxy) is your call.
+- **Your decision (see the scope doc):** (A) rely on CTDB's proxy and delete the dead library (recommended); (B) add a NEW direct MusicBrainz v2 provider behind the metadata seam as a fallback/richer source (I'll implement + verify on request); (C) leave as-is. Either A or B retires the dead `MusicBrainz/` project (folds into D5).
 
 ### D7. CUEControls resgen under dotnet build — PARTIALLY DONE; old-style GUIs deferred to R12
 
