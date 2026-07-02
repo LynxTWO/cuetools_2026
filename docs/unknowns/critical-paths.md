@@ -4,6 +4,18 @@ Open questions from critical-path comment passes (pass 03). Entry shape and voca
 
 ## Entries
 
+### BitReader.fill() has no buffer bounds check
+
+- **Area or file:** `CUETools.Codecs\BitReader.cs:110` (`fill`)
+- **Concern:** `fill()` dereferences `*(bptr_m++)` in a loop with no comparison to `buffer_len_m`, so decoding a truncated or malformed bitstream that requests more bits than the buffer holds reads past the end of the backing memory. `BitReader` is the shared reader under the managed FLAC/ALAC/lossyWAV decoders, which parse untrusted files.
+- **Why it matters:** out-of-bounds read on attacker-controlled input; at minimum a crash, potentially an info leak depending on what follows the buffer. This is the concrete instance behind the general "159 unsafe blocks parse untrusted input" risk.
+- **Evidence found so far:** `fill()` read and commented 2026-07-02; no bounds guard present. Whether every caller pre-guarantees sufficient trailing bytes (known frame length or padding) was not traced.
+- **Confidence:** verified (no check in fill), inferred (exploitability depends on callers)
+- **Likely owner:** upstream maintainer
+- **Next best check:** audit the managed decoders (Flake `AudioDecoder`, ALAC) for how they size and pad the buffer they hand to `BitReader.Reset`; decide whether a bounded-mode fill or a guaranteed padding contract is the safer fix. Good fuzz target (SharpFuzz, modernization idea 9).
+- **Risk level:** high
+- **Status:** open
+
 ### Reserved device names and trailing dots survive metadata cleansing
 
 - **Area or file:** `CUETools.Processor\CUEConfig.cs:565` (`CleanseString`), path construction in `CUESheet.cs`
