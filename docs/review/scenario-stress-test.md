@@ -7,7 +7,7 @@ Pass 08, 2026-07-02. Synthetic abuse/failure scenarios that fit CUETools' actual
 ### SC1. Malicious CTDB parity blob tries to rewrite audio
 
 Plausible: parity is fetched over unauthenticated HTTP. An on-path attacker returns a crafted parity file to corrupt a "repaired" rip.
-- **Holds?** Yes. `AccurateRip\CDRepair.cs VerifyParity` accepts a fix only when the corrections reproduce the local rip's CRC (residual == 0). A forged blob fails the gate → `canRecover = false`. Commented at the gate (S5).
+- **Holds?** Yes. `AccurateRip\CDRepair.cs VerifyParity` accepts a fix only when the corrections reproduce the local rip's CRC (residual == 0). A forged blob fails the gate -> `canRecover = false`. Commented at the gate (S5).
 - **Residual gap:** CRC32 is not collision-resistant; an adversary fully controlling parity is bounded by RS structure + 32-bit check, not a signature. Adequate vs corruption, noted for a future threat-model pass. **Score 2.**
 
 ### SC2. Malformed FLAC/ALAC file triggers an out-of-bounds read
@@ -52,6 +52,6 @@ Plausible (historical): before this session, CI built but ran no tests, so a reg
 
 ## Themes
 
-1. The **integrity story is strong** (CRC repair gate, corroborative verification, no extract-to-disk) — SC1/SC6/SC7 score 2.
-2. The **untrusted-parser story is the weak axis** — SC2 (BitReader OOB) and SC3 (GDI+ MOTD) are the real exposure, both on attacker-controlled bytes. These are the top candidates for the fuzzing/hardening work (modernization idea 9).
+1. The **integrity story is strong** (CRC repair gate, corroborative verification, no extract-to-disk) - SC1/SC6/SC7 score 2.
+2. The **untrusted-parser story is the weak axis** - SC2 (BitReader OOB) and SC3 (GDI+ MOTD) are the real exposure, both on attacker-controlled bytes. These are the top candidates for the fuzzing/hardening work (modernization idea 9).
 3. **Data-at-rest and reserved-name edges** (SC4, SC8) are low-severity robustness/hardening gaps, tracked.
