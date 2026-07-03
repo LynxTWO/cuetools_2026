@@ -4,7 +4,7 @@ Pass 10, 2026-07-02. Lightweight guardrails to keep CUETools from drifting back 
 
 ## What was installed
 
-- **`.github/pull_request_template.md`** — repo-fit PR checklist: protected-area gate, docs-update prompts, sensitive-data self-check, and comment/boundary continuity. Names this repo's actual protected areas rather than generic ones.
+- **`.github/pull_request_template.md`** - repo-fit PR checklist: protected-area gate, docs-update prompts, sensitive-data self-check, and comment/boundary continuity. Names this repo's actual protected areas rather than generic ones.
 - **CI test gate (already live, safe-fix batch 1):** `dotnet test` on TestParity and TestCodecs in both `CI-windows.yml` and `release-windows.yml`. Regressions in the covered parity/codec math block the build and releases.
 
 ## Hard gates (enforced by tooling)
