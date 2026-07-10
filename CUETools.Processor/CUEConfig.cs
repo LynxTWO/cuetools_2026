@@ -593,7 +593,41 @@ namespace CUETools.Processor
                     sb.Append(ch);
             }
 
-            return sb.ToString();
+            string result = sb.ToString();
+
+            // Windows silently strips trailing dots and spaces from every path component, so
+            // "Album." and "Album" (or "Title " and "Title") would collapse to the same file
+            // and silently overwrite each other. Map the trailing run to underscores so the
+            // cleansed name is what actually lands on disk and stays distinct. (SC4)
+            int end = result.Length;
+            while (end > 0 && (result[end - 1] == '.' || result[end - 1] == ' '))
+                end--;
+            if (end < result.Length)
+                result = result.Substring(0, end) + new string('_', result.Length - end);
+
+            // A component equal (case-insensitively, ignoring extension) to a reserved DOS
+            // device name cannot be created as a file or directory. Prefix it so it stays a
+            // legal, distinct name regardless of any extension the caller later appends. (SC4)
+            if (IsReservedDeviceName(result))
+                result = "_" + result;
+
+            return result;
+        }
+
+        static readonly string[] _reservedDeviceNames = {
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
+        internal static bool IsReservedDeviceName(string name)
+        {
+            int dot = name.IndexOf('.');
+            string baseName = (dot >= 0 ? name.Substring(0, dot) : name).TrimEnd(' ');
+            foreach (string r in _reservedDeviceNames)
+                if (string.Equals(baseName, r, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
         }
     }
 }
