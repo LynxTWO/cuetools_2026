@@ -52,6 +52,52 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 - FlaCuda projects (absent from sln), `CUDA.NET.dll`, `Freedb.dll`, `MusicBrainz.dll` (no csproj refs). Keep until the initial rollout completes. Note: D6 may retire the MusicBrainz source project; revisit D5 together with D6's outcome.
 
+## R12 / R13 - large programs, need your sequencing call (assessed 2026-07-10)
+
+The bucket-A remediation items are now done (R1 + R15 decoder hardening, R11
+CleanseString, R10a TestProcessor fixtures). What is left in R12 (modernization) and
+R13 (codec refresh) is large, behavior-affecting, and gated on either your input or a
+verification step that cannot run headless. Parking the concrete decisions here rather
+than starting a large program blind.
+
+### R12 decision - which modernization slice next, and how to verify GUIs
+
+- **What is already done** (see D1, D2, D4, D7): HTTPS lookups, SharpZipLib 1.4.2,
+  the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`.
+- **The blocking sub-decision:** the remaining big pieces - SDK-style conversion of the
+  old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`),
+  then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm
+  resource/icon loading and behavior. This machine has Build Tools only (no full VS) and
+  the review is headless, so I cannot verify a GUI change here. Options:
+  - (A) You (or CI with a GUI runner) verify each converted GUI; I do the conversions in
+    reviewable branches one project at a time.
+  - (B) Defer all GUI-touching modernization until the codec/rollout work settles, and I
+    keep to non-GUI slices (build/test plumbing, library-layer cleanups).
+  - (C) Pick one specific GUI to convert first as a pilot.
+  - **Recommend (A) with `CUETools.eac3ui` as the pilot** - it is the smallest GUI.
+
+### R13 decision - codec refresh needs your codec wishlist + a native build/verify path
+
+- **Current pins (measured in the working tree):** libFLAC **1.5.0**, WavPack **5.8.1**,
+  taglib-sharp **2.3.0.0** - all at or near latest stable already. The submodules are
+  checked out at these versions but the superproject still pins older commits (they show
+  as modified/uncommitted), and each carries local `ThirdParty/*.patch` that must be
+  re-verified on any bump. MAC (APE) SDK 10.86 and unrar 6.11 (D3, approved-but-deferred)
+  are the laggards.
+- **Why I did not just commit the bumps:** advancing a native codec is behavior-affecting
+  (bit-exactness must hold) and needs a native rebuild + round-trip verification that this
+  headless env cannot do. The managed-codec safety net already exists - `TestCodecs`
+  asserts byte-exact encoder output (e.g. `FlakeWriterTest.ConstructorTest` compares
+  against a committed `flake.flac`) - but the native DLLs are built by CI, not here.
+- **Two things I need from you before implementing R13:**
+  1. **Codec wishlist:** which formats to *add* (e.g. Opus? newer ALAC? DSD?). R13 cannot
+     start the "add codecs" half without this list.
+  2. **Bump-and-verify path:** confirm bumps land as reviewable branches that CI builds and
+     round-trips (native bit-exactness), since I cannot verify native output headless.
+- **Safe next step I can take now without a decision:** produce the full per-codec
+  version-vs-latest table + patch-reapply risk note (read-only), and land the D3 unrar
+  upgrade once a real `.rar` round-trip can be run. Say the word and I will.
+
 ## Resolved / actioned
 
 - **D1 AccurateRip HTTPS - DONE 2026-07-02.** Flipped both `http://www.accuraterip.com` literals to `https://` (`AccurateRip.cs:833` dBAR lookup, `:1247` DriveOffsets.bin). No http fallback: a failed AR lookup degrades to "not verified" (corroborative, no data loss), so retrying over cleartext buys nothing. Verified: AccurateRip builds; the HTTPS dBAR path returns 404 for a fake id (proves TLS+routing) and DriveOffsets.bin returned 200 earlier; TestParity 18/18 green. Commit pending in this batch.
