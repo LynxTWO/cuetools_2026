@@ -86,7 +86,7 @@ namespace CUETools.Codecs.ALAC
 			_predicterror_buffer_b = new int[setinfo_max_samples_per_frame];
 			_outputsamples_buffer_a = new int[setinfo_max_samples_per_frame];
 			_outputsamples_buffer_b = new int[setinfo_max_samples_per_frame];
-			_framesBuffer = new byte[65536];
+			_framesBuffer = new byte[FRAMES_BUFFER_SIZE];
 		}
 
         private DecoderSettings m_settings;
@@ -115,7 +115,7 @@ namespace CUETools.Codecs.ALAC
 			_outputsamples_buffer_b = new int[setinfo_max_samples_per_frame];
 
 			_samplesInBuffer = 0;
-			_framesBuffer = new byte[65536];
+			_framesBuffer = new byte[FRAMES_BUFFER_SIZE];
 		}
 
 		public int Read(AudioBuffer buff, int maxLength)
@@ -324,6 +324,7 @@ namespace CUETools.Codecs.ALAC
 		/* supports reading 1 to 24 bits, in big endian format */
 		private uint readbits_24 (byte []buff, ref int pos, int bits)
 		{
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			uint result = (((uint)buff[pos]) << 24) | (((uint)buff[pos + 1]) << 16) | (((uint)buff[pos + 2]) << 8) | ((uint)buff[pos + 3]);
 			result <<= _bitaccumulator;
 			result >>= 32 - bits;
@@ -337,6 +338,7 @@ namespace CUETools.Codecs.ALAC
 		/* supports reading 1 to 24 bits, in big endian format */
 		private unsafe uint readbits_24(byte* buff, ref int pos, int bits)
 		{
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			uint result = (((uint)buff[pos]) << 24) | (((uint)buff[pos + 1]) << 16) | (((uint)buff[pos + 2]) << 8) | ((uint)buff[pos + 3]);
 			result <<= _bitaccumulator;
 			result >>= 32 - bits;
@@ -350,6 +352,7 @@ namespace CUETools.Codecs.ALAC
 		/* supports reading 1 to 16 bits, in big endian format */
 		private unsafe uint peekbits_9(byte* buff, int pos)
 		{
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			uint result = (((uint)buff[pos]) << 8) | (((uint)buff[pos + 1]));
 			result <<= _bitaccumulator;
 			result &= 0x0000ffff;
@@ -371,6 +374,7 @@ namespace CUETools.Codecs.ALAC
 			if (bits <= 24)
 				return readbits_24(buff, ref pos, bits);
 
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			ulong result = (((ulong)buff[pos]) << 32) | (((ulong)buff[pos + 1]) << 24) | (((ulong)buff[pos + 2]) << 16) | (((ulong)buff[pos + 3]) << 8) | ((ulong)buff[pos + 4]);
 			result <<= _bitaccumulator;
 			result &= 0x00ffffffffff;
@@ -387,6 +391,7 @@ namespace CUETools.Codecs.ALAC
 			if (bits <= 24)
 				return readbits_24(buff, ref pos, bits);
 
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			ulong result = (((ulong)buff[pos]) << 32) | (((ulong)buff[pos + 1]) << 24) | (((ulong)buff[pos + 2]) << 16) | (((ulong)buff[pos + 3]) << 8) | ((ulong)buff[pos + 4]);
 			result <<= _bitaccumulator;
 			result &= 0x00ffffffffff;
@@ -400,6 +405,7 @@ namespace CUETools.Codecs.ALAC
 		/* reads a single bit */
 		private uint readbit(byte[] buff, ref int pos)
 		{
+			if (pos + 5 > FRAMES_BUFFER_SIZE) throw new IndexOutOfRangeException("ALAC: read past end of frame buffer (corrupt or truncated stream)");
 			int new_accumulator;
 			uint result = buff[pos];
 			result <<= _bitaccumulator;
@@ -662,6 +668,11 @@ namespace CUETools.Codecs.ALAC
 
 		private void decodeFrame(int sampleSize)
 		{
+			// The frame's compressed bytes live in _framesBuffer[0..sampleSize). Cap it at the
+			// data region so the padded allocation always has room for the readers' look-ahead
+			// window; a larger sampleSize (from a crafted stsz atom) is a corrupt stream.
+			if ((uint)sampleSize > FRAMES_BUFFER_DATA)
+				throw new IndexOutOfRangeException("ALAC: frame size exceeds the frame buffer (corrupt stream)");
 			_bitaccumulator = 0;
 			int pos = 0;
 
@@ -675,6 +686,12 @@ namespace CUETools.Codecs.ALAC
 			int wasted_bytes = (int) readbits(_framesBuffer, ref pos, 2); /* unknown ? */
 			bool isnotcompressed = 0 != readbits(_framesBuffer, ref pos, 1); /* whether the frame is compressed */
 			int outputSamples = hassize ? (int)readbits(_framesBuffer, ref pos, 32) : setinfo_max_samples_per_frame;
+			// outputSamples drives the rice/predictor loops that write into the
+			// _predicterror_buffer / _outputsamples_buffer arrays (sized
+			// setinfo_max_samples_per_frame). A crafted "hassize" frame could set it to any
+			// 32-bit value -> heap out-of-bounds WRITE. Reject anything past the buffers.
+			if ((uint)outputSamples > (uint)setinfo_max_samples_per_frame)
+				throw new IndexOutOfRangeException("ALAC: frame sample count exceeds buffer capacity (corrupt stream)");
 
 			int readsamplesize = pcm.BitsPerSample - (wasted_bytes * 8) + pcm.ChannelCount - 1;
 			if (!isnotcompressed)
@@ -1200,12 +1217,12 @@ namespace CUETools.Codecs.ALAC
 			//qtmovie_add_lst_parser("top.moov.udta", null);
 			//qtmovie_add_lst_parser("top.moov.udta.meta", (uint)4);
 			//qtmovie_add_lst_parser("top.moov.udta.meta.ilst", null);
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©nam", "TITLE");
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©ART", "ARTIST");
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©wrt", "COMPOSER");
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©alb", "ALBUM");
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©day", "DATE");
-			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.©gen", "GENRE");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½nam", "TITLE");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½ART", "ARTIST");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½wrt", "COMPOSER");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½alb", "ALBUM");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½day", "DATE");
+			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.ï¿½gen", "GENRE");
 			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.disk");
 			//qtmovie_add_tag_parser("top.moov.udta.meta.ilst.trkn");
 			//qtmovie_add_any_parser("top.moov.udta.meta.ilst.----", new qtmovie_read_atom(qtmovie_read_meta_freeform), null);
@@ -1276,6 +1293,12 @@ namespace CUETools.Codecs.ALAC
 
 		NameValueCollection _tags;
 		int _samplesInBuffer, _samplesBufferOffset;
+		// A compressed frame is at most FRAMES_BUFFER_DATA bytes; the +16 is trailing pad so
+		// the inline bit readers (readbits/peekbits read a 4-5 byte window at pos) can top up
+		// a few bytes past a valid frame end without touching the allocation boundary. The
+		// readers bound pos against FRAMES_BUFFER_SIZE so a crafted frame cannot walk off it.
+		const int FRAMES_BUFFER_DATA = 65536;
+		const int FRAMES_BUFFER_SIZE = FRAMES_BUFFER_DATA + 16;
 		byte[] _framesBuffer;
 		byte[] _buff;
 		byte _interlacing_shift;
