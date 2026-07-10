@@ -9,6 +9,20 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <!-- R10: the "Test Images" fixtures are CUE sheets plus tiny ".dummy" duration
+       stubs (MM:SS:FF, read by the NULL/silent decoder), so they carry no real audio.
+       The processor tests open them by a path relative to the output directory
+       ("Amarok\Amarok.cue"), so copy the tree there with the "Test Images\" prefix
+       stripped via Link. Without this the OpenCDExtra/OpenEnhancedCD/OpenOneTrackCD
+       tests throw DirectoryNotFoundException. -->
+  <ItemGroup>
+    <None Remove="Test Images\**\*.*" />
+    <Content Include="Test Images\**\*.*">
+      <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.1" />
