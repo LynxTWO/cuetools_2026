@@ -63,6 +63,7 @@ namespace CUETools.Codecs
 
         private byte* buffer_m;
         private byte* bptr_m;
+        private byte* end_m;        // one past the last readable byte (buffer_m + pos + len)
         private int buffer_len_m;
         private int have_bits_m;
         private ulong cache_m;
@@ -85,6 +86,7 @@ namespace CUETools.Codecs
 		{
 			buffer_m = null;
             bptr_m = null;
+            end_m = null;
 			buffer_len_m = 0;
 			have_bits_m = 0;
 			cache_m = 0;
@@ -100,6 +102,7 @@ namespace CUETools.Codecs
 		{
 			buffer_m = _buffer;
             bptr_m = _buffer + _pos;
+            end_m = _buffer + _pos + _len;
 			buffer_len_m = _len;
 			have_bits_m = 0;
             cache_m = 0;
@@ -107,19 +110,20 @@ namespace CUETools.Codecs
 			fill();
 		}
 
-		// Refills the bit cache to at least 56 bits by reading raw bytes through bptr_m.
-		// INVARIANT (unchecked here): this dereferences *bptr_m++ with no comparison against
-		// buffer_len_m, so it will read past the end of the input if the decoder asks for
-		// more bits than the buffer holds. Every caller must guarantee the backing buffer has
-		// enough trailing bytes (frame length known ahead, or padding) before decoding
-		// attacker-controlled data. Adding a bounds check here is behavior-affecting (it would
-		// change the hot decode loop) and is tracked as an unknown, not fixed in this pass.
+		// Refills the bit cache to at least 56 bits. This is a SPECULATIVE top-up: the decoder
+		// keeps the cache full and consumes only the bits a frame actually needs, so on a valid
+		// last frame this legitimately reaches a few bytes past end_m (the cache holds bits the
+		// frame never uses). Reading zero past end_m is therefore byte-identical to reading the
+		// real trailing bytes -- those bits are discarded, never output -- while it stops the
+		// unbounded over-read that made a crafted/truncated stream walk off the frame buffer.
+		// The unbounded scans (read_unary, read_rice_block) throw at end_m instead; see there.
 		public void fill()
 		{
             while (have_bits_m < 56)
             {
                 have_bits_m += 8;
-                byte b = *(bptr_m++);
+                byte b = bptr_m < end_m ? *bptr_m : (byte)0;
+                bptr_m++;
                 cache_m |= (ulong)b << (64 - have_bits_m);
                 crc16_m = (ushort)((crc16_m << 8) ^ Crc16.table[(crc16_m >> 8) ^ b]);
             }
@@ -201,6 +205,11 @@ namespace CUETools.Codecs
 			{
 				val += 8;
                 cache_m <<= 8;
+                // Unbounded scan: a valid unary code terminates within the frame data, so this
+                // never reaches end_m on well-formed input. A crafted/truncated stream with a
+                // long zero run would otherwise walk off the buffer -- stop it cleanly.
+                if (bptr_m >= end_m)
+                    throw new IndexOutOfRangeException("BitReader.read_unary: read past end of buffer (corrupt or truncated stream)");
                 byte b = *(bptr_m++);
                 cache_m |= (ulong)b << (64 - have_bits_m);
                 crc16_m = (ushort)((crc16_m << 8) ^ Crc16.table[(crc16_m >> 8) ^ b]);
@@ -309,19 +318,28 @@ namespace CUETools.Codecs
                 {
                     uint bits;
                     byte* orig_bptr = bptr;
+                    // Unbounded unary scan (see read_unary): throw at end_m so a crafted zero
+                    // run cannot walk off the buffer. Never reached on well-formed input.
                     while ((bits = unary_table[cache >> 56]) == 8)
                     {
                         cache <<= 8;
+                        if (bptr >= end_m)
+                        {
+                            bptr_m = bptr; have_bits_m = have_bits; cache_m = cache; crc16_m = crc;
+                            throw new IndexOutOfRangeException("BitReader.read_rice_block: read past end of buffer (corrupt or truncated stream)");
+                        }
                         byte b = *(bptr++);
                         cache |= (ulong)b << (64 - have_bits);
                         crc = (ushort)((crc << 8) ^ t[(crc >> 8) ^ b]);
                     }
                     uint msbs = bits + ((uint)(bptr - orig_bptr) << 3);
                     // assumes k <= 41 (have_bits < 41 + 7 + 1 + 8 == 57, so we don't loose bits here)
+                    // Speculative top-up (see fill): read zero past end_m, byte-identical.
                     while (have_bits < 56)
                     {
                         have_bits += 8;
-                        byte b = *(bptr++);
+                        byte b = bptr < end_m ? *bptr : (byte)0;
+                        bptr++;
                         cache |= (ulong)b << (64 - have_bits);
                         crc = (ushort)((crc << 8) ^ t[(crc >> 8) ^ b]);
                     }

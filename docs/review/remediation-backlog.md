@@ -6,12 +6,14 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 ## Ranked items
 
-### R1. BitReader out-of-bounds read on malformed input - bucket C->A, risk high
+### R1. BitReader out-of-bounds read on malformed input - DONE 2026-07-10, risk high
 
-- **Where:** `CUETools.Codecs\BitReader.cs:110` (`fill`), shared by managed FLAC/ALAC/lossyWAV decoders.
-- **Why:** no bounds check vs `buffer_len_m`; crafted/truncated stream reads past the buffer (SC2).
-- **Next step:** (C) trace decoder buffer sizing/padding to establish exploitability; then (A) add a bounded fill or a guaranteed-padding contract. Good SharpFuzz target (idea 9).
-- **Verify:** fuzz corpus of truncated frames; TestCodecs stays green.
+- **Where:** `CUETools.Codecs\BitReader.cs` (`fill`, `read_unary`, `read_rice_block`).
+- **Why:** no bounds check vs the buffer length - `buffer_len_m` was stored but never read, so the check had been optimized out. A crafted/truncated FLAC frame (oversized blocksize, or an unbounded zero-run in the rice/unary path) drove `bptr_m` past the managed 128 KB frame buffer: an out-of-bounds read (CWE-125) reachable through the Flake `AudioDecoder`, a user-selectable decoder for untrusted `.flac`. DoS at minimum, potential info-disclosure into decoded output.
+- **Exploitability (the C step, done):** the Flake decoder feeds a fixed 128 KB ring buffer and hands `DecodeFrame` the remaining length, which the reader ignored. Reachable at EOF (truncated last frame) or via a crafted long zero-run; the OOB was confirmed by fuzzing the managed decoder from a `MemoryStream` (harness in scratchpad, not committed).
+- **Fix (the A step):** track `end_m = buffer + pos + len`; the speculative cache top-up (`fill`, and `read_rice_block`'s `have_bits<56` loop) reads zero past `end_m` (byte-identical - those bits are discarded), and the unbounded unary scans (`read_unary`, `read_rice_block`'s `bits==8` loop) throw at `end_m`. Commit `624879c` on branch `r1-bitreader-bounds`.
+- **Verified:** decoded-PCM SHA-256 identical to the pre-fix decoder on a 16-bit (test.flac) and a 24-bit (hires1.flac) seed; encoders unaffected (they use `BitReader` only for static tables/log2i); mutation + truncation fuzzing of both seeds (tens of thousands of malformed inputs) yields clean exceptions, no crash or hang. TestCodecs is the standing byte-identity gate (run via the documented net47 recipe).
+- **Follow-up (new):** the R1 finding said "FLAC/ALAC/lossyWAV"; in fact only the **Flake FLAC decoder** consumes the shared `BitReader` for decode. **ALAC decode uses its own inline bit reader** (`ALACDotNet.cs` `readbits`/`basterdised_rice_decompress`, borrowing only `BitReader`'s static table) and was NOT covered here - tracked as R15. lossyWAV has no managed decoder (encode-side preprocessor only).
 
 ### R2. MOTD image fetched over HTTP and rendered via GDI+ - bucket B, risk medium
 
@@ -83,6 +85,13 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Next step:** build 3.100 as a baseline; assess plausible 20-year gains (AVX2 SIMD for FFT/psychoacoustics/quantization hot loops - Zen 3 is AVX2, not AVX-512; multithreaded frame encoding; build/CI modernization; VBR/reservoir quality tuning) and quantify with speed + quality benchmarks before proposing a v4 feature set. Bench on the 5950X (see hardware note).
 - **Confidence:** unscoped; needs the baseline build + benchmark pass first.
 - **Status 2026-07-02:** baseline BUILT + BENCHMARKED + proposed (`docs/review/lame-v4-proposal.md`). Measured: LAME 3.100 is single-threaded (uses 1/32 cores), SIMD stuck at SSE1, `-q0` only 17x realtime. v4 case: first multithreaded LAME (flagship), AVX2 SIMD, CMake/CI/tests, fuzz mpglib, loudness updates. Awaiting user's pick of where to start (recommended: frontend/batch multithreading).
+
+### R15. ALAC decoder inline bit reader - unaudited OOB surface - bucket C, risk medium
+
+- **Where:** `CUETools.Codecs.ALAC\ALACDotNet.cs` - its own `readbits(_framesBuffer, ref pos, bps)` and `basterdised_rice_decompress`, NOT the shared `BitReader` (it borrows only `BitReader`'s static unary table).
+- **Why:** surfaced while fixing R1. ALAC is a user-selectable decoder for untrusted `.m4a`/ALAC input; its hand-rolled bit reading was never checked for the same past-the-buffer read that R1 fixed in the FLAC path.
+- **Next step:** (C) trace `_framesBuffer`/`pos` bounds and the rice loops; then apply the same end-pointer bound if needed. Reuse the R1 fuzz harness pattern (decode from a `MemoryStream`, truncate/mutate a seed `.m4a`).
+- **Verify:** decoded-PCM identical to pre-change on a valid ALAC seed; malformed inputs fail cleanly; ALAC round-trip test green.
 
 ## Ordering
 
