@@ -53,14 +53,46 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Where:** `CUEConfigAdvanced.ProxyPassword` + SettingsWriter.
 - **Next step:** (C) confirm persistence format; then DPAPI / Credential Manager, or document the exposure. Approval-gated (credentials).
 
-### R10. Synthetic test fixtures to unblock TestProcessor / TestRipper - bucket A, risk medium
+### R10a. TestProcessor fixtures not copied to output - bucket A, risk medium - DONE (2026-07-10)
 
-- **Where:** `docs/unknowns/coverage-pass.md`.
-- **Next step:** generate small CC0 CUE fixtures (gaps variants, CD-Extra, one-track) for TestProcessor; rework TestRipper against synthetic multi-pass dumps. Then add CI steps.
+- **Where:** `docs/unknowns/coverage-pass.md`; `CUETools/CUETools.TestProcessor/CUETools.TestProcessor.csproj`.
+- **What was wrong (verified):** the CC0 fixtures already exist in source under
+  `CUETools/CUETools.TestProcessor/Test Images/` - each is a CUE sheet plus a tiny
+  `.dummy` stub holding a `MM:SS:FF` duration that `AudioReadWrite.GetAudioSource`
+  turns into a silent `NULL.AudioDecoder` (no real audio, so nothing copyrighted).
+  The SDK-style test project never copied that tree to the output directory, so
+  `OpenCDExtra`, `OpenEnhancedCD`, and `OpenOneTrackCD` threw
+  `DirectoryNotFoundException` looking for `bin\...\Amarok\Amarok.cue`.
+- **Fix:** a `Content Include="Test Images\**\*.*"` item with
+  `Link=%(RecursiveDir)%(Filename)%(Extension)` (strips the `Test Images\` prefix)
+  and `CopyToOutputDirectory=PreserveNewest`, plus a matching `None Remove` to avoid
+  the SDK duplicate-item conflict.
+- **Result (measured):** TestProcessor 7 passed, 0 failed, 1 skipped
+  (`CTDBResponseTest` is `[Ignore]` and needs an out-of-repo `Z:\ctdb.xml`).
 
-### R11. CleanseString: reserved names + trailing dots (SC4) - bucket A, risk low
+### R10b. TestRipper synthetic multi-pass dumps - bucket A, risk medium - PENDING
 
-- **Next step:** small hardening in `CUEConfig.CleanseString`; add unit tests.
+- **What blocks it (verified):** `TestRipper/CDDriveReaderTest.MyTestInitialize` reads
+  hardcoded machine-specific dumps `Y:\Temp\dbg\960\960-{00..63}.bin` and `.c2` (64
+  passes) plus `960.bin`. Those files were never in the repo, are ~5.6 MB each
+  (~360 MB total), and are drive-specific, so committing them is not an option. The
+  single test (`CorrectSectorsTest`) then asserts the C2-weighted majority vote across
+  the 64 passes recovers `_realData` exactly (`_realErrors == 0`).
+- **Next step:** replace the file-replay init with in-memory synthesis - generate a
+  deterministic `_realData`, model each pass as that data with a minority of
+  C2-flagged byte errors, and feed `UserData`/`C2Count` directly (the original author
+  already sketched this in the commented-out `Random` block). Keep it purely in memory
+  so it runs in CI with no hardware and no committed dumps. Note: TestRipper is an
+  old-style (non-SDK) project and is absent from the buildable set today; sequence it
+  with R8.
+
+### R11. CleanseString: reserved names + trailing dots (SC4) - bucket A, risk low - DONE (2026-07-10)
+
+- **Fix (merged e5f2026):** `CUEConfig.CleanseString` now maps trailing dots/spaces to
+  underscores (Windows silently trims them, which collides distinct names) and prefixes
+  reserved DOS device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) with `_`. Added
+  `CleanseStringTest` (3 tests, green) covering both hardenings and confirming ordinary
+  names like `CONcert` and `COM10` are untouched.
 
 ### R12. Modernization program (net8 SDK-style, async, HttpClient, SIMD, installer, dead-code removal D5) - bucket B, large
 
