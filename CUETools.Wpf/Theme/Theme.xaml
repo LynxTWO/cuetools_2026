@@ -18,26 +18,28 @@
   <SolidColorBrush x:Key="GlassLine" Color="#243029"/>
   <SolidColorBrush x:Key="TealSoft" Color="#2434CFC0"/>
 
+  <!-- Themeable control surfaces. These are named (not inline) so ThemeService can flip the
+       whole app light/dark by mutating their colors at runtime; StaticResource references keep
+       pointing at these same brush objects. Not frozen. -->
+  <SolidColorBrush x:Key="ButtonPressed" Color="#0C110E"/>
+  <LinearGradientBrush x:Key="ButtonFace" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#1B221C" Offset="0"/>
+    <GradientStop Color="#121813" Offset="1"/>
+  </LinearGradientBrush>
+
   <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
   <FontFamily x:Key="Mono">Cascadia Mono, Consolas, monospace</FontFamily>
 
   <!-- Panel button: reads like a milled bench-gear key. Dark brushed face, hairline edge that
        lights teal on hover, sinks on press. Implicit, so every plain Button picks it up. -->
   <Style TargetType="Button">
-    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="FontSize" Value="12.5"/>
     <Setter Property="Padding" Value="14,7"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
-    <Setter Property="Background">
-      <Setter.Value>
-        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-          <GradientStop Color="#1B221C" Offset="0"/>
-          <GradientStop Color="#121813" Offset="1"/>
-        </LinearGradientBrush>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassLine}"/>
+    <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
@@ -54,8 +56,8 @@
               </Setter>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="b" Property="Background" Value="#0C110E"/>
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Line}"/>
+              <Setter TargetName="b" Property="Background" Value="{DynamicResource ButtonPressed}"/>
+              <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Line}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter TargetName="b" Property="Opacity" Value="0.4"/>
@@ -83,7 +85,7 @@
 
   <!-- dark dropdown to match the panel buttons -->
   <Style TargetType="ComboBoxItem">
-    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="Padding" Value="10,6"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -102,7 +104,7 @@
   </Style>
 
   <Style TargetType="ComboBox">
-    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="FontSize" Value="12.5"/>
     <Setter Property="Height" Value="30"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -114,13 +116,7 @@
                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
               <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
-                  <Border x:Name="face" CornerRadius="7" BorderThickness="1" BorderBrush="{StaticResource GlassLine}">
-                    <Border.Background>
-                      <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#1B221C" Offset="0"/>
-                        <GradientStop Color="#121813" Offset="1"/>
-                      </LinearGradientBrush>
-                    </Border.Background>
+                  <Border x:Name="face" CornerRadius="7" BorderThickness="1" BorderBrush="{DynamicResource GlassLine}" Background="{DynamicResource ButtonFace}">
                     <Grid>
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -129,7 +125,7 @@
                       <ContentPresenter Grid.Column="0" Margin="11,0,0,0" VerticalAlignment="Center"
                                         Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
                       <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Data="M0,0 L8,0 L4,5 Z" Fill="{StaticResource Muted}"/>
+                            Data="M0,0 L8,0 L4,5 Z" Fill="{DynamicResource Muted}"/>
                     </Grid>
                   </Border>
                   <ControlTemplate.Triggers>
@@ -142,7 +138,7 @@
             </ToggleButton>
             <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
                    AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-              <Border Margin="0,4,0,0" CornerRadius="8" Background="{StaticResource Face}" BorderBrush="{StaticResource GlassLine}" BorderThickness="1"
+              <Border Margin="0,4,0,0" CornerRadius="8" Background="{DynamicResource Face}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1"
                       MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Padding="4">
                 <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="3" Opacity="0.5"/></Border.Effect>
                 <ScrollViewer MaxHeight="260"><ItemsPresenter/></ScrollViewer>
@@ -156,7 +152,7 @@
 
   <!-- left-nav item -->
   <Style x:Key="NavItem" TargetType="ListBoxItem">
-    <Setter Property="Foreground" Value="{StaticResource InkDim}"/>
+    <Setter Property="Foreground" Value="{DynamicResource InkDim}"/>
     <Setter Property="Padding" Value="12,9"/>
     <Setter Property="Margin" Value="0,1"/>
     <Setter Property="Template">
@@ -167,12 +163,12 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource Panel}"/>
-              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter TargetName="b" Property="Background" Value="{DynamicResource Panel}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
               <Setter TargetName="b" Property="Background" Value="{StaticResource TealSoft}"/>
-              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
