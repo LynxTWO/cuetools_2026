@@ -76,7 +76,7 @@ public sealed class RipViewModel : PageViewModel
     {
         if (_selectedDrive == '\0' || _isBusy) return;
         IsBusy = true;
-        StatusText = "Reading disc...";
+        StatusText = "Reading disc and looking up metadata...";
         char drive = _selectedDrive;
 
         DiscInfo? info = await Task.Run(() => _drives.ReadDisc(drive));
@@ -93,11 +93,15 @@ public sealed class RipViewModel : PageViewModel
         else
         {
             IsDiscPresent = true;
-            AlbumTitle = "Unknown album";
-            AlbumArtist = string.IsNullOrWhiteSpace(info.DriveName) ? $"Drive {drive}:" : info.DriveName;
-            DiscInfoText = $"{info.AudioTracks} tracks   {Fmt(info.TotalLength)}   {info.TocId}";
+            AlbumTitle = info.Album;
+            AlbumArtist = string.IsNullOrWhiteSpace(info.Artist)
+                ? (string.IsNullOrWhiteSpace(info.DriveName) ? $"Drive {drive}:" : info.DriveName)
+                : (string.IsNullOrWhiteSpace(info.Year) ? info.Artist : $"{info.Artist}  ({info.Year})");
+            DiscInfoText = $"{info.AudioTracks} tracks   {Fmt(info.TotalLength)}   {info.ReleaseMatches.Count} release match(es)";
             foreach (var t in info.Tracks) Tracks.Add(t);
-            StatusText = $"Disc read: {info.AudioTracks} tracks. Metadata lookup and ripping come next.";
+            StatusText = info.ReleaseMatches.Count > 0
+                ? $"Identified: {info.Artist} - {info.Album}. Ripping comes next."
+                : "Disc read; not found in the metadata databases (generic track names).";
         }
         IsBusy = false;
     }
