@@ -32,13 +32,16 @@
     <ProjectReference Include="..\CUETools.Ripper\CUETools.Ripper.csproj" />
     <ProjectReference Include="..\CUETools.Ripper.SCSI\CUETools.Ripper.SCSI.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.ALAC\CUETools.Codecs.ALAC.csproj" />
     <ProjectReference Include="..\Freedb\Freedb.csproj" />
   </ItemGroup>
 
-  <!-- The engine discovers codec plugins from a "plugins" subdir; put the managed Flake
-       FLAC encoder there so ripping uses it (no external flac.exe needed). More codecs follow. -->
+  <!-- The engine discovers codec plugins from a "plugins" subdir; put the managed codecs there
+       so ripping/converting use them (no external exe needed). They are project references so
+       the net8 plugin loader can resolve them (see backlog R16). Flake = FLAC, ALAC = m4a. -->
   <Target Name="CopyManagedPlugins" AfterTargets="Build">
     <Copy SourceFiles="$(TargetDir)CUETools.Codecs.Flake.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.ALAC.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>
