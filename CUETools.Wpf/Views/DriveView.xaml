@@ -13,7 +13,7 @@
             <TextBlock Text="{Binding DriveLetter}" FontFamily="{StaticResource Mono}" FontSize="11.5" Foreground="{StaticResource Muted}"/>
             <TextBlock Text="{Binding DriveModel}" FontFamily="{StaticResource Serif}" FontSize="20" Foreground="{StaticResource Ink}" Margin="0,2,0,0"/>
           </StackPanel>
-          <Button DockPanel.Dock="Right" Content="Detect" Command="{Binding DetectCommand}" Padding="16,8" VerticalAlignment="Center"/>
+          <Button DockPanel.Dock="Right" Content="Detect" Command="{Binding DetectCommand}" Style="{StaticResource Accent}" Padding="16,8" VerticalAlignment="Center"/>
           <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,20,0">
             <TextBlock Text="READ OFFSET" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
             <TextBlock Text="{Binding OffsetText}" FontFamily="{StaticResource Mono}" FontSize="23" Foreground="{StaticResource Teal}" HorizontalAlignment="Right"/>
