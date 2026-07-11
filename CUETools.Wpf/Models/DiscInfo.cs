@@ -17,4 +17,8 @@ public sealed class DiscInfo
     public TimeSpan TotalLength { get; init; }
     public string TocId { get; init; } = "";
     public IReadOnlyList<string> ReleaseMatches { get; init; } = Array.Empty<string>();
+
+    /// <summary>The matched releases, ranked best-first with source + why. Empty when offline or
+    /// the disc is not found.</summary>
+    public IReadOnlyList<ReleaseMatch> Releases { get; init; } = Array.Empty<ReleaseMatch>();
 }

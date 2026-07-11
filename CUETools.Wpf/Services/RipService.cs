@@ -29,41 +29,54 @@ public sealed class VerifyResult
 public interface IRipService
 {
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
-    /// <paramref name="onLevels"/> receives real per-channel peak (L,R) of each read buffer.</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, Action<double, string> onProgress, Action<double, double>? onLevels = null);
+    /// <paramref name="onLevels"/> receives real per-channel peak (L,R) of each read buffer.
+    /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
+    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
-    /// Music\CUETools\Artist - Album.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, Action<double, string> onProgress, Action<double, double>? onLevels = null);
+    /// Music\CUETools\Artist - Album, using the chosen release metadata when given.</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 }
 
 public sealed class RipService : IRipService
 {
     private readonly CUEConfig _config;
+    private readonly IDiagnosticLog _log;
 
-    public RipService(CUEConfig config) => _config = config;
+    public RipService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
-    public VerifyResult RunVerify(char drive, int cq, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, "flac", onProgress, onLevels);
-    public VerifyResult RunEncode(char drive, int cq, string format, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, onProgress, onLevels);
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, "flac", metadata, onProgress, onLevels);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, onProgress, onLevels);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, Action<double, string> onProgress, Action<double, double>? onLevels)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels)
     {
         var reader = new CDDriveReader();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            if (!reader.Open(drive)) return new VerifyResult { Error = "No disc." };
+            if (!reader.Open(drive)) { _log.Warn("rip", "no disc / not ready"); return new VerifyResult { Error = "No disc." }; }
 
             int offset = 0;
             try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); } catch { }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
+            _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' chosen_release={(metadata != null)}");
 
             // Tap real audio levels for the VU meter (delegates everything else to the drive).
             ICDRipper ripper = onLevels != null ? new LevelMeteringRipper(reader, onLevels) : reader;
 
             var cue = new CUESheet(_config);
             cue.OpenCD(ripper);
-            try { var rel = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Fast); if (rel.Count > 0) cue.CopyMetadata(((CUEMetadataEntry)rel[0]).metadata); } catch { }
+            if (metadata != null)
+            {
+                try { cue.CopyMetadata(metadata); } catch { }   // honor the user's chosen release
+            }
+            else
+            {
+                try { var rel = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Fast); if (rel.Count > 0) cue.CopyMetadata(((CUEMetadataEntry)rel[0]).metadata); } catch { }
+            }
+            // from here on, any album/artist text (incl. in paths or errors) is scrubbed from the log
+            _log.Redact(cue.Metadata?.Artist, cue.Metadata?.Title);
 
             cue.UseCUEToolsDB("CUETools 2026", reader.ARName, false, CTDBMetadataSearch.Fast);
             cue.UseAccurateRip();
@@ -108,6 +121,9 @@ public sealed class RipService : IRipService
             int files = 0;
             try { if (encode && Directory.Exists(outDir)) files = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
 
+            _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
+                $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} status={status}");
+
             int n = Math.Max(0, cue.TrackCount);
             var arpt = new int[n];
             var ctpt = new int[n];
@@ -134,6 +150,7 @@ public sealed class RipService : IRipService
         }
         catch (Exception ex)
         {
+            _log.Error("rip", $"failed after {sw.Elapsed.TotalSeconds:0}s", ex);
             return new VerifyResult { Error = ex.Message };
         }
         finally
