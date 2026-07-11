@@ -14,8 +14,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _theme = theme;
-        // Subscribed after the startup Apply already fired, so there is no flash on launch - only
-        // when the user toggles the theme.
+        // The palette brushes are recolored in place by ThemeService (they are single mutable
+        // objects in the app resources), so the window just plays the light-switch animation.
         _theme.Changed += (_, _) => AnimateLightSwitch(_theme.Current);
     }
 
