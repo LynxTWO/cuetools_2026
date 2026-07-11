@@ -16,6 +16,7 @@ namespace CUETools.Wpf.ViewModels;
 public sealed class RipViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
+    private readonly IRipService _rip;
 
     public ObservableCollection<char> Drives { get; } = new();
     public ObservableCollection<TrackItem> Tracks { get; } = new();
@@ -46,16 +47,28 @@ public sealed class RipViewModel : PageViewModel
     private string _statusText = "Ready";
     public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
 
-    public ICommand ReadDiscCommand { get; }
+    private double _ripProgress;
+    public double RipProgress { get => _ripProgress; private set => Set(ref _ripProgress, value); }
 
-    public RipViewModel(IDriveService drives)
+    private bool _isRipping;
+    public bool IsRipping { get => _isRipping; private set => Set(ref _isRipping, value); }
+
+    private string _ripStatus = "";
+    public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
+
+    public ICommand ReadDiscCommand { get; }
+    public ICommand VerifyCommand { get; }
+
+    public RipViewModel(IDriveService drives, IRipService rip)
     {
         Title = "Rip";
         Group = "Work";
         Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB.";
         _drives = drives;
+        _rip = rip;
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
+        VerifyCommand = new RelayCommand(_ => { _ = VerifyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         SeedRecent();
@@ -104,6 +117,26 @@ public sealed class RipViewModel : PageViewModel
                 : "Disc read; not found in the metadata databases (generic track names).";
         }
         IsBusy = false;
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (!IsDiscPresent || IsRipping || IsBusy) return;
+        char drive = _selectedDrive;
+        IsRipping = true;
+        RipProgress = 0;
+        StatusText = "Starting verify...";
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        var result = await Task.Run(() => _rip.RunVerify(drive, (frac, status) =>
+        {
+            // ReadProgress fires on the ripper's thread; marshal to the UI.
+            dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; }));
+        }));
+
+        RipProgress = result.Ok ? 1 : RipProgress;
+        StatusText = result.Ok ? result.Status : ("Verify failed: " + result.Error);
+        IsRipping = false;
     }
 
     private static string Fmt(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:00}";
