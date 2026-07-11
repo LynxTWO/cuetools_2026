@@ -22,6 +22,7 @@ public partial class App : Application
         services.AddSingleton<IVerifyService, VerifyService>();
         services.AddSingleton<IConvertService, ConvertService>();
         services.AddSingleton<IReportStore, ReportStore>();
+        services.AddSingleton<IHistoryStore, HistoryStore>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.

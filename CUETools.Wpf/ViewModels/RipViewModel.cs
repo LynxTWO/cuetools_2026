@@ -19,6 +19,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IDriveService _drives;
     private readonly IRipService _rip;
     private readonly IReportStore _reports;
+    private readonly IHistoryStore _history;
     private readonly CUEConfig _config;
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
@@ -85,7 +86,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand VerifyCommand { get; }
     public ICommand RipCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IReportStore reports, CUEConfig config)
+    public RipViewModel(IDriveService drives, IRipService rip, IReportStore reports, IHistoryStore history, CUEConfig config)
     {
         Title = "Rip";
         Group = "Work";
@@ -93,6 +94,7 @@ public sealed class RipViewModel : PageViewModel
         _drives = drives;
         _rip = rip;
         _reports = reports;
+        _history = history;
         _config = config;
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
@@ -100,7 +102,7 @@ public sealed class RipViewModel : PageViewModel
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
-        SeedRecent();
+        LoadRecent();
 
         if (Drives.Count > 0)
         {
@@ -184,7 +186,7 @@ public sealed class RipViewModel : PageViewModel
     private void PublishReport(bool encode, VerifyResult result)
     {
         var d = _lastDisc;
-        _reports.Publish(new RipReport
+        var report = new RipReport
         {
             Mode = encode ? "Rip" : "Verify",
             Album = d?.Album ?? AlbumTitle,
@@ -203,17 +205,18 @@ public sealed class RipViewModel : PageViewModel
             FileCount = result.FileCount,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
             TocId = d?.TocId ?? ""
-        });
+        };
+        _reports.Publish(report);
+        _history.Add(report);
+        LoadRecent();
     }
 
     private static string Fmt(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:00}";
 
-    private void SeedRecent()
+    private void LoadRecent()
     {
-        // Placeholder until the local verification DB (UseLocalDB) is wired in.
-        Recent.Add(new RecentRip { Title = "The Four Seasons", Artist = "Vivaldi - Il Giardino Armonico", When = "2 min ago", Result = "12/12 verified" });
-        Recent.Add(new RecentRip { Title = "Cello Suites", Artist = "J.S. Bach - Pablo Casals", When = "9 min ago", Result = "12/12 verified" });
-        Recent.Add(new RecentRip { Title = "Kind of Blue", Artist = "Miles Davis", When = "16 min ago", Result = "5/5 verified" });
-        Recent.Add(new RecentRip { Title = "A Love Supreme", Artist = "John Coltrane", When = "48 min ago", Result = "4/4 verified" });
+        // Real history only - the last discs handled in this app, from the persistent store.
+        Recent.Clear();
+        foreach (var r in _history.Recent(10)) Recent.Add(r);
     }
 }
