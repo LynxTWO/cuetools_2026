@@ -176,10 +176,12 @@
     </Setter>
   </Style>
 
-  <!-- Physical lit toggle. Reads as a real panel switch: a translucent plastic housing with a
-       bulb behind it. OFF: the housing is dark and the slider cap sits left. ON: the bulb lights
-       and glows THROUGH the plastic, brightest at the right end and falling off to the left; the
-       opaque slider cap slides right and the light visibly falls off in the recess beneath it. -->
+  <!-- Physical lit toggle. A translucent plastic housing with a bulb behind it. OFF: dark, cap
+       left. ON: the bulb lights the exposed plastic (lit lens on the left), the light bleeds
+       faintly through the cap, and the cap slides right. The transition is animated with real
+       physics: the cap snaps across (slight mechanical overshoot), the bulb WARMS UP quickly, and
+       on OFF it COOLS DOWN with a longer dim tail like an incandescent filament. The cap parts
+       ride together in a translated "mover"; the lens opacity carries the warm/cool curve. -->
   <Style x:Key="Switch" TargetType="ToggleButton">
     <Setter Property="Width" Value="50"/>
     <Setter Property="Height" Value="25"/>
@@ -188,7 +190,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="ToggleButton">
           <Grid>
-            <!-- housing: recessed translucent plastic -->
+            <!-- housing: recessed translucent plastic (fixed) -->
             <Border x:Name="housing" CornerRadius="12" BorderThickness="1" BorderBrush="#0A0F0B">
               <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -198,12 +200,11 @@
               </Border.Background>
             </Border>
 
-            <!-- bulb glow behind the plastic (only visible when on). The bulb lights the EXPOSED
-                 plastic; when the cap is on the right, the lit lens is on the LEFT and the light
-                 falls off to dark under the cap. Origin is set per state by the trigger. -->
+            <!-- bulb glow behind the plastic (lit lens on the left) + the outer teal halo, both
+                 carried by this layer's Opacity (0 off, warms to 1 on). -->
             <Border x:Name="glow" CornerRadius="12" Opacity="0" Margin="1">
               <Border.Background>
-                <RadialGradientBrush x:Name="glowBrush" GradientOrigin="0.3,0.5" Center="0.3,0.5" RadiusX="0.72" RadiusY="1.15">
+                <RadialGradientBrush GradientOrigin="0.3,0.5" Center="0.3,0.5" RadiusX="0.72" RadiusY="1.15">
                   <GradientStop Color="#EAFFFB" Offset="0"/>
                   <GradientStop Color="#6FE3D6" Offset="0.26"/>
                   <GradientStop Color="#27A99C" Offset="0.52"/>
@@ -211,63 +212,85 @@
                   <GradientStop Color="#06211E" Offset="1"/>
                 </RadialGradientBrush>
               </Border.Background>
+              <Border.Effect><DropShadowEffect Color="#34CFC0" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/></Border.Effect>
             </Border>
 
-            <!-- soft recess shadow the cap casts on the lit plastic at its base (reinforces the
-                 falloff under the slider). Rides with the thumb. -->
-            <Border x:Name="occlude" Width="23" Height="21" CornerRadius="6" HorizontalAlignment="Left" Margin="1,0,0,0" Opacity="0">
-              <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.62" RadiusY="0.62">
-                  <GradientStop Color="#73000000" Offset="0"/>
-                  <GradientStop Color="#3C000000" Offset="0.65"/>
-                  <GradientStop Color="#00000000" Offset="1"/>
-                </RadialGradientBrush>
-              </Border.Background>
-            </Border>
+            <!-- mover: the cap and everything riding with it, translated on toggle -->
+            <Grid x:Name="mover" Width="21" Height="19" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0">
+              <Grid.RenderTransform><TranslateTransform x:Name="slide" X="0"/></Grid.RenderTransform>
 
-            <!-- slider cap: thick beveled dark plastic (not fully opaque metal) -->
-            <Border x:Name="thumb" Width="21" Height="19" CornerRadius="5" HorizontalAlignment="Left" Margin="2,0,0,0">
-              <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                  <GradientStop Color="#5A6356" Offset="0"/>
-                  <GradientStop Color="#333C34" Offset="0.5"/>
-                  <GradientStop Color="#242B25" Offset="1"/>
-                </LinearGradientBrush>
-              </Border.Background>
-              <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1.5" Direction="270" Opacity="0.55"/>
-              </Border.Effect>
-            </Border>
-            <!-- light bleeding THROUGH the thick plastic cap: strongest on the cap edge that
-                 faces the lit lens, fading across the cap. Kept faint (thick plastic). On only. -->
-            <Border x:Name="capBleed" Width="21" Height="19" CornerRadius="5" HorizontalAlignment="Left" Margin="2,0,0,0" Opacity="0">
-              <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.1,0.62" Center="0.1,0.62" RadiusX="0.95" RadiusY="1.0">
-                  <GradientStop Color="#B8F1FBF9" Offset="0"/>
-                  <GradientStop Color="#5A45D6C9" Offset="0.35"/>
-                  <GradientStop Color="#0034CFC0" Offset="0.9"/>
-                </RadialGradientBrush>
-              </Border.Background>
-            </Border>
-            <!-- thin specular sheen along the cap top -->
-            <Border x:Name="sheen" Width="15" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="5,3,0,0" Background="#26FFFFFF"/>
+              <!-- soft recess shadow the cap casts on the lit plastic beneath it -->
+              <Border x:Name="occlude" Width="23" Height="21" CornerRadius="6" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0">
+                <Border.Background>
+                  <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.62" RadiusY="0.62">
+                    <GradientStop Color="#73000000" Offset="0"/>
+                    <GradientStop Color="#3C000000" Offset="0.65"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                  </RadialGradientBrush>
+                </Border.Background>
+              </Border>
+
+              <!-- slider cap: thick beveled dark plastic -->
+              <Border x:Name="thumb" Width="21" Height="19" CornerRadius="5">
+                <Border.Background>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#5A6356" Offset="0"/>
+                    <GradientStop Color="#333C34" Offset="0.5"/>
+                    <GradientStop Color="#242B25" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.Background>
+                <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1.5" Direction="270" Opacity="0.55"/></Border.Effect>
+              </Border>
+
+              <!-- light bleeding through the thick plastic cap, on the lens-facing edge -->
+              <Border x:Name="capBleed" Width="21" Height="19" CornerRadius="5" Opacity="0">
+                <Border.Background>
+                  <RadialGradientBrush GradientOrigin="0.1,0.62" Center="0.1,0.62" RadiusX="0.95" RadiusY="1.0">
+                    <GradientStop Color="#B8F1FBF9" Offset="0"/>
+                    <GradientStop Color="#5A45D6C9" Offset="0.35"/>
+                    <GradientStop Color="#0034CFC0" Offset="0.9"/>
+                  </RadialGradientBrush>
+                </Border.Background>
+              </Border>
+
+              <!-- specular sheen along the cap top -->
+              <Border x:Name="sheen" Width="15" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,3,0,0" Background="#26FFFFFF"/>
+            </Grid>
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsChecked" Value="True">
-              <Setter TargetName="glow" Property="Opacity" Value="1"/>
-              <Setter TargetName="occlude" Property="Opacity" Value="1"/>
-              <Setter TargetName="occlude" Property="HorizontalAlignment" Value="Right"/>
-              <Setter TargetName="occlude" Property="Margin" Value="0,0,1,0"/>
-              <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
-              <Setter TargetName="thumb" Property="Margin" Value="0,0,2,0"/>
-              <Setter TargetName="capBleed" Property="Opacity" Value="0.5"/>
-              <Setter TargetName="capBleed" Property="HorizontalAlignment" Value="Right"/>
-              <Setter TargetName="capBleed" Property="Margin" Value="0,0,2,0"/>
-              <Setter TargetName="sheen" Property="HorizontalAlignment" Value="Right"/>
-              <Setter TargetName="sheen" Property="Margin" Value="0,3,5,0"/>
-              <Setter TargetName="housing" Property="Effect">
-                <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="12" ShadowDepth="0" Opacity="0.55"/></Setter.Value>
-              </Setter>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <!-- cap snaps across with a slight mechanical overshoot -->
+                    <DoubleAnimation Storyboard.TargetName="slide" Storyboard.TargetProperty="X" To="25" Duration="0:0:0.15">
+                      <DoubleAnimation.EasingFunction><BackEase Amplitude="0.3" EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <!-- bulb warm-up: quick rise settling to full -->
+                    <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <!-- light takes a moment to bleed through the thick cap -->
+                    <DoubleAnimation Storyboard.TargetName="capBleed" Storyboard.TargetProperty="Opacity" To="0.5" BeginTime="0:0:0.04" Duration="0:0:0.2"/>
+                    <DoubleAnimation Storyboard.TargetName="occlude" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12"/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="slide" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.15">
+                      <DoubleAnimation.EasingFunction><BackEase Amplitude="0.3" EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <!-- bulb cool-down: fast initial drop, long dim tail (filament) -->
+                    <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.34">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="capBleed" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.3"/>
+                    <DoubleAnimation Storyboard.TargetName="occlude" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2"/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
