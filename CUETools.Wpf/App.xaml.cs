@@ -1,4 +1,5 @@
 using System.Windows;
+using CUETools.Wpf.Services;
 using CUETools.Wpf.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,6 +12,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         var services = new ServiceCollection();
+
+        services.AddSingleton<IDriveService, DriveService>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.

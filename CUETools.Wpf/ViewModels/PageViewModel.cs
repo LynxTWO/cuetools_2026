@@ -13,10 +13,7 @@ public abstract class PageViewModel : ViewModelBase
     public string Subtitle { get; protected init; } = "";
 }
 
-public sealed class RipViewModel : PageViewModel
-{
-    public RipViewModel() { Title = "Rip"; Group = "Work"; Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB."; }
-}
+// RipViewModel lives in its own file (RipViewModel.cs) - it is a real page now.
 
 public sealed class VerifyViewModel : PageViewModel
 {

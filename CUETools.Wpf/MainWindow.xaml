@@ -64,7 +64,7 @@
         </ListBox>
       </Border>
 
-      <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" ContentTemplate="{StaticResource PageTemplate}"/>
+      <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" ContentTemplateSelector="{StaticResource PageSelector}"/>
     </Grid>
   </Grid>
 </Window>
