@@ -86,8 +86,10 @@
         <ListView.View>
           <GridView>
             <GridViewColumn Header="#" Width="44" DisplayMemberBinding="{Binding Number}"/>
-            <GridViewColumn Header="Title" Width="420" DisplayMemberBinding="{Binding Title}"/>
-            <GridViewColumn Header="Length" Width="90" DisplayMemberBinding="{Binding LengthText}"/>
+            <GridViewColumn Header="Title" Width="300" DisplayMemberBinding="{Binding Title}"/>
+            <GridViewColumn Header="Length" Width="74" DisplayMemberBinding="{Binding LengthText}"/>
+            <GridViewColumn Header="AccurateRip" Width="100" DisplayMemberBinding="{Binding ArResult}"/>
+            <GridViewColumn Header="CTDB" Width="90" DisplayMemberBinding="{Binding CtdbResult}"/>
           </GridView>
         </ListView.View>
       </ListView>

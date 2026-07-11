@@ -174,6 +174,7 @@ public sealed class RipViewModel : PageViewModel
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
+            ApplyPerTrack(result);
             PublishReport(encode, result);
         }
         else
@@ -181,6 +182,17 @@ public sealed class RipViewModel : PageViewModel
             StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         IsRipping = false;
+    }
+
+    private void ApplyPerTrack(VerifyResult result)
+    {
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            int ar = i < result.ArPerTrack.Length ? result.ArPerTrack[i] : 0;
+            int ct = i < result.CtdbPerTrack.Length ? result.CtdbPerTrack[i] : 0;
+            Tracks[i].ArResult = ar > 0 ? $"conf {ar}" : "not found";
+            Tracks[i].CtdbResult = ct > 0 ? $"conf {ct}" : "not found";
+        }
     }
 
     private void PublishReport(bool encode, VerifyResult result)
