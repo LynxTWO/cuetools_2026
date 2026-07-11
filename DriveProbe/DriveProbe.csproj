@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 1 smoke test: proves the Windows SCSI ripping stack runs on .NET 8.
+       Enumerates optical drives and opens each through CDDriveReader (real SCSI
+       INQUIRY + ReadTOC). Not shipped - a throwaway diagnostic the owner runs on
+       a machine with a real drive. All ripper assemblies are referenced directly
+       so they land in this exe's output (the plugin projects mark their own refs
+       Private=False, which would otherwise keep the transitive DLLs out). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DriveProbe</AssemblyName>
+    <RootNamespace>DriveProbe</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CUETools.Ripper.SCSI\CUETools.Ripper.SCSI.csproj" />
+    <ProjectReference Include="..\CUETools.Ripper\CUETools.Ripper.csproj" />
+    <ProjectReference Include="..\CUETools.CDImage\CUETools.CDImage.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs\CUETools.Codecs.csproj" />
+    <ProjectReference Include="..\Bwg.Logging\Bwg.Logging.csproj" />
+    <ProjectReference Include="..\Bwg.Scsi\Bwg.Scsi.csproj" />
+  </ItemGroup>
+
+</Project>
