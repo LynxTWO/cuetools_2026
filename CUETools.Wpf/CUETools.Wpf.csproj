@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- CUETools 2026 - the unified WPF/.NET 8 front end (R12). References the existing
+       engine, which now builds for net8 consumers (Processor et al. via netstandard2.0;
+       Ripper.SCSI via net8.0-windows from Phase 1). This is the Phase 2 shell: it compiles
+       and launches as a navigable window; rip/verify/repair logic lands in Phase 3. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CUETools.Wpf</RootNamespace>
+    <AssemblyName>CUETools.Wpf</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CUETools.Processor\CUETools.Processor.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs\CUETools.Codecs.csproj" />
+    <ProjectReference Include="..\CUETools.CDImage\CUETools.CDImage.csproj" />
+    <ProjectReference Include="..\CUETools.AccurateRip\CUETools.AccurateRip.csproj" />
+    <ProjectReference Include="..\CUETools.CTDB\CUETools.CTDB.csproj" />
+    <ProjectReference Include="..\CUETools.CTDB.Types\CUETools.CTDB.Types.csproj" />
+    <ProjectReference Include="..\CUETools.Compression\CUETools.Compression.csproj" />
+    <ProjectReference Include="..\CUETools.Parity\CUETools.Parity.csproj" />
+    <ProjectReference Include="..\CUETools.Ripper\CUETools.Ripper.csproj" />
+    <ProjectReference Include="..\CUETools.Ripper.SCSI\CUETools.Ripper.SCSI.csproj" />
+    <ProjectReference Include="..\Freedb\Freedb.csproj" />
+  </ItemGroup>
+
+</Project>

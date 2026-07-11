@@ -1,0 +1,64 @@
+<Application x:Class="CUETools.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:CUETools.Wpf.ViewModels">
+  <Application.Resources>
+    <ResourceDictionary>
+
+      <!-- palette: warm hi-fi-bench dark theme (light theme + physics come in a later pass) -->
+      <SolidColorBrush x:Key="Ground"   Color="#0C0F0D"/>
+      <SolidColorBrush x:Key="Bar"      Color="#0E1310"/>
+      <SolidColorBrush x:Key="Face"     Color="#161C16"/>
+      <SolidColorBrush x:Key="Panel"    Color="#141A16"/>
+      <SolidColorBrush x:Key="Line"     Color="#28312A"/>
+      <SolidColorBrush x:Key="Ink"      Color="#EDF1E9"/>
+      <SolidColorBrush x:Key="InkDim"   Color="#B1BCAE"/>
+      <SolidColorBrush x:Key="Muted"    Color="#7D887C"/>
+      <SolidColorBrush x:Key="Teal"     Color="#34CFC0"/>
+      <SolidColorBrush x:Key="Amber"    Color="#E9A63F"/>
+      <SolidColorBrush x:Key="TealSoft" Color="#2434CFC0"/>
+
+      <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
+      <FontFamily x:Key="Mono">Cascadia Mono, Consolas, monospace</FontFamily>
+
+      <!-- left-nav item -->
+      <Style x:Key="NavItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource InkDim}"/>
+        <Setter Property="Padding" Value="12,9"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListBoxItem">
+              <Border x:Name="b" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                <ContentPresenter/>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="b" Property="Background" Value="{StaticResource Panel}"/>
+                  <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="b" Property="Background" Value="{StaticResource TealSoft}"/>
+                  <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
+      <!-- page placeholder (Phase 2); each page gets its real view in Phase 3 -->
+      <DataTemplate x:Key="PageTemplate">
+        <StackPanel Margin="28" VerticalAlignment="Top">
+          <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="30" Foreground="{StaticResource Ink}"/>
+          <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+          <Border Margin="0,22,0,0" Padding="16,13" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="11" HorizontalAlignment="Left">
+            <TextBlock Foreground="{StaticResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="12" TextWrapping="Wrap" MaxWidth="520"
+                       Text="Phase 2 shell - the app compiles, launches, and navigates over the .NET 8 engine. This screen gets its real UI in Phase 3, driven through the CUESheet facade."/>
+          </Border>
+        </StackPanel>
+      </DataTemplate>
+
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>
