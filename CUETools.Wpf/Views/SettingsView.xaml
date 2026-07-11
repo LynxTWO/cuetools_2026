@@ -1,0 +1,82 @@
+<UserControl x:Class="CUETools.Wpf.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <UserControl.Resources>
+    <Style x:Key="Sec" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="9.5"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+      <Setter Property="Margin" Value="2,20,0,6"/>
+    </Style>
+    <Style x:Key="RowLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="Row" TargetType="Border">
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="Padding" Value="2,9"/>
+    </Style>
+    <Style x:Key="Box" TargetType="TextBox">
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+      <Setter Property="Padding" Value="6,4"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+  </UserControl.Resources>
+
+  <ScrollViewer Background="{StaticResource Ground}" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="24,20" MaxWidth="720" HorizontalAlignment="Left">
+      <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{StaticResource Ink}"/>
+      <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,2,0,4" TextWrapping="Wrap"/>
+
+      <TextBlock Style="{StaticResource Sec}" Text="GENERAL"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding OneInstance}"/><TextBlock Style="{StaticResource RowLabel}" Text="Single instance"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CheckForUpdates}"/><TextBlock Style="{StaticResource RowLabel}" Text="Check for updates"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding SeparateDecodingThread}"/><TextBlock Style="{StaticResource RowLabel}" Text="Separate decoding thread"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EjectAfterRip}"/><TextBlock Style="{StaticResource RowLabel}" Text="Eject after rip"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="ACCURATERIP &amp; CTDB"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding NoUnverifiedOutput}"/><TextBlock Style="{StaticResource RowLabel}" Text="No unverified output"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding FixOffset}"/><TextBlock Style="{StaticResource RowLabel}" Text="Apply write-offset correction"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteArTagsOnEncode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write AccurateRip tags on encode"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteArLogOnConvert}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write AccurateRip log on convert"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CtdbSubmit}"/><TextBlock Style="{StaticResource RowLabel}" Text="Submit to CTDB"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CtdbAsk}"/><TextBlock Style="{StaticResource RowLabel}" Text="Ask before submitting"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="FILE NAMING &amp; OUTPUT"/>
+      <Border Style="{StaticResource Row}"><DockPanel><TextBox DockPanel.Dock="Right" Width="260" Style="{StaticResource Box}" Text="{Binding TrackFilenameFormat, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Track filename template"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCueInTracksMode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Create .cue sheet in tracks mode"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateM3U}"/><TextBlock Style="{StaticResource RowLabel}" Text="Create .m3u playlist"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateEacLog}"/><TextBlock Style="{StaticResource RowLabel}" Text="EAC-style rip log"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteUtf8Bom}"/><TextBlock Style="{StaticResource RowLabel}" Text="UTF-8 byte-order mark in .cue"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="GAPS &amp; HTOA"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectGaps}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect gaps"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding PreserveHtoa}"/><TextBlock Style="{StaticResource RowLabel}" Text="Preserve HTOA (hidden track one audio)"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding UseHtoaThreshold}"/><TextBlock Style="{StaticResource RowLabel}" Text="HTOA length threshold (5 s)"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="TAGGING"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding BasicTagsFromCue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Basic tags from CUE metadata"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyBasicTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy basic tags from source"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyUnknownTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy unknown / extra tags"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="ALBUM ART"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Embed album art"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ExtractAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Extract album art to a folder image"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><TextBox DockPanel.Dock="Right" Width="90" Style="{StaticResource Box}" Text="{Binding MaxAlbumArtSize, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Max album-art size (px)"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="HDCD"/>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect HDCD"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
+
+      <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                 Text="These write straight to the live configuration. The remaining sections (Metadata, Encoding &amp; Formats with the codec editor, Ripper &amp; Drives) and settings persistence are the next increments."/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
