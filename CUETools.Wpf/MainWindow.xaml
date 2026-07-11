@@ -71,5 +71,9 @@
 
       <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" ContentTemplateSelector="{StaticResource PageSelector}"/>
     </Grid>
+
+    <!-- theme-transition overlay: covers the whole window and fades on toggle so the interface
+         "turns on" (warm-up) going light and "turns off" (cool-down) going dark. Not hit-testable. -->
+    <Border x:Name="ThemeFlash" Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False" Opacity="0"/>
   </Grid>
 </Window>

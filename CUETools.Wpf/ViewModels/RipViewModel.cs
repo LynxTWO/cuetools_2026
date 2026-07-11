@@ -49,6 +49,20 @@ public sealed class RipViewModel : PageViewModel
         set { if (Set(ref _selectedRelease, value)) ApplyRelease(value); }
     }
 
+    // where ripped albums go (an "Artist - Album" folder is created under this base)
+    private string _outputBaseDir = "";
+    public string OutputBaseDir { get => _outputBaseDir; set => Set(ref _outputBaseDir, value); }
+
+    private string _lastOutputDir = "";
+    public string LastOutputDir { get => _lastOutputDir; private set => Set(ref _lastOutputDir, value); }
+
+    // "rip complete" state shown after a successful rip
+    private bool _ripDone;
+    public bool RipDone { get => _ripDone; private set => Set(ref _ripDone, value); }
+
+    private string _ripSummary = "";
+    public string RipSummary { get => _ripSummary; private set => Set(ref _ripSummary, value); }
+
     private char _selectedDrive;
     public char SelectedDrive
     {
@@ -124,6 +138,10 @@ public sealed class RipViewModel : PageViewModel
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
     public ICommand RipCommand { get; }
+    public ICommand EjectCommand { get; }
+    public ICommand BrowseOutputCommand { get; }
+    public ICommand OpenFolderCommand { get; }
+    public ICommand DismissDoneCommand { get; }
 
     public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config)
     {
@@ -135,6 +153,7 @@ public sealed class RipViewModel : PageViewModel
         _reports = reports;
         _history = history;
         _config = config;
+        _outputBaseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
 
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
@@ -142,6 +161,10 @@ public sealed class RipViewModel : PageViewModel
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        EjectCommand = new RelayCommand(_ => Eject(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
+        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
+        OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
+        DismissDoneCommand = new RelayCommand(_ => RipDone = false);
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         LoadRecent();
@@ -227,6 +250,7 @@ public sealed class RipViewModel : PageViewModel
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         IsRipping = true;
+        RipDone = false;
         RipProgress = 0;
         StatusText = encode ? "Starting rip..." : "Starting verify...";
         _discSeconds = _lastDisc?.TotalLength.TotalSeconds ?? 0;
@@ -258,7 +282,8 @@ public sealed class RipViewModel : PageViewModel
 
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, Report, Levels) : _rip.RunVerify(drive, cq, meta, Report, Levels));
+        string outBase = OutputBaseDir;
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels) : _rip.RunVerify(drive, cq, meta, Report, Levels));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
@@ -267,6 +292,14 @@ public sealed class RipViewModel : PageViewModel
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
+            if (encode)
+            {
+                LastOutputDir = result.OutputDir;
+                RipSummary = $"Ripped {result.FileCount} {fmt} files"
+                    + (result.Accurate ? $"  .  AccurateRip verified (confidence {result.ArConfidence})" : "  .  not found in AccurateRip")
+                    + (result.CtdbConfidence > 0 ? $"  .  CTDB confidence {result.CtdbConfidence}" : "");
+                RipDone = true;
+            }
             ApplyPerTrack(result);
             PublishReport(encode, result);
         }
@@ -292,6 +325,41 @@ public sealed class RipViewModel : PageViewModel
         SpeedLevel = Math.Max(0, Math.Min(1, sx / SpeedCapX));
         _lastSpeedTick = now;
         _lastSpeedFrac = frac;
+    }
+
+    private void Eject()
+    {
+        char d = _selectedDrive;
+        if (d == '\0') return;
+        RipDone = false;
+        StatusText = $"Ejecting drive {d}:...";
+        System.Threading.Tasks.Task.Run(() => { try { _drives.Eject(d); } catch { } });
+        IsDiscPresent = false;
+        Tracks.Clear();
+        Releases.Clear();
+        _chosenMetadata = null;
+        _selectedRelease = null;
+        AlbumTitle = "Tray open - insert a disc and Read";
+        AlbumArtist = "";
+        DiscInfoText = "";
+        OnPropertyChanged(nameof(HasReleases));
+        OnPropertyChanged(nameof(SelectedRelease));
+    }
+
+    private void BrowseOutput()
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose where ripped albums go" };
+        if (dlg.ShowDialog() == true) OutputBaseDir = dlg.FolderName;
+    }
+
+    private void OpenFolder()
+    {
+        try
+        {
+            if (System.IO.Directory.Exists(LastOutputDir))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = LastOutputDir, UseShellExecute = true });
+        }
+        catch { }
     }
 
     // Map the whole-disc read fraction onto each track: done tracks fill, the current track shows

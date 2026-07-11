@@ -13,4 +13,7 @@ public interface IDriveService
     /// readable audio disc (empty tray, data disc, or drive not ready). <paramref name="onStatus"/>
     /// reports the metadata-lookup step live ("Looking up album via CTDB...", "...via Freedb...").</summary>
     DiscInfo? ReadDisc(char drive, Action<string>? onStatus = null);
+
+    /// <summary>Open the drive tray (works with or without a disc loaded).</summary>
+    void Eject(char drive);
 }

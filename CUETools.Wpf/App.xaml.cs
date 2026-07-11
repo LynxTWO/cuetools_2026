@@ -15,8 +15,18 @@ public partial class App : Application
         var services = new ServiceCollection();
 
         // Explicit factory: CUEConfig has a copy constructor too, and the DI container would
-        // otherwise pick it and self-recurse. Force the parameterless ctor.
-        services.AddSingleton<CUEConfig>(_ => new CUEConfig());
+        // otherwise pick it and self-recurse. Force the parameterless ctor, then apply the app's
+        // preferred defaults (until settings persistence lands).
+        services.AddSingleton<CUEConfig>(_ =>
+        {
+            var c = new CUEConfig();
+            c.detectHDCD = true;            // flag HDCD discs by default
+            c.decodeHDCD = false;           // but do not alter the audio unless asked
+            c.decodeHDCDto24bit = false;    // 24-bit HDCD output off by default
+            c.maxAlbumArtSize = 1000;       // embed/extract art up to 1000 px
+            c.writeArTagsOnEncode = true;   // AccurateRip tags in the files by default
+            return c;
+        });
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
