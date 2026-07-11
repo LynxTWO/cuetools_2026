@@ -3,6 +3,7 @@ using System.IO;
 using CUETools.AccurateRip;
 using CUETools.CTDB;
 using CUETools.Processor;
+using CUETools.Ripper;
 using CUETools.Ripper.SCSI;
 
 namespace CUETools.Wpf.Services;
@@ -27,11 +28,12 @@ public sealed class VerifyResult
 
 public interface IRipService
 {
-    /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, Action<double, string> onProgress);
+    /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
+    /// <paramref name="onLevels"/> receives real per-channel peak (L,R) of each read buffer.</summary>
+    VerifyResult RunVerify(char drive, int correctionQuality, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 
     /// <summary>Rip the disc to FLAC (read + encode + verify) under Music\CUETools\Artist - Album.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, Action<double, string> onProgress);
+    VerifyResult RunEncode(char drive, int correctionQuality, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 }
 
 public sealed class RipService : IRipService
@@ -40,10 +42,10 @@ public sealed class RipService : IRipService
 
     public RipService(CUEConfig config) => _config = config;
 
-    public VerifyResult RunVerify(char drive, int cq, Action<double, string> onProgress) => Run(drive, cq, encode: false, onProgress);
-    public VerifyResult RunEncode(char drive, int cq, Action<double, string> onProgress) => Run(drive, cq, encode: true, onProgress);
+    public VerifyResult RunVerify(char drive, int cq, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, onProgress, onLevels);
+    public VerifyResult RunEncode(char drive, int cq, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, onProgress, onLevels);
 
-    private VerifyResult Run(char drive, int cq, bool encode, Action<double, string> onProgress)
+    private VerifyResult Run(char drive, int cq, bool encode, Action<double, string> onProgress, Action<double, double>? onLevels)
     {
         var reader = new CDDriveReader();
         try
@@ -55,8 +57,11 @@ public sealed class RipService : IRipService
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
 
+            // Tap real audio levels for the VU meter (delegates everything else to the drive).
+            ICDRipper ripper = onLevels != null ? new LevelMeteringRipper(reader, onLevels) : reader;
+
             var cue = new CUESheet(_config);
-            cue.OpenCD(reader);
+            cue.OpenCD(ripper);
             try { var rel = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Fast); if (rel.Count > 0) cue.CopyMetadata(((CUEMetadataEntry)rel[0]).metadata); } catch { }
 
             cue.UseCUEToolsDB("CUETools 2026", reader.ARName, false, CTDBMetadataSearch.Fast);

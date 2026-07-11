@@ -68,6 +68,13 @@ public sealed class RipViewModel : PageViewModel
     private string _speedText = "";
     public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
 
+    // real per-channel peak levels for the VU meter (0..1), tapped from the disc audio
+    private double _levelL;
+    public double LevelL { get => _levelL; private set => Set(ref _levelL, value); }
+
+    private double _levelR;
+    public double LevelR { get => _levelR; private set => Set(ref _levelR, value); }
+
     private const double SpeedCapX = 12.0;
     private double _discSeconds;
     private double _lastSpeedFrac;
@@ -132,10 +139,14 @@ public sealed class RipViewModel : PageViewModel
     {
         if (_selectedDrive == '\0' || _isBusy) return;
         IsBusy = true;
-        StatusText = "Reading disc and looking up metadata...";
+        StatusText = "Reading disc...";
         char drive = _selectedDrive;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        DiscInfo? info = await Task.Run(() => _drives.ReadDisc(drive));
+        // surface the live metadata-lookup step (which database is being queried)
+        void OnStatus(string s) => dispatcher?.BeginInvoke(new Action(() => { if (_isBusy) StatusText = s; }));
+
+        DiscInfo? info = await Task.Run(() => _drives.ReadDisc(drive, OnStatus));
         _lastDisc = info;
 
         Tracks.Clear();
@@ -178,11 +189,13 @@ public sealed class RipViewModel : PageViewModel
         SpeedText = "";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        // ReadProgress fires on the ripper's thread; marshal to the UI.
+        // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
         void Report(double frac, string status)
             => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); }));
+        void Levels(double l, double r)
+            => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
 
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, Report) : _rip.RunVerify(drive, cq, Report));
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, Report, Levels) : _rip.RunVerify(drive, cq, Report, Levels));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
@@ -198,6 +211,7 @@ public sealed class RipViewModel : PageViewModel
         {
             StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
+        LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
         IsRipping = false;
     }
 
