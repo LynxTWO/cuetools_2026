@@ -117,7 +117,19 @@
         <ListView.View>
           <GridView>
             <GridViewColumn Header="#" Width="32" DisplayMemberBinding="{Binding Number}"/>
-            <GridViewColumn Header="Title" Width="238" DisplayMemberBinding="{Binding Title}"/>
+            <GridViewColumn Header="Title" Width="238">
+              <GridViewColumn.CellTemplate>
+                <DataTemplate>
+                  <Grid>
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                    <!-- live per-track read progress (only while ripping) -->
+                    <ProgressBar Height="2" VerticalAlignment="Bottom" Margin="0,0,6,-3" Minimum="0" Maximum="1" Value="{Binding Progress}"
+                                 Background="Transparent" Foreground="{DynamicResource Teal}" BorderThickness="0"
+                                 Visibility="{Binding DataContext.IsRipping, RelativeSource={RelativeSource AncestorType=ListView}, Converter={StaticResource BoolVis}}"/>
+                  </Grid>
+                </DataTemplate>
+              </GridViewColumn.CellTemplate>
+            </GridViewColumn>
             <GridViewColumn Header="Len" Width="52" DisplayMemberBinding="{Binding LengthText}"/>
             <GridViewColumn Header="AR" Width="48" DisplayMemberBinding="{Binding ArResult}"/>
             <GridViewColumn Header="CTDB" Width="52" DisplayMemberBinding="{Binding CtdbResult}"/>
