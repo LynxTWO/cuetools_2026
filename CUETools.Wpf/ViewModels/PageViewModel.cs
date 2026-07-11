@@ -11,6 +11,10 @@ public abstract class PageViewModel : ViewModelBase
     public string Title { get; protected init; } = "";
     public string Group { get; protected init; } = "";
     public string Subtitle { get; protected init; } = "";
+
+    // So the nav list items report their page name (not the VM type name) to UI automation /
+    // screen readers.
+    public override string ToString() => Title;
 }
 
 // RipViewModel lives in its own file (RipViewModel.cs) - it is a real page now.

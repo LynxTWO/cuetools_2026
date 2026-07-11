@@ -34,8 +34,9 @@ public interface IRipService
     VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
-    /// Music\CUETools\Artist - Album, using the chosen release metadata when given.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null);
+    /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
+    /// given.</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null);
 }
 
 public sealed class RipService : IRipService
@@ -45,10 +46,10 @@ public sealed class RipService : IRipService
 
     public RipService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, "flac", metadata, onProgress, onLevels);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, onProgress, onLevels);
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -89,7 +90,10 @@ public sealed class RipService : IRipService
                 cue.Action = CUEAction.Encode;
                 string artist = Safe(cue.Metadata.Artist), title = Safe(cue.Metadata.Title);
                 string album = (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title)) ? "Unknown Album" : $"{artist} - {title}";
-                outDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools", album);
+                string baseDir = string.IsNullOrWhiteSpace(outputBaseDir)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
+                    : outputBaseDir;
+                outDir = Path.Combine(baseDir, album);
                 Directory.CreateDirectory(outDir);
                 cue.GenerateFilenames(AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
                 onProgress(0, $"Encoding to {format.ToUpperInvariant()} -> {outDir}");

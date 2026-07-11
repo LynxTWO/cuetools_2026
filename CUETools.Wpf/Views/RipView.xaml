@@ -16,6 +16,8 @@
                   ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}"/>
         <TextBlock DockPanel.Dock="Left" Margin="16,0,0,0" VerticalAlignment="Center"
                    Text="{Binding DiscInfoText}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5"/>
+        <Button DockPanel.Dock="Right" Content="Eject" Command="{Binding EjectCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"
+                ToolTip="Open the drive tray."/>
         <Button DockPanel.Dock="Right" Content="Read disc" Command="{Binding ReadDiscCommand}" Padding="12,6" VerticalAlignment="Center"/>
         <!-- release picker: ranked best-first by source + completeness; pick one to relabel -->
         <ComboBox DockPanel.Dock="Right" Width="320" Margin="10,0,10,0" VerticalAlignment="Center"
@@ -144,6 +146,26 @@
         <ctl:CodecScope Height="104" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"/>
       </Border>
 
+      <!-- rip complete: a clear finished state with the result + where the files went -->
+      <Border Grid.Row="1" Grid.Column="1" VerticalAlignment="Top" Margin="18,10,18,0"
+              Background="{DynamicResource Glass}" BorderBrush="{StaticResource Good}" BorderThickness="1" CornerRadius="11" Padding="16,13"
+              Visibility="{Binding RipDone, Converter={StaticResource BoolVis}}">
+        <DockPanel LastChildFill="True">
+          <Ellipse DockPanel.Dock="Left" Width="14" Height="14" Fill="{StaticResource Good}" VerticalAlignment="Top" Margin="0,2,12,0">
+            <Ellipse.Effect><DropShadowEffect Color="#5CCB8B" BlurRadius="10" ShadowDepth="0" Opacity="0.9"/></Ellipse.Effect>
+          </Ellipse>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+            <Button Content="Open folder" Command="{Binding OpenFolderCommand}" Style="{StaticResource Accent}" Padding="12,6"/>
+            <Button Content="Dismiss" Command="{Binding DismissDoneCommand}" Padding="10,6" Margin="8,0,0,0"/>
+          </StackPanel>
+          <StackPanel>
+            <TextBlock Text="Rip complete" Foreground="{DynamicResource Ink}" FontFamily="{StaticResource Serif}" FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding RipSummary}" Foreground="{DynamicResource InkDim}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding LastOutputDir}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
       <Border Grid.Row="2" Grid.Column="1" Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,12">
         <DockPanel LastChildFill="False">
           <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"/>
@@ -158,9 +180,16 @@
             <ComboBoxItem>Paranoid</ComboBoxItem>
           </ComboBox>
           <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
-            <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
+            <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="440"/>
             <ProgressBar Height="4" Width="240" Minimum="0" Maximum="1" Value="{Binding RipProgress, Mode=OneWay}" Margin="0,5,0,0" HorizontalAlignment="Left"
                          Background="{DynamicResource Glass}" Foreground="{StaticResource Teal}" BorderThickness="0"/>
+            <!-- where the ripped album folder is created -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+              <TextBlock Text="saves to" Foreground="{DynamicResource Muted}" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0"/>
+              <TextBlock Text="{Binding OutputBaseDir}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="10.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+              <Button Content="Change..." Command="{Binding BrowseOutputCommand}" Padding="8,2" Margin="8,0,0,0" FontSize="10.5"
+                      ToolTip="Choose the base folder. Each album gets its own 'Artist - Album' subfolder here."/>
+            </StackPanel>
           </StackPanel>
         </DockPanel>
       </Border>

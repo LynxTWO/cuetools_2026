@@ -184,4 +184,26 @@ public sealed class DriveService : IDriveService
         if (s == "tags") return 20;
         return 40;
     }
+
+    // Open the tray via the storage eject IOCTL - works whether or not a disc is loaded, and does
+    // not need to read the disc first.
+    public void Eject(char drive)
+    {
+        var h = CreateFileW($@"\\.\{char.ToUpperInvariant(drive)}:", 0x80000000 /*GENERIC_READ*/,
+            0x1 | 0x2 /*share read+write*/, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0, IntPtr.Zero);
+        if (h == new IntPtr(-1)) { _log.Warn("drive", $"eject {drive}: cannot open device"); return; }
+        try
+        {
+            bool ok = DeviceIoControl(h, 0x2D4808 /*IOCTL_STORAGE_EJECT_MEDIA*/, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero);
+            _log.Info("drive", $"eject {drive} ok={ok}");
+        }
+        finally { CloseHandle(h); }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "CreateFileW")]
+    private static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint creation, uint flags, IntPtr template);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(IntPtr h, uint code, IntPtr inBuf, uint inSize, IntPtr outBuf, uint outSize, out uint returned, IntPtr overlapped);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr h);
 }
