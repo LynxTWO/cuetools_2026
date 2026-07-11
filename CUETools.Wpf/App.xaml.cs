@@ -19,6 +19,7 @@ public partial class App : Application
         services.AddSingleton<CUEConfig>(_ => new CUEConfig());
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
+        services.AddSingleton<IReportStore, ReportStore>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.

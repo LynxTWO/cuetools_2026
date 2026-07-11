@@ -10,6 +10,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? RipTemplate { get; set; }
     public DataTemplate? DriveTemplate { get; set; }
+    public DataTemplate? ReportTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
     public DataTemplate? PlaceholderTemplate { get; set; }
 
@@ -17,6 +18,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
     {
         RipViewModel => RipTemplate,
         DriveViewModel => DriveTemplate,
+        ReportViewModel => ReportTemplate,
         SettingsViewModel => SettingsTemplate,
         _ => PlaceholderTemplate
     };

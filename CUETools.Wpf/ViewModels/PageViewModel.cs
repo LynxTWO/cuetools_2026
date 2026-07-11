@@ -30,10 +30,6 @@ public sealed class QueueViewModel : PageViewModel
     public QueueViewModel() { Title = "Queue"; Group = "Session"; Subtitle = "Process a stack of discs or jobs in one sitting."; }
 }
 
-public sealed class ReportViewModel : PageViewModel
-{
-    public ReportViewModel() { Title = "Report"; Group = "Session"; Subtitle = "The per-job accuracy log, with a tamper-evident checksum."; }
-}
-
+// ReportViewModel lives in its own file (ReportViewModel.cs) - it is a real page now.
 // DriveViewModel lives in its own file (DriveViewModel.cs) - it is a real page now.
 // SettingsViewModel lives in its own file (SettingsViewModel.cs) - it is a real page now.

@@ -18,7 +18,12 @@ public sealed class RipViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
     private readonly IRipService _rip;
+    private readonly IReportStore _reports;
     private readonly CUEConfig _config;
+
+    // The last disc read, kept so a finished job can be turned into a full RipReport
+    // (drive, offset, TOC) rather than just the AR/CTDB numbers.
+    private DiscInfo? _lastDisc;
 
     public ObservableCollection<char> Drives { get; } = new();
     public ObservableCollection<TrackItem> Tracks { get; } = new();
@@ -80,13 +85,14 @@ public sealed class RipViewModel : PageViewModel
     public ICommand VerifyCommand { get; }
     public ICommand RipCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, CUEConfig config)
+    public RipViewModel(IDriveService drives, IRipService rip, IReportStore reports, CUEConfig config)
     {
         Title = "Rip";
         Group = "Work";
         Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB.";
         _drives = drives;
         _rip = rip;
+        _reports = reports;
         _config = config;
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
@@ -116,6 +122,7 @@ public sealed class RipViewModel : PageViewModel
         char drive = _selectedDrive;
 
         DiscInfo? info = await Task.Run(() => _drives.ReadDisc(drive));
+        _lastDisc = info;
 
         Tracks.Clear();
         if (info == null)
@@ -165,12 +172,38 @@ public sealed class RipViewModel : PageViewModel
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
+            PublishReport(encode, result);
         }
         else
         {
             StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         IsRipping = false;
+    }
+
+    private void PublishReport(bool encode, VerifyResult result)
+    {
+        var d = _lastDisc;
+        _reports.Publish(new RipReport
+        {
+            Mode = encode ? "Rip" : "Verify",
+            Album = d?.Album ?? AlbumTitle,
+            Artist = d?.Artist ?? "",
+            Year = d?.Year ?? "",
+            DriveName = d?.DriveName ?? "",
+            Offset = d?.Offset ?? 0,
+            CorrectionQuality = CorrectionQuality,
+            ArConfidence = result.ArConfidence,
+            ArTotal = result.ArTotal,
+            CtdbConfidence = result.CtdbConfidence,
+            CtdbTotal = result.CtdbTotal,
+            Accurate = result.Accurate,
+            Status = result.Status,
+            OutputDir = result.OutputDir,
+            FileCount = result.FileCount,
+            TrackCount = d?.AudioTracks ?? Tracks.Count,
+            TocId = d?.TocId ?? ""
+        });
     }
 
     private static string Fmt(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:00}";
