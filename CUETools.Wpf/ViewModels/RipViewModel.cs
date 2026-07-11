@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using CUETools.Processor;
 using CUETools.Wpf.Models;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
@@ -17,6 +18,7 @@ public sealed class RipViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
     private readonly IRipService _rip;
+    private readonly CUEConfig _config;
 
     public ObservableCollection<char> Drives { get; } = new();
     public ObservableCollection<TrackItem> Tracks { get; } = new();
@@ -56,16 +58,35 @@ public sealed class RipViewModel : PageViewModel
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
 
+    // 0 = Burst, 1 = Secure, 2 = Paranoid (maps to the drive's CorrectionQuality)
+    private int _correctionQuality = 1;
+    public int CorrectionQuality { get => _correctionQuality; set => Set(ref _correctionQuality, value); }
+
+    private string _arText = "not checked";
+    public string ArText { get => _arText; private set => Set(ref _arText, value); }
+
+    private string _ctdbText = "not checked";
+    public string CtdbText { get => _ctdbText; private set => Set(ref _ctdbText, value); }
+
+    private bool _accurate;
+    public bool Accurate { get => _accurate; private set => Set(ref _accurate, value); }
+
+    // per-disc options, bound to the live config
+    public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
+    public bool WriteLog { get => _config.createEACLOG; set { _config.createEACLOG = value; OnPropertyChanged(); } }
+    public bool EmbedArt { get => _config.embedAlbumArt; set { _config.embedAlbumArt = value; OnPropertyChanged(); } }
+
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip)
+    public RipViewModel(IDriveService drives, IRipService rip, CUEConfig config)
     {
         Title = "Rip";
         Group = "Work";
         Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB.";
         _drives = drives;
         _rip = rip;
+        _config = config;
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
         VerifyCommand = new RelayCommand(_ => { _ = VerifyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
@@ -123,12 +144,13 @@ public sealed class RipViewModel : PageViewModel
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
         char drive = _selectedDrive;
+        int cq = CorrectionQuality;
         IsRipping = true;
         RipProgress = 0;
         StatusText = "Starting verify...";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        var result = await Task.Run(() => _rip.RunVerify(drive, (frac, status) =>
+        var result = await Task.Run(() => _rip.RunVerify(drive, cq, (frac, status) =>
         {
             // ReadProgress fires on the ripper's thread; marshal to the UI.
             dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; }));
@@ -136,6 +158,12 @@ public sealed class RipViewModel : PageViewModel
 
         RipProgress = result.Ok ? 1 : RipProgress;
         StatusText = result.Ok ? result.Status : ("Verify failed: " + result.Error);
+        if (result.Ok)
+        {
+            ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
+            CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+            Accurate = result.Accurate;
+        }
         IsRipping = false;
     }
 

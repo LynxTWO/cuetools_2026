@@ -30,7 +30,34 @@
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="252"/>
         <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="234"/>
       </Grid.ColumnDefinitions>
+
+      <!-- right: AccurateRip / CTDB / options -->
+      <Border Grid.Column="2" Grid.RowSpan="3" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" Padding="14,16">
+        <StackPanel>
+          <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="11" Padding="13" Margin="0,0,0,11">
+            <StackPanel>
+              <TextBlock Text="ACCURATERIP" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" Margin="0,0,0,7"/>
+              <TextBlock Text="{Binding ArText}" FontFamily="{StaticResource Mono}" FontSize="15" Foreground="{StaticResource Good}"/>
+            </StackPanel>
+          </Border>
+          <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="11" Padding="13" Margin="0,0,0,11">
+            <StackPanel>
+              <TextBlock Text="CTDB" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" Margin="0,0,0,7"/>
+              <TextBlock Text="{Binding CtdbText}" FontFamily="{StaticResource Mono}" FontSize="13" Foreground="{StaticResource Good}"/>
+            </StackPanel>
+          </Border>
+          <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="11" Padding="13">
+            <StackPanel>
+              <TextBlock Text="OPTIONS" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
+              <DockPanel Margin="0,3,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCue}"/><TextBlock Text="Create .cue sheet" Foreground="{StaticResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
+              <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteLog}"/><TextBlock Text="Write rip log" Foreground="{StaticResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
+              <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedArt}"/><TextBlock Text="Embed cover art" Foreground="{StaticResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Border>
 
       <!-- left: live disc read-map -->
       <Border Grid.Column="0" Grid.RowSpan="3" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" Padding="16,18">
@@ -69,11 +96,17 @@
         <DockPanel LastChildFill="False">
           <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"/>
           <Button DockPanel.Dock="Right" Content="Rip" Padding="18,9" Margin="0,0,10,0" IsEnabled="False"/>
-          <ComboBox DockPanel.Dock="Right" Width="130" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
+          <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
             <ComboBoxItem>FLAC -8</ComboBoxItem>
             <ComboBoxItem>Opus 192</ComboBoxItem>
             <ComboBoxItem>WavPack</ComboBoxItem>
             <ComboBoxItem>ALAC</ComboBoxItem>
+          </ComboBox>
+          <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" VerticalAlignment="Center"
+                    ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
+            <ComboBoxItem>Burst</ComboBoxItem>
+            <ComboBoxItem>Secure</ComboBoxItem>
+            <ComboBoxItem>Paranoid</ComboBoxItem>
           </ComboBox>
           <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
             <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
