@@ -20,6 +20,7 @@ public partial class App : Application
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
+        services.AddSingleton<IConvertService, ConvertService>();
         services.AddSingleton<IReportStore, ReportStore>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
