@@ -54,33 +54,57 @@
         </Setter>
       </Style>
 
-      <!-- physical lit switch: a bulb under the translucent thumb (hotspot + falloff) when on -->
+      <!-- physical lit switch: recessed dark track; a bulb under the translucent thumb shows a
+           hotspot with real falloff to dark edges when on (matches the mockup's bulb physics) -->
       <Style x:Key="Switch" TargetType="ToggleButton">
-        <Setter Property="Width" Value="46"/>
-        <Setter Property="Height" Value="23"/>
+        <Setter Property="Width" Value="48"/>
+        <Setter Property="Height" Value="24"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="ToggleButton">
-              <Border x:Name="track" CornerRadius="6" BorderThickness="1" BorderBrush="{StaticResource GlassLine}" Background="{StaticResource Glass}">
-                <Border x:Name="thumb" Width="19" Height="17" CornerRadius="4" HorizontalAlignment="Left" Margin="2,0,0,0" Background="#3E483F"/>
-              </Border>
+              <Grid>
+                <!-- recessed dark track (stays dark; only the thumb lights) -->
+                <Border x:Name="track" CornerRadius="7" BorderThickness="1" BorderBrush="#151B16">
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                      <GradientStop Color="#070B08" Offset="0"/>
+                      <GradientStop Color="#101710" Offset="1"/>
+                    </LinearGradientBrush>
+                  </Border.Background>
+                </Border>
+                <!-- OFF: beveled dark-metal thumb -->
+                <Border x:Name="thumb" Width="20" Height="18" CornerRadius="4" HorizontalAlignment="Left" Margin="2,0,0,0">
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                      <GradientStop Color="#565F52" Offset="0"/>
+                      <GradientStop Color="#2A322B" Offset="1"/>
+                    </LinearGradientBrush>
+                  </Border.Background>
+                </Border>
+                <!-- thin specular highlight along the thumb top (glass sheen) -->
+                <Border x:Name="sheen" Width="16" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="4,2,0,0" Background="#22FFFFFF"/>
+              </Grid>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsChecked" Value="True">
                   <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
                   <Setter TargetName="thumb" Property="Margin" Value="0,0,2,0"/>
+                  <Setter TargetName="sheen" Property="HorizontalAlignment" Value="Right"/>
+                  <Setter TargetName="sheen" Property="Margin" Value="0,2,4,0"/>
                   <Setter TargetName="thumb" Property="Background">
                     <Setter.Value>
-                      <RadialGradientBrush GradientOrigin="0.5,0.55" Center="0.5,0.55" RadiusX="0.62" RadiusY="0.85">
-                        <GradientStop Color="#EAFFFB" Offset="0"/>
-                        <GradientStop Color="#46B8E0" Offset="0.32"/>
-                        <GradientStop Color="#34CFC0" Offset="0.72"/>
-                        <GradientStop Color="#0B3A34" Offset="1"/>
+                      <!-- bulb under translucent plastic: bright core, falling off to dark edges -->
+                      <RadialGradientBrush GradientOrigin="0.5,0.6" Center="0.5,0.6" RadiusX="0.58" RadiusY="0.82">
+                        <GradientStop Color="#F4FFFD" Offset="0"/>
+                        <GradientStop Color="#8FE9DE" Offset="0.2"/>
+                        <GradientStop Color="#34CFC0" Offset="0.48"/>
+                        <GradientStop Color="#136B60" Offset="0.78"/>
+                        <GradientStop Color="#092824" Offset="1"/>
                       </RadialGradientBrush>
                     </Setter.Value>
                   </Setter>
                   <Setter TargetName="thumb" Property="Effect">
-                    <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="10" ShadowDepth="0" Opacity="0.85"/></Setter.Value>
+                    <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="13" ShadowDepth="0" Opacity="0.9"/></Setter.Value>
                   </Setter>
                 </Trigger>
               </ControlTemplate.Triggers>
