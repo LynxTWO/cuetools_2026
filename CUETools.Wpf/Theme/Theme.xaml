@@ -1,31 +1,16 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-  <!-- palette: warm hi-fi-bench dark theme (light theme + physics come in a later pass) -->
-  <SolidColorBrush x:Key="Ground"   Color="#0C0F0D"/>
-  <SolidColorBrush x:Key="Bar"      Color="#0E1310"/>
-  <SolidColorBrush x:Key="Face"     Color="#161C16"/>
-  <SolidColorBrush x:Key="Panel"    Color="#141A16"/>
-  <SolidColorBrush x:Key="Line"     Color="#28312A"/>
-  <SolidColorBrush x:Key="Ink"      Color="#EDF1E9"/>
-  <SolidColorBrush x:Key="InkDim"   Color="#B1BCAE"/>
-  <SolidColorBrush x:Key="Muted"    Color="#7D887C"/>
+  <!-- Accent colors (same in both themes). The THEMEABLE structural brushes - Ground, Bar, Face,
+       Panel, Line, Ink, InkDim, Muted, Glass, GlassLine, ButtonPressed, ButtonFace - are NOT
+       defined here: ThemeService creates them as single mutable brush objects in the app resources
+       and recolors them on light/dark toggle, so every DynamicResource consumer updates from the
+       one brush (no ambiguous frozen duplicate to fight). -->
   <SolidColorBrush x:Key="Teal"     Color="#34CFC0"/>
   <SolidColorBrush x:Key="Teal2"    Color="#46B8E0"/>
   <SolidColorBrush x:Key="Amber"    Color="#E9A63F"/>
   <SolidColorBrush x:Key="Good"     Color="#5CCB8B"/>
-  <SolidColorBrush x:Key="Glass"    Color="#0E1311"/>
-  <SolidColorBrush x:Key="GlassLine" Color="#243029"/>
   <SolidColorBrush x:Key="TealSoft" Color="#2434CFC0"/>
-
-  <!-- Themeable control surfaces. These are named (not inline) so ThemeService can flip the
-       whole app light/dark by mutating their colors at runtime; StaticResource references keep
-       pointing at these same brush objects. Not frozen. -->
-  <SolidColorBrush x:Key="ButtonPressed" Color="#0C110E"/>
-  <LinearGradientBrush x:Key="ButtonFace" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#1B221C" Offset="0"/>
-    <GradientStop Color="#121813" Offset="1"/>
-  </LinearGradientBrush>
 
   <!-- Switch "bulb" colors as a one-knob ramp (see the lit-panel-controls skill). The Switch
        template references these via DynamicResource, so a settings section can color-code its
