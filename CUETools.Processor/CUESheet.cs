@@ -2410,8 +2410,13 @@ namespace CUETools.Processor
                 uint sec_end = Math.Min(sec_start + 74, tr_start + len - 1);
                 bool fError = false;
                 for (uint iSector = sec_start; iSector <= sec_end; iSector++)
-                    if (_ripper.FailedSectors[(int)iSector - (int)_toc[_toc.FirstAudio][0].Start])
+                {
+                    // Bounds-guard: the ripper may be closed (and its FailedSectors sized 0)
+                    // by the time the log is generated, and burst mode records no failures.
+                    int fi = (int)iSector - (int)_toc[_toc.FirstAudio][0].Start;
+                    if (fi >= 0 && fi < _ripper.FailedSectors.Length && _ripper.FailedSectors[fi])
                         fError = true;
+                }
                 if (fError)
                 {
                     uint end = tr_end - 1;
@@ -2421,8 +2426,11 @@ namespace CUETools.Processor
                         uint jsec_end = Math.Min(jsec_start + 74, tr_start + len - 1);
                         bool jfError = false;
                         for (uint jSector = jsec_start; jSector <= jsec_end; jSector++)
-                            if (_ripper.FailedSectors[(int)jSector - (int)_toc[_toc.FirstAudio][0].Start])
+                        {
+                            int fj = (int)jSector - (int)_toc[_toc.FirstAudio][0].Start;
+                            if (fj >= 0 && fj < _ripper.FailedSectors.Length && _ripper.FailedSectors[fj])
                                 jfError = true;
+                        }
                         if (!jfError)
                         {
                             end = jSecond - 1;
