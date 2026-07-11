@@ -5,23 +5,23 @@
     <Style x:Key="Sec" TargetType="TextBlock">
       <Setter Property="FontSize" Value="9.5"/>
       <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
       <Setter Property="Margin" Value="2,20,0,6"/>
     </Style>
     <Style x:Key="RowLabel" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
       <Setter Property="FontSize" Value="13"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style x:Key="Row" TargetType="Border">
-      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
       <Setter Property="BorderThickness" Value="0,0,0,1"/>
       <Setter Property="Padding" Value="2,9"/>
     </Style>
     <Style x:Key="Box" TargetType="TextBox">
-      <Setter Property="Background" Value="{StaticResource Glass}"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+      <Setter Property="Background" Value="{DynamicResource Glass}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassLine}"/>
       <Setter Property="Padding" Value="6,4"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
@@ -29,10 +29,10 @@
     </Style>
   </UserControl.Resources>
 
-  <ScrollViewer Background="{StaticResource Ground}" VerticalScrollBarVisibility="Auto">
+  <ScrollViewer Background="{DynamicResource Ground}" VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="24,20" MaxWidth="720" HorizontalAlignment="Left">
-      <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{StaticResource Ink}"/>
-      <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,2,0,4" TextWrapping="Wrap"/>
+      <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{DynamicResource Ink}"/>
+      <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,2,0,4" TextWrapping="Wrap"/>
 
       <TextBlock Style="{StaticResource Sec}" Text="GENERAL"/>
       <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding OneInstance}"/><TextBlock Style="{StaticResource RowLabel}" Text="Single instance"/></DockPanel></Border>
@@ -75,7 +75,7 @@
       <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
       <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
 
-      <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+      <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                  Text="These write straight to the live configuration. The remaining sections (Metadata, Encoding &amp; Formats with the codec editor, Ripper &amp; Drives) and settings persistence are the next increments."/>
     </StackPanel>
   </ScrollViewer>
