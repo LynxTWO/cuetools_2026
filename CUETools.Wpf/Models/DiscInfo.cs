@@ -7,6 +7,7 @@ namespace CUETools.Wpf.Models;
 public sealed class DiscInfo
 {
     public string DriveName { get; init; } = "";
+    public int Offset { get; init; }
     public string Album { get; init; } = "Unknown album";
     public string Artist { get; init; } = "";
     public string Year { get; init; } = "";

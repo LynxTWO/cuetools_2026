@@ -35,6 +35,9 @@ public sealed class DriveService : IDriveService
             if (!reader.Open(drive)) return null; // Open reads INQUIRY + TOC; throws if no audio disc
             opened = true;
 
+            int driveOffset = 0;
+            try { CUETools.AccurateRip.AccurateRipVerify.FindDriveReadOffset(reader.ARName, out driveOffset); } catch { }
+
             var cue = new CUESheet(_config);
             cue.OpenCD(reader);
             CDImageLayout toc = reader.TOC;
@@ -74,6 +77,7 @@ public sealed class DriveService : IDriveService
             var info = new DiscInfo
             {
                 DriveName = (reader.ARName ?? "").Trim(),
+                Offset = driveOffset,
                 Album = album,
                 Artist = artist,
                 Year = year,
