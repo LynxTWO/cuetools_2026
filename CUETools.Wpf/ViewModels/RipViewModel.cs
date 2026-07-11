@@ -61,6 +61,18 @@ public sealed class RipViewModel : PageViewModel
     private bool _isRipping;
     public bool IsRipping { get => _isRipping; private set => Set(ref _isRipping, value); }
 
+    // live read-speed readout for the SpeedGraph (0..1 of a 12x display cap) + "6.4x" text
+    private double _speedLevel;
+    public double SpeedLevel { get => _speedLevel; private set => Set(ref _speedLevel, value); }
+
+    private string _speedText = "";
+    public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
+
+    private const double SpeedCapX = 12.0;
+    private double _discSeconds;
+    private double _lastSpeedFrac;
+    private DateTime _lastSpeedTick;
+
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
 
@@ -159,11 +171,16 @@ public sealed class RipViewModel : PageViewModel
         IsRipping = true;
         RipProgress = 0;
         StatusText = encode ? "Starting rip..." : "Starting verify...";
+        _discSeconds = _lastDisc?.TotalLength.TotalSeconds ?? 0;
+        _lastSpeedFrac = 0;
+        _lastSpeedTick = DateTime.UtcNow;
+        SpeedLevel = 0;
+        SpeedText = "";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
         // ReadProgress fires on the ripper's thread; marshal to the UI.
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; }));
+            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); }));
 
         var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, Report) : _rip.RunVerify(drive, cq, Report));
 
@@ -182,6 +199,21 @@ public sealed class RipViewModel : PageViewModel
             StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         IsRipping = false;
+    }
+
+    // Convert progress deltas into read speed as a multiple of realtime (1x = 75 sectors/s).
+    // speed = (fraction of disc read) * (disc seconds) / (elapsed seconds).
+    private void UpdateSpeed(double frac)
+    {
+        var now = DateTime.UtcNow;
+        double dt = (now - _lastSpeedTick).TotalSeconds;
+        double dFrac = frac - _lastSpeedFrac;
+        if (dt < 0.08 || dFrac <= 0 || _discSeconds <= 0) return;
+        double sx = dFrac * _discSeconds / dt;
+        SpeedText = $"{sx:0.0}x";
+        SpeedLevel = Math.Max(0, Math.Min(1, sx / SpeedCapX));
+        _lastSpeedTick = now;
+        _lastSpeedFrac = frac;
     }
 
     private void ApplyPerTrack(VerifyResult result)

@@ -73,6 +73,15 @@
               <ctl:VuMeter Height="74" Active="{Binding IsRipping, Mode=OneWay}"/>
             </StackPanel>
           </Border>
+          <Border Margin="0,11,0,0" Background="{StaticResource Glass}" BorderBrush="{StaticResource GlassLine}" BorderThickness="1" CornerRadius="10" Padding="11,9">
+            <StackPanel>
+              <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" Text="READ SPEED" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Teal}"/>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding SpeedText}" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{StaticResource InkDim}"/>
+              </DockPanel>
+              <ctl:SpeedGraph Height="64" Level="{Binding SpeedLevel, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </Border>
 
