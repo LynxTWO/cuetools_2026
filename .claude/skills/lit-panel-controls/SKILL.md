@@ -31,22 +31,74 @@ Reference implementation: [assets/lit-switch.xaml](assets/lit-switch.xaml) (the 
 `Switch` style). The same four layers recolor a lamp (housing + lens only), a VU backlight, or
 an accent key.
 
-## The one knob: light color
+## The one knob: light color (via scoped resources - the good way)
 
-Every glow uses the same 5-role ramp derived from one accent hue - near-white core, light tint,
-base accent, dark accent, near-black edge - with alpha preserved. To recolor, swap the ramp:
+The bulb colors are a ramp of named `Color` resources the template references with
+`DynamicResource`, so ONE template recolors per scope - no duplicated styles. Keys:
+`LampCore` (near-white), `LampLight`, `LampBase`, `LampDark`, `LampEdge`, `LampHalo`
+(DropShadow color), and the cap-bleed `LampCapCore` / `LampCapMid` / `LampCapEdge` (alpha-
+prefixed). Default is teal, defined once in `Theme.xaml`.
 
-| Role        | Teal (default) | Amber      | Green      |
-|-------------|----------------|------------|------------|
-| Core        | `#EAFFFB`      | `#FFF6E9`  | `#EAFFF1`  |
-| Light tint  | `#6FE3D6`      | `#F0C784`  | `#9FE9B8`  |
-| Base accent | `#34CFC0`      | `#E9A63F`  | `#5CCB8B`  |
-| Dark accent | `#0E4F48`      | `#7A5416`  | `#1E5E38`  |
-| Edge (dark) | `#06211E`      | `#241804`  | `#06210F`  |
+To color-code a section, override those keys in that element's `Resources` - every switch inside
+recolors:
 
-Keep the OFFSETS and ALPHAS as in the reference; change only these five colors and the
-`DropShadowEffect Color`. The housing, cap metal, and occlusion (pure black) do NOT change - only
-the emissive layers carry the light color.
+```xml
+<StackPanel>
+  <StackPanel.Resources>
+    <Color x:Key="LampCore">#FFF6E9</Color><Color x:Key="LampLight">#F0C784</Color>
+    <Color x:Key="LampBase">#C8871F</Color><Color x:Key="LampDark">#7A5416</Color>
+    <Color x:Key="LampEdge">#241804</Color><Color x:Key="LampHalo">#E9A63F</Color>
+    <Color x:Key="LampCapCore">#B8FFF8EE</Color><Color x:Key="LampCapMid">#5AE0A94A</Color><Color x:Key="LampCapEdge">#00E9A63F</Color>
+  </StackPanel.Resources>
+  ... switches here are amber ...
+</StackPanel>
+```
+
+Ramps used in CUETools 2026 (housing/cap/occlusion stay neutral - only these carry the hue):
+
+| Role | Teal (default) | Amber | Green |
+|---|---|---|---|
+| LampCore | `#EAFFFB` | `#FFF6E9` | `#EAFFF1` |
+| LampLight | `#6FE3D6` | `#F0C784` | `#9FE9B8` |
+| LampBase | `#27A99C` | `#C8871F` | `#3FB877` |
+| LampDark | `#0E4F48` | `#7A5416` | `#1E5E38` |
+| LampEdge | `#06211E` | `#241804` | `#06210F` |
+| LampHalo | `#34CFC0` | `#E9A63F` | `#5CCB8B` |
+
+Note: `DynamicResource` on a `GradientStop.Color` / `DropShadowEffect.Color` (both Freezables)
+DOES resolve through the scope here - verified - but it is a known-finicky corner; keep the
+render check below.
+
+## Animation (real bulb physics)
+
+The transition is animated, not a snap. The moving parts (cap, cap-bleed, occlusion, sheen) ride
+in a `mover` Grid with a `TranslateTransform`; the lens `Opacity` carries the light curve. Turning
+ON (`Trigger.EnterActions` storyboard): the cap slides across with a slight mechanical overshoot
+(`BackEase`), the bulb WARMS UP fast (`CubicEase` EaseOut ~180ms), and the cap-bleed fades in a
+beat later (light takes a moment through thick plastic). Turning OFF (`Trigger.ExitActions`): the
+bulb COOLS DOWN with a longer dim tail (~340ms) like an incandescent filament.
+
+Use `To=`-only animations (no `From`) with default `HoldEnd` so the resting states are correct and
+toggling mid-animation is smooth. Caveat: a switch that is CHECKED AT LOAD relies on EnterActions
+firing on load - they do here (verified), settling it lit - but if you ever see an on-by-default
+switch stuck dark, that is the cause; fix with VSM or explicit state, not property setters that
+fight the animation.
+
+## Verify by rendering, never by guessing
+
+You usually cannot see the running WPF app. Render the control to a PNG and look at it:
+
+1. Keep the styles in a standalone `ResourceDictionary` (e.g. `Theme/Theme.xaml`) merged by the
+   app, so a harness can load the SAME file.
+2. For STATIC looks (off state, geometry, colors), a tiny net8 WPF console loads it with
+   `XamlReader.Parse(File.ReadAllText(path))`, builds the control with the real `Style`,
+   `Measure`/`Arrange`, renders via `RenderTargetBitmap` (192 dpi = 2x). Put the theme dict in
+   `root.Resources.MergedDictionaries` so implicit styles apply. See `scratchpad/SwitchRender`.
+3. For ANIMATION or the lit ON state (which needs the storyboard clock, and for `DynamicResource`
+   recolor which needs a real resource scope), run a real `Application` + `Window` off-screen,
+   wait ~600ms on a `DispatcherTimer`, THEN `RenderTargetBitmap`. A single headless frame captures
+   the animation at t=0 (looks off). See `scratchpad/AnimTest` - it is how the warm-up and the
+   teal/amber/green recolor were verified.
 
 ## Verify by rendering, never by guessing
 
