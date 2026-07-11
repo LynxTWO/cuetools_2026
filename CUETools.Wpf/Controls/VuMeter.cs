@@ -5,23 +5,30 @@ using System.Windows.Media;
 namespace CUETools.Wpf.Controls;
 
 /// <summary>
-/// A pair of analog VU meters (L/R), amber needles on a tick scale. Retained-mode WPF
-/// drawing, GPU-composited. Idle demo animation for now; binds to real read levels later.
-/// Drawn from computed tick points + needle lines (no arc geometry) so it renders predictably.
+/// A pair of analog VU meters (L/R), amber needles on a tick scale, GPU-composited. Driven by
+/// REAL per-channel peak levels (<see cref="LevelL"/> / <see cref="LevelR"/>, 0..1 linear) tapped
+/// from the disc audio as it is read. Classic meter ballistics: fast attack, slow decay, so the
+/// needle jumps to a peak and drifts back. When <see cref="Active"/> is false (nothing ripping)
+/// the levels are zero and the needles sit at rest - it does not animate for no reason.
 /// </summary>
 public sealed class VuMeter : FrameworkElement
 {
     public static readonly DependencyProperty ActiveProperty = DependencyProperty.Register(
-        nameof(Active), typeof(bool), typeof(VuMeter), new PropertyMetadata(true));
+        nameof(Active), typeof(bool), typeof(VuMeter), new PropertyMetadata(false));
+    public static readonly DependencyProperty LevelLProperty = DependencyProperty.Register(
+        nameof(LevelL), typeof(double), typeof(VuMeter), new PropertyMetadata(0.0));
+    public static readonly DependencyProperty LevelRProperty = DependencyProperty.Register(
+        nameof(LevelR), typeof(double), typeof(VuMeter), new PropertyMetadata(0.0));
 
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
+    public double LevelL { get => (double)GetValue(LevelLProperty); set => SetValue(LevelLProperty, value); }
+    public double LevelR { get => (double)GetValue(LevelRProperty); set => SetValue(LevelRProperty, value); }
 
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
+    private const double Attack = 0.35, Decay = 0.06;
 
-    private double _l = 0.5, _r = 0.42;
-    private TimeSpan _last;
-    private readonly Random _rng = new();
+    private double _l, _r;   // smoothed needle deflection 0..1
 
     public VuMeter()
     {
@@ -31,16 +38,22 @@ public sealed class VuMeter : FrameworkElement
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        var t = ((RenderingEventArgs)e).RenderingTime;
-        double dt = _last == default ? 0 : (t - _last).TotalSeconds;
-        _last = t;
-        double amt = Active ? 8.0 * dt : 2.0 * dt;
-        _l = Clamp(_l + (_rng.NextDouble() - 0.5) * amt);
-        _r = Clamp(_r + (_rng.NextDouble() - 0.5) * amt);
+        double tL = Active ? Deflection(LevelL) : 0;
+        double tR = Active ? Deflection(LevelR) : 0;
+        _l += (tL - _l) * (tL > _l ? Attack : Decay);
+        _r += (tR - _r) * (tR > _r ? Attack : Decay);
+        // stop repainting once fully settled at rest
+        if (_l < 0.0005 && _r < 0.0005 && tL == 0 && tR == 0) { _l = _r = 0; return; }
         InvalidateVisual();
     }
 
-    private static double Clamp(double v) => Math.Max(0.18, Math.Min(0.92, v));
+    // Map a 0..1 linear peak onto needle deflection with a dB-like VU scale (-40 dB .. 0 dB).
+    private static double Deflection(double level)
+    {
+        if (level <= 0) return 0;
+        double db = 20.0 * Math.Log10(Math.Min(1.0, level));
+        return Math.Max(0, Math.Min(1, (db + 40.0) / 40.0));
+    }
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -54,9 +67,8 @@ public sealed class VuMeter : FrameworkElement
 
     private void Meter(DrawingContext dc, double cx, double cy, double R, string label, double val)
     {
-        const double a0 = -Math.PI * 0.75, a1 = -Math.PI * 0.25; // sweep across the top, left=0 to right=1
+        const double a0 = -Math.PI * 0.75, a1 = -Math.PI * 0.25;
 
-        // faint backing arc as a sampled polyline
         var fig = new PathFigure { StartPoint = Pt(cx, cy, R, a0), IsClosed = false };
         for (int i = 1; i <= 24; i++)
             fig.Segments.Add(new LineSegment(Pt(cx, cy, R, a0 + (a1 - a0) * i / 24.0), true));
@@ -66,7 +78,6 @@ public sealed class VuMeter : FrameworkElement
         arcPen.Freeze();
         dc.DrawGeometry(null, arcPen, geo);
 
-        // ticks
         for (int i = 0; i <= 10; i++)
         {
             double a = a0 + (a1 - a0) * i / 10.0;
@@ -76,7 +87,6 @@ public sealed class VuMeter : FrameworkElement
             dc.DrawLine(pen, Pt(cx, cy, R - R * 0.06, a), Pt(cx, cy, R + R * 0.06, a));
         }
 
-        // needle (glow under, bright over) + pivot
         double na = a0 + (a1 - a0) * Math.Max(0, Math.Min(1, val));
         var tip = Pt(cx, cy, R + R * 0.04, na);
         var glow = new Pen(new SolidColorBrush(Color.FromArgb(90, Amber.R, Amber.G, Amber.B)), 4.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
@@ -87,7 +97,6 @@ public sealed class VuMeter : FrameworkElement
         dc.DrawLine(needle, new Point(cx, cy), tip);
         dc.DrawEllipse(new SolidColorBrush(Amber), null, new Point(cx, cy), 2.6, 2.6);
 
-        // label
         var ft = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface("Consolas"), 10, new SolidColorBrush(Color.FromArgb(180, 200, 208, 196)), 1.0);
         dc.DrawText(ft, new Point(cx - ft.Width / 2, cy + R * 0.05));

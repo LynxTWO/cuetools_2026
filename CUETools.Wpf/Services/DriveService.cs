@@ -26,7 +26,7 @@ public sealed class DriveService : IDriveService
         catch { return Array.Empty<char>(); }
     }
 
-    public DiscInfo? ReadDisc(char drive)
+    public DiscInfo? ReadDisc(char drive, Action<string>? onStatus = null)
     {
         var reader = new CDDriveReader();
         bool opened = false;
@@ -39,6 +39,7 @@ public sealed class DriveService : IDriveService
             try { CUETools.AccurateRip.AccurateRipVerify.FindDriveReadOffset(reader.ARName, out driveOffset); } catch { }
 
             var cue = new CUESheet(_config);
+            if (onStatus != null) cue.CUEToolsProgress += (s, e) => { if (!string.IsNullOrEmpty(e.status)) onStatus(e.status); };
             cue.OpenCD(reader);
             CDImageLayout toc = reader.TOC;
 
@@ -48,6 +49,7 @@ public sealed class DriveService : IDriveService
             // metadata lookup is best-effort: keep generic names if the disc isn't found or we're offline
             try
             {
+                onStatus?.Invoke("Looking up disc in the databases...");
                 var releases = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Extensive);
                 foreach (var r in releases)
                     if (r is CUEMetadataEntry e) releaseNames.Add(e.ToString());

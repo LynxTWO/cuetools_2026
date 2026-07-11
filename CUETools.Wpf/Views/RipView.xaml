@@ -70,7 +70,8 @@
                 <TextBlock DockPanel.Dock="Left" Text="READ LEVEL" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Amber}"/>
                 <TextBlock DockPanel.Dock="Right" Text="dB -20 . 0 . +3" FontFamily="{StaticResource Mono}" FontSize="9.5" Foreground="{DynamicResource Muted}"/>
               </DockPanel>
-              <ctl:VuMeter Height="74" Active="{Binding IsRipping, Mode=OneWay}"/>
+              <ctl:VuMeter Height="74" Active="{Binding IsRipping, Mode=OneWay}"
+                           LevelL="{Binding LevelL, Mode=OneWay}" LevelR="{Binding LevelR, Mode=OneWay}"/>
             </StackPanel>
           </Border>
           <Border Margin="0,11,0,0" Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="10" Padding="11,9">
