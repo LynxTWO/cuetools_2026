@@ -66,7 +66,9 @@ are the known integration snags to clear.
   `CDDriveReader` (real SCSI INQUIRY + ReadTOC). It runs on .NET 8.0.28 here; this
   sandbox exposes no optical drive, so the live SCSI read against the BD-RE on K: is the
   owner's step: `dotnet DriveProbe/bin/Release/net8.0-windows/DriveProbe.dll` with an
-  audio CD inserted.
+  audio CD inserted. **Confirmed live 2026-07-10** on the owner's box: enumerated K:,
+  INQUIRY returned "ASUS BW-16D1HT", and read a 9-track / 46:20 disc TOC on .NET 8.0.28.
+  The one real risk is fully cleared.
 - [ ] Phase 2: WPF scaffold
 - [ ] Phase 3: ripper vertical slice
 - [ ] Phase 4: settings, polish, packaging, CI
