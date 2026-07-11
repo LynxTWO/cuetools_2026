@@ -15,10 +15,7 @@ public abstract class PageViewModel : ViewModelBase
 
 // RipViewModel lives in its own file (RipViewModel.cs) - it is a real page now.
 
-public sealed class VerifyViewModel : PageViewModel
-{
-    public VerifyViewModel() { Title = "Verify & Repair"; Group = "Work"; Subtitle = "Check existing files against AccurateRip and CTDB, and repair from CTDB parity."; }
-}
+// VerifyViewModel lives in its own file (VerifyViewModel.cs) - it is a real page now.
 
 public sealed class ConvertViewModel : PageViewModel
 {
