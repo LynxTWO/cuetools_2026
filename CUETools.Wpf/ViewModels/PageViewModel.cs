@@ -19,11 +19,7 @@ public abstract class PageViewModel : ViewModelBase
 
 // ConvertViewModel lives in its own file (ConvertViewModel.cs) - it is a real page now.
 
-public sealed class QueueViewModel : PageViewModel
-{
-    public QueueViewModel() { Title = "Queue"; Group = "Session"; Subtitle = "Process a stack of discs or jobs in one sitting."; }
-}
-
+// QueueViewModel lives in its own file (QueueViewModel.cs) - it is a real page now.
 // ReportViewModel lives in its own file (ReportViewModel.cs) - it is a real page now.
 // DriveViewModel lives in its own file (DriveViewModel.cs) - it is a real page now.
 // SettingsViewModel lives in its own file (SettingsViewModel.cs) - it is a real page now.
