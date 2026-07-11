@@ -40,7 +40,4 @@ public sealed class DriveViewModel : PageViewModel
     public DriveViewModel() { Title = "Drive & Read"; Group = "Setup"; Subtitle = "Drive capabilities (cache defeat, overread, offset) and calibration."; }
 }
 
-public sealed class SettingsViewModel : PageViewModel
-{
-    public SettingsViewModel() { Title = "Settings"; Group = "Setup"; Subtitle = "Every engine option, grouped."; }
-}
+// SettingsViewModel lives in its own file (SettingsViewModel.cs) - it is a real page now.

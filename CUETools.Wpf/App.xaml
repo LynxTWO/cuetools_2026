@@ -18,7 +18,11 @@
       <SolidColorBrush x:Key="InkDim"   Color="#B1BCAE"/>
       <SolidColorBrush x:Key="Muted"    Color="#7D887C"/>
       <SolidColorBrush x:Key="Teal"     Color="#34CFC0"/>
+      <SolidColorBrush x:Key="Teal2"    Color="#46B8E0"/>
       <SolidColorBrush x:Key="Amber"    Color="#E9A63F"/>
+      <SolidColorBrush x:Key="Good"     Color="#5CCB8B"/>
+      <SolidColorBrush x:Key="Glass"    Color="#0E1311"/>
+      <SolidColorBrush x:Key="GlassLine" Color="#243029"/>
       <SolidColorBrush x:Key="TealSoft" Color="#2434CFC0"/>
 
       <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
@@ -50,6 +54,41 @@
         </Setter>
       </Style>
 
+      <!-- physical lit switch: a bulb under the translucent thumb (hotspot + falloff) when on -->
+      <Style x:Key="Switch" TargetType="ToggleButton">
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="23"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ToggleButton">
+              <Border x:Name="track" CornerRadius="6" BorderThickness="1" BorderBrush="{StaticResource GlassLine}" Background="{StaticResource Glass}">
+                <Border x:Name="thumb" Width="19" Height="17" CornerRadius="4" HorizontalAlignment="Left" Margin="2,0,0,0" Background="#3E483F"/>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+                  <Setter TargetName="thumb" Property="Margin" Value="0,0,2,0"/>
+                  <Setter TargetName="thumb" Property="Background">
+                    <Setter.Value>
+                      <RadialGradientBrush GradientOrigin="0.5,0.55" Center="0.5,0.55" RadiusX="0.62" RadiusY="0.85">
+                        <GradientStop Color="#EAFFFB" Offset="0"/>
+                        <GradientStop Color="#46B8E0" Offset="0.32"/>
+                        <GradientStop Color="#34CFC0" Offset="0.72"/>
+                        <GradientStop Color="#0B3A34" Offset="1"/>
+                      </RadialGradientBrush>
+                    </Setter.Value>
+                  </Setter>
+                  <Setter TargetName="thumb" Property="Effect">
+                    <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="10" ShadowDepth="0" Opacity="0.85"/></Setter.Value>
+                  </Setter>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+
       <!-- page placeholder (Phase 2); each page gets its real view in Phase 3 -->
       <DataTemplate x:Key="PageTemplate">
         <StackPanel Margin="28" VerticalAlignment="Top">
@@ -65,8 +104,10 @@
       <!-- real page views (extended per increment) + the selector that picks them -->
       <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
       <DataTemplate x:Key="RipTemplate"><views:RipView/></DataTemplate>
+      <DataTemplate x:Key="SettingsTemplate"><views:SettingsView/></DataTemplate>
       <sel:PageTemplateSelector x:Key="PageSelector"
                                 RipTemplate="{StaticResource RipTemplate}"
+                                SettingsTemplate="{StaticResource SettingsTemplate}"
                                 PlaceholderTemplate="{StaticResource PageTemplate}"/>
 
     </ResourceDictionary>
