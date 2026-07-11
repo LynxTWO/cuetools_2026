@@ -17,8 +17,9 @@ namespace CUETools.Wpf.Services;
 public sealed class DriveService : IDriveService
 {
     private readonly CUEConfig _config;
+    private readonly IDiagnosticLog _log;
 
-    public DriveService(CUEConfig config) => _config = config;
+    public DriveService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
     public IReadOnlyList<char> GetDrives()
     {
@@ -32,7 +33,7 @@ public sealed class DriveService : IDriveService
         bool opened = false;
         try
         {
-            if (!reader.Open(drive)) return null; // Open reads INQUIRY + TOC; throws if no audio disc
+            if (!reader.Open(drive)) { _log.Info("disc", $"read drive={drive}: no readable audio disc"); return null; }
             opened = true;
 
             int driveOffset = 0;
@@ -44,25 +45,33 @@ public sealed class DriveService : IDriveService
             CDImageLayout toc = reader.TOC;
 
             string album = "Unknown album", artist = "", year = "";
-            var releaseNames = new List<string>();
+            var matches = new List<ReleaseMatch>();
 
             // metadata lookup is best-effort: keep generic names if the disc isn't found or we're offline
             try
             {
                 onStatus?.Invoke("Looking up disc in the databases...");
                 var releases = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Extensive);
+                int idx = 0;
                 foreach (var r in releases)
-                    if (r is CUEMetadataEntry e) releaseNames.Add(e.ToString());
+                    if (r is CUEMetadataEntry e) matches.Add(BuildMatch(e, idx++, (int)toc.AudioTracks));
 
-                if (releaseNames.Count > 0 && releases[0] is CUEMetadataEntry top)
+                // rank best-first by source quality + metadata completeness; apply the best.
+                matches.Sort((a, b) => b.Score.CompareTo(a.Score));
+                if (matches.Count > 0 && matches[0].Metadata != null)
                 {
-                    cue.CopyMetadata(top.metadata);
+                    matches[0].IsBest = true;
+                    cue.CopyMetadata(matches[0].Metadata);
                     artist = cue.Metadata?.Artist ?? "";
                     if (!string.IsNullOrEmpty(cue.Metadata?.Title)) album = cue.Metadata!.Title;
                     year = cue.Metadata?.Year ?? "";
                 }
+                // log the outcome by source/count only (no titles); scrub the chosen names after
+                _log.Info("disc", $"read ok drive='{(reader.ARName ?? "").Trim()}' tracks={toc.AudioTracks} " +
+                    $"releases={matches.Count} best_source={(matches.Count > 0 ? matches[0].Source : "none")}");
+                _log.Redact(artist, album);
             }
-            catch { /* lookup failed / offline - generic names */ }
+            catch (Exception ex) { _log.Error("disc", "metadata lookup failed", ex); /* offline - generic names */ }
 
             var metaTracks = cue.Metadata?.Tracks;
             var tracks = new List<TrackItem>();
@@ -88,20 +97,91 @@ public sealed class DriveService : IDriveService
                 Tracks = tracks,
                 TotalLength = TimeSpan.FromSeconds(toc.AudioLength / 75.0),
                 TocId = toc.ToString() ?? "",
-                ReleaseMatches = releaseNames
+                ReleaseMatches = matches.ConvertAll(m => m.Header),
+                Releases = matches
             };
 
             cue.Close();
             opened = false;
             return info;
         }
-        catch
+        catch (Exception ex)
         {
-            return null; // no disc / not ready / data disc - caller shows the empty state
+            _log.Warn("disc", $"read drive={drive} failed (no disc / not ready / data disc): {ex.GetType().Name}");
+            return null; // caller shows the empty state
         }
         finally
         {
             try { if (opened) reader.Close(); else reader.Dispose(); } catch { }
         }
+    }
+
+    // Every returned release already matches the disc TOC; scoring ranks them by source quality
+    // and metadata completeness so the user can see which is best and why.
+    private static ReleaseMatch BuildMatch(CUEMetadataEntry e, int index, int audioTracks)
+    {
+        var m = e.metadata;
+        int total = (m.Tracks != null && m.Tracks.Count > 0) ? m.Tracks.Count : audioTracks;
+        int titled = 0;
+        if (m.Tracks != null) foreach (var t in m.Tracks) if (!string.IsNullOrWhiteSpace(t.Title)) titled++;
+        bool cover = e.cover != null && e.cover.Length > 0;
+        string source = PrettySource(e.ImageKey);
+        string detail = !string.IsNullOrWhiteSpace(m.ReleaseDateAndLabel) ? m.ReleaseDateAndLabel : (m.Country ?? "");
+
+        int score = SourceRank(e.ImageKey)
+            + (string.IsNullOrEmpty(m.Year) ? 0 : 12)
+            + (string.IsNullOrEmpty(detail) ? 0 : 8)
+            + (cover ? 15 : 0)
+            + (total > 0 ? (int)(25.0 * titled / total) : 0);
+
+        var q = new List<string>
+        {
+            (titled >= total && total > 0) ? "all track titles" : titled > 0 ? $"{titled}/{total} track titles" : "no track titles"
+        };
+        if (!string.IsNullOrEmpty(m.Year)) q.Add("year");
+        if (!string.IsNullOrEmpty(detail)) q.Add("label/date");
+        if (cover) q.Add("cover art");
+
+        return new ReleaseMatch
+        {
+            Index = index,
+            Source = source,
+            Artist = m.Artist ?? "",
+            Title = m.Title ?? "",
+            Year = m.Year ?? "",
+            Detail = detail,
+            TrackCount = total,
+            TitledTracks = titled,
+            HasCover = cover,
+            Score = score,
+            Why = $"{source}: matches the disc layout; {string.Join(", ", q)}",
+            Metadata = m
+        };
+    }
+
+    private static string PrettySource(string key)
+    {
+        string s = (key ?? "").ToLowerInvariant();
+        if (s.Contains("musicbrainz")) return "MusicBrainz";
+        if (s.Contains("discogs")) return "Discogs";
+        if (s.Contains("freedb") || s.Contains("gnudb")) return "freedb";
+        if (s.Contains("ctdb") || s.Contains("cuetools")) return "CTDB";
+        if (s == "local") return "local cache";
+        if (s == "cue") return "embedded cue";
+        if (s == "tags") return "file tags";
+        return string.IsNullOrWhiteSpace(key) ? "database" : key;
+    }
+
+    private static int SourceRank(string key)
+    {
+        string s = (key ?? "").ToLowerInvariant();
+        if (s.Contains("musicbrainz")) return 100;
+        if (s.Contains("discogs")) return 90;
+        if (s.Contains("ctdb") || s.Contains("cuetools")) return 85;
+        if (s.Contains("freedb") || s.Contains("gnudb")) return 45;
+        if (s == "local") return 35;
+        if (s == "cue") return 25;
+        if (s == "tags") return 20;
+        return 40;
     }
 }

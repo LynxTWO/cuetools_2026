@@ -36,6 +36,19 @@ public sealed class RipViewModel : PageViewModel
     private string _selectedFormat = "flac";
     public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
 
+    // Ranked release matches for the inserted disc; picking one applies its metadata to the rip.
+    public ObservableCollection<ReleaseMatch> Releases { get; } = new();
+    public bool HasReleases => Releases.Count > 0;
+
+    private CUEMetadata? _chosenMetadata;
+
+    private ReleaseMatch? _selectedRelease;
+    public ReleaseMatch? SelectedRelease
+    {
+        get => _selectedRelease;
+        set { if (Set(ref _selectedRelease, value)) ApplyRelease(value); }
+    }
+
     private char _selectedDrive;
     public char SelectedDrive
     {
@@ -159,6 +172,9 @@ public sealed class RipViewModel : PageViewModel
         _lastDisc = info;
 
         Tracks.Clear();
+        Releases.Clear();
+        _chosenMetadata = null;
+        _selectedRelease = null;
         if (info == null)
         {
             IsDiscPresent = false;
@@ -174,13 +190,34 @@ public sealed class RipViewModel : PageViewModel
             AlbumArtist = string.IsNullOrWhiteSpace(info.Artist)
                 ? (string.IsNullOrWhiteSpace(info.DriveName) ? $"Drive {drive}:" : info.DriveName)
                 : (string.IsNullOrWhiteSpace(info.Year) ? info.Artist : $"{info.Artist}  ({info.Year})");
-            DiscInfoText = $"{info.AudioTracks} tracks   {Fmt(info.TotalLength)}   {info.ReleaseMatches.Count} release match(es)";
+            DiscInfoText = $"{info.AudioTracks} tracks   {Fmt(info.TotalLength)}   {info.Releases.Count} release match(es)";
             foreach (var t in info.Tracks) Tracks.Add(t);
-            StatusText = info.ReleaseMatches.Count > 0
+            foreach (var rm in info.Releases) Releases.Add(rm);
+            _selectedRelease = System.Linq.Enumerable.FirstOrDefault(Releases, r => r.IsBest) ?? (Releases.Count > 0 ? Releases[0] : null);
+            _chosenMetadata = _selectedRelease?.Metadata;
+            StatusText = info.Releases.Count > 0
                 ? $"Identified: {info.Artist} - {info.Album}. Ripping comes next."
                 : "Disc read; not found in the metadata databases (generic track names).";
         }
+        OnPropertyChanged(nameof(SelectedRelease));
+        OnPropertyChanged(nameof(HasReleases));
         IsBusy = false;
+    }
+
+    // Choosing a release re-labels the album and re-titles the tracks from that release, and makes
+    // the rip use its metadata instead of the auto-picked best.
+    private void ApplyRelease(ReleaseMatch? r)
+    {
+        if (r?.Metadata == null) return;
+        _chosenMetadata = r.Metadata;
+        if (!string.IsNullOrWhiteSpace(r.Title)) AlbumTitle = r.Title;
+        AlbumArtist = string.IsNullOrWhiteSpace(r.Artist)
+            ? AlbumArtist
+            : (string.IsNullOrWhiteSpace(r.Year) ? r.Artist : $"{r.Artist}  ({r.Year})");
+        var mt = r.Metadata.Tracks;
+        for (int i = 0; i < Tracks.Count; i++)
+            if (mt != null && i < mt.Count && !string.IsNullOrWhiteSpace(mt[i].Title))
+                Tracks[i].Title = mt[i].Title;
     }
 
     private async Task RunJobAsync(bool encode)
@@ -205,7 +242,8 @@ public sealed class RipViewModel : PageViewModel
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
 
         string fmt = SelectedFormat;
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, Report, Levels) : _rip.RunVerify(drive, cq, Report, Levels));
+        var meta = _chosenMetadata;
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, Report, Levels) : _rip.RunVerify(drive, cq, meta, Report, Levels));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
@@ -246,8 +284,8 @@ public sealed class RipViewModel : PageViewModel
         {
             int ar = i < result.ArPerTrack.Length ? result.ArPerTrack[i] : 0;
             int ct = i < result.CtdbPerTrack.Length ? result.CtdbPerTrack[i] : 0;
-            Tracks[i].ArResult = ar > 0 ? $"conf {ar}" : "not found";
-            Tracks[i].CtdbResult = ct > 0 ? $"conf {ct}" : "not found";
+            Tracks[i].ArResult = ar > 0 ? ar.ToString() : "-";
+            Tracks[i].CtdbResult = ct > 0 ? ct.ToString() : "-";
         }
     }
 

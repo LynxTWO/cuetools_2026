@@ -17,6 +17,24 @@
         <TextBlock DockPanel.Dock="Left" Margin="16,0,0,0" VerticalAlignment="Center"
                    Text="{Binding DiscInfoText}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5"/>
         <Button DockPanel.Dock="Right" Content="Read disc" Command="{Binding ReadDiscCommand}" Padding="12,6" VerticalAlignment="Center"/>
+        <!-- release picker: ranked best-first by source + completeness; pick one to relabel -->
+        <ComboBox DockPanel.Dock="Right" Width="320" Margin="10,0,10,0" VerticalAlignment="Center"
+                  ItemsSource="{Binding Releases}" SelectedItem="{Binding SelectedRelease, Mode=TwoWay}"
+                  Visibility="{Binding HasReleases, Converter={StaticResource BoolVis}}"
+                  ToolTip="Metadata release used for this rip. Ranked best-first by source quality and how complete the info is. Pick one to relabel the album and tracks.">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <DockPanel MinWidth="264" ToolTip="{Binding Why}">
+                <Border DockPanel.Dock="Right" Background="{StaticResource Teal}" CornerRadius="3" Padding="5,0" Margin="6,0,0,0" VerticalAlignment="Center"
+                        Visibility="{Binding IsBest, Converter={StaticResource BoolVis}}">
+                  <TextBlock Text="BEST" FontSize="8" FontWeight="Bold" Foreground="#04110F"/>
+                </Border>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Source}" Foreground="{DynamicResource Muted}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                <TextBlock Text="{Binding Header}" Foreground="{DynamicResource Ink}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+              </DockPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
       </DockPanel>
     </Border>
 
@@ -89,17 +107,20 @@
       <StackPanel Grid.Row="0" Grid.Column="1" Margin="18,16,18,8">
         <TextBlock Text="{Binding AlbumTitle}" FontFamily="{StaticResource Serif}" FontSize="24" Foreground="{DynamicResource Ink}"/>
         <TextBlock Text="{Binding AlbumArtist}" FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="14" Foreground="{DynamicResource InkDim}" Margin="0,2,0,0"/>
+        <!-- why this release was chosen (all matches fit the disc; ranked by source + completeness) -->
+        <TextBlock Text="{Binding SelectedRelease.Why}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,5,0,0" TextWrapping="Wrap"
+                   Visibility="{Binding HasReleases, Converter={StaticResource BoolVis}}"/>
       </StackPanel>
 
       <ListView Grid.Row="1" Grid.Column="1" Margin="18,4,18,4" ItemsSource="{Binding Tracks}"
                 Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" Foreground="{DynamicResource Ink}">
         <ListView.View>
           <GridView>
-            <GridViewColumn Header="#" Width="44" DisplayMemberBinding="{Binding Number}"/>
-            <GridViewColumn Header="Title" Width="300" DisplayMemberBinding="{Binding Title}"/>
-            <GridViewColumn Header="Length" Width="74" DisplayMemberBinding="{Binding LengthText}"/>
-            <GridViewColumn Header="AccurateRip" Width="100" DisplayMemberBinding="{Binding ArResult}"/>
-            <GridViewColumn Header="CTDB" Width="90" DisplayMemberBinding="{Binding CtdbResult}"/>
+            <GridViewColumn Header="#" Width="32" DisplayMemberBinding="{Binding Number}"/>
+            <GridViewColumn Header="Title" Width="238" DisplayMemberBinding="{Binding Title}"/>
+            <GridViewColumn Header="Len" Width="52" DisplayMemberBinding="{Binding LengthText}"/>
+            <GridViewColumn Header="AR" Width="48" DisplayMemberBinding="{Binding ArResult}"/>
+            <GridViewColumn Header="CTDB" Width="52" DisplayMemberBinding="{Binding CtdbResult}"/>
           </GridView>
         </ListView.View>
       </ListView>

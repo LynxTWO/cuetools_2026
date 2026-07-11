@@ -24,6 +24,7 @@ public partial class App : Application
         services.AddSingleton<IReportStore, ReportStore>();
         services.AddSingleton<IHistoryStore, HistoryStore>();
         services.AddSingleton<IAlbumArtService, AlbumArtService>();
+        services.AddSingleton<IDiagnosticLog, DiagnosticLog>();
         services.AddSingleton<ThemeService>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
@@ -41,6 +42,14 @@ public partial class App : Application
 
         var provider = services.BuildServiceProvider();
 
+        // Diagnostic log + global crash handlers first, so anything below is captured. The log is
+        // privacy-safe (see DiagnosticLog): structure only, no album/artist/track names.
+        var log = provider.GetRequiredService<IDiagnosticLog>();
+        log.Info("app", $"start clr={Environment.Version} os={Environment.OSVersion.Version} x64={Environment.Is64BitProcess} log={log.LogPath}");
+        DispatcherUnhandledException += (s, e) => { log.Error("crash.ui", "unhandled UI-thread exception (kept alive)", e.Exception); e.Handled = true; };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) => log.Error("crash.fatal", "unhandled exception (terminating)", e.ExceptionObject as Exception);
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) => { log.Error("crash.task", "unobserved task exception", e.Exception); e.SetObserved(); };
+
         // apply the saved theme (mutates the palette brushes) before the window shows
         var theme = provider.GetRequiredService<ThemeService>();
         theme.Apply(theme.Current);
@@ -48,5 +57,6 @@ public partial class App : Application
         var window = provider.GetRequiredService<MainWindow>();
         window.DataContext = provider.GetRequiredService<MainViewModel>();
         window.Show();
+        log.Info("app", "window shown");
     }
 }
