@@ -9,12 +9,14 @@ namespace CUETools.Wpf.Selection;
 public sealed class PageTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? RipTemplate { get; set; }
+    public DataTemplate? DriveTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
     public DataTemplate? PlaceholderTemplate { get; set; }
 
     public override DataTemplate? SelectTemplate(object item, DependencyObject container) => item switch
     {
         RipViewModel => RipTemplate,
+        DriveViewModel => DriveTemplate,
         SettingsViewModel => SettingsTemplate,
         _ => PlaceholderTemplate
     };

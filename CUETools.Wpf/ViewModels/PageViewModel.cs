@@ -35,9 +35,5 @@ public sealed class ReportViewModel : PageViewModel
     public ReportViewModel() { Title = "Report"; Group = "Session"; Subtitle = "The per-job accuracy log, with a tamper-evident checksum."; }
 }
 
-public sealed class DriveViewModel : PageViewModel
-{
-    public DriveViewModel() { Title = "Drive & Read"; Group = "Setup"; Subtitle = "Drive capabilities (cache defeat, overread, offset) and calibration."; }
-}
-
+// DriveViewModel lives in its own file (DriveViewModel.cs) - it is a real page now.
 // SettingsViewModel lives in its own file (SettingsViewModel.cs) - it is a real page now.

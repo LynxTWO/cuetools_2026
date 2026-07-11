@@ -128,9 +128,11 @@
       <!-- real page views (extended per increment) + the selector that picks them -->
       <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
       <DataTemplate x:Key="RipTemplate"><views:RipView/></DataTemplate>
+      <DataTemplate x:Key="DriveTemplate"><views:DriveView/></DataTemplate>
       <DataTemplate x:Key="SettingsTemplate"><views:SettingsView/></DataTemplate>
       <sel:PageTemplateSelector x:Key="PageSelector"
                                 RipTemplate="{StaticResource RipTemplate}"
+                                DriveTemplate="{StaticResource DriveTemplate}"
                                 SettingsTemplate="{StaticResource SettingsTemplate}"
                                 PlaceholderTemplate="{StaticResource PageTemplate}"/>
 
