@@ -128,23 +128,40 @@
           </StackPanel>
         </Border>
 
-        <TextBlock Text="RECENTLY RIPPED - LAST 10" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" Margin="2,0,0,9"/>
-        <ItemsControl ItemsSource="{Binding Recent}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="9" Padding="13,10" Margin="0,0,0,8">
-                <DockPanel LastChildFill="False">
-                  <StackPanel DockPanel.Dock="Left">
-                    <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="14" Foreground="{StaticResource Ink}"/>
-                    <TextBlock Text="{Binding Artist}" FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="11.5" Foreground="{StaticResource Muted}"/>
-                  </StackPanel>
-                  <TextBlock DockPanel.Dock="Right" Text="{Binding Result}" Foreground="{StaticResource Teal}" FontFamily="{StaticResource Mono}" FontSize="11.5" VerticalAlignment="Center"/>
-                  <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Foreground="{StaticResource Muted}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                </DockPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <!-- empty state: no history yet (honest - shown until real rips accumulate) -->
+        <TextBlock Text="No rips yet. Insert a disc and rip or verify it - the last ten show up here so you can keep a stack of discs straight."
+                   Foreground="{StaticResource Muted}" FontSize="12.5" TextWrapping="Wrap" Margin="2,0,0,0"
+                   Visibility="{Binding Recent.Count, Converter={StaticResource ZeroToVis}}"/>
+
+        <!-- history list (header + rows) hidden until there is at least one entry -->
+        <StackPanel>
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Recent.Count}" Value="0">
+                  <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <TextBlock Text="RECENTLY RIPPED - LAST 10" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}" Margin="2,0,0,9"/>
+          <ItemsControl ItemsSource="{Binding Recent}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="9" Padding="13,10" Margin="0,0,0,8">
+                  <DockPanel LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left">
+                      <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="14" Foreground="{StaticResource Ink}"/>
+                      <TextBlock Text="{Binding Artist}" FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="11.5" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Result}" Foreground="{StaticResource Teal}" FontFamily="{StaticResource Mono}" FontSize="11.5" VerticalAlignment="Center"/>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Foreground="{StaticResource Muted}" FontFamily="{StaticResource Mono}" FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                  </DockPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
       </StackPanel>
     </ScrollViewer>
   </Grid>
