@@ -12,14 +12,19 @@ public sealed class VerifyResult
     public bool Ok { get; init; }
     public string Status { get; init; } = "";
     public string Error { get; init; } = "";
+    public int ArConfidence { get; init; }
+    public int ArTotal { get; init; }
+    public int CtdbConfidence { get; init; }
+    public int CtdbTotal { get; init; }
+    public bool Accurate { get; init; }
 }
 
 public interface IRipService
 {
     /// <summary>Run the real CUESheet verify pipeline against the disc (reads the whole disc,
-    /// checks AccurateRip + CTDB, writes nothing). onProgress reports (fraction 0..1, status)
-    /// on the ripper's thread - the caller marshals to the UI. Proven end-to-end on .NET 8.</summary>
-    VerifyResult RunVerify(char drive, Action<double, string> onProgress);
+    /// checks AccurateRip + CTDB, writes nothing). correctionQuality: 0 burst, 1 secure,
+    /// 2 paranoid. onProgress reports (fraction 0..1, status) on the ripper's thread.</summary>
+    VerifyResult RunVerify(char drive, int correctionQuality, Action<double, string> onProgress);
 }
 
 public sealed class RipService : IRipService
@@ -28,7 +33,7 @@ public sealed class RipService : IRipService
 
     public RipService(CUEConfig config) => _config = config;
 
-    public VerifyResult RunVerify(char drive, Action<double, string> onProgress)
+    public VerifyResult RunVerify(char drive, int correctionQuality, Action<double, string> onProgress)
     {
         var reader = new CDDriveReader();
         try
@@ -38,7 +43,7 @@ public sealed class RipService : IRipService
             int offset = 0;
             try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); } catch { }
             reader.DriveOffset = offset;
-            reader.CorrectionQuality = 0; // burst for a fast verify; secure re-reads come with the accuracy features
+            reader.CorrectionQuality = Math.Max(0, Math.Min(2, correctionQuality));
 
             var cue = new CUESheet(_config);
             cue.OpenCD(reader);
@@ -55,7 +60,6 @@ public sealed class RipService : IRipService
             double lastFrac = -1;
             reader.ReadProgress += (s, e) =>
             {
-                // e.Position is an absolute sector index; fill = position into the disc.
                 double frac = e.Position / total;
                 if (frac - lastFrac >= 0.004 || frac >= 1.0)
                 {
@@ -67,7 +71,20 @@ public sealed class RipService : IRipService
             onProgress(0, "Verifying against AccurateRip + CTDB...");
             string status = cue.Go();
             onProgress(1, status);
-            return new VerifyResult { Ok = true, Status = status };
+
+            int arConf = 0, arTotal = 0, ctConf = cue.CTDB.Confidence, ctTotal = cue.CTDB.Total;
+            try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); } catch { }
+
+            return new VerifyResult
+            {
+                Ok = true,
+                Status = status,
+                ArConfidence = arConf,
+                ArTotal = arTotal,
+                CtdbConfidence = ctConf,
+                CtdbTotal = ctTotal,
+                Accurate = arConf > 0
+            };
         }
         catch (Exception ex)
         {
