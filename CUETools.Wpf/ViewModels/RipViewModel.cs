@@ -78,6 +78,7 @@ public sealed class RipViewModel : PageViewModel
 
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
+    public ICommand RipCommand { get; }
 
     public RipViewModel(IDriveService drives, IRipService rip, CUEConfig config)
     {
@@ -89,7 +90,8 @@ public sealed class RipViewModel : PageViewModel
         _config = config;
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
-        VerifyCommand = new RelayCommand(_ => { _ = VerifyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         SeedRecent();
@@ -140,29 +142,33 @@ public sealed class RipViewModel : PageViewModel
         IsBusy = false;
     }
 
-    private async Task VerifyAsync()
+    private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         IsRipping = true;
         RipProgress = 0;
-        StatusText = "Starting verify...";
+        StatusText = encode ? "Starting rip..." : "Starting verify...";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        var result = await Task.Run(() => _rip.RunVerify(drive, cq, (frac, status) =>
-        {
-            // ReadProgress fires on the ripper's thread; marshal to the UI.
-            dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; }));
-        }));
+        // ReadProgress fires on the ripper's thread; marshal to the UI.
+        void Report(double frac, string status)
+            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; }));
+
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, Report) : _rip.RunVerify(drive, cq, Report));
 
         RipProgress = result.Ok ? 1 : RipProgress;
-        StatusText = result.Ok ? result.Status : ("Verify failed: " + result.Error);
         if (result.Ok)
         {
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
+            StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
+        }
+        else
+        {
+            StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         IsRipping = false;
     }
