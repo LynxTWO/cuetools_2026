@@ -58,7 +58,15 @@ are the known integration snags to clear.
 
 ## Status
 
-- [ ] Phase 1: net8 foundation + drive-enumeration smoke test
+- [x] **Phase 1 (net8 foundation) - build proven 2026-07-10.** Added `net8.0-windows`
+  to `Bwg.Logging`, `Bwg.Scsi`, `CUETools.Ripper.SCSI` (additive; net47/net20 untouched).
+  The whole graph builds for net8 with 0 errors - the SCSI stack uses only raw
+  `kernel32`/`ntdll` P/Invoke, no net8-hostile APIs. `DriveProbe/` is a net8 console that
+  enumerates drives via `CDDrivesList.DrivesAvailable()` and opens each with
+  `CDDriveReader` (real SCSI INQUIRY + ReadTOC). It runs on .NET 8.0.28 here; this
+  sandbox exposes no optical drive, so the live SCSI read against the BD-RE on K: is the
+  owner's step: `dotnet DriveProbe/bin/Release/net8.0-windows/DriveProbe.dll` with an
+  audio CD inserted.
 - [ ] Phase 2: WPF scaffold
 - [ ] Phase 3: ripper vertical slice
 - [ ] Phase 4: settings, polish, packaging, CI
