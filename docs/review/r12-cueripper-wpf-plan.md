@@ -46,6 +46,17 @@ are the known integration snags to clear.
    Freedb/gnudb fallback); editable track list; secure rip + encode + AccurateRip/CTDB
    verify driven through `CUESheet` on a worker; live progress, log, pause/cancel; the
    metadata-choice and error surfaces. This is the end-to-end "rip a CD" story.
+   - **Live disc read-map (real telemetry, not animation).** The disc visualization is
+     bound to the ripper's `ReadProgress` stream (`ReadProgressArgs.Position/Pass/
+     ErrorsCount/PassTime`) plus `ICDRipper.RetryCount[]` and `FailedSectors`, surfaced as
+     `IProgress<T>` off the worker. Mapping: fill/pickup radius = `Position` / total
+     sectors (accurate to position, inside-out spiral); amber/red marks at the true radii
+     of sectors with retries / in `FailedSectors`; platter spin rate proportional to the
+     measured read speed. Accurate axis is radius (= time into the disc); angular spin is
+     representational (the real spiral wraps thousands of revolutions). Confirm
+     `RetryCount`/`FailedSectors` update live during the read (small ripper tweak if they
+     only finalize at end) so per-sector confidence is real-time. Recently-ripped list on
+     the eject screen is fed by the local verification DB (`UseLocalDB`).
 4. **Settings + polish + packaging.** Options screen bound to `CUEConfig`; output-format
    picker over the codec matrix (ties into R13); theming; `collect_files` + CI wiring.
 
