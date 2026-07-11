@@ -19,6 +19,10 @@ public sealed class VerifyResult
     public bool Accurate { get; init; }
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
+
+    /// <summary>Per-audio-track AccurateRip / CTDB confidence, index-aligned to the track list.</summary>
+    public int[] ArPerTrack { get; init; } = System.Array.Empty<int>();
+    public int[] CtdbPerTrack { get; init; } = System.Array.Empty<int>();
 }
 
 public interface IRipService
@@ -97,6 +101,15 @@ public sealed class RipService : IRipService
             int files = 0;
             try { if (encode && Directory.Exists(outDir)) files = Directory.GetFiles(outDir, "*.flac").Length; } catch { }
 
+            int n = Math.Max(0, cue.TrackCount);
+            var arpt = new int[n];
+            var ctpt = new int[n];
+            for (int t = 0; t < n; t++)
+            {
+                try { arpt[t] = (int)cue.ArVerify.Confidence(t); } catch { }
+                try { ctpt[t] = cue.CTDB.GetConfidence(t); } catch { }
+            }
+
             return new VerifyResult
             {
                 Ok = true,
@@ -107,7 +120,9 @@ public sealed class RipService : IRipService
                 CtdbTotal = ctTotal,
                 Accurate = arConf > 0,
                 OutputDir = outDir,
-                FileCount = files
+                FileCount = files,
+                ArPerTrack = arpt,
+                CtdbPerTrack = ctpt
             };
         }
         catch (Exception ex)

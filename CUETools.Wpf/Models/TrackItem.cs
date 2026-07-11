@@ -17,6 +17,13 @@ public sealed class TrackItem : ViewModelBase
 
     private bool _include = true;
     public bool Include { get => _include; set => Set(ref _include, value); }
+
+    // Per-track verification, filled in after a rip/verify. "-" until then (no data yet).
+    private string _arResult = "-";
+    public string ArResult { get => _arResult; set => Set(ref _arResult, value); }
+
+    private string _ctdbResult = "-";
+    public string CtdbResult { get => _ctdbResult; set => Set(ref _ctdbResult, value); }
 }
 
 /// <summary>A row in the "recently ripped" list on the eject/no-disc screen.</summary>
