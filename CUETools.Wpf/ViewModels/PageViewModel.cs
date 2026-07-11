@@ -17,10 +17,7 @@ public abstract class PageViewModel : ViewModelBase
 
 // VerifyViewModel lives in its own file (VerifyViewModel.cs) - it is a real page now.
 
-public sealed class ConvertViewModel : PageViewModel
-{
-    public ConvertViewModel() { Title = "Convert"; Group = "Work"; Subtitle = "Transcode existing files to another format, layout, or tagging."; }
-}
+// ConvertViewModel lives in its own file (ConvertViewModel.cs) - it is a real page now.
 
 public sealed class QueueViewModel : PageViewModel
 {
