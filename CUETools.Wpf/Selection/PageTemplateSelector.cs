@@ -11,6 +11,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
     public DataTemplate? RipTemplate { get; set; }
     public DataTemplate? VerifyTemplate { get; set; }
     public DataTemplate? ConvertTemplate { get; set; }
+    public DataTemplate? QueueTemplate { get; set; }
     public DataTemplate? DriveTemplate { get; set; }
     public DataTemplate? ReportTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
@@ -21,6 +22,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
         RipViewModel => RipTemplate,
         VerifyViewModel => VerifyTemplate,
         ConvertViewModel => ConvertTemplate,
+        QueueViewModel => QueueTemplate,
         DriveViewModel => DriveTemplate,
         ReportViewModel => ReportTemplate,
         SettingsViewModel => SettingsTemplate,
