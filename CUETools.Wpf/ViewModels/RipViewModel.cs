@@ -30,6 +30,12 @@ public sealed class RipViewModel : PageViewModel
     public ObservableCollection<TrackItem> Tracks { get; } = new();
     public ObservableCollection<RecentRip> Recent { get; } = new();
 
+    // Real output formats (only those with a working encoder in this build), not a fixed list.
+    public ObservableCollection<string> Formats { get; } = new();
+
+    private string _selectedFormat = "flac";
+    public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
+
     private char _selectedDrive;
     public char SelectedDrive
     {
@@ -105,7 +111,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand VerifyCommand { get; }
     public ICommand RipCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IReportStore reports, IHistoryStore history, CUEConfig config)
+    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config)
     {
         Title = "Rip";
         Group = "Work";
@@ -115,6 +121,9 @@ public sealed class RipViewModel : PageViewModel
         _reports = reports;
         _history = history;
         _config = config;
+
+        foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
+        if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
@@ -195,7 +204,8 @@ public sealed class RipViewModel : PageViewModel
         void Levels(double l, double r)
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
 
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, Report, Levels) : _rip.RunVerify(drive, cq, Report, Levels));
+        string fmt = SelectedFormat;
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, Report, Levels) : _rip.RunVerify(drive, cq, Report, Levels));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
