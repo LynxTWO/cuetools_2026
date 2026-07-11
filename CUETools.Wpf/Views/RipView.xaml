@@ -95,7 +95,7 @@
       <Border Grid.Row="2" Grid.Column="1" Background="{StaticResource Face}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,12">
         <DockPanel LastChildFill="False">
           <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"/>
-          <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Padding="18,9" Margin="0,0,10,0"/>
+          <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"/>
           <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
             <ComboBoxItem>FLAC -8</ComboBoxItem>
             <ComboBoxItem>Opus 192</ComboBoxItem>

@@ -1,0 +1,195 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- palette: warm hi-fi-bench dark theme (light theme + physics come in a later pass) -->
+  <SolidColorBrush x:Key="Ground"   Color="#0C0F0D"/>
+  <SolidColorBrush x:Key="Bar"      Color="#0E1310"/>
+  <SolidColorBrush x:Key="Face"     Color="#161C16"/>
+  <SolidColorBrush x:Key="Panel"    Color="#141A16"/>
+  <SolidColorBrush x:Key="Line"     Color="#28312A"/>
+  <SolidColorBrush x:Key="Ink"      Color="#EDF1E9"/>
+  <SolidColorBrush x:Key="InkDim"   Color="#B1BCAE"/>
+  <SolidColorBrush x:Key="Muted"    Color="#7D887C"/>
+  <SolidColorBrush x:Key="Teal"     Color="#34CFC0"/>
+  <SolidColorBrush x:Key="Teal2"    Color="#46B8E0"/>
+  <SolidColorBrush x:Key="Amber"    Color="#E9A63F"/>
+  <SolidColorBrush x:Key="Good"     Color="#5CCB8B"/>
+  <SolidColorBrush x:Key="Glass"    Color="#0E1311"/>
+  <SolidColorBrush x:Key="GlassLine" Color="#243029"/>
+  <SolidColorBrush x:Key="TealSoft" Color="#2434CFC0"/>
+
+  <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
+  <FontFamily x:Key="Mono">Cascadia Mono, Consolas, monospace</FontFamily>
+
+  <!-- Panel button: reads like a milled bench-gear key. Dark brushed face, hairline edge that
+       lights teal on hover, sinks on press. Implicit, so every plain Button picks it up. -->
+  <Style TargetType="Button">
+    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    <Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="Padding" Value="14,7"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+    <Setter Property="Background">
+      <Setter.Value>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+          <GradientStop Color="#1B221C" Offset="0"/>
+          <GradientStop Color="#121813" Offset="1"/>
+        </LinearGradientBrush>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="b" CornerRadius="7" BorderThickness="1"
+                  Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Teal}"/>
+              <Setter TargetName="b" Property="Effect">
+                <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="9" ShadowDepth="0" Opacity="0.4"/></Setter.Value>
+              </Setter>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="b" Property="Background" Value="#0C110E"/>
+              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Line}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="b" Property="Opacity" Value="0.4"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Accent button for the primary action on a page (Rip, Verify, Convert). Teal-lit lens. -->
+  <Style x:Key="Accent" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+    <Setter Property="Foreground" Value="#04110F"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="BorderBrush" Value="{StaticResource Teal}"/>
+    <Setter Property="Background">
+      <Setter.Value>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+          <GradientStop Color="#5FE0D3" Offset="0"/>
+          <GradientStop Color="#2FC2B4" Offset="1"/>
+        </LinearGradientBrush>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- left-nav item -->
+  <Style x:Key="NavItem" TargetType="ListBoxItem">
+    <Setter Property="Foreground" Value="{StaticResource InkDim}"/>
+    <Setter Property="Padding" Value="12,9"/>
+    <Setter Property="Margin" Value="0,1"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <Border x:Name="b" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}">
+            <ContentPresenter/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="b" Property="Background" Value="{StaticResource Panel}"/>
+              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="b" Property="Background" Value="{StaticResource TealSoft}"/>
+              <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Physical lit toggle. Reads as a real panel switch: a translucent plastic housing with a
+       bulb behind it. OFF: the housing is dark and the slider cap sits left. ON: the bulb lights
+       and glows THROUGH the plastic, brightest at the right end and falling off to the left; the
+       opaque slider cap slides right and the light visibly falls off in the recess beneath it. -->
+  <Style x:Key="Switch" TargetType="ToggleButton">
+    <Setter Property="Width" Value="50"/>
+    <Setter Property="Height" Value="25"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToggleButton">
+          <Grid>
+            <!-- housing: recessed translucent plastic -->
+            <Border x:Name="housing" CornerRadius="12" BorderThickness="1" BorderBrush="#0A0F0B">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="#0A0E0B" Offset="0"/>
+                  <GradientStop Color="#131A14" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+
+            <!-- bulb glow behind the plastic (only visible when on). The bulb lights the EXPOSED
+                 plastic; when the cap is on the right, the lit lens is on the LEFT and the light
+                 falls off to dark under the cap. Origin is set per state by the trigger. -->
+            <Border x:Name="glow" CornerRadius="12" Opacity="0" Margin="1">
+              <Border.Background>
+                <RadialGradientBrush x:Name="glowBrush" GradientOrigin="0.3,0.5" Center="0.3,0.5" RadiusX="0.72" RadiusY="1.15">
+                  <GradientStop Color="#EAFFFB" Offset="0"/>
+                  <GradientStop Color="#6FE3D6" Offset="0.26"/>
+                  <GradientStop Color="#27A99C" Offset="0.52"/>
+                  <GradientStop Color="#0E4F48" Offset="0.78"/>
+                  <GradientStop Color="#06211E" Offset="1"/>
+                </RadialGradientBrush>
+              </Border.Background>
+            </Border>
+
+            <!-- soft recess shadow the cap casts on the lit plastic at its base (reinforces the
+                 falloff under the slider). Rides with the thumb. -->
+            <Border x:Name="occlude" Width="23" Height="21" CornerRadius="6" HorizontalAlignment="Left" Margin="1,0,0,0" Opacity="0">
+              <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.62" RadiusY="0.62">
+                  <GradientStop Color="#73000000" Offset="0"/>
+                  <GradientStop Color="#3C000000" Offset="0.65"/>
+                  <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+              </Border.Background>
+            </Border>
+
+            <!-- opaque slider cap (beveled dark metal) -->
+            <Border x:Name="thumb" Width="21" Height="19" CornerRadius="5" HorizontalAlignment="Left" Margin="2,0,0,0">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="#5A6356" Offset="0"/>
+                  <GradientStop Color="#333C34" Offset="0.5"/>
+                  <GradientStop Color="#242B25" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+              <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1.5" Direction="270" Opacity="0.55"/>
+              </Border.Effect>
+            </Border>
+            <!-- thin specular sheen along the cap top -->
+            <Border x:Name="sheen" Width="15" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="5,3,0,0" Background="#26FFFFFF"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="glow" Property="Opacity" Value="1"/>
+              <Setter TargetName="occlude" Property="Opacity" Value="1"/>
+              <Setter TargetName="occlude" Property="HorizontalAlignment" Value="Right"/>
+              <Setter TargetName="occlude" Property="Margin" Value="0,0,1,0"/>
+              <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+              <Setter TargetName="thumb" Property="Margin" Value="0,0,2,0"/>
+              <Setter TargetName="sheen" Property="HorizontalAlignment" Value="Right"/>
+              <Setter TargetName="sheen" Property="Margin" Value="0,3,5,0"/>
+              <Setter TargetName="housing" Property="Effect">
+                <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="12" ShadowDepth="0" Opacity="0.55"/></Setter.Value>
+              </Setter>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+</ResourceDictionary>

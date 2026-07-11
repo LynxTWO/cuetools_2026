@@ -17,7 +17,7 @@
         <Button DockPanel.Dock="Left" Content="Add file(s)..." Command="{Binding AddFilesCommand}" Padding="12,6" Margin="14,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Left" Content="Add folder..." Command="{Binding AddFolderCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"/>
 
-        <Button DockPanel.Dock="Right" Content="Run all" Command="{Binding RunAllCommand}" Padding="16,6" Margin="8,0,0,0" VerticalAlignment="Center"/>
+        <Button DockPanel.Dock="Right" Content="Run all" Command="{Binding RunAllCommand}" Style="{StaticResource Accent}" Padding="16,6" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearCommand}" Padding="12,6" VerticalAlignment="Center"/>
       </DockPanel>
     </Border>

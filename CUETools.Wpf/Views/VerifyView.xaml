@@ -12,7 +12,7 @@
     <Border Grid.Row="0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,11">
       <DockPanel LastChildFill="True">
         <TextBlock DockPanel.Dock="Left" Text="Source" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,0"/>
-        <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="16,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
+        <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Style="{StaticResource Accent}" Padding="16,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Right" Content="Folder..." Command="{Binding BrowseFolderCommand}" Padding="12,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Right" Content="File..." Command="{Binding BrowseFileCommand}" Padding="12,7" VerticalAlignment="Center"/>
         <Border Background="{StaticResource Glass}" BorderBrush="{StaticResource GlassLine}" BorderThickness="1" CornerRadius="6" Padding="10,6" VerticalAlignment="Center">
