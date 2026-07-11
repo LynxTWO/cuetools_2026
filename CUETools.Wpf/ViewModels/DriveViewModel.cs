@@ -6,9 +6,10 @@ using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.ViewModels;
 
-/// <summary>Drive & Read page. Shows real per-drive data (model + AccurateRip read offset)
-/// and the read capabilities. Cache defeat / overread are still "planned" per the design
-/// spec, and are labelled honestly rather than faked.</summary>
+/// <summary>Drive &amp; Read page - the full readout of everything the drive tells us about itself:
+/// identity (vendor/model/firmware from INQUIRY), capabilities and supported media (GET
+/// CONFIGURATION), speeds (GET PERFORMANCE), the AccurateRip read offset, and the live feature
+/// list. All read straight from the drive with no disc required; nothing here is hardcoded.</summary>
 public sealed class DriveViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
@@ -18,28 +19,22 @@ public sealed class DriveViewModel : PageViewModel
     {
         Title = "Drive & Read";
         Group = "Setup";
-        Subtitle = "What CUETools knows about this drive. Detect reads the model and offset from the disc.";
+        Subtitle = "Everything this drive reports about itself. Detect reads it live over SCSI - no disc needed.";
         _drives = drives;
         var d = drives.GetDrives();
         DriveLetter = d.Count > 0 ? d[0] + ":" : "no optical drive";
         DetectCommand = new RelayCommand(_ => { _ = DetectAsync(); }, _ => !_busy);
+        if (d.Count > 0) _ = DetectAsync();   // populate on open so the page is never empty
     }
 
     private string _driveLetter = "";
     public string DriveLetter { get => _driveLetter; private set => Set(ref _driveLetter, value); }
 
-    private string _driveModel = "not detected";
-    public string DriveModel { get => _driveModel; private set => Set(ref _driveModel, value); }
+    private DriveDetails? _details;
+    public DriveDetails? Details { get => _details; private set { if (Set(ref _details, value)) OnPropertyChanged(nameof(HasDetails)); } }
+    public bool HasDetails => _details != null && _details.Valid;
 
-    private int _offset;
-    public int Offset { get => _offset; private set { if (Set(ref _offset, value)) OnPropertyChanged(nameof(OffsetText)); } }
-
-    private bool _detected;
-    public bool Detected { get => _detected; private set { if (Set(ref _detected, value)) OnPropertyChanged(nameof(OffsetText)); } }
-
-    public string OffsetText => _detected ? (Offset >= 0 ? "+" + Offset : Offset.ToString()) : "--";
-
-    private string _status = "Insert a disc and click Detect to read this drive's model and offset.";
+    private string _status = "Reading the drive...";
     public string Status { get => _status; private set => Set(ref _status, value); }
 
     public ICommand DetectCommand { get; }
@@ -49,18 +44,19 @@ public sealed class DriveViewModel : PageViewModel
         var d = _drives.GetDrives();
         if (d.Count == 0) { Status = "No optical drive found."; return; }
         _busy = true;
-        Status = "Detecting drive (reading the disc)...";
-        var info = await Task.Run(() => _drives.ReadDisc(d[0]));
-        if (info != null)
+        Status = "Reading the drive over SCSI...";
+        char drive = d[0];
+        DriveLetter = drive + ":";
+        var det = await Task.Run(() => _drives.GetDriveDetails(drive));
+        Details = det;
+        if (det.Valid)
         {
-            DriveModel = string.IsNullOrWhiteSpace(info.DriveName) ? "unknown" : info.DriveName;
-            Offset = info.Offset;
-            Detected = true;
-            Status = $"Detected: {DriveModel}, AccurateRip read offset {(Offset >= 0 ? "+" : "")}{Offset}.";
+            Status = "Read live from " + det.Model + " over SCSI"
+                + (det.OffsetKnown ? ". AccurateRip offset " + det.OffsetText + "." : ". AccurateRip offset not in the cached table.");
         }
         else
         {
-            Status = "No disc - insert an audio CD and Detect again.";
+            Status = "Could not read the drive" + (det.Error.Length > 0 ? " (" + det.Error + ")." : ".");
         }
         _busy = false;
     }

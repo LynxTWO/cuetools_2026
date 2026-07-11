@@ -26,6 +26,7 @@
       <!-- real page views (extended per increment) + the selector that picks them -->
       <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
       <conv:ZeroToVisibilityConverter x:Key="ZeroToVis"/>
+      <conv:BoolToBrushConverter x:Key="BoolBrush"/>
       <DataTemplate x:Key="RipTemplate"><views:RipView/></DataTemplate>
       <DataTemplate x:Key="VerifyTemplate"><views:VerifyView/></DataTemplate>
       <DataTemplate x:Key="ConvertTemplate"><views:ConvertView/></DataTemplate>
