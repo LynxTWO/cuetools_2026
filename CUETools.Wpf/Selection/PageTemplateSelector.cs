@@ -9,6 +9,7 @@ namespace CUETools.Wpf.Selection;
 public sealed class PageTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? RipTemplate { get; set; }
+    public DataTemplate? VerifyTemplate { get; set; }
     public DataTemplate? DriveTemplate { get; set; }
     public DataTemplate? ReportTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
@@ -17,6 +18,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
     public override DataTemplate? SelectTemplate(object item, DependencyObject container) => item switch
     {
         RipViewModel => RipTemplate,
+        VerifyViewModel => VerifyTemplate,
         DriveViewModel => DriveTemplate,
         ReportViewModel => ReportTemplate,
         SettingsViewModel => SettingsTemplate,
