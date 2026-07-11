@@ -1,4 +1,5 @@
 using System.Windows;
+using CUETools.Processor;
 using CUETools.Wpf.Services;
 using CUETools.Wpf.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,9 @@ public partial class App : Application
 
         var services = new ServiceCollection();
 
+        // Explicit factory: CUEConfig has a copy constructor too, and the DI container would
+        // otherwise pick it and self-recurse. Force the parameterless ctor.
+        services.AddSingleton<CUEConfig>(_ => new CUEConfig());
         services.AddSingleton<IDriveService, DriveService>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
