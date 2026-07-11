@@ -102,12 +102,19 @@ namespace CUETools.Ripper.SCSI
             {
                 if (m_failedSectors == null)
                 {
-                    m_failedSectors = new BitArray((int)_toc.AudioLength);
-                    // A sector is "failed" only when it exhausted the retry budget without the
-                    // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
-                    // the +1 marking give-up rather than "resolved on the last allowed pass".
-                    for (int i = 0; i < m_failedSectors.Length; i++)
-                        m_failedSectors[i] = m_retryCount[i] == (16 << _correctionQuality) + 1;
+                    // Burst mode (CorrectionQuality 0) never allocates the per-sector retry
+                    // array, and _toc is null once the drive is closed. Guard both so log
+                    // generation after a burst read reports "no failures" instead of throwing.
+                    m_failedSectors = new BitArray(_toc == null ? 0 : (int)_toc.AudioLength);
+                    if (m_retryCount != null)
+                    {
+                        // A sector is "failed" only when it exhausted the retry budget without the
+                        // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
+                        // the +1 marking give-up rather than "resolved on the last allowed pass".
+                        int n = Math.Min(m_failedSectors.Length, m_retryCount.Length);
+                        for (int i = 0; i < n; i++)
+                            m_failedSectors[i] = m_retryCount[i] == (16 << _correctionQuality) + 1;
+                    }
                 }
                 return m_failedSectors;
             }
