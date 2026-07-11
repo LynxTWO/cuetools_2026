@@ -104,16 +104,20 @@
         </ListView.View>
       </ListView>
 
+      <!-- during a rip: an educational view of what the codec is doing to the audio -->
+      <Border Grid.Row="1" Grid.Column="1" VerticalAlignment="Bottom" Margin="18,0,18,10"
+              Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="14,11"
+              Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}">
+        <ctl:CodecScope Height="104" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"/>
+      </Border>
+
       <Border Grid.Row="2" Grid.Column="1" Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,12">
         <DockPanel LastChildFill="False">
           <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"/>
           <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"/>
-          <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
-            <ComboBoxItem>FLAC -8</ComboBoxItem>
-            <ComboBoxItem>Opus 192</ComboBoxItem>
-            <ComboBoxItem>WavPack</ComboBoxItem>
-            <ComboBoxItem>ALAC</ComboBoxItem>
-          </ComboBox>
+          <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,10,0" VerticalAlignment="Center"
+                    ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
+                    ToolTip="Output format (only codecs with a working encoder in this build are listed)."/>
           <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" VerticalAlignment="Center"
                     ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
             <ComboBoxItem>Burst</ComboBoxItem>
