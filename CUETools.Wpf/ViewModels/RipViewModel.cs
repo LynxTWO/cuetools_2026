@@ -2,7 +2,9 @@ using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 using CUETools.Processor;
+using CUETools.Ripper.SCSI;
 using CUETools.Wpf.Models;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
@@ -75,6 +77,36 @@ public sealed class RipViewModel : PageViewModel
 
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
+
+    // physical tray/media state, polled live from the drive (open / closed-empty / closed-disc)
+    private DriveTrayState _tray = DriveTrayState.Unknown;
+    public DriveTrayState TrayState
+    {
+        get => _tray;
+        private set
+        {
+            if (Set(ref _tray, value))
+            {
+                OnPropertyChanged(nameof(IsTrayOpen));
+                OnPropertyChanged(nameof(EjectButtonText));
+                OnPropertyChanged(nameof(EjectButtonTip));
+            }
+        }
+    }
+    public bool IsTrayOpen => _tray == DriveTrayState.Open;
+    // one button ejects when the tray is in, and closes it when it is out
+    public string EjectButtonText => _tray == DriveTrayState.Open ? "Close" : "Eject";
+    public string EjectButtonTip => _tray == DriveTrayState.Open
+        ? "Pull the tray in, then read the disc automatically."
+        : "Open the drive tray.";
+
+    // the drive model shown in the bar (read from INQUIRY - no disc needed)
+    private string _driveModel = "";
+    public string DriveModel { get => _driveModel; private set => Set(ref _driveModel, value); }
+
+    // disc-insertion watcher state
+    private DispatcherTimer? _trayWatch;
+    private bool _triedCurrentMedia;   // guards against re-reading a data disc every poll
 
     private string _albumTitle = "Insert a disc";
     public string AlbumTitle { get => _albumTitle; private set => Set(ref _albumTitle, value); }
@@ -161,7 +193,7 @@ public sealed class RipViewModel : PageViewModel
         ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
-        EjectCommand = new RelayCommand(_ => Eject(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
+        EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
         DismissDoneCommand = new RelayCommand(_ => RipDone = false);
@@ -174,6 +206,7 @@ public sealed class RipViewModel : PageViewModel
             _selectedDrive = Drives[0];   // set the field to avoid a double read from the setter
             OnPropertyChanged(nameof(SelectedDrive));
             _ = ReadDiscAsync();
+            StartTrayWatch();
         }
         else
         {
@@ -181,14 +214,53 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // Poll the drive for tray/media changes so the UI reacts to the physical eject button and to a
+    // disc being dropped in and the tray pushed shut - the classic "insert disc, it just reads"
+    // behaviour. GET EVENT STATUS NOTIFICATION does not spin the disc; we skip polling mid-read so
+    // we never fight the ripper for the device.
+    private void StartTrayWatch()
+    {
+        _trayWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
+        _trayWatch.Tick += async (_, _) => await PollTrayAsync();
+        _trayWatch.Start();
+    }
+
+    private async Task PollTrayAsync()
+    {
+        if (_selectedDrive == '\0' || _isBusy || IsRipping) return;
+        char drive = _selectedDrive;
+        DriveTrayState tray = await Task.Run(() => _drives.GetTrayState(drive));
+        if (tray == DriveTrayState.Unknown) return;
+        TrayState = tray;
+
+        if (tray == DriveTrayState.ClosedWithDisc)
+        {
+            // a disc is loaded and we have not read this one yet -> read it and show the rip screen
+            if (!IsDiscPresent && !_triedCurrentMedia && !_isBusy)
+                await ReadDiscAsync();
+        }
+        else
+        {
+            _triedCurrentMedia = false;          // media is gone; allow a fresh read next time
+            if (IsDiscPresent) ClearDiscView(tray);
+        }
+    }
+
     private async Task ReadDiscAsync()
     {
         if (_selectedDrive == '\0' || _isBusy) return;
         IsBusy = true;
-        StatusText = "Reading disc...";
+        _triedCurrentMedia = true;           // this read counts as our attempt at the current media
         char drive = _selectedDrive;
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
+        // identity + tray state first (works with an empty tray) so the bar shows the drive model
+        StatusText = "Reading drive...";
+        DriveDetails details = await Task.Run(() => _drives.GetDriveDetails(drive));
+        if (details.Valid) DriveModel = details.Model;
+        TrayState = details.Tray;
+
+        StatusText = "Reading disc...";
         // surface the live metadata-lookup step (which database is being queried)
         void OnStatus(string s) => dispatcher?.BeginInvoke(new Action(() => { if (_isBusy) StatusText = s; }));
 
@@ -202,10 +274,11 @@ public sealed class RipViewModel : PageViewModel
         if (info == null)
         {
             IsDiscPresent = false;
-            AlbumTitle = "No disc in drive " + drive + ":";
+            bool open = TrayState == DriveTrayState.Open;
+            AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc in drive " + drive + ":";
             AlbumArtist = "";
             DiscInfoText = "";
-            StatusText = "Drive ready - insert an audio CD to begin.";
+            StatusText = open ? "Tray open." : "Drive ready - insert an audio CD to begin.";
         }
         else
         {
@@ -327,21 +400,43 @@ public sealed class RipViewModel : PageViewModel
         _lastSpeedFrac = frac;
     }
 
-    private void Eject()
+    // The eject button toggles the tray: open it when it is in, close it when it is out. Closing
+    // hands off to the watcher, which sees the disc land and reads it automatically.
+    private void ToggleTray()
     {
         char d = _selectedDrive;
         if (d == '\0') return;
-        RipDone = false;
-        StatusText = $"Ejecting drive {d}:...";
-        System.Threading.Tasks.Task.Run(() => { try { _drives.Eject(d); } catch { } });
+        _triedCurrentMedia = false;   // a fresh tray cycle: allow the next disc to be read
+        if (TrayState == DriveTrayState.Open)
+        {
+            StatusText = $"Closing tray {d}:...";
+            TrayState = DriveTrayState.ClosedNoDisc;   // optimistic; the watcher confirms + reads
+            Task.Run(() => { try { _drives.CloseTray(d); } catch { } });
+        }
+        else
+        {
+            StatusText = $"Ejecting drive {d}:...";
+            TrayState = DriveTrayState.Open;
+            ClearDiscView(DriveTrayState.Open);
+            Task.Run(() => { try { _drives.OpenTray(d); } catch { } });
+        }
+    }
+
+    // Drop back to the no-disc view (tray open or emptied). Keeps the disc read-map / tracks from
+    // lingering after the media is gone.
+    private void ClearDiscView(DriveTrayState tray)
+    {
         IsDiscPresent = false;
+        RipDone = false;
         Tracks.Clear();
         Releases.Clear();
         _chosenMetadata = null;
         _selectedRelease = null;
-        AlbumTitle = "Tray open - insert a disc and Read";
+        bool open = tray == DriveTrayState.Open;
+        AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc - insert an audio CD";
         AlbumArtist = "";
         DiscInfoText = "";
+        StatusText = open ? "Tray open." : "Drive ready - insert an audio CD.";
         OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(SelectedRelease));
     }

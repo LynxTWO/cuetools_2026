@@ -14,10 +14,13 @@
         <TextBlock DockPanel.Dock="Left" Text="Drive" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <ComboBox DockPanel.Dock="Left" Width="80" VerticalAlignment="Center"
                   ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}"/>
+        <!-- real drive model, read from INQUIRY (no disc needed) -->
+        <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding DriveModel}" Foreground="{DynamicResource Ink}" FontSize="12" FontWeight="SemiBold"/>
         <TextBlock DockPanel.Dock="Left" Margin="16,0,0,0" VerticalAlignment="Center"
                    Text="{Binding DiscInfoText}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5"/>
-        <Button DockPanel.Dock="Right" Content="Eject" Command="{Binding EjectCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"
-                ToolTip="Open the drive tray."/>
+        <Button DockPanel.Dock="Right" Content="{Binding EjectButtonText}" Command="{Binding EjectCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"
+                ToolTip="{Binding EjectButtonTip}"/>
         <Button DockPanel.Dock="Right" Content="Read disc" Command="{Binding ReadDiscCommand}" Padding="12,6" VerticalAlignment="Center"/>
         <!-- release picker: ranked best-first by source + completeness; pick one to relabel -->
         <ComboBox DockPanel.Dock="Right" Width="320" Margin="10,0,10,0" VerticalAlignment="Center"
@@ -199,6 +202,13 @@
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                   Visibility="{Binding IsDiscPresent, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
       <StackPanel Margin="24">
+        <!-- the drive tray: slides out on Eject, pulls in on Close, then the disc reads itself -->
+        <ctl:DiscTray Width="264" Height="150" HorizontalAlignment="Center" Margin="0,2,0,6"
+                      Open="{Binding IsTrayOpen, Mode=OneWay}"/>
+        <TextBlock Text="Drop in a disc and press Close (or the drive's own button) - it reads automatically."
+                   Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5"
+                   HorizontalAlignment="Center" Margin="0,0,0,16" TextWrapping="Wrap" TextAlignment="Center"
+                   Visibility="{Binding IsTrayOpen, Converter={StaticResource BoolVis}}"/>
         <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Padding="18,15" Margin="0,4,0,18">
           <StackPanel>
             <TextBlock Text="{Binding AlbumTitle}" FontFamily="{StaticResource Serif}" FontSize="20" Foreground="{DynamicResource Ink}"/>

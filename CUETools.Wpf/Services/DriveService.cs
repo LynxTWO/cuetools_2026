@@ -19,6 +19,10 @@ public sealed class DriveService : IDriveService
     private readonly CUEConfig _config;
     private readonly IDiagnosticLog _log;
 
+    // A single physical drive cannot be opened by two callers at once - the startup Rip read and
+    // the Drive & Read detect would otherwise race for the device. Serialise every device touch.
+    private static readonly object _scsiGate = new object();
+
     public DriveService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
     public IReadOnlyList<char> GetDrives()
@@ -29,6 +33,8 @@ public sealed class DriveService : IDriveService
 
     public DiscInfo? ReadDisc(char drive, Action<string>? onStatus = null)
     {
+      lock (_scsiGate)
+      {
         var reader = new CDDriveReader();
         bool opened = false;
         try
@@ -114,6 +120,7 @@ public sealed class DriveService : IDriveService
         {
             try { if (opened) reader.Close(); else reader.Dispose(); } catch { }
         }
+      }
     }
 
     // Every returned release already matches the disc TOC; scoring ranks them by source quality
@@ -185,19 +192,50 @@ public sealed class DriveService : IDriveService
         return 40;
     }
 
-    // Open the tray via the storage eject IOCTL - works whether or not a disc is loaded, and does
-    // not need to read the disc first.
-    public void Eject(char drive)
+    // Read the drive's full capability snapshot (identity + GET CONFIGURATION + speeds + tray
+    // state) and fold in the AccurateRip read offset. Works with an empty tray - identity comes
+    // from INQUIRY, which needs no disc. Blocking SCSI: callers run this off the UI thread.
+    public DriveDetails GetDriveDetails(char drive)
     {
+        DriveCapabilities caps;
+        lock (_scsiGate) { caps = DriveInspector.Query(drive); }
+        int offset = 0; bool known = false;
+        if (caps.Valid)
+        {
+            try { known = CUETools.AccurateRip.AccurateRipVerify.FindDriveReadOffset(caps.ARName, out offset); }
+            catch { /* offline or no cached offset table - offset stays unknown */ }
+        }
+        _log.Info("drive", $"details drive={drive} valid={caps.Valid} model='{caps.DisplayName}' fw='{caps.Firmware}' " +
+            $"profile={caps.CurrentProfileName} readx={caps.MaxReadCdX} tray={caps.Tray} offsetKnown={known}");
+        return DriveDetails.From(caps, offset, known);
+    }
+
+    // Fast tray/media state query (SCSI GET EVENT STATUS NOTIFICATION - does not spin the disc),
+    // used both for the Eject/Close button label and for the disc-insertion watcher.
+    public DriveTrayState GetTrayState(char drive)
+    {
+        lock (_scsiGate) { return DriveInspector.GetTray(drive); }
+    }
+
+    // Tray control via the storage IOCTLs (the proven path): eject opens the tray with or without
+    // a disc; load pulls it back in. Both are no-ops if the mechanism is already in that state.
+    public void OpenTray(char drive) => TrayIoctl(drive, 0x2D4808 /*IOCTL_STORAGE_EJECT_MEDIA*/, "open");
+    public void CloseTray(char drive) => TrayIoctl(drive, 0x2D480C /*IOCTL_STORAGE_LOAD_MEDIA*/, "close");
+
+    private void TrayIoctl(char drive, uint code, string what)
+    {
+      lock (_scsiGate)
+      {
         var h = CreateFileW($@"\\.\{char.ToUpperInvariant(drive)}:", 0x80000000 /*GENERIC_READ*/,
             0x1 | 0x2 /*share read+write*/, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0, IntPtr.Zero);
-        if (h == new IntPtr(-1)) { _log.Warn("drive", $"eject {drive}: cannot open device"); return; }
+        if (h == new IntPtr(-1)) { _log.Warn("drive", $"tray {what} {drive}: cannot open device"); return; }
         try
         {
-            bool ok = DeviceIoControl(h, 0x2D4808 /*IOCTL_STORAGE_EJECT_MEDIA*/, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero);
-            _log.Info("drive", $"eject {drive} ok={ok}");
+            bool ok = DeviceIoControl(h, code, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero);
+            _log.Info("drive", $"tray {what} {drive} ok={ok}");
         }
         finally { CloseHandle(h); }
+      }
     }
 
     [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "CreateFileW")]
