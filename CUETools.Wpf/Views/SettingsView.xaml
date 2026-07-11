@@ -60,20 +60,36 @@
       <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding PreserveHtoa}"/><TextBlock Style="{StaticResource RowLabel}" Text="Preserve HTOA (hidden track one audio)"/></DockPanel></Border>
       <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding UseHtoaThreshold}"/><TextBlock Style="{StaticResource RowLabel}" Text="HTOA length threshold (5 s)"/></DockPanel></Border>
 
-      <TextBlock Style="{StaticResource Sec}" Text="TAGGING"/>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding BasicTagsFromCue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Basic tags from CUE metadata"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyBasicTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy basic tags from source"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyUnknownTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy unknown / extra tags"/></DockPanel></Border>
+      <!-- metadata / presentation settings: amber bulbs (color-coded category) -->
+      <StackPanel>
+        <StackPanel.Resources>
+          <Color x:Key="LampCore">#FFF6E9</Color><Color x:Key="LampLight">#F0C784</Color><Color x:Key="LampBase">#C8871F</Color>
+          <Color x:Key="LampDark">#7A5416</Color><Color x:Key="LampEdge">#241804</Color><Color x:Key="LampHalo">#E9A63F</Color>
+          <Color x:Key="LampCapCore">#B8FFF8EE</Color><Color x:Key="LampCapMid">#5AE0A94A</Color><Color x:Key="LampCapEdge">#00E9A63F</Color>
+        </StackPanel.Resources>
+        <TextBlock Style="{StaticResource Sec}" Text="TAGGING"/>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding BasicTagsFromCue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Basic tags from CUE metadata"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyBasicTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy basic tags from source"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CopyUnknownTags}"/><TextBlock Style="{StaticResource RowLabel}" Text="Copy unknown / extra tags"/></DockPanel></Border>
 
-      <TextBlock Style="{StaticResource Sec}" Text="ALBUM ART"/>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Embed album art"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ExtractAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Extract album art to a folder image"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><TextBox DockPanel.Dock="Right" Width="90" Style="{StaticResource Box}" Text="{Binding MaxAlbumArtSize, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Max album-art size (px)"/></DockPanel></Border>
+        <TextBlock Style="{StaticResource Sec}" Text="ALBUM ART"/>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Embed album art"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ExtractAlbumArt}"/><TextBlock Style="{StaticResource RowLabel}" Text="Extract album art to a folder image"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><TextBox DockPanel.Dock="Right" Width="90" Style="{StaticResource Box}" Text="{Binding MaxAlbumArtSize, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Max album-art size (px)"/></DockPanel></Border>
+      </StackPanel>
 
-      <TextBlock Style="{StaticResource Sec}" Text="HDCD"/>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect HDCD"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
+      <!-- special audio decode: green bulbs (color-coded category) -->
+      <StackPanel>
+        <StackPanel.Resources>
+          <Color x:Key="LampCore">#EAFFF1</Color><Color x:Key="LampLight">#9FE9B8</Color><Color x:Key="LampBase">#3FB877</Color>
+          <Color x:Key="LampDark">#1E5E38</Color><Color x:Key="LampEdge">#06210F</Color><Color x:Key="LampHalo">#5CCB8B</Color>
+          <Color x:Key="LampCapCore">#B8EFFBEF</Color><Color x:Key="LampCapMid">#5A7AD89A</Color><Color x:Key="LampCapEdge">#005CCB8B</Color>
+        </StackPanel.Resources>
+        <TextBlock Style="{StaticResource Sec}" Text="HDCD"/>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect HDCD"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
+      </StackPanel>
 
       <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                  Text="These write straight to the live configuration. The remaining sections (Metadata, Encoding &amp; Formats with the codec editor, Ripper &amp; Drives) and settings persistence are the next increments."/>

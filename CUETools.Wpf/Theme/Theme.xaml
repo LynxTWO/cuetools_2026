@@ -27,6 +27,19 @@
     <GradientStop Color="#121813" Offset="1"/>
   </LinearGradientBrush>
 
+  <!-- Switch "bulb" colors as a one-knob ramp (see the lit-panel-controls skill). The Switch
+       template references these via DynamicResource, so a settings section can color-code its
+       switches by overriding these Color keys in its own Resources scope. Default = teal. -->
+  <Color x:Key="LampCore">#EAFFFB</Color>
+  <Color x:Key="LampLight">#6FE3D6</Color>
+  <Color x:Key="LampBase">#27A99C</Color>
+  <Color x:Key="LampDark">#0E4F48</Color>
+  <Color x:Key="LampEdge">#06211E</Color>
+  <Color x:Key="LampHalo">#34CFC0</Color>
+  <Color x:Key="LampCapCore">#B8F1FBF9</Color>
+  <Color x:Key="LampCapMid">#5A45D6C9</Color>
+  <Color x:Key="LampCapEdge">#0034CFC0</Color>
+
   <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
   <FontFamily x:Key="Mono">Cascadia Mono, Consolas, monospace</FontFamily>
 
@@ -205,14 +218,14 @@
             <Border x:Name="glow" CornerRadius="12" Opacity="0" Margin="1">
               <Border.Background>
                 <RadialGradientBrush GradientOrigin="0.3,0.5" Center="0.3,0.5" RadiusX="0.72" RadiusY="1.15">
-                  <GradientStop Color="#EAFFFB" Offset="0"/>
-                  <GradientStop Color="#6FE3D6" Offset="0.26"/>
-                  <GradientStop Color="#27A99C" Offset="0.52"/>
-                  <GradientStop Color="#0E4F48" Offset="0.78"/>
-                  <GradientStop Color="#06211E" Offset="1"/>
+                  <GradientStop Color="{DynamicResource LampCore}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource LampLight}" Offset="0.26"/>
+                  <GradientStop Color="{DynamicResource LampBase}" Offset="0.52"/>
+                  <GradientStop Color="{DynamicResource LampDark}" Offset="0.78"/>
+                  <GradientStop Color="{DynamicResource LampEdge}" Offset="1"/>
                 </RadialGradientBrush>
               </Border.Background>
-              <Border.Effect><DropShadowEffect Color="#34CFC0" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/></Border.Effect>
+              <Border.Effect><DropShadowEffect Color="{DynamicResource LampHalo}" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/></Border.Effect>
             </Border>
 
             <!-- mover: the cap and everything riding with it, translated on toggle -->
@@ -246,9 +259,9 @@
               <Border x:Name="capBleed" Width="21" Height="19" CornerRadius="5" Opacity="0">
                 <Border.Background>
                   <RadialGradientBrush GradientOrigin="0.1,0.62" Center="0.1,0.62" RadiusX="0.95" RadiusY="1.0">
-                    <GradientStop Color="#B8F1FBF9" Offset="0"/>
-                    <GradientStop Color="#5A45D6C9" Offset="0.35"/>
-                    <GradientStop Color="#0034CFC0" Offset="0.9"/>
+                    <GradientStop Color="{DynamicResource LampCapCore}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource LampCapMid}" Offset="0.35"/>
+                    <GradientStop Color="{DynamicResource LampCapEdge}" Offset="0.9"/>
                   </RadialGradientBrush>
                 </Border.Background>
               </Border>
