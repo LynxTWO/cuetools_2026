@@ -98,6 +98,7 @@ public sealed class RipViewModel : PageViewModel
     private double _discSeconds;
     private double _lastSpeedFrac;
     private DateTime _lastSpeedTick;
+    private double[] _trackEndFrac = Array.Empty<double>();
 
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
@@ -233,11 +234,25 @@ public sealed class RipViewModel : PageViewModel
         _lastSpeedTick = DateTime.UtcNow;
         SpeedLevel = 0;
         SpeedText = "";
+
+        // per-track progress boundaries as fractions of the whole disc (by track length)
+        double totalSec = 0;
+        foreach (var t in Tracks) totalSec += t.Length.TotalSeconds;
+        _trackEndFrac = new double[Tracks.Count];
+        double cum = 0;
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            cum += Tracks[i].Length.TotalSeconds;
+            _trackEndFrac[i] = totalSec > 0 ? cum / totalSec : 0;
+            Tracks[i].Progress = 0;
+            Tracks[i].Active = false;
+        }
+
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
         // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); }));
+            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac); }));
         void Levels(double l, double r)
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
 
@@ -260,6 +275,7 @@ public sealed class RipViewModel : PageViewModel
             StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
+        foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
     }
 
@@ -276,6 +292,21 @@ public sealed class RipViewModel : PageViewModel
         SpeedLevel = Math.Max(0, Math.Min(1, sx / SpeedCapX));
         _lastSpeedTick = now;
         _lastSpeedFrac = frac;
+    }
+
+    // Map the whole-disc read fraction onto each track: done tracks fill, the current track shows
+    // its own progress, later tracks stay empty. Real (position-based), not a status-string guess.
+    private void UpdateTrackProgress(double frac)
+    {
+        double start = 0;
+        for (int i = 0; i < Tracks.Count && i < _trackEndFrac.Length; i++)
+        {
+            double end = _trackEndFrac[i];
+            if (frac >= end) { Tracks[i].Progress = 1; Tracks[i].Active = false; }
+            else if (frac >= start) { double span = end - start; Tracks[i].Progress = span > 1e-6 ? (frac - start) / span : 0; Tracks[i].Active = true; }
+            else { Tracks[i].Progress = 0; Tracks[i].Active = false; }
+            start = end;
+        }
     }
 
     private void ApplyPerTrack(VerifyResult result)

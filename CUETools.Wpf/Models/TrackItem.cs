@@ -24,6 +24,13 @@ public sealed class TrackItem : ViewModelBase
 
     private string _ctdbResult = "-";
     public string CtdbResult { get => _ctdbResult; set => Set(ref _ctdbResult, value); }
+
+    // Live per-track progress during a rip (0..1), derived from the read head position.
+    private double _progress;
+    public double Progress { get => _progress; set => Set(ref _progress, value); }
+
+    private bool _active;
+    public bool Active { get => _active; set => Set(ref _active, value); }
 }
 
 /// <summary>A row in the "recently ripped" list on the eject/no-disc screen.</summary>
