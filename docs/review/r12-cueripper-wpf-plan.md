@@ -80,6 +80,31 @@ are the known integration snags to clear.
   audio CD inserted. **Confirmed live 2026-07-10** on the owner's box: enumerated K:,
   INQUIRY returned "ASUS BW-16D1HT", and read a 9-track / 46:20 disc TOC on .NET 8.0.28.
   The one real risk is fully cleared.
-- [ ] Phase 2: WPF scaffold
-- [ ] Phase 3: ripper vertical slice
-- [ ] Phase 4: settings, polish, packaging, CI
+- [x] **Phase 2 (WPF scaffold) - 2026-07-10/11.** `CUETools.Wpf` (net8.0-windows, WinExe,
+  MVVM + Microsoft.Extensions.DependencyInjection). Faceplate + grouped left-nav shell,
+  DataTemplateSelector per page, custom `ViewModelBase`/`RelayCommand`. Freedb converted to
+  SDK-style `net47;netstandard2.0` (the last net8 engine blocker); `Bwg.*`/ripper retargeted.
+- [x] **Phase 3 (unified app - all pages real) - 2026-07-11.** Seven nav destinations, every
+  one a real view over the engine (no stubs):
+  - **Rip** - drive/TOC/metadata read, disc-read map + VU (GPU-composited), Verify (real
+    AR + CTDB) and Rip-to-FLAC both proven end-to-end on net8; per-track AR/CTDB columns;
+    real persistent recently-ripped history (`%AppData%\CUETools2026\history.json`).
+  - **Verify & Repair** - file-based verify of a .cue/folder/embedded-cue against AR + CTDB
+    (proven via `VerifyProbe`), plus CTDB parity repair (drives the engine `repair` script,
+    guarded by confirmation).
+  - **Convert** - transcode existing rips to any format with a working encoder (proven: real
+    FLAC via managed Flake); format list is data-driven.
+  - **Queue** - batch verify/convert over the same proven services, live per-item status.
+  - **Drive & Read** - real drive model + AccurateRip offset; capability lamps (cache defeat /
+    overread honestly marked "planned" per the rip-accuracy spec).
+  - **Report** - accuracy certificate + tamper-evident log with a real SHA-256 self-check
+    (model B layer 1; seal/verify/tamper round-trip proven on the shipped DLL).
+  - **Settings** - all ~27 CUEConfig options surfaced.
+  - Engine bugs fixed along the way: burst-mode `FailedSectors` NRE, `PrintErrors`
+    IndexOutOfRange (both guarded). Codec/plugin finding recorded as R16 in the backlog.
+  - Theme in `Theme/Theme.xaml`: lit "bulb-behind-plastic" switches, milled dark buttons +
+    teal accent, dark ComboBox - all verified from rendered PNGs via a `SwitchRender` harness
+    (WPF `RenderTargetBitmap`), not guessed.
+- [ ] Phase 4: light/dark theme toggle; speed graph on Rip; packaging + CI. Live disc
+  rip/encode still needs the owner's hardware to confirm end-to-end (headless box proved
+  drive read, metadata, verify, and encode via probes + a real disc read).
