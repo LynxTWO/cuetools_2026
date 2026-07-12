@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 
 namespace CUETools.Wpf.Controls;
@@ -46,6 +47,7 @@ public sealed class DiscModel3D : Viewport3D
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
 
     private readonly PerspectiveCamera _cam;
+    private readonly ImageBrush _tracks;             // data-track rings, opacity rises with zoom
     private readonly RadialGradientBrush _surface;   // the read glow, updated from Progress
     private readonly TranslateTransform3D _laserPos;
     private readonly RotateTransform3D _spin;
@@ -88,12 +90,17 @@ public sealed class DiscModel3D : Viewport3D
             RadiusY = 0.5
         };
         RebuildSurfaceStops(0);
+        _tracks = MakeTracks(512);   // fine data-track rings, brought up when zoomed in on the surface
         var topMaterial = new MaterialGroup
         {
             Children =
             {
                 // a dark grey base so the disc has form under the lights
-                new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0x18, 0x1E, 0x1C))),
+                new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0x14, 0x1A, 0x18))),
+                // a subtle diffraction rainbow (the "CD sheen"), spins with the disc
+                new EmissiveMaterial(MakeRainbow(512)),
+                // the data spiral - faint at overview, clearer when the camera zooms toward the surface
+                new EmissiveMaterial(_tracks),
                 // the read glow is emissive (self-lit) so it shows regardless of lighting
                 new EmissiveMaterial(_surface),
                 new SpecularMaterial(new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)), 30)
@@ -156,6 +163,7 @@ public sealed class DiscModel3D : Viewport3D
         bool damage = RereadActive || Unreadable;
         _zoom += ((damage ? 1.0 : 0.0) - _zoom) * 0.05;
         _pulse += dt * 4.2;
+        _tracks.Opacity = 0.06 + 0.7 * _zoom;   // data tracks emerge as the camera zooms toward the surface
         UpdateCamera();
         UpdateMarker(damage);
 
@@ -201,6 +209,70 @@ public sealed class DiscModel3D : Viewport3D
 
     private static Point3D Lerp(Point3D a, Point3D b, double t) =>
         new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t);
+
+    // ---- procedural surface textures (built once, planar-UV mapped like the read glow) ----
+
+    // A faint spectral sheen: two rainbow bands swept around the disc, brighter toward the rim, low
+    // alpha. Emissive, so it reads as the diffraction shimmer of a CD; it spins with the disc.
+    private static ImageBrush MakeRainbow(int size)
+    {
+        var px = new byte[size * size * 4];
+        double c = size / 2.0;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                double dx = x - c, dy = y - c, r = Math.Sqrt(dx * dx + dy * dy) / c;
+                if (r > 1.0 || r < 0.14) continue;                 // outside the disc / inside the hub
+                double ang = (Math.Atan2(dy, dx) + Math.PI) / (2 * Math.PI);
+                double hue = (ang * 2.0 % 1.0) * 360;              // two bands around
+                HsvToRgb(hue, 0.5, 1.0, out byte rr, out byte gg, out byte bb);
+                double a = 0.12 * (0.3 + 0.7 * r);
+                int i = (y * size + x) * 4;
+                px[i] = bb; px[i + 1] = gg; px[i + 2] = rr; px[i + 3] = (byte)(a * 255);
+            }
+        return BrushFrom(px, size);
+    }
+
+    // Fine concentric rings across the data band: a REPRESENTATIVE data spiral (not the literal 1.6 um
+    // pitch, which is sub-pixel), faint so it does not moire at overview and reads when zoomed in.
+    private static ImageBrush MakeTracks(int size)
+    {
+        var px = new byte[size * size * 4];
+        double c = size / 2.0;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                double dx = x - c, dy = y - c, r = Math.Sqrt(dx * dx + dy * dy) / c;
+                if (r > 0.985 || r < 0.42) continue;               // the 25..58 mm data band
+                double ring = 0.5 + 0.5 * Math.Sin(r * c * 0.7);   // representative track frequency
+                double a = ring * ring * ring;                     // thin bright lines, dark gaps
+                int i = (y * size + x) * 4;
+                byte t = 0xC8;
+                px[i] = t; px[i + 1] = t; px[i + 2] = t; px[i + 3] = (byte)(a * 120);
+            }
+        return BrushFrom(px, size);
+    }
+
+    private static ImageBrush BrushFrom(byte[] bgra, int size)
+    {
+        var wb = new WriteableBitmap(size, size, 96, 96, PixelFormats.Bgra32, null);
+        wb.WritePixels(new Int32Rect(0, 0, size, size), bgra, size * 4, 0);
+        wb.Freeze();
+        return new ImageBrush(wb) { Stretch = Stretch.Fill };
+    }
+
+    private static void HsvToRgb(double h, double s, double v, out byte r, out byte g, out byte b)
+    {
+        double c = v * s, x = c * (1 - Math.Abs((h / 60.0) % 2 - 1)), m = v - c;
+        double rr = 0, gg = 0, bb = 0;
+        if (h < 60) { rr = c; gg = x; }
+        else if (h < 120) { rr = x; gg = c; }
+        else if (h < 180) { gg = c; bb = x; }
+        else if (h < 240) { gg = x; bb = c; }
+        else if (h < 300) { rr = x; bb = c; }
+        else { rr = c; bb = x; }
+        r = (byte)((rr + m) * 255); g = (byte)((gg + m) * 255); b = (byte)((bb + m) * 255);
+    }
 
     // Read glow (emissive): teal from the hub out to the laser radius, a bright edge at the laser,
     // then transparent beyond so only the dark base disc shows in the not-yet-read region. Idle shows
