@@ -22,6 +22,8 @@ internal static class Program
     {
         if (Array.IndexOf(args, "--gui") >= 0)
             return GuiFuzzer.Run(args);
+        if (Array.IndexOf(args, "--toggles") >= 0)
+            return GuiFuzzer.RunToggleSweep(args);
 
         // The vendored Bwg.Scsi parsers use Debug.Assert on parsed values; on malformed fuzz input
         // an assert can fire and, in a Debug build, terminate the process. Drop the trace listeners
