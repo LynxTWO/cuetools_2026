@@ -162,6 +162,8 @@ public sealed class RipViewModel : PageViewModel
     public int RereadErrors { get => _rereadErrors; private set => Set(ref _rereadErrors, value); }
     private string _rereadText = "";
     public string RereadText { get => _rereadText; private set => Set(ref _rereadText, value); }
+    private double _rereadFrac;   // where on the disc (0..1) the stuck window is - drives the 3D zoom
+    public double RereadFrac { get => _rereadFrac; private set => Set(ref _rereadFrac, value); }
 
     private DateTime _lastRereadUtc;
     private DispatcherTimer? _rereadTimer;
@@ -523,6 +525,7 @@ public sealed class RipViewModel : PageViewModel
                     RereadCount = n;
                     RereadMax = Math.Max(1, max);
                     RereadErrors = errs;
+                    RereadFrac = frac;
                     RereadText = $"{(int)(frac * 100)}% in";
                 }
                 else

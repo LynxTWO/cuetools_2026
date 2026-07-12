@@ -22,35 +22,57 @@ public sealed class DiscModel3D : Viewport3D
         nameof(Progress), typeof(double), typeof(DiscModel3D), new PropertyMetadata(0.0));
     public static readonly DependencyProperty ActiveProperty = DependencyProperty.Register(
         nameof(Active), typeof(bool), typeof(DiscModel3D), new PropertyMetadata(false));
+    // Re-read: when the drive is re-reading a stuck spot, the camera dollies in to it. RereadFrac is
+    // where on the disc (0..1); Unreadable holds the zoom on a spot the drive/parity could not recover.
+    public static readonly DependencyProperty RereadActiveProperty = DependencyProperty.Register(
+        nameof(RereadActive), typeof(bool), typeof(DiscModel3D), new PropertyMetadata(false));
+    public static readonly DependencyProperty RereadFracProperty = DependencyProperty.Register(
+        nameof(RereadFrac), typeof(double), typeof(DiscModel3D), new PropertyMetadata(0.0));
+    public static readonly DependencyProperty UnreadableProperty = DependencyProperty.Register(
+        nameof(Unreadable), typeof(bool), typeof(DiscModel3D), new PropertyMetadata(false));
 
     public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
+    public bool RereadActive { get => (bool)GetValue(RereadActiveProperty); set => SetValue(RereadActiveProperty, value); }
+    public double RereadFrac { get => (double)GetValue(RereadFracProperty); set => SetValue(RereadFracProperty, value); }
+    public bool Unreadable { get => (bool)GetValue(UnreadableProperty); set => SetValue(UnreadableProperty, value); }
 
     // Real CD geometry, in millimetres (used only as proportions).
     private const double RHole = 7.5, RData0 = 25.0, RDataN = 58.0, REdge = 60.0;
     private static double Radius(double f) => Math.Sqrt(RData0 * RData0 + Math.Max(0, Math.Min(1, f)) * (RDataN * RDataN - RData0 * RData0));
 
     private static readonly Color Teal = Color.FromRgb(0x34, 0xCF, 0xC0);
+    private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
+    private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
 
+    private readonly PerspectiveCamera _cam;
     private readonly RadialGradientBrush _surface;   // the read glow, updated from Progress
-    private readonly GradientStop _readEdge;
     private readonly TranslateTransform3D _laserPos;
     private readonly RotateTransform3D _spin;
+    private readonly TranslateTransform3D _markerPos;   // damage marker position
+    private readonly ScaleTransform3D _markerScale;     // damage marker pulse
+    private readonly SolidColorBrush _markerBrush;      // amber re-reading / red unreadable
     private double _spinAngle;
+    private double _zoom;      // 0 = overview, 1 = dollied in on the damage
+    private double _pulse;     // marker pulse phase
     private DateTime _last = DateTime.Now;
+
+    // camera poses: overview, and the reference the damage-focus is derived from
+    private static readonly Point3D OverviewPos = new(0, 95, 96);
 
     public DiscModel3D()
     {
         ClipToBounds = true;
 
-        // camera: a 3/4 view looking down at the disc from the front
-        Camera = new PerspectiveCamera
+        // camera: a 3/4 view looking down at the disc from the front (animated toward damage on re-read)
+        _cam = new PerspectiveCamera
         {
-            Position = new Point3D(0, 95, 96),
-            LookDirection = new Vector3D(0, -95, -96),
+            Position = OverviewPos,
+            LookDirection = new Vector3D(0, -OverviewPos.Y, -OverviewPos.Z),
             UpDirection = new Vector3D(0, 1, 0),
             FieldOfView = 46
         };
+        Camera = _cam;
 
         var root = new Model3DGroup();
         root.Children.Add(new AmbientLight(Color.FromRgb(0x28, 0x2c, 0x2a)));
@@ -58,7 +80,6 @@ public sealed class DiscModel3D : Viewport3D
 
         // the disc surface (top face, +Y): a dark reflective material with a radial read glow. Planar
         // UVs so a RadialGradientBrush maps to real world radius.
-        _readEdge = new GradientStop(Teal, 0.0);
         _surface = new RadialGradientBrush
         {
             GradientOrigin = new Point(0.5, 0.5),
@@ -101,6 +122,15 @@ public sealed class DiscModel3D : Viewport3D
         laserGroup.Transform = _laserPos;
         root.Children.Add(laserGroup);
 
+        // damage marker: an emissive halo that sits on the re-read spot, pulsing; amber while being
+        // re-read, red when the spot is unreadable. Hidden (scaled to nothing) when there is no damage.
+        _markerBrush = new SolidColorBrush(Amber);
+        _markerPos = new TranslateTransform3D(0, 1.2, 0);
+        _markerScale = new ScaleTransform3D(0, 0, 0);
+        var marker = new Model3DGroup { Transform = new Transform3DGroup { Children = { _markerScale, _markerPos } } };
+        marker.Children.Add(new GeometryModel3D(Sphere(new Point3D(0, 0, 0), 3.2, 18), new EmissiveMaterial(_markerBrush)));
+        root.Children.Add(marker);
+
         Children.Add(new ModelVisual3D { Content = root });
 
         Loaded += (_, _) => { _last = DateTime.Now; CompositionTarget.Rendering += OnTick; };
@@ -113,23 +143,64 @@ public sealed class DiscModel3D : Viewport3D
         var now = DateTime.Now;
         double dt = Math.Min(0.05, (now - _last).TotalSeconds);
         _last = now;
+
         if (Active)
         {
             // the disc spins (visual cue; CLV would vary with radius, shown once pits give it texture)
             _spinAngle = (_spinAngle + dt * 120) % 360;
             ((AxisAngleRotation3D)_spin.Rotation).Angle = _spinAngle;
         }
+
+        // dolly the camera toward the damaged spot while re-reading or when it is unreadable, then
+        // ease back out. Real-outcome-driven: RereadActive / Unreadable come straight from the rip.
+        bool damage = RereadActive || Unreadable;
+        _zoom += ((damage ? 1.0 : 0.0) - _zoom) * 0.05;
+        _pulse += dt * 4.2;
+        UpdateCamera();
+        UpdateMarker(damage);
+
         RebuildSurfaceStops(Progress);
         PlaceLaser();
     }
 
+    private void UpdateCamera()
+    {
+        if (_zoom < 0.002)
+        {
+            _cam.Position = OverviewPos;
+            _cam.LookDirection = new Vector3D(-OverviewPos.X, -OverviewPos.Y, -OverviewPos.Z);
+            return;
+        }
+        double r = Radius(RereadFrac);
+        var damagePt = new Point3D(0, 0, r);                 // the stuck spot, at the front of the disc
+        var focusPos = new Point3D(0, 42, r + 34);           // closer, above and in front of it
+        var pos = Lerp(OverviewPos, focusPos, _zoom);
+        _cam.Position = pos;
+        _cam.LookDirection = Lerp(new Point3D(0, 0, 0), damagePt, _zoom) - pos;
+    }
+
+    private void UpdateMarker(bool damage)
+    {
+        _markerPos.OffsetZ = Radius(RereadFrac);
+        double pulse = 0.7 + 0.3 * Math.Sin(_pulse);
+        double s = damage ? pulse * (0.4 + 0.6 * _zoom) : Math.Max(0, _markerScale.ScaleX - 0.06);
+        _markerScale.ScaleX = _markerScale.ScaleY = _markerScale.ScaleZ = s;
+        _markerBrush.Color = Unreadable
+            ? Color.FromArgb((byte)(255 * (0.45 + 0.55 * Math.Abs(Math.Sin(_pulse * 0.8)))), Crit.R, Crit.G, Crit.B)  // flashing red
+            : Amber;
+    }
+
     // Put the laser spot at the true spiral radius for the current read fraction, at the front of the
-    // disc (angle -90 deg, toward the camera) so it is always in view. Idle: parked at the data start.
+    // disc so it is always in view. During a re-read it sits on the stuck spot; idle it parks at the
+    // data start.
     private void PlaceLaser()
     {
         _laserPos.OffsetX = 0;
-        _laserPos.OffsetZ = Active ? Radius(Progress) : RData0;   // front of the disc, toward the camera
+        _laserPos.OffsetZ = RereadActive ? Radius(RereadFrac) : Active ? Radius(Progress) : RData0;
     }
+
+    private static Point3D Lerp(Point3D a, Point3D b, double t) =>
+        new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t);
 
     // Read glow (emissive): teal from the hub out to the laser radius, a bright edge at the laser,
     // then transparent beyond so only the dark base disc shows in the not-yet-read region. Idle shows
@@ -139,7 +210,10 @@ public sealed class DiscModel3D : Viewport3D
         double hub = RHole / REdge;
         double v = Active ? Math.Max(hub + 0.02, Radius(f) / REdge) : hub;   // laser radius in planar-UV terms
         Color glow = Color.FromArgb(0x55, Teal.R, Teal.G, Teal.B);
-        Color edge = Active ? Color.FromRgb(0xD8, 0xFF, 0xF6) : Color.FromArgb(0x66, Teal.R, Teal.G, Teal.B);
+        Color edge = Unreadable ? Crit
+            : RereadActive ? Amber
+            : Active ? Color.FromRgb(0xD8, 0xFF, 0xF6)
+            : Color.FromArgb(0x66, Teal.R, Teal.G, Teal.B);
         Color clear = Color.FromArgb(0x00, Teal.R, Teal.G, Teal.B);
         var stops = new GradientStopCollection
         {
