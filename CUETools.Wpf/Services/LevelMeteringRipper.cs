@@ -36,14 +36,20 @@ public sealed class LevelMeteringRipper : ICDRipper
             if (n > 0 && buffer.PCM.ChannelCount >= 2)
             {
                 int[,] s = buffer.Samples;
-                int peakL = 0, peakR = 0;
-                for (int i = 0; i < n; i += 4)   // every 4th frame is plenty for a meter
-                {
-                    int a = s[i, 0]; if (a < 0) a = -a; if (a > peakL) peakL = a;
-                    int b = s[i, 1]; if (b < 0) b = -b; if (b > peakR) peakR = b;
-                }
                 double full = 1 << (buffer.PCM.BitsPerSample - 1);
-                _onLevels(peakL / full, peakR / full);
+                // RMS (average power) over a short recent window, not peak over the whole 1.5s
+                // buffer: peak pins near full-scale for any loud music, so the needle would sit
+                // frozen at the top. RMS reflects loudness and actually moves with the music.
+                int start = Math.Max(0, n - 8192);   // most recent ~186ms of the read
+                double sumL = 0, sumR = 0; int cnt = 0;
+                for (int i = start; i < n; i += 2)
+                {
+                    int a = s[i, 0]; int b = s[i, 1];
+                    sumL += (double)a * a; sumR += (double)b * b; cnt++;
+                }
+                double rmsL = cnt > 0 ? Math.Sqrt(sumL / cnt) / full : 0;
+                double rmsR = cnt > 0 ? Math.Sqrt(sumR / cnt) / full : 0;
+                _onLevels(rmsL, rmsR);
 
                 // Hand the codec scope a big chunk of CONSECUTIVE mono samples (not decimated). We
                 // deliver a large slice, not a tiny snippet, so the scope has real audio to keep
