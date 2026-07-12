@@ -120,7 +120,11 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="22"/>
                       </Grid.ColumnDefinitions>
+                      <!-- force the selected-item text colour: this ContentPresenter lives inside a
+                           plain ToggleButton whose default style sets Foreground=black, which would
+                           otherwise beat the ComboBox's inherited Ink and render black on dark. -->
                       <ContentPresenter Grid.Column="0" Margin="11,0,0,0" VerticalAlignment="Center"
+                                        TextElement.Foreground="{DynamicResource Ink}"
                                         Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                         ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
                       <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -144,6 +148,26 @@
               </Border>
             </Popup>
           </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- list column headers (Rip track list, Verify/Queue source lists) - themed, replacing the
+       default white system header that read as a white bar on the dark surface. -->
+  <Style TargetType="GridViewColumnHeader">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+    <Setter Property="Background" Value="{DynamicResource Bar}"/>
+    <Setter Property="FontSize" Value="10.5"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="Padding" Value="9,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="GridViewColumnHeader">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,1" Padding="{TemplateBinding Padding}">
+            <ContentPresenter TextElement.Foreground="{DynamicResource Muted}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+          </Border>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
