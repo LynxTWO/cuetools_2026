@@ -146,7 +146,7 @@ public sealed class RipService : IRipService
             // is (16 << cqc) total passes, so maxReReads extra passes before it gives up.
             int cqc = Math.Max(0, Math.Min(2, cq));
             int maxReReads = Math.Max(1, (16 << cqc) - 1 - cqc);
-            int lastReReads = 0, peakReRead = 0, rereadWindows = 0;
+            int lastReReads = 0, peakReRead = 0, rereadWindows = 0, failedWindows = 0;
             reader.ReadProgress += (s, e) =>
             {
                 double frac = e.Position / total;
@@ -168,6 +168,12 @@ public sealed class RipService : IRipService
                         // one line per damaged spot (position + errors only, no titles): tells you
                         // where a disc is scratched/pin-holed and confirms the re-read path is live.
                         _log.Info("rip.reread", $"stuck window at {(int)(frac * 100)}% errors={e.ErrorsCount}");
+                    }
+                    // last pass and the sectors still disagree: the drive has given up on this window
+                    if (reReads >= maxReReads && e.ErrorsCount > 0 && lastReReads < maxReReads)
+                    {
+                        failedWindows++;
+                        _log.Warn("rip.reread", $"gave up on window at {(int)(frac * 100)}% errors={e.ErrorsCount} (unreadable by drive)");
                     }
                     if (onReread != null && (reReads > 0 || lastReReads > 0))
                     {
@@ -204,7 +210,7 @@ public sealed class RipService : IRipService
 
             _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
                 $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
-                $"reread_windows={rereadWindows} reread_peak={peakReRead} status={status}");
+                $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
 
             int n = Math.Max(0, cue.TrackCount);
             var arpt = new int[n];

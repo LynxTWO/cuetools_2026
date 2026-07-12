@@ -24,6 +24,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IHistoryStore _history;
     private readonly CUEConfig _config;
     private readonly IAlbumArtService _art;
+    private readonly AppSettings _settings;
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
     // (drive, offset, TOC) rather than just the AR/CTDB numbers.
@@ -164,9 +165,12 @@ public sealed class RipViewModel : PageViewModel
     public string RereadText { get => _rereadText; private set => Set(ref _rereadText, value); }
     private double _rereadFrac;   // where on the disc (0..1) the stuck window is - drives the 3D zoom
     public double RereadFrac { get => _rereadFrac; private set => Set(ref _rereadFrac, value); }
+    private bool _unreadable;     // the drive exhausted its retries and could not read the spot
+    public bool Unreadable { get => _unreadable; private set => Set(ref _unreadable, value); }
 
     private DateTime _lastRereadUtc;
     private DispatcherTimer? _rereadTimer;
+    private bool _holdDamageZoom;   // stop-on-unrecoverable fired: hold the red zoom until the job ends
 
     private const double SpeedCapX = 12.0;
     private double _discSeconds;
@@ -217,7 +221,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art)
+    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings)
     {
         Title = "Rip";
         Group = "Work";
@@ -228,6 +232,7 @@ public sealed class RipViewModel : PageViewModel
         _history = history;
         _config = config;
         _art = art;
+        _settings = settings;
         _outputBaseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
 
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
@@ -454,6 +459,7 @@ public sealed class RipViewModel : PageViewModel
     private void StartRereadTimer()
     {
         RereadVisible = false; RereadActive = false; RereadCount = 0; RereadErrors = 0; RereadText = "";
+        Unreadable = false; _holdDamageZoom = false;
         _rereadTimer ??= new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(200) };
         _rereadTimer.Tick -= RereadTick;
         _rereadTimer.Tick += RereadTick;
@@ -463,15 +469,19 @@ public sealed class RipViewModel : PageViewModel
     private void StopRereadTimer()
     {
         _rereadTimer?.Stop();
-        RereadVisible = false; RereadActive = false;
+        RereadVisible = false; RereadActive = false; Unreadable = false; _holdDamageZoom = false;
     }
 
     private void RereadTick(object? sender, EventArgs e)
     {
+        // When stop-on-unrecoverable fired, hold the zoomed red state until the job ends; otherwise let
+        // the box/zoom linger briefly and then clear so the read can carry on.
+        if (_holdDamageZoom) return;
         if (RereadVisible && (DateTime.UtcNow - _lastRereadUtc).TotalSeconds > 1.4)
         {
             RereadVisible = false;
             RereadActive = false;
+            Unreadable = false;
         }
     }
 
@@ -521,12 +531,24 @@ public sealed class RipViewModel : PageViewModel
                 {
                     _lastRereadUtc = DateTime.UtcNow;
                     RereadVisible = true;
-                    RereadActive = true;
                     RereadCount = n;
                     RereadMax = Math.Max(1, max);
                     RereadErrors = errs;
                     RereadFrac = frac;
                     RereadText = $"{(int)(frac * 100)}% in";
+
+                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
+                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
+                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
+                    bool failed = n >= RereadMax && errs > 0;
+                    RereadActive = !failed;
+                    Unreadable = failed;
+                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
+                    {
+                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
+                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
+                        Task.Run(() => { try { _rip.Stop(); } catch { } });
+                    }
                 }
                 else
                 {

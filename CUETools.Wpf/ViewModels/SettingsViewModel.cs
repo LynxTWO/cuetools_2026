@@ -49,6 +49,7 @@ public sealed class SettingsViewModel : PageViewModel
     // Ripping behaviour (app-level)
     public bool PreventSleepDuringRip { get => _app.PreventSleepDuringRip; set { _app.PreventSleepDuringRip = value; Raise(); } }
     public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
+    public bool StopOnUnrecoverable { get => _app.StopOnUnrecoverable; set { _app.StopOnUnrecoverable = value; Raise(); } }
 
     // General
     public bool OneInstance { get => _c.oneInstance; set { _c.oneInstance = value; Raise(); } }
