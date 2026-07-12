@@ -70,6 +70,36 @@ Replaces or augments the current 2D `DiscReadMap` in the left column of the Rip 
 Camera: a fixed 3/4 orbit by default; optional slow auto-orbit. No user interaction needed here (that
 is stage 2).
 
+### Zoom to damage (live, real-outcome-driven)
+
+When the drive hits real damage, the camera dollies IN to the damaged radius, shows it being worked,
+then eases back OUT when the read continues - so the viewer's eye is taken to exactly where the disc
+is failing, on this disc, right now. Driven entirely by data already wired (`RereadActive`,
+`RereadFrac`, `RereadCount`, plus the failed-sector outcome), no new source.
+
+Honest note on the two damage types: the drive reports difficulty and failure, never the physical
+cause, so the states below are keyed to the real OUTCOME (which correlates with cause), and the
+physical cause is shown as EDUCATION, not a claimed measurement.
+
+- Being re-read (amber): `RereadActive` -> camera zooms to `radius(RereadFrac)`, laser re-scans the
+  stuck window, the re-read count ticks. Smooth lerp in.
+- Recovered (green flash), then zoom out: the window converged (`ErrorsCount -> 0`). Caption: "read
+  through it" - typically a clear-side scratch, the data layer is intact. Read resumes, camera eases
+  back to the overview.
+- Reconstructed from parity (teal): the drive failed the window but CTDB parity can fill it (surfaces
+  on the Verify/encode pass, links to the RepairScope). Marked, not zoomed-held.
+- Unreadable / uncorrectable (red): sectors the drive failed AND parity cannot recover. A red damage
+  marker sits at that spot. Caption frames the physical cause as education: "the data layer here is
+  gone - this is what label-side damage (a pin-hole through the reflective layer) does; a clear-side
+  scratch usually reads through or is fixed from parity."
+
+If the rip is set to stop on unrecoverable damage (a new opt-in setting, off by default so today's
+behavior of finishing and marking failed sectors is unchanged), the camera STAYS zoomed on the failed
+location with the red marker slowly flashing until the user ejects or stops - so an unrecoverable disc
+does not silently produce a bad rip; it stops and shows you exactly where and why. The stop itself
+reuses the existing `Stop()` path (`StopException`), just triggered by the failed-sector outcome
+instead of the button.
+
 ## Stage 2: explorable "How a CD works" mode
 
 A new nav page (or a full-window overlay opened by an "Explore" button on the live disc).
@@ -103,6 +133,10 @@ The live read data drives all three tiers identically; only the surface detail s
   visible pits are this track's actual bits.
 - The layer cross-section dimensions are the real CD spec figures. Cite them.
 - No fabricated "reading" motion when nothing is being read (idle disc is still).
+- Damage states are labeled by the real OUTCOME (re-reading / recovered / reconstructed from parity /
+  unreadable), never by a physical cause the drive cannot report. The scratch-vs-pin-hole framing is
+  phrased as education ("this is what label-side damage does"), tied to the outcome, not asserted as a
+  measurement of this disc.
 
 ## Verification plan
 
@@ -133,5 +167,9 @@ The live read data drives all three tiers identically; only the surface detail s
 1. Spike the pit shader vs. procedural-texture question offscreen (small, decides the surface path).
 2. Stage 1 live disc (geometry, camera, laser, read-position mapping, re-read back-track, tiers),
    verified offscreen then on a live rip.
+2b. Zoom-to-damage: camera dolly to `radius(RereadFrac)` on `RereadActive`, the outcome states
+   (recovered / reconstructed / unreadable), and the opt-in "stop on unrecoverable damage" setting
+   (new `AppSettings` flag + a failed-sector-triggered `Stop()`), with the stay-zoomed flashing-red
+   held state. Verified on the pin-holed disc, which forces real unrecoverable spots.
 3. Stage 2 explore mode (orbit/zoom, zoom-tier callouts, layer cross-section).
 4. Update the `disc-read-visualization` skill with the 3D approach and the offscreen-3D technique.
