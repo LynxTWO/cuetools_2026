@@ -190,7 +190,7 @@ public sealed class RipViewModel : PageViewModel
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
-        ReadDiscCommand = new RelayCommand(_ => { _ = ReadDiscAsync(); });
+        ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose());
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
@@ -275,10 +275,16 @@ public sealed class RipViewModel : PageViewModel
         {
             IsDiscPresent = false;
             bool open = TrayState == DriveTrayState.Open;
-            AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc in drive " + drive + ":";
+            // the drive tells us the media type: distinguish "empty" from "a disc, but not audio"
+            bool nonAudio = !open && details.Valid && details.MediaPresent && details.CurrentProfile.Length > 0;
+            AlbumTitle = open ? "Tray open - insert a disc, then Close"
+                : nonAudio ? $"Not an audio CD - {details.CurrentProfile} in drive {drive}:"
+                : "No disc in drive " + drive + ":";
             AlbumArtist = "";
             DiscInfoText = "";
-            StatusText = open ? "Tray open." : "Drive ready - insert an audio CD to begin.";
+            StatusText = open ? "Tray open."
+                : nonAudio ? $"{details.CurrentProfile} loaded - insert an audio CD to rip."
+                : "Drive ready - insert an audio CD to begin.";
         }
         else
         {
@@ -398,6 +404,23 @@ public sealed class RipViewModel : PageViewModel
         SpeedLevel = Math.Max(0, Math.Min(1, sx / SpeedCapX));
         _lastSpeedTick = now;
         _lastSpeedFrac = frac;
+    }
+
+    // "Read disc" with the tray open means "close it and read what's in there" - the natural thing
+    // to expect. Closing hands off to the watcher, which reads the disc once it lands. With the
+    // tray already shut, it just (re)reads.
+    private void ReadDiscOrClose()
+    {
+        if (TrayState == DriveTrayState.Open)
+        {
+            char d = _selectedDrive;
+            if (d == '\0') return;
+            StatusText = $"Closing tray {d}:...";
+            TrayState = DriveTrayState.ClosedNoDisc;   // optimistic; the watcher confirms + reads
+            _triedCurrentMedia = false;
+            Task.Run(() => { try { _drives.CloseTray(d); } catch { } });
+        }
+        else _ = ReadDiscAsync();
     }
 
     // The eject button toggles the tray: open it when it is in, close it when it is out. Closing
