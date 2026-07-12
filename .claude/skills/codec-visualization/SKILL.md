@@ -1,73 +1,102 @@
 ---
 name: codec-visualization
-description: Use when building, extending, or refining the educational codec-encoding animation (CodecScope) - the GPU-drawn view of what an audio codec does to the sound while encoding, or when adding a new codec's depiction or improving how a stage is drawn. WPF/XAML specific.
+description: Use when building, extending, or refining a real-time visualization of audio codec compression - what a lossless codec does to the sound (signal, prediction, residual, entropy pack), how formats differ, or a convert round trip (source -> PCM -> target). Portable: the DSP core is UI-free and reusable in any program; the reference rendering is WPF.
 ---
 
-# Codec Visualization
+# Codec / Compression Visualization
 
-A living, extensible model for depicting *what a codec actually does* to audio while it encodes.
-The goal is honest education: show the real pipeline of the codec family, animated, without
-faking measurements. Keep this skill updated as codec knowledge and the animation improve.
+A living model for showing *what a codec actually does to audio*, driven by the **real samples** and
+the **real predictor math** - not a canned loop. A better predictor genuinely leaves a smaller
+residual and earns a lower ratio, so the picture and the numbers are true, and the differences
+between formats fall out of the computation instead of being asserted.
 
-Reference implementation: `CUETools.Wpf/Controls/CodecScope.cs` (a `FrameworkElement` with
-`OnRender` + `CompositionTarget.Rendering`, GPU-composited like the disc map / VU / speed graph).
+Reusable in other programs: the algorithm core is UI-free. Keep this skill updated as the model and
+the drawing improve.
 
-## The model
+## Two layers: portable core + rendering
 
-Most lossless audio codecs share one pipeline; depict it as left-to-right stages with arrows:
+- **`CodecMath`** (`CUETools.Wpf/Controls/CodecMath.cs`) is the portable, UI-free core. Given a
+  window of real PCM it runs a family predictor and returns the true residual, then estimates
+  bits/sample from that residual with the Rice cost an encoder actually spends. No WPF types - lift
+  it into any program (port the ~120 lines to any language). This is the piece worth reusing.
+- **Rendering** is WPF reference only: `CodecScope.cs` (rip: one codec's pipeline) and
+  `ConvertScope.cs` (convert: source -> PCM -> target round trip). Both are `FrameworkElement` +
+  `OnRender` + `CompositionTarget.Rendering`, GPU-composited like the disc map / VU / speed graph.
 
-1. **signal** - the PCM waveform (scrolling).
-2. **predict** - a predictor (LPC / adaptive FIR) tracking the signal; the codec stores how to
-   predict, not the samples.
-3. **residual** - signal minus prediction: a much smaller, near-zero signal - "what is left to
-   store".
-4. **pack** - entropy coding (Rice / Golomb / range) packs the small residuals into fewer bits;
-   show raw vs packed columns and a compression figure.
+## The real math (the important part)
 
-Uncompressed PCM (WAV) is the degenerate case: **signal -> store**, 1:1, no prediction.
-Lossy codecs (Opus/AAC/MP3/Vorbis) are a *different* pipeline - add stages for a filterbank/MDCT,
-a psychoacoustic model, quantization (where data is actually discarded), and entropy coding - and
-say plainly that they discard inaudible detail. Do not draw a lossy codec with the lossless
-"residual" stage; that would misrepresent it.
+Every lossless codec family: predict each sample from earlier ones, store the small error. The core
+computes the **real** residual per family, so it is measured, not decoration.
 
-## Per-codec knowledge (extend this)
+| Pred kind | Family | Real predictor used |
+|---|---|---|
+| `None` | WAV | none - store raw PCM |
+| `Fixed2` | FLAC / ALAC / TAK | 2nd-order fixed polynomial: `2*s[n-1] - s[n-2]` |
+| `Adaptive` | TTA | order-1 adaptive (weight tracks the signal) |
+| `Cascade` | WavPack | cascaded decorrelation (two difference passes) |
+| `Lms` | Monkey's Audio | order-8 adaptive NLMS FIR filter |
 
-The control's `Info(codec)` switch is the single place to add or refine a codec. Each entry:
-name, one-line description, compressed?, typical ratio. Current entries:
+`residual = signal - prediction`. Then `BitsPerSample` = the Rice-code cost of that residual
+(`(|r|>>k) + 1 + k` per sample, optimal `k` from the residual mean) - the same figure an encoder
+uses to size a block. `ratio = bits/16`. WAV is 16.0 bits, 1:1.
 
-| codec | name | one-liner | typical ratio |
-|---|---|---|---|
-| wav | WAV | uncompressed PCM - every sample kept exactly | 1.0 |
-| flac | FLAC | fit a linear predictor, then Rice-code the residual | ~0.58 |
-| m4a/alac | ALAC | adaptive FIR prediction + Rice/Golomb (Apple Lossless) | ~0.62 |
-| tta | TTA | adaptive prediction + Rice coding (True Audio) | ~0.62 |
-| ape | Monkey's Audio | high-order adaptive prediction + range coding | ~0.55 |
-| wv | WavPack | decorrelation + entropy coding | ~0.60 |
+Verified ordering on a real test signal (earned, not asserted): WAV 16.0 > FLAC 10.5 > TTA 10.4 >
+WavPack 10.2 > Monkey's Audio 9.9 bits/sample. Monkey's Audio wins because its adaptive filter
+predicts best, leaving the smallest residual.
 
-When adding a codec, cite its real mechanism (predictor order, entropy coder) in the one-liner.
-Ratios are typical-catalogue figures - keep them labelled "typical ~x%", never present them as a
-measurement of the current disc. If a live encode exposes the real encoded/raw byte ratio, show
-that instead and label it "measured".
+## Feeding real samples
+
+Tap **consecutive** PCM (not decimated - decimation destroys the sample-to-sample correlation the
+predictor needs). Reference pattern:
+
+- Rip: `LevelMeteringRipper` wraps the `ICDRipper`, and on each `Read` also hands a window of ~320
+  consecutive mono samples (normalized to [-1,1]) to an `onSamples` callback, throttled to ~40/s.
+  Threaded RipService -> `RipViewModel.SampleWindow` -> the scope's `Samples` DP.
+- Convert: `ConvertService.PreloadSource` decodes a short real snippet of the source (resolving a
+  .cue/folder to its largest audio file) into windows; the VM loops them through the scope during
+  the convert. Real source audio, no contention with the encoder.
+
+The scope keeps a rolling buffer and scrolls it; it runs the predictor on that buffer each frame.
+
+## What to draw (three things at once)
+
+1. **DSP pipeline**: `signal -> predict -> residual -> pack`, real waveforms flowing through. WAV is
+   the degenerate `signal -> store`.
+2. **Compression forming**: live bits/sample, % of PCM, a shrink bar from 16 down to the real
+   figure, and raw-vs-packed columns. In the residual panel draw a faint envelope of how big the
+   signal was, so the small residual reads as "what is left".
+3. **Format contrast**: each codec's predictor and pack visuals differ - Rice bars vs a narrowing
+   range-coder interval - and the earned ratio differs. The round-trip scope adds a
+   "9.7 -> 16.0 bits/sample, larger" / "16.0 -> 8.6, smaller" verdict comparing two formats on the
+   same PCM.
+
+Palette: teal (signal / residual), amber (predictor / uncompressed), muted (structure).
 
 ## Honesty rules
 
-- The predictor/residual/pack drawings are stylized representations of the algorithm, not the
-  actual samples. That is fine for teaching, but never imply the numbers are measured.
-- Match the pipeline to the codec family (lossless prediction vs lossy transform). A wrong
-  pipeline teaches the wrong thing.
-- WAV and other uncompressed formats must read as 1:1 - do not animate a fake compression.
-
-## Verify by rendering
-
-The animation phase comes from `CompositionTarget.Rendering`, which does not tick under a
-headless `RenderTargetBitmap`; a single frame at phase 0 is representative. A tiny net8 WPF
-console (see `scratchpad/CodecRender`) builds a `CodecScope` per codec in a card, renders to PNG,
-and the PNG is read back to check legibility and correctness of each stage before shipping.
+- The signal, prediction, residual, bits/sample and ratio ARE computed from the real audio - say so.
+- The predictors are **representative of each family**, not bit-exact reimplementations of the real
+  encoder. State that (a comment in `CodecMath` does). Do not claim the on-screen ratio equals the
+  encoder's final file size; it is a faithful estimate from the real residual.
+- Match the pipeline to the family. Lossy codecs (Opus/AAC/MP3/Vorbis) are a *different* pipeline -
+  filterbank/MDCT, psychoacoustic model, quantization (where data is discarded), entropy coding.
+  Give them their own stages; never draw them with the lossless "residual" stage.
+- WAV / uncompressed must read as 1:1 - no fake compression animation.
 
 ## Extending
 
-- New codec: add a case to `Info`. If its family differs (lossy), give it its own `stages[]` and
-  `DrawStage` cases rather than forcing the lossless pipeline.
-- Better animation: the `Wave`, `PackBars`, and stage drawings are independent; refine one at a
-  time and re-render. Keep the palette teal (signal) / amber (predictor) / muted (structure).
-- Keep this SKILL.md's codec table and honesty rules in sync with the control.
+- **New lossless codec**: add a case to `CodecMath.Info` (name, one-liner, `Pred` kind, `Pack`
+  kind, stage labels). If none of the existing predictors matches its family, add a `Pred` case with
+  its real predictor.
+- **New pack style**: Rice bars and the range-coder interval are separate draws; add another for a
+  new entropy coder.
+- **Lossy**: add a `Pred`/pipeline that models transform + quantization, with its own stages.
+- Keep this table and the honesty rules in sync with `CodecMath`.
+
+## Verify by rendering
+
+`CompositionTarget.Rendering` does not tick under a bare `RenderTargetBitmap`, so the harness shows a
+real off-screen `Window`, feeds real sample windows on a `DispatcherTimer`, lets the bits/ratio EMA
+settle (~700ms after switching codec), then captures each codec/round-trip to PNG and reads it back.
+See `scratchpad/CodecRender` (per-codec) and `scratchpad/ConvertRender` (round trip). Always let the
+EMA settle before the shot, or the headline number lags the previous codec.
