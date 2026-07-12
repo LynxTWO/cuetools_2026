@@ -128,6 +128,11 @@ public sealed class RipViewModel : PageViewModel
     private bool _isRipping;
     public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) CommandManager.InvalidateRequerySuggested(); } }
 
+    // Weak-hardware fallback (standing perf rule): the 3D disc uses WPF's GPU-rasterized Viewport3D.
+    // With no hardware acceleration (software rendering / RemoteFX, tier 0) fall back to the 2D
+    // read-map. Read once at startup; the dev box's RTX 3060 is tier 2.
+    public bool Supports3DDisc { get; } = (System.Windows.Media.RenderCapability.Tier >> 16) >= 1;
+
     // live read-speed readout for the SpeedGraph (0..1 of a 12x display cap) + "6.4x" text
     private double _speedLevel;
     public double SpeedLevel { get => _speedLevel; private set => Set(ref _speedLevel, value); }
