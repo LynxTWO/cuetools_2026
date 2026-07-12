@@ -31,12 +31,13 @@ public interface IRipService
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
     /// <paramref name="onLevels"/> receives real per-channel peak (L,R) of each read buffer.
     /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null);
+    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
-    /// given.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null);
+    /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
+    /// the codec scope.</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
 }
 
 public sealed class RipService : IRipService
@@ -46,10 +47,10 @@ public sealed class RipService : IRipService
 
     public RipService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels);
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -63,8 +64,11 @@ public sealed class RipService : IRipService
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
             _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' chosen_release={(metadata != null)}");
 
-            // Tap real audio levels for the VU meter (delegates everything else to the drive).
-            ICDRipper ripper = onLevels != null ? new LevelMeteringRipper(reader, onLevels) : reader;
+            // Tap real audio for the VU meter (levels) and the codec scope (a window of real
+            // samples); everything else delegates to the drive unchanged.
+            ICDRipper ripper = (onLevels != null || onSamples != null)
+                ? new LevelMeteringRipper(reader, onLevels ?? ((_, _) => { }), onSamples)
+                : reader;
 
             var cue = new CUESheet(_config);
             cue.OpenCD(ripper);
