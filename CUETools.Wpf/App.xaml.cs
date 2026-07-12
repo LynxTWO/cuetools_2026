@@ -27,6 +27,7 @@ public partial class App : Application
             c.writeArTagsOnEncode = true;   // AccurateRip tags in the files by default
             return c;
         });
+        services.AddSingleton<AppSettings>();
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();

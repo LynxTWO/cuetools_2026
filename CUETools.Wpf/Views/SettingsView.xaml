@@ -34,6 +34,10 @@
       <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{DynamicResource Ink}"/>
       <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,2,0,4" TextWrapping="Wrap"/>
 
+      <TextBlock Style="{StaticResource Sec}" Text="RIPPING"/>
+      <Border Style="{StaticResource Row}" ToolTip="Keep the computer awake (no sleep, no display timeout) while a rip or verify runs, so a long secure rip is not cut short by the machine sleeping. On by default."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding PreventSleepDuringRip}"/><TextBlock Style="{StaticResource RowLabel}" Text="Keep computer awake during a rip"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Lock the drive tray while a rip or verify runs so the disc cannot be ejected mid-read - by its own button or by software. This prevents an accidental eject from failing the read. Off by default."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding LockTrayDuringRip}"/><TextBlock Style="{StaticResource RowLabel}" Text="Lock drive tray during a rip"/></DockPanel></Border>
+
       <TextBlock Style="{StaticResource Sec}" Text="GENERAL"/>
       <Border Style="{StaticResource Row}" ToolTip="Keep only one CUETools window open; launching again focuses the existing one instead of opening a second."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding OneInstance}"/><TextBlock Style="{StaticResource RowLabel}" Text="Single instance"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Check online for a newer CUETools version when the app starts."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CheckForUpdates}"/><TextBlock Style="{StaticResource RowLabel}" Text="Check for updates"/></DockPanel></Border>
@@ -90,6 +94,17 @@
         <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
         <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
       </StackPanel>
+
+      <TextBlock Style="{StaticResource Sec}" Text="DIAGNOSTICS"/>
+      <Border Style="{StaticResource Row}" ToolTip="A privacy-safe log of what the app does this run - phases, counts, timings, and full error detail if something fails - with no album/artist/track names, and paths scrubbed of your user name and folders. Open the folder to attach it to a bug report.">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Open log folder" Command="{Binding OpenLogFolderCommand}" Padding="12,6" VerticalAlignment="Center"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource RowLabel}" Text="Diagnostic log (privacy-safe)"/>
+            <TextBlock Text="{Binding LogPath}" FontFamily="{StaticResource Mono}" FontSize="10.5" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" MaxWidth="470"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
 
       <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                  Text="These write straight to the live configuration. The remaining sections (Metadata, Encoding &amp; Formats with the codec editor, Ripper &amp; Drives) and settings persistence are the next increments."/>

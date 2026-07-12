@@ -1,5 +1,8 @@
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 using CUETools.Processor;
+using CUETools.Wpf.Mvvm;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.ViewModels;
 
@@ -12,16 +15,40 @@ namespace CUETools.Wpf.ViewModels;
 public sealed class SettingsViewModel : PageViewModel
 {
     private readonly CUEConfig _c;
+    private readonly AppSettings _app;
+    private readonly IDiagnosticLog _log;
 
-    public SettingsViewModel(CUEConfig config)
+    public SettingsViewModel(CUEConfig config, AppSettings app, IDiagnosticLog log)
     {
         Title = "Settings";
         Group = "Setup";
         Subtitle = "Every engine option, grouped. Changes apply to the live configuration.";
         _c = config;
+        _app = app;
+        _log = log;
+        OpenLogFolderCommand = new RelayCommand(_ => OpenLogFolder());
     }
 
     private void Raise([CallerMemberName] string? n = null) => OnPropertyChanged(n);
+
+    // Diagnostics: the privacy-safe log for this run (structure only, no album/artist/track names).
+    public string LogPath => _log.LogPath;
+    public ICommand OpenLogFolderCommand { get; }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            string? dir = System.IO.Path.GetDirectoryName(_log.LogPath);
+            if (dir != null && System.IO.Directory.Exists(dir))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = dir, UseShellExecute = true });
+        }
+        catch { /* best-effort */ }
+    }
+
+    // Ripping behaviour (app-level)
+    public bool PreventSleepDuringRip { get => _app.PreventSleepDuringRip; set { _app.PreventSleepDuringRip = value; Raise(); } }
+    public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
 
     // General
     public bool OneInstance { get => _c.oneInstance; set { _c.oneInstance = value; Raise(); } }

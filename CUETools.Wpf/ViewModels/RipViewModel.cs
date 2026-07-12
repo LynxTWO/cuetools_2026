@@ -124,7 +124,7 @@ public sealed class RipViewModel : PageViewModel
     public double RipProgress { get => _ripProgress; private set => Set(ref _ripProgress, value); }
 
     private bool _isRipping;
-    public bool IsRipping { get => _isRipping; private set => Set(ref _isRipping, value); }
+    public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) CommandManager.InvalidateRequerySuggested(); } }
 
     // live read-speed readout for the SpeedGraph (0..1 of a 12x display cap) + "6.4x" text
     private double _speedLevel;
@@ -175,6 +175,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
     public ICommand RipCommand { get; }
+    public ICommand StopCommand { get; }
     public ICommand EjectCommand { get; }
     public ICommand BrowseOutputCommand { get; }
     public ICommand OpenFolderCommand { get; }
@@ -198,6 +199,7 @@ public sealed class RipViewModel : PageViewModel
         ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose());
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
@@ -328,6 +330,15 @@ public sealed class RipViewModel : PageViewModel
                 Tracks[i].Title = mt[i].Title;
     }
 
+    // Ask the engine to stop the running rip/verify at the next safe point. The job's Task then
+    // returns a "Stopped." result and the UI settles back to the disc view.
+    private void Stop()
+    {
+        if (!IsRipping) return;
+        StatusText = "Stopping...";
+        Task.Run(() => { try { _rip.Stop(); } catch { } });
+    }
+
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
@@ -391,7 +402,9 @@ public sealed class RipViewModel : PageViewModel
         }
         else
         {
-            StatusText = (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
+            StatusText = result.Error == "Stopped."
+                ? (encode ? "Rip stopped." : "Verify stopped.")
+                : (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
