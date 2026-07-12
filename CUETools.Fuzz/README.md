@@ -15,19 +15,25 @@ directly with `dotnet run`.
   (NaN, +/-Inf, +/-huge, denormal, zero, normal audio) through every codec family. Invariant: never
   throws, and the returned bits/sample is finite and in [1,16].
 - **GUI random-walk** (`--gui`): attaches to the running `CUETools.Wpf` window and hammers it with
-  SAFE actions only - random page navigation, light/dark theme toggling, window resizes, scrolls -
-  checking the process stays alive. It does NOT invoke Rip / Verify / Eject / Convert / Detect /
-  folder-picker buttons (hardware, filesystem, or blocking-dialog side effects). It stresses the
-  load-bearing UI: the DynamicResource theme swap, page switching, the GPU-drawn custom controls,
-  and layout under random sizes.
+  SAFE actions only - random page navigation, switch toggling, window resizes - checking the process
+  stays alive. It does NOT invoke Rip / Verify / Eject / Convert / Detect / folder-picker buttons
+  (hardware, filesystem, or blocking-dialog side effects). MOUSE-FREE: it drives controls through
+  UIAutomation patterns and never moves the physical cursor or steals focus, so you can keep using
+  the machine while it runs. Stresses the DynamicResource theme swap, page switching, the GPU-drawn
+  custom controls, and layout under random sizes.
+- **Toggle-combination sweep** (`--toggles`): navigates to Settings and drives every switch through
+  all 2^N combinations (or a 4096 random sample when N is large), checking health after each.
+  Toggling only sets a config bool / the theme, so no combination should misbehave - this proves it
+  and would catch a setter/binding surprise. Verified: 4096 combinations across 16 switches, healthy.
 
 ## Run
 
-```
+```sh
 dotnet run -c Release                  # headless fuzzers, default seed + 300k iters
 dotnet run -c Release -- 42 500000     # seed, iterations
 dotnet run -c Release -- --gui         # random-walk the already-running app window
 dotnet run -c Release -- --gui 42 300  # seed, steps
+dotnet run -c Release -- --toggles     # sweep every switch combination (app running)
 ```
 
 Exit code is non-zero on any failure, and failures print the seed to reproduce.
