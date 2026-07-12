@@ -106,6 +106,20 @@
               <ctl:SpeedGraph Height="64" Level="{Binding SpeedLevel, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"/>
             </StackPanel>
           </Border>
+          <!-- appears only when the drive is genuinely re-reading a stuck sector (scratch / pin-hole);
+               every number is the drive's real retry count, not a canned animation -->
+          <Border Margin="0,11,0,0" Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="10" Padding="11,9"
+                  Visibility="{Binding RereadVisible, Converter={StaticResource BoolVis}}">
+            <StackPanel>
+              <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" Text="RE-READING" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Amber}"/>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding RereadText}" FontFamily="{StaticResource Mono}" FontSize="9.5" Foreground="{DynamicResource Muted}"/>
+              </DockPanel>
+              <ctl:RereadScope Height="56" Active="{Binding RereadActive, Mode=OneWay}"
+                               Count="{Binding RereadCount, Mode=OneWay}" Max="{Binding RereadMax, Mode=OneWay}"
+                               Errors="{Binding RereadErrors, Mode=OneWay}"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </Border>
 

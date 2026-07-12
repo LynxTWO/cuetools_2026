@@ -145,6 +145,26 @@ public sealed class RipViewModel : PageViewModel
     private float[]? _sampleWindow;
     public float[]? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
 
+    // Re-read state, driven by the drive's real retry loop. RereadVisible governs the box (it lingers
+    // ~1.4s after the last re-read so the "recovered" state and fade-out are seen); RereadActive
+    // governs the live animation; the counts are the truth from ReadProgress. Only non-zero when the
+    // drive is genuinely fighting a bad spot on the disc.
+    private bool _rereadVisible;
+    public bool RereadVisible { get => _rereadVisible; private set => Set(ref _rereadVisible, value); }
+    private bool _rereadActive;
+    public bool RereadActive { get => _rereadActive; private set => Set(ref _rereadActive, value); }
+    private int _rereadCount;
+    public int RereadCount { get => _rereadCount; private set => Set(ref _rereadCount, value); }
+    private int _rereadMax = 30;
+    public int RereadMax { get => _rereadMax; private set => Set(ref _rereadMax, value); }
+    private int _rereadErrors;
+    public int RereadErrors { get => _rereadErrors; private set => Set(ref _rereadErrors, value); }
+    private string _rereadText = "";
+    public string RereadText { get => _rereadText; private set => Set(ref _rereadText, value); }
+
+    private DateTime _lastRereadUtc;
+    private DispatcherTimer? _rereadTimer;
+
     private const double SpeedCapX = 12.0;
     private double _discSeconds;
     private double _lastSpeedFrac;
@@ -339,6 +359,32 @@ public sealed class RipViewModel : PageViewModel
         Task.Run(() => { try { _rip.Stop(); } catch { } });
     }
 
+    // The re-read box lingers briefly after the last re-read so the "recovered"/fade-out is seen and
+    // the box does not flicker between adjacent bad spots. This UI-thread timer does the hiding.
+    private void StartRereadTimer()
+    {
+        RereadVisible = false; RereadActive = false; RereadCount = 0; RereadErrors = 0; RereadText = "";
+        _rereadTimer ??= new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(200) };
+        _rereadTimer.Tick -= RereadTick;
+        _rereadTimer.Tick += RereadTick;
+        _rereadTimer.Start();
+    }
+
+    private void StopRereadTimer()
+    {
+        _rereadTimer?.Stop();
+        RereadVisible = false; RereadActive = false;
+    }
+
+    private void RereadTick(object? sender, EventArgs e)
+    {
+        if (RereadVisible && (DateTime.UtcNow - _lastRereadUtc).TotalSeconds > 1.4)
+        {
+            RereadVisible = false;
+            RereadActive = false;
+        }
+    }
+
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
@@ -376,11 +422,34 @@ public sealed class RipViewModel : PageViewModel
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
         void Samples(float[] win)
             => dispatcher?.BeginInvoke(new Action(() => SampleWindow = win));
+        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
+        // n == 0 means the window cleared; the linger timer then hides the box.
+        void Reread(int n, int max, int errs, double frac)
+            => dispatcher?.BeginInvoke(new Action(() =>
+            {
+                if (n > 0)
+                {
+                    _lastRereadUtc = DateTime.UtcNow;
+                    RereadVisible = true;
+                    RereadActive = true;
+                    RereadCount = n;
+                    RereadMax = Math.Max(1, max);
+                    RereadErrors = errs;
+                    RereadText = $"{(int)(frac * 100)}% in";
+                }
+                else
+                {
+                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
+                    RereadErrors = 0;
+                }
+            }));
+
+        StartRereadTimer();
 
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples));
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
@@ -407,6 +476,7 @@ public sealed class RipViewModel : PageViewModel
                 : (encode ? "Rip failed: " : "Verify failed: ") + result.Error;
         }
         LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
+        StopRereadTimer();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
     }
