@@ -29,7 +29,7 @@ public sealed class VerifyResult
 public interface IRipService
 {
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
-    /// <paramref name="onLevels"/> receives real per-channel peak (L,R) of each read buffer.
+    /// <paramref name="onLevels"/> receives the real per-channel RMS loudness (L,R) of each read.
     /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
     VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
 
