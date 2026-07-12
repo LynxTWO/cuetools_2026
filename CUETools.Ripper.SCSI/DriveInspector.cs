@@ -280,10 +280,14 @@ namespace CUETools.Ripper.SCSI
             {
                 SpeedDescriptorList list;
                 if (dev.GetSpeed(out list) != Device.CommandStatus.Success || list == null) return;
+                // Guard against a malformed reply: a real optical drive tops out well under
+                // 200,000 KB/s (~48x CD / ~16x DVD / ~12x BD); ignore negative or absurd values
+                // (a high-bit speed field would otherwise show as a negative/garbage max speed).
+                const int SaneMax = 200000;
                 foreach (SpeedDescriptor s in list)
                 {
-                    if (s.ReadSpeed > caps.MaxReadKBps) caps.MaxReadKBps = s.ReadSpeed;
-                    if (s.WriteSpeed > caps.MaxWriteKBps) caps.MaxWriteKBps = s.WriteSpeed;
+                    if (s.ReadSpeed > caps.MaxReadKBps && s.ReadSpeed <= SaneMax) caps.MaxReadKBps = s.ReadSpeed;
+                    if (s.WriteSpeed > caps.MaxWriteKBps && s.WriteSpeed <= SaneMax) caps.MaxWriteKBps = s.WriteSpeed;
                 }
             }
             catch { /* some drives refuse GET PERFORMANCE with no media - leave speeds at 0 */ }
