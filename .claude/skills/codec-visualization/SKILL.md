@@ -49,14 +49,23 @@ predicts best, leaving the smallest residual.
 Tap **consecutive** PCM (not decimated - decimation destroys the sample-to-sample correlation the
 predictor needs). Reference pattern:
 
-- Rip: `LevelMeteringRipper` wraps the `ICDRipper`, and on each `Read` also hands a window of ~320
-  consecutive mono samples (normalized to [-1,1]) to an `onSamples` callback, throttled to ~40/s.
-  Threaded RipService -> `RipViewModel.SampleWindow` -> the scope's `Samples` DP.
+- Rip: `LevelMeteringRipper` wraps the `ICDRipper`, and on each `Read` hands a window of `WindowSize`
+  (16384) consecutive mono samples (normalized to [-1,1]) to an `onSamples` callback, throttled to
+  ~20ms. Threaded RipService -> `RipViewModel.SampleWindow` -> the scope's `Samples` DP.
 - Convert: `ConvertService.PreloadSource` decodes a short real snippet of the source (resolving a
   .cue/folder to its largest audio file) into windows; the VM loops them through the scope during
   the convert. Real source audio, no contention with the encoder.
 
-The scope keeps a rolling buffer and scrolls it; it runs the predictor on that buffer each frame.
+**Delivery cadence matters more than it looks.** The disc delivers audio in bursts (a read chunk,
+then nothing while the drive re-reads a hard sector), so if the scope consumes exactly what arrives
+each frame it "zips across, then waits" - a visible stutter. The fix is a **producer/consumer ring**:
+deliver a large window (16384) into a ring (`RingSize` ~96000, ~2s of headroom) and let the scope's
+render loop consume from it with an **exponential-follow** read pointer, not the raw arrival rate:
+`lag = write - read; read += (lag / tau) * dt`, clamped so it never passes the write head or falls
+more than `RingSize - Roll` behind. That decouples the smooth on-screen scroll from the bursty feed -
+the picture glides through the buffered audio while the drive stalls, then catches up. Measure a
+suspected stutter objectively (crop-hash run-lengths at ~15 fps), do not eyeball it; the "zip/wait"
+signature is long identical-frame runs punctuated by big jumps.
 
 ## What to draw (three things at once)
 
