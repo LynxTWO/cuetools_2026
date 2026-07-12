@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -21,11 +22,19 @@ public sealed record AlbumArt(string Url, byte[] Bytes, int Width, int Height, s
 /// </summary>
 public interface IAlbumArtService
 {
-    Task<AlbumArt?> FindHiRes(string artist, string album, CancellationToken ct = default);
+    /// <summary>Find the largest cover Apple has. When <paramref name="barcode"/> (the disc's UPC/EAN)
+    /// is given, look up that EXACT release first; otherwise (or if the UPC is unknown to Apple) fall
+    /// back to an artist+album text search.</summary>
+    Task<AlbumArt?> FindHiRes(string artist, string album, string? barcode = null, CancellationToken ct = default);
 
     /// <summary>Find hi-res art and re-encode it as JPEG downscaled so its longest side is at most
     /// <paramref name="maxSize"/> px (RIOT-matched). Returns null if nothing is found.</summary>
-    Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, CancellationToken ct = default);
+    Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, string? barcode = null, CancellationToken ct = default);
+
+    /// <summary>Downscale already-fetched image bytes to a JPEG whose longest side is at most
+    /// <paramref name="maxSize"/> px, using the RIOT-matching resampler. No network - lets a caller
+    /// that already fetched a master (for a preview) produce the embed copy without fetching twice.</summary>
+    byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 90);
 }
 
 public sealed class AlbumArtService : IAlbumArtService
@@ -33,14 +42,28 @@ public sealed class AlbumArtService : IAlbumArtService
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private static readonly Regex SizeToken = new(@"\d+x\d+bb", RegexOptions.Compiled);
 
-    public async Task<AlbumArt?> FindHiRes(string artist, string album, CancellationToken ct = default)
+    public async Task<AlbumArt?> FindHiRes(string artist, string album, string? barcode = null, CancellationToken ct = default)
     {
+        // UPC-exact first: the disc's barcode (MCN / release UPC) picks the exact Apple release, so the
+        // cover is guaranteed to match this pressing rather than a same-title search hit.
+        string upc = new string((barcode ?? "").Where(char.IsDigit).ToArray());
+        if (upc.Length >= 8)
+        {
+            var exact = await LookupAsync($"https://itunes.apple.com/lookup?upc={upc}&entity=album&limit=1", album, artist, ct);
+            if (exact != null) return exact;
+        }
+
         string term = Uri.EscapeDataString($"{artist} {album}".Trim());
         if (term.Length == 0) return null;
-        string search = $"https://itunes.apple.com/search?term={term}&entity=album&limit=5";
+        return await LookupAsync($"https://itunes.apple.com/search?term={term}&entity=album&limit=5", album, artist, ct);
+    }
 
+    // Run one iTunes query (search or upc lookup), take the top album result, and pull its largest
+    // master. Shared by both the UPC-exact and text-search paths.
+    private async Task<AlbumArt?> LookupAsync(string url, string album, string artist, CancellationToken ct)
+    {
         string json;
-        try { json = await Http.GetStringAsync(search, ct); }
+        try { json = await Http.GetStringAsync(url, ct); }
         catch { return null; }
 
         using var doc = JsonDocument.Parse(json);
@@ -65,12 +88,15 @@ public sealed class AlbumArtService : IAlbumArtService
             top.TryGetProperty("artistName", out var an) ? an.GetString() ?? artist : artist);
     }
 
-    public async Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, CancellationToken ct = default)
+    public async Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, string? barcode = null, CancellationToken ct = default)
     {
-        var art = await FindHiRes(artist, album, ct);
-        if (art == null) return null;
+        var art = await FindHiRes(artist, album, barcode, ct);
+        return art == null ? null : ResizeToJpeg(art.Bytes, maxSize, quality);
+    }
 
-        var src = Decode(art.Bytes);
+    public byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 90)
+    {
+        var src = Decode(source);
         if (src == null) return null;
         int w = src.PixelWidth, h = src.PixelHeight;
 

@@ -23,6 +23,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IReportStore _reports;
     private readonly IHistoryStore _history;
     private readonly CUEConfig _config;
+    private readonly IAlbumArtService _art;
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
     // (drive, offset, TOC) rather than just the AR/CTDB numbers.
@@ -190,7 +191,20 @@ public sealed class RipViewModel : PageViewModel
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
     public bool WriteLog { get => _config.createEACLOG; set { _config.createEACLOG = value; OnPropertyChanged(); } }
-    public bool EmbedArt { get => _config.embedAlbumArt; set { _config.embedAlbumArt = value; OnPropertyChanged(); } }
+    public bool EmbedArt { get => _config.embedAlbumArt; set { _config.embedAlbumArt = value; OnPropertyChanged(); if (value) TriggerArtFetch(); else ClearArt(); } }
+
+    // Hi-res cover preview: the largest Apple cover for this exact release (UPC-exact when the disc
+    // carries a barcode), shown before the rip and embedded when the rip runs. Falls back to the
+    // database cover when Apple has nothing. _coverBytes is the resized JPEG actually embedded.
+    private System.Windows.Media.ImageSource? _artPreview;
+    public System.Windows.Media.ImageSource? ArtPreview { get => _artPreview; private set { if (Set(ref _artPreview, value)) OnPropertyChanged(nameof(HasArtPreview)); } }
+    public bool HasArtPreview => _artPreview != null;
+    private string _artInfo = "";
+    public string ArtInfo { get => _artInfo; private set => Set(ref _artInfo, value); }
+    private bool _artLoading;
+    public bool ArtLoading { get => _artLoading; private set => Set(ref _artLoading, value); }
+    private byte[]? _coverBytes;
+    private System.Threading.CancellationTokenSource? _artCts;
 
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
@@ -201,7 +215,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config)
+    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art)
     {
         Title = "Rip";
         Group = "Work";
@@ -211,6 +225,7 @@ public sealed class RipViewModel : PageViewModel
         _reports = reports;
         _history = history;
         _config = config;
+        _art = art;
         _outputBaseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
 
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
@@ -309,6 +324,7 @@ public sealed class RipViewModel : PageViewModel
                 : "No disc in drive " + drive + ":";
             AlbumArtist = "";
             DiscInfoText = "";
+            ClearArt();
             StatusText = open ? "Tray open."
                 : nonAudio ? $"{details.CurrentProfile} loaded - insert an audio CD to rip."
                 : "Drive ready - insert an audio CD to begin.";
@@ -328,6 +344,7 @@ public sealed class RipViewModel : PageViewModel
             StatusText = info.Releases.Count > 0
                 ? $"Identified: {info.Artist} - {info.Album}. Ripping comes next."
                 : "Disc read; not found in the metadata databases (generic track names).";
+            TriggerArtFetch();   // look up the hi-res Apple cover for the preview + embed
         }
         OnPropertyChanged(nameof(SelectedRelease));
         OnPropertyChanged(nameof(HasReleases));
@@ -348,6 +365,77 @@ public sealed class RipViewModel : PageViewModel
         for (int i = 0; i < Tracks.Count; i++)
             if (mt != null && i < mt.Count && !string.IsNullOrWhiteSpace(mt[i].Title))
                 Tracks[i].Title = mt[i].Title;
+        TriggerArtFetch();   // the release (and its barcode) changed - refresh the cover
+    }
+
+    // Kick off a hi-res Apple cover lookup for the current release, cancelling any in-flight one.
+    // Runs when a disc is read, when the chosen release changes, or when Embed cover art is enabled.
+    private void TriggerArtFetch()
+    {
+        string album = _chosenMetadata?.Title ?? "";
+        string artist = _chosenMetadata?.Artist ?? "";
+        string barcode = _chosenMetadata?.Barcode ?? "";
+        if (!_config.embedAlbumArt) { ClearArt(); return; }
+        if (string.IsNullOrWhiteSpace(album) && string.IsNullOrWhiteSpace(artist)) { ClearArt(); return; }
+        _ = FetchArtAsync(artist, album, barcode);
+    }
+
+    private void ClearArt()
+    {
+        _artCts?.Cancel();
+        _coverBytes = null;
+        ArtPreview = null;
+        ArtInfo = "";
+        ArtLoading = false;
+    }
+
+    private async Task FetchArtAsync(string artist, string album, string barcode)
+    {
+        _artCts?.Cancel();
+        var cts = _artCts = new System.Threading.CancellationTokenSource();
+        var ct = cts.Token;
+        ArtLoading = true;
+        ArtPreview = null;
+        _coverBytes = null;
+        ArtInfo = "searching Apple...";
+        try
+        {
+            int max = Math.Max(200, _config.maxAlbumArtSize);
+            var art = await _art.FindHiRes(artist, album, barcode, ct);
+            if (ct.IsCancellationRequested) return;
+            if (art == null || art.Bytes.Length == 0)
+            {
+                ArtInfo = "no Apple cover - database cover will be used";
+                return;
+            }
+            // resize to the configured max with the RIOT-matched resampler (off the UI thread)
+            var jpeg = await Task.Run(() => _art.ResizeToJpeg(art.Bytes, max), ct);
+            if (ct.IsCancellationRequested) return;
+            _coverBytes = jpeg;
+            ArtPreview = MakeThumb(art.Bytes);
+            int outSide = Math.Min(max, Math.Max(art.Width, art.Height));
+            ArtInfo = $"Apple {art.Width}x{art.Height}" + (barcode.Length > 0 ? " (UPC-exact)" : "")
+                + $" -> {outSide}px" + (jpeg != null ? $", {jpeg.Length / 1024}KB JPEG" : "");
+        }
+        catch (OperationCanceledException) { }
+        catch { ArtInfo = "cover lookup failed - database cover will be used"; }
+        finally { if (!ct.IsCancellationRequested) ArtLoading = false; }
+    }
+
+    private static System.Windows.Media.ImageSource? MakeThumb(byte[] bytes)
+    {
+        try
+        {
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = 240;   // small preview, decoded once
+            bmp.StreamSource = new System.IO.MemoryStream(bytes);
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch { return null; }
     }
 
     // Ask the engine to stop the running rip/verify at the next safe point. The job's Task then
@@ -449,7 +537,8 @@ public sealed class RipViewModel : PageViewModel
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
+        byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
