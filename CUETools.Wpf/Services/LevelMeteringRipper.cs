@@ -14,7 +14,7 @@ namespace CUETools.Wpf.Services;
 /// </summary>
 public sealed class LevelMeteringRipper : ICDRipper
 {
-    private const int WindowSize = 320;    // contiguous frames handed to the codec scope
+    private const int WindowSize = 16384;  // contiguous frames handed to the codec scope per read
 
     private readonly ICDRipper _inner;
     private readonly Action<double, double> _onLevels;
@@ -45,10 +45,12 @@ public sealed class LevelMeteringRipper : ICDRipper
                 double full = 1 << (buffer.PCM.BitsPerSample - 1);
                 _onLevels(peakL / full, peakR / full);
 
-                // Hand the codec scope a window of CONSECUTIVE mono samples (not decimated) so the
-                // predictor it runs sees real sample-to-sample correlation - the residual it draws
-                // is then the true prediction error, not decoration. Throttled to ~40/s.
-                if (_onSamples != null && (DateTime.UtcNow - _lastPush).TotalMilliseconds >= 25)
+                // Hand the codec scope a big chunk of CONSECUTIVE mono samples (not decimated). We
+                // deliver a large slice, not a tiny snippet, so the scope has real audio to keep
+                // scrolling through during the long gaps between reads in secure mode (a Read() can
+                // block for seconds re-reading a hard sector). Light throttle (~20ms) so the burst
+                // reads - the ripper drains its buffer in ~3ms chunks - do not flood the dispatcher.
+                if (_onSamples != null && n > 0 && (DateTime.UtcNow - _lastPush).TotalMilliseconds >= 20)
                 {
                     int m = Math.Min(WindowSize, n);
                     var win = new float[m];
