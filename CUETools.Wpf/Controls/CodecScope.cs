@@ -44,6 +44,8 @@ public sealed class CodecScope : FrameworkElement
     // rolling window of the real audio (scrolls right-to-left as new windows arrive)
     private const int Roll = 640;
     private readonly float[] _roll = new float[Roll];
+    private readonly float[] _demo = new float[Roll];
+    private float[] _show;                       // _roll when real audio flows, else the idle demo
     private readonly float[] _pred = new float[Roll];
     private readonly float[] _resid = new float[Roll];
     private double _bitsEma = 16, _ratioEma = 1;
@@ -52,6 +54,7 @@ public sealed class CodecScope : FrameworkElement
 
     public CodecScope()
     {
+        _show = _roll;
         Loaded += (_, _) => CompositionTarget.Rendering += OnRendering;
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnRendering;
     }
@@ -85,8 +88,12 @@ public sealed class CodecScope : FrameworkElement
         if (w <= 0 || h <= 0) return;
         var info = CodecMath.Info(Codec);
 
-        // run the real predictor on the rolling window; residual + bits are the true figures
-        CodecMath.ComputeResidual(_roll, info.Predictor, _pred, _resid);
+        // real audio when it is flowing; a gentle demo when idle so the pipeline stays legible
+        if (CodecMath.HasSignal(_roll)) _show = _roll;
+        else { CodecMath.FillDemo(_demo, _phase); _show = _demo; }
+
+        // run the real predictor on the shown window; residual + bits are the true figures
+        CodecMath.ComputeResidual(_show, info.Predictor, _pred, _resid);
         double bits = info.Predictor == Pred.None ? 16.0 : CodecMath.BitsPerSample(_resid, info.Predictor);
         double ratio = Math.Max(0.02, Math.Min(1.0, bits / 16.0));
         _bitsEma += (bits - _bitsEma) * 0.12;
@@ -121,7 +128,7 @@ public sealed class CodecScope : FrameworkElement
     private void DrawStage(DrawingContext dc, int index, int count, Rect r, CodecMath.CodecInfo info)
     {
         bool isLast = index == count - 1;
-        if (index == 0) { Trace(dc, r, _roll, Teal, 1.6); return; }            // signal
+        if (index == 0) { Trace(dc, r, _show, Teal, 1.6); return; }            // signal
         if (info.Predictor == Pred.None) { StoreStage(dc, r); return; }        // WAV "store"
         if (isLast) { PackStage(dc, r, info.Packer); return; }                 // pack / range
         if (index == 1) { PredictStage(dc, r); return; }                      // predict / adapt / decorrelate
@@ -130,7 +137,7 @@ public sealed class CodecScope : FrameworkElement
 
     private void PredictStage(DrawingContext dc, Rect r)
     {
-        Trace(dc, r, _roll, Color.FromArgb(70, Teal.R, Teal.G, Teal.B), 1.3);  // real signal, faint
+        Trace(dc, r, _show, Color.FromArgb(70, Teal.R, Teal.G, Teal.B), 1.3);  // real signal, faint
         Trace(dc, r, _pred, Amber, 1.6);                                       // real prediction tracking it
     }
 
@@ -138,7 +145,7 @@ public sealed class CodecScope : FrameworkElement
     {
         // faint envelope of how big the signal was, so the small residual reads as "what's left"
         double mid = r.Top + r.Height / 2, amp = r.Height * 0.42;
-        double env = 0; for (int i = 0; i < Roll; i++) env = Math.Max(env, Math.Abs(_roll[i]));
+        double env = 0; for (int i = 0; i < Roll; i++) env = Math.Max(env, Math.Abs(_show[i]));
         double eh = Math.Min(amp, env * amp);
         var band = new SolidColorBrush(Color.FromArgb(22, Muted.R, Muted.G, Muted.B)); band.Freeze();
         dc.DrawRectangle(band, null, new Rect(r.Left + 5, mid - eh, r.Width - 10, eh * 2));
@@ -181,7 +188,7 @@ public sealed class CodecScope : FrameworkElement
 
     private void StoreStage(DrawingContext dc, Rect r)
     {
-        Trace(dc, r, _roll, Teal, 1.6);
+        Trace(dc, r, _show, Teal, 1.6);
         var tick = new Pen(new SolidColorBrush(Color.FromArgb(80, Muted.R, Muted.G, Muted.B)), 1); tick.Freeze();
         for (double bx = r.Left + 6; bx < r.Right - 4; bx += 7) dc.DrawLine(tick, new Point(bx, r.Bottom - 8), new Point(bx, r.Bottom - 4));
     }

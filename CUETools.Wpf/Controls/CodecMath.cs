@@ -98,6 +98,28 @@ public static class CodecMath
         }
     }
 
+    /// <summary>True if the buffer carries real audio (not silence) - i.e. samples are flowing.</summary>
+    public static bool HasSignal(float[] buf)
+    {
+        for (int i = 0; i < buf.Length; i++) if (buf[i] > 1e-3f || buf[i] < -1e-3f) return true;
+        return false;
+    }
+
+    /// <summary>Fill a gentle representative waveform for the IDLE teaser, before real audio flows.
+    /// Used only when no real samples have arrived; live views always run on the real buffer.</summary>
+    public static void FillDemo(float[] buf, double phase)
+    {
+        int n = buf.Length;
+        for (int i = 0; i < n; i++)
+        {
+            double t = (i - phase * 80.0) / n;
+            double a = t * 6.0 * Math.PI;
+            double v = 0.5 * Math.Sin(a) + 0.25 * Math.Sin(a * 2.02 + 0.6) + 0.12 * Math.Sin(a * 3.1 + 1.1);
+            v *= 0.7 + 0.3 * Math.Sin(t * 2.0);
+            buf[i] = (float)v;
+        }
+    }
+
     /// <summary>The Rice-code cost of the residual - the true bits/sample an encoder spends on this
     /// block (uncompressed PCM assumed 16-bit). Range coders do a hair better, but the residual size
     /// dominates and is what differs between codecs.</summary>

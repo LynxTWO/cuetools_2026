@@ -40,6 +40,8 @@ public sealed class ConvertScope : FrameworkElement
 
     private const int Roll = 640;
     private readonly float[] _roll = new float[Roll];
+    private readonly float[] _demo = new float[Roll];
+    private float[] _show;                       // _roll when real audio flows, else the idle demo
     private readonly float[] _predS = new float[Roll], _residS = new float[Roll];
     private readonly float[] _predT = new float[Roll], _residT = new float[Roll];
     private double _srcBitsEma = 12, _tgtBitsEma = 12;
@@ -48,6 +50,7 @@ public sealed class ConvertScope : FrameworkElement
 
     public ConvertScope()
     {
+        _show = _roll;
         Loaded += (_, _) => CompositionTarget.Rendering += OnRendering;
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnRendering;
     }
@@ -81,6 +84,10 @@ public sealed class ConvertScope : FrameworkElement
 
         var src = CodecMath.Info(SourceCodec);
         var tgt = CodecMath.Info(TargetCodec);
+
+        // real audio when it is flowing; a gentle demo when idle so the round trip stays legible
+        if (CodecMath.HasSignal(_roll)) _show = _roll;
+        else { CodecMath.FillDemo(_demo, _phase); _show = _demo; }
 
         // both formats' real compactness on the SAME reconstructed PCM
         double srcBits = Bits(src.Predictor, _predS, _residS);
@@ -116,7 +123,7 @@ public sealed class ConvertScope : FrameworkElement
 
         // PCM card: the real reconstructed audio, the shared currency of the round trip
         dc.PushClip(new RectangleGeometry(rPcm, 8, 8));
-        Trace(dc, rPcm, _roll, Teal, 1.6);
+        Trace(dc, rPcm, _show, Teal, 1.6);
         dc.Pop();
         Label(dc, rPcm, "PCM", "16.0 b/s");
 
@@ -134,7 +141,7 @@ public sealed class ConvertScope : FrameworkElement
     private double Bits(Pred kind, float[] pred, float[] resid)
     {
         if (kind == Pred.None) return 16.0;
-        CodecMath.ComputeResidual(_roll, kind, pred, resid);
+        CodecMath.ComputeResidual(_show, kind, pred, resid);
         return CodecMath.BitsPerSample(resid, kind);
     }
 
@@ -157,7 +164,7 @@ public sealed class ConvertScope : FrameworkElement
 
     private void StoreStage(DrawingContext dc, Rect r)
     {
-        Trace(dc, r, _roll, Amber, 1.4);
+        Trace(dc, r, _show, Amber, 1.4);
         var tick = new Pen(new SolidColorBrush(Color.FromArgb(80, Muted.R, Muted.G, Muted.B)), 1); tick.Freeze();
         for (double bx = r.Left + 6; bx < r.Right - 4; bx += 7) dc.DrawLine(tick, new Point(bx, r.Bottom - 8), new Point(bx, r.Bottom - 4));
     }
