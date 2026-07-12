@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
 
@@ -51,6 +52,15 @@ public sealed class ConvertViewModel : PageViewModel
     private string _selectedFormat;
     public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
 
+    // the source codec (for the round-trip scope) - guessed from the extension, refined by the
+    // real decode when the convert runs
+    private string _sourceCodec = "flac";
+    public string SourceCodec { get => _sourceCodec; private set => Set(ref _sourceCodec, value); }
+
+    // a window of real decoded source PCM, fed to the ConvertScope during a convert
+    private float[]? _sampleWindow;
+    public float[]? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
+
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
 
@@ -97,7 +107,15 @@ public sealed class ConvertViewModel : PageViewModel
     {
         SourcePath = path;
         HasResult = false;
+        SourceCodec = GuessFormat(path);
         StatusText = "Ready to convert: " + path;
+    }
+
+    // the source format for the round-trip label, before we decode it for real
+    private static string GuessFormat(string path)
+    {
+        string ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+        return ext.Length > 0 && ext != "cue" && ext != "m3u" ? ext : "flac";
     }
 
     private async Task RunAsync()
@@ -113,7 +131,22 @@ public sealed class ConvertViewModel : PageViewModel
         void Report(double frac, string status)
             => dispatcher?.BeginInvoke(new Action(() => { Progress = frac; StatusText = status; }));
 
+        // decode a real snippet of the source up front, then loop it through the round-trip scope
+        // while the convert runs (no contention with the encoder, and it is the real source audio)
+        var preview = await Task.Run(() => _convert.PreloadSource(path));
+        if (!string.IsNullOrEmpty(preview.SourceFormat)) SourceCodec = preview.SourceFormat;
+        var windows = preview.Windows;
+        DispatcherTimer? feed = null;
+        if (windows.Count > 0)
+        {
+            int wi = 0;
+            feed = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(28) };
+            feed.Tick += (_, _) => { SampleWindow = windows[wi % windows.Count]; wi++; };
+            feed.Start();
+        }
+
         ConvertResult result = await Task.Run(() => _convert.Convert(path, fmt, outDir, Report));
+        feed?.Stop();
 
         Progress = result.Ok ? 1 : Progress;
         if (result.Ok)
