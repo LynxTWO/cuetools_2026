@@ -41,11 +41,18 @@ public sealed class CodecScope : FrameworkElement
     private static readonly Typeface Face = new("Segoe UI");
     private static readonly Typeface Mono = new("Cascadia Mono, Consolas");
 
-    // rolling window of the real audio (scrolls right-to-left as new windows arrive)
-    private const int Roll = 640;
-    private readonly float[] _roll = new float[Roll];
+    // The ripper delivers audio in BURSTS (reads a buffer fast, then pauses while the drive
+    // re-reads in secure mode). So we do not scroll in lockstep with delivery - we append into a
+    // ring and let the render loop CONSUME it at a steady, servo-controlled rate. That turns the
+    // "run fast / freeze / run fast" lurch into a smooth scroll.
+    private const int Roll = 640;         // window shown / fed to the predictor
+    private const int RingSize = 8192;    // ~0.6s of headroom to absorb the bursts
+    private readonly float[] _ring = new float[RingSize];
+    private long _ringWrite;              // total real samples appended
+    private double _readPos;              // smooth consume position (samples)
+    private readonly float[] _view = new float[Roll];   // window the predictor + drawing use
     private readonly float[] _demo = new float[Roll];
-    private float[] _show;                       // _roll when real audio flows, else the idle demo
+    private float[] _show;                // _view when real audio flows, else the idle demo
     private readonly float[] _pred = new float[Roll];
     private readonly float[] _resid = new float[Roll];
     private double _bitsEma = 16, _ratioEma = 1;
@@ -54,7 +61,7 @@ public sealed class CodecScope : FrameworkElement
 
     public CodecScope()
     {
-        _show = _roll;
+        _show = _view;
         Loaded += (_, _) => CompositionTarget.Rendering += OnRendering;
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnRendering;
     }
@@ -64,12 +71,11 @@ public sealed class CodecScope : FrameworkElement
         if (e.NewValue is float[] win && win.Length > 0) ((CodecScope)d).Push(win);
     }
 
-    // shift the rolling buffer left and append the new real window
+    // append the new real window to the ring (producer); the render loop consumes it steadily
     private void Push(float[] win)
     {
-        int m = Math.Min(win.Length, Roll);
-        if (m < Roll) Array.Copy(_roll, m, _roll, 0, Roll - m);
-        Array.Copy(win, Math.Max(0, win.Length - m), _roll, Roll - m, m);
+        for (int i = 0; i < win.Length; i++) _ring[(int)((_ringWrite + i) % RingSize)] = win[i];
+        _ringWrite += win.Length;
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -79,7 +85,35 @@ public sealed class CodecScope : FrameworkElement
         double dt = _last == default ? 0 : (t - _last).TotalSeconds;
         _last = t;
         _phase += dt * (Active ? 3.0 : 1.0);
+        AdvanceRead(dt);
         InvalidateVisual();
+    }
+
+    // Steady consumer with a gentle servo: consume near the average delivery rate, speeding up a
+    // little when the buffer builds after a burst and coasting slowly when it drains during a
+    // pause - so the scroll never lurches or hard-freezes.
+    private void AdvanceRead(double dt)
+    {
+        if (dt <= 0 || dt > 0.25) return;
+        double lag = _ringWrite - _readPos;
+        const double baseRate = 12800.0, target = RingSize * 0.5;  // ~ the 320-sample / 25ms feed
+        double rate = baseRate * Math.Max(0.25, Math.Min(2.5, lag / target));
+        _readPos += rate * dt;
+        if (_readPos > _ringWrite) _readPos = _ringWrite;                          // caught up: hold
+        double floorPos = _ringWrite - (RingSize - Roll);
+        if (_readPos < floorPos) _readPos = floorPos;                              // overflowed: skip old
+        if (_readPos < Roll) _readPos = Roll;
+    }
+
+    // extract the Roll-length window ending at the smooth read position
+    private void BuildView()
+    {
+        long end = (long)_readPos;
+        for (int i = 0; i < Roll; i++)
+        {
+            long idx = end - Roll + i;
+            _view[i] = idx >= 0 ? _ring[(int)(((idx % RingSize) + RingSize) % RingSize)] : 0f;
+        }
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -89,7 +123,8 @@ public sealed class CodecScope : FrameworkElement
         var info = CodecMath.Info(Codec);
 
         // real audio when it is flowing; a gentle demo when idle so the pipeline stays legible
-        if (CodecMath.HasSignal(_roll)) _show = _roll;
+        BuildView();
+        if (CodecMath.HasSignal(_view)) _show = _view;
         else { CodecMath.FillDemo(_demo, _phase); _show = _demo; }
 
         // run the real predictor on the shown window; residual + bits are the true figures
