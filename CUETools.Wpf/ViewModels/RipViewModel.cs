@@ -140,6 +140,11 @@ public sealed class RipViewModel : PageViewModel
     private double _levelR;
     public double LevelR { get => _levelR; private set => Set(ref _levelR, value); }
 
+    // a window of real consecutive PCM samples, fed to the codec scope so it runs the real
+    // predictor math on the actual audio being ripped
+    private float[]? _sampleWindow;
+    public float[]? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
+
     private const double SpeedCapX = 12.0;
     private double _discSeconds;
     private double _lastSpeedFrac;
@@ -358,11 +363,13 @@ public sealed class RipViewModel : PageViewModel
             => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac); }));
         void Levels(double l, double r)
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
+        void Samples(float[] win)
+            => dispatcher?.BeginInvoke(new Action(() => SampleWindow = win));
 
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels) : _rip.RunVerify(drive, cq, meta, Report, Levels));
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)

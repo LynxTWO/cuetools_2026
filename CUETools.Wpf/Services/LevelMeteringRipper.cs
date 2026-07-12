@@ -14,13 +14,18 @@ namespace CUETools.Wpf.Services;
 /// </summary>
 public sealed class LevelMeteringRipper : ICDRipper
 {
+    private const int WindowSize = 320;    // contiguous frames handed to the codec scope
+
     private readonly ICDRipper _inner;
     private readonly Action<double, double> _onLevels;
+    private readonly Action<float[]>? _onSamples;
+    private DateTime _lastPush = DateTime.MinValue;
 
-    public LevelMeteringRipper(ICDRipper inner, Action<double, double> onLevels)
+    public LevelMeteringRipper(ICDRipper inner, Action<double, double> onLevels, Action<float[]>? onSamples = null)
     {
         _inner = inner;
         _onLevels = onLevels;
+        _onSamples = onSamples;
     }
 
     public int Read(AudioBuffer buffer, int maxLength)
@@ -39,6 +44,19 @@ public sealed class LevelMeteringRipper : ICDRipper
                 }
                 double full = 1 << (buffer.PCM.BitsPerSample - 1);
                 _onLevels(peakL / full, peakR / full);
+
+                // Hand the codec scope a window of CONSECUTIVE mono samples (not decimated) so the
+                // predictor it runs sees real sample-to-sample correlation - the residual it draws
+                // is then the true prediction error, not decoration. Throttled to ~40/s.
+                if (_onSamples != null && (DateTime.UtcNow - _lastPush).TotalMilliseconds >= 25)
+                {
+                    int m = Math.Min(WindowSize, n);
+                    var win = new float[m];
+                    float inv = (float)(1.0 / full);
+                    for (int i = 0; i < m; i++) win[i] = ((s[i, 0] + s[i, 1]) * 0.5f) * inv;
+                    _onSamples(win);
+                    _lastPush = DateTime.UtcNow;
+                }
             }
         }
         catch { /* metering is best-effort; never disturb the rip */ }
