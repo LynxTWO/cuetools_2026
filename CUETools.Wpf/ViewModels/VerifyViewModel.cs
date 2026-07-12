@@ -72,6 +72,22 @@ public sealed class VerifyViewModel : PageViewModel
     private bool _canRepair;
     public bool CanRepair { get => _canRepair; private set { if (Set(ref _canRepair, value)) CommandManager.InvalidateRequerySuggested(); } }
 
+    // CTDB Reed-Solomon repair scope. Shown once a verify (or repair) turns up real recoverable
+    // damage; every field below is the true CDRepairFix data, not a mock.
+    private bool _showRepair;
+    public bool ShowRepair { get => _showRepair; private set => Set(ref _showRepair, value); }
+    private bool _repairActive;      // the repair write is running -> sweep animates against Progress
+    public bool RepairActive { get => _repairActive; private set => Set(ref _repairActive, value); }
+    private bool _repairApplied;     // the repair pass rewrote the audio
+    public bool RepairApplied { get => _repairApplied; private set => Set(ref _repairApplied, value); }
+    private bool _repairRecoverable; // parity is sufficient to reconstruct the damage
+    public bool RepairRecoverable { get => _repairRecoverable; private set => Set(ref _repairRecoverable, value); }
+    private int _repairSamples; public int RepairSamples { get => _repairSamples; private set => Set(ref _repairSamples, value); }
+    private int _repairSectors; public int RepairSectors { get => _repairSectors; private set => Set(ref _repairSectors, value); }
+    private int _repairNpar; public int RepairNpar { get => _repairNpar; private set => Set(ref _repairNpar, value); }
+    private double[] _repairMap = Array.Empty<double>(); public double[] RepairMap { get => _repairMap; private set => Set(ref _repairMap, value); }
+    private string _repairRanges = ""; public string RepairRanges { get => _repairRanges; private set => Set(ref _repairRanges, value); }
+
     public ICommand BrowseFileCommand { get; }
     public ICommand BrowseFolderCommand { get; }
     public ICommand VerifyCommand { get; }
@@ -98,6 +114,8 @@ public sealed class VerifyViewModel : PageViewModel
         SourcePath = path;
         HasResult = false;
         CanRepair = false;
+        ShowRepair = false;
+        RepairApplied = false;
         StatusText = "Ready to verify: " + path;
     }
 
@@ -110,6 +128,8 @@ public sealed class VerifyViewModel : PageViewModel
         IsBusy = true;
         Progress = 0;
         HasResult = false;
+        // repairing: keep the scope up and animate its sweep against the real repair progress
+        RepairActive = repair && ShowRepair;
         StatusText = repair ? "Repairing from CTDB parity..." : "Verifying against AccurateRip + CTDB...";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
@@ -131,7 +151,19 @@ public sealed class VerifyViewModel : PageViewModel
                 : result.ArTotal > 0 ? $"not accurate ({result.ArConfidence} / {result.ArTotal})" : "not in database";
             CtdbText = result.CtdbConfidence > 0 ? $"verified (confidence {result.CtdbConfidence})"
                 : result.CanRecover ? "errors found - repairable from parity" : "not found";
-            CanRepair = result.HasErrors && result.CanRecover;
+            CanRepair = result.HasErrors && result.CanRecover && !result.RepairApplied;
+
+            // Feed the repair scope the real CDRepairFix numbers. Show it whenever there is genuine
+            // recoverable damage or a repair was just applied; a clean verify leaves it hidden.
+            RepairSamples = result.RepairSamples;
+            RepairSectors = result.RepairSectors;
+            RepairNpar = result.RepairNpar;
+            RepairMap = result.RepairSectorMap;
+            RepairRanges = result.RepairRanges;
+            RepairApplied = result.RepairApplied;
+            RepairRecoverable = result.CanRecover && result.HasErrors;
+            ShowRepair = result.RepairSectors > 0 || result.RepairApplied;
+
             StatusText = result.Status;
             PublishReport(repair, path, result);
         }
@@ -139,6 +171,7 @@ public sealed class VerifyViewModel : PageViewModel
         {
             StatusText = (repair ? "Repair failed: " : "Verify failed: ") + result.Error;
         }
+        RepairActive = false;
         IsBusy = false;
     }
 

@@ -20,6 +20,18 @@ public sealed class VerifyFilesResult
     public bool HasErrors { get; init; }
     public bool CanRecover { get; init; }
     public string Source { get; init; } = "";
+
+    // CTDB Reed-Solomon repair detail, read straight off the matching DBEntry.repair after the verify
+    // pass (the same data the destructive repair would apply). All real: RepairSamples is the count of
+    // 16-bit samples the parity can/did reconstruct, RepairSectorMap is a downsampled view of exactly
+    // which sectors were damaged (from AffectedSectorArray), RepairNpar the parity depth used.
+    public int RepairSamples { get; init; }
+    public int RepairSectors { get; init; }
+    public int RepairTotalSectors { get; init; }
+    public int RepairNpar { get; init; }
+    public double[] RepairSectorMap { get; init; } = System.Array.Empty<double>();
+    public string RepairRanges { get; init; } = "";
+    public bool RepairApplied { get; init; }   // true after the repair pass actually rewrote the audio
 }
 
 /// <summary>Verify and repair existing audio files (a .cue, a single file, or a folder) against
@@ -57,7 +69,7 @@ public sealed class VerifyService : IVerifyService
             string status = cue.Go();
             onProgress(1, status);
 
-            return Gather(cue, status, path, ok: true, error: "");
+            return Gather(cue, status, path, ok: true, error: "", applied: false);
         }
         catch (Exception ex)
         {
@@ -83,7 +95,7 @@ public sealed class VerifyService : IVerifyService
             string status = cue.ExecuteScript(repair);
             onProgress(1, status);
 
-            return Gather(cue, status, path, ok: true, error: "");
+            return Gather(cue, status, path, ok: true, error: "", applied: true);
         }
         catch (Exception ex)
         {
@@ -91,13 +103,14 @@ public sealed class VerifyService : IVerifyService
         }
     }
 
-    private static VerifyFilesResult Gather(CUESheet cue, string status, string path, bool ok, string error)
+    private static VerifyFilesResult Gather(CUESheet cue, string status, string path, bool ok, string error, bool applied)
     {
         int arConf = 0, arTotal = 0;
         try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); } catch { }
 
         int ctConf = 0, ctTotal = 0;
         bool hasErrors = false, canRecover = false;
+        DBEntry rep = null;
         try
         {
             ctConf = cue.CTDB.Confidence;
@@ -106,9 +119,39 @@ public sealed class VerifyService : IVerifyService
             {
                 if (e.hasErrors) hasErrors = true;
                 if (e.canRecover) canRecover = true;
+                // the entry we can actually reconstruct from (has real corrections computed)
+                if (rep == null && e.hasErrors && e.canRecover && e.repair != null) rep = e;
             }
+            if (rep == null) { var se = cue.CTDB.SelectedEntry; if (se != null && se.repair != null && se.hasErrors) rep = se; }
         }
         catch { }
+
+        // Pull the real Reed-Solomon repair detail off the chosen entry: how many samples parity can
+        // reconstruct, the parity depth, and the exact damaged-sector map (downsampled for drawing).
+        int repSamples = 0, repSectors = 0, repTotal = 0, repNpar = 0;
+        double[] repMap = System.Array.Empty<double>();
+        string repRanges = "";
+        if (rep != null)
+        {
+            try
+            {
+                var fx = rep.repair;
+                repSamples = fx.CorrectableErrors;
+                repNpar = rep.Npar;
+                var arr = fx.AffectedSectorArray;   // one bit per CD sector, true = a sample there was corrected
+                repTotal = arr.Length;
+                const int B = 200;
+                repMap = new double[B];
+                int hit = 0;
+                for (int i = 0; i < arr.Length; i++)
+                    if (arr[i]) { hit++; repMap[(int)((long)i * B / System.Math.Max(1, arr.Length))] += 1; }
+                repSectors = hit;
+                double per = System.Math.Max(1.0, (double)arr.Length / B);
+                for (int b = 0; b < B; b++) repMap[b] = System.Math.Min(1.0, repMap[b] / per);
+                try { repRanges = fx.AffectedSectors; } catch { }
+            }
+            catch { }
+        }
 
         return new VerifyFilesResult
         {
@@ -125,7 +168,14 @@ public sealed class VerifyService : IVerifyService
             Accurate = arConf > 0,
             HasErrors = hasErrors,
             CanRecover = canRecover,
-            Source = path
+            Source = path,
+            RepairSamples = repSamples,
+            RepairSectors = repSectors,
+            RepairTotalSectors = repTotal,
+            RepairNpar = repNpar,
+            RepairSectorMap = repMap,
+            RepairRanges = repRanges,
+            RepairApplied = applied && rep != null
         };
     }
 
