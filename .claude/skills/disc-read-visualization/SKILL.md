@@ -25,7 +25,9 @@ dependency properties the view-model marshals real data into:
 | `RepairScope` | CTDB Reed-Solomon parity reconstruction (damage map, RS pipeline) | `CDRepairFix` |
 | `VuMeter` | read level, per-channel | RMS of the read audio |
 | `SpeedGraph` | read speed vs realtime | read-progress delta |
-| `DiscReadMap` | inside-out read position | rip progress fraction |
+| `DiscModel3D` | 3D CD + laser reading the spiral; zooms to real damage | rip progress + re-read |
+| `LayerCrossSection` | the CD layer stack + laser path (explore mode) | static CD spec |
+| `DiscReadMap` | inside-out read position (the 2D / weak-hardware fallback) | rip progress fraction |
 
 ## Re-read (RereadScope): the drive's retry loop
 
@@ -66,6 +68,30 @@ they are populated during the **Verify** pass (`DoVerify`), before any destructi
   and lights only on Repair.** States: recoverable (amber) -> repairing (green sweep tied to the real
   repair progress) -> repaired (green).
 
+## The 3D disc (DiscModel3D)
+
+A real 3D CD (a `Viewport3D` subclass, GPU-rasterized, built-in - no native dependency, and it IS
+the weak-hardware fallback: `RenderCapability.Tier >> 16` picks the 2D `DiscReadMap` on tier 0).
+
+- **Read position is real, via true CD geometry.** `radius(f) = sqrt(rInner^2 + f*(rOuter^2 -
+  rInner^2))` (inner data ~25 mm, outer ~58 mm) - an EQUAL-AREA mapping, so a linear read fraction
+  moves the laser at constant data density (the CLV truth). A consequence worth showing: only ~10% of
+  the data sits before 50% radius, because most of a CD's area is near the rim. The read glow (an
+  emissive radial-gradient brush, planar UVs so it maps to world radius) grows inside-out to the
+  laser.
+- **Zoom-to-damage** reuses the re-read data: on `RereadActive` a `_zoom` lerps 0..1 and the camera
+  interpolates from the overview pose to a close pose above `radius(RereadFrac)`; a pulsing marker +
+  amber edge mark the spot, red when `Unreadable` (a window that exhausted retries with errors:
+  `reReads == maxReReads && errors > 0`). Stop-on-unrecoverable holds the red zoom until the job ends.
+- **Surface is procedural textures, not shaders.** WPF `ShaderEffect` is SM3 / 2D-post-only, so the
+  diffraction rainbow and the (representative, not literal 1.6 um) data-track spiral are generated
+  into `WriteableBitmap`s once and layered as emissive materials; the track opacity rises with zoom.
+- **Explore mode** (`Interactive`): a free-orbit camera (spherical az/el/dist) driven by `Orbit()` /
+  `Zoom()` from mouse drag + wheel, for the "How a CD Works" lesson page with the `LayerCrossSection`.
+- **Honesty:** the read position, re-read back-track, and CLV are real; the pits and the diffraction
+  are representative at the correct scale, not this disc's actual bits (a caption says so). Damage is
+  labeled by outcome, never by a physical cause the drive cannot report.
+
 ## VU and speed
 
 - **VU is RMS, not peak.** Peak pins at full-scale for any loud music (needle frozen at top); RMS
@@ -102,6 +128,10 @@ live window). See `scratchpad/RereadRender`, `scratchpad/RepairRender`.
   -> a real `CDRepairFix` with real `CorrectableErrors` / `AffectedSectorArray`. Corrupt a few
   contiguous regions and confirm they come back as the expected `AffectedSectors` time ranges. See
   `scratchpad/RepairReal`.
+- **3D disc**: unlike the 2D `CompositionTarget` controls, `Viewport3D` / 3D content DOES compose
+  under a bare `RenderTargetBitmap`, so it verifies fully off-screen - render at several `Progress` /
+  `RereadFrac` / `Interactive` orbit states and check the laser radius and camera respond. See
+  `scratchpad/DiscRender`. Then confirm the live zoom-to-damage on a pin-holed disc.
 - Measure a suspected stutter/hang objectively with crop-hash run-lengths at ~15 fps, not by eye.
 
 ## Extending
