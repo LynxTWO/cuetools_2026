@@ -14,4 +14,10 @@ public sealed class AppSettings
     /// <summary>Keep the computer awake (no sleep, no display timeout) while a rip or verify runs,
     /// so a long secure rip is not cut short by the machine sleeping. On by default.</summary>
     public bool PreventSleepDuringRip { get; set; } = true;
+
+    /// <summary>Stop the rip when the drive exhausts its retries on a sector and still cannot read it,
+    /// instead of finishing and leaving that spot unread. Off by default (today's behaviour is to
+    /// carry on and mark the bad sectors, then let CTDB parity try to fill them). When on, the 3D disc
+    /// holds zoomed on the failed spot with a flashing marker until you eject or stop.</summary>
+    public bool StopOnUnrecoverable { get; set; } = false;
 }

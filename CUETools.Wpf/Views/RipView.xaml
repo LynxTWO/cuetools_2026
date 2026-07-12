@@ -98,7 +98,8 @@
         <StackPanel VerticalAlignment="Top">
           <ctl:DiscModel3D Width="216" Height="216" HorizontalAlignment="Center"
                            Progress="{Binding RipProgress, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"
-                           RereadActive="{Binding RereadActive, Mode=OneWay}" RereadFrac="{Binding RereadFrac, Mode=OneWay}"/>
+                           RereadActive="{Binding RereadActive, Mode=OneWay}" RereadFrac="{Binding RereadFrac, Mode=OneWay}"
+                           Unreadable="{Binding Unreadable, Mode=OneWay}"/>
           <TextBlock Text="reading inside-out" FontFamily="{StaticResource Mono}" FontSize="10" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,0"/>
           <Border Margin="0,16,0,0" Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="10" Padding="11,9">
             <StackPanel>
