@@ -30,8 +30,6 @@ public sealed class VuMeter : FrameworkElement
     private const double Attack = 0.35, Decay = 0.06;
 
     private double _l, _r;   // smoothed needle deflection 0..1
-    private double _lastL = -1, _lastR = -1;
-    private int _staleL, _staleR;
 
     public VuMeter()
     {
@@ -41,24 +39,18 @@ public sealed class VuMeter : FrameworkElement
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        // Levels arrive one per disc read, which in secure mode comes in bursts with multi-second
-        // gaps while the drive re-reads a hard sector. If the level has not changed for a few
-        // frames the read has paused, so let the needle RELEASE (decay) like a real analog VU
-        // instead of freezing at the last value.
-        if (LevelL != _lastL) { _lastL = LevelL; _staleL = 0; } else _staleL++;
-        if (LevelR != _lastR) { _lastR = LevelR; _staleR = 0; } else _staleR++;
-        double tL = Active ? Deflection(LevelL) * Stale(_staleL) : 0;
-        double tR = Active ? Deflection(LevelR) * Stale(_staleR) : 0;
+        // The needle HOLDS its level during a read gap (the level DP keeps its last value while the
+        // drive re-reads a hard sector) rather than falling. Falling during gaps made the meter
+        // mirror the read-speed graph, which dips at exactly the same moments; holding keeps the
+        // Read Level about the MUSIC's loudness, distinct from the Read Speed.
+        double tL = Active ? Deflection(LevelL) : 0;
+        double tR = Active ? Deflection(LevelR) : 0;
         _l += (tL - _l) * (tL > _l ? Attack : Decay);
         _r += (tR - _r) * (tR > _r ? Attack : Decay);
         // stop repainting once fully settled at rest
         if (_l < 0.0005 && _r < 0.0005 && tL == 0 && tR == 0) { _l = _r = 0; return; }
         InvalidateVisual();
     }
-
-    // 1.0 while levels are fresh; eases toward 0 after ~100ms without an update (a read gap),
-    // so the needle drifts down naturally during a pause instead of holding.
-    private static double Stale(int frames) => frames <= 6 ? 1.0 : Math.Pow(0.94, frames - 6);
 
     // Map a 0..1 linear peak onto needle deflection with a dB-like VU scale (-40 dB .. 0 dB).
     private static double Deflection(double level)
