@@ -46,7 +46,7 @@ public sealed class CodecScope : FrameworkElement
     // ring and let the render loop CONSUME it at a steady, servo-controlled rate. That turns the
     // "run fast / freeze / run fast" lurch into a smooth scroll.
     private const int Roll = 640;         // window shown / fed to the predictor
-    private const int RingSize = 8192;    // ~0.6s of headroom to absorb the bursts
+    private const int RingSize = 96000;   // ~2s of headroom to scroll through during long reads
     private readonly float[] _ring = new float[RingSize];
     private long _ringWrite;              // total real samples appended
     private double _readPos;              // smooth consume position (samples)
@@ -96,10 +96,13 @@ public sealed class CodecScope : FrameworkElement
     {
         if (dt <= 0 || dt > 0.25) return;
         double lag = _ringWrite - _readPos;
-        const double baseRate = 12800.0, target = RingSize * 0.5;  // ~ the 320-sample / 25ms feed
-        double rate = baseRate * Math.Max(0.25, Math.Min(2.5, lag / target));
-        _readPos += rate * dt;
-        if (_readPos > _ringWrite) _readPos = _ringWrite;                          // caught up: hold
+        // Exponential follow: scroll quickly right after a read delivers a big chunk, ease off as
+        // the buffer runs low during a long secure-mode re-read. rate -> 0 as it nears the head, so
+        // it never overtakes and never hard-freezes - it just keeps flowing, slower, until the next
+        // chunk arrives. tau sets how far behind live it trails (~1.2s).
+        const double tau = 1.2;
+        _readPos += (lag / tau) * dt;
+        if (_readPos > _ringWrite) _readPos = _ringWrite;
         double floorPos = _ringWrite - (RingSize - Roll);
         if (_readPos < floorPos) _readPos = floorPos;                              // overflowed: skip old
         if (_readPos < Roll) _readPos = Roll;
