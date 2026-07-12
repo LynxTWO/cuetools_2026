@@ -47,6 +47,7 @@ public partial class App : Application
         services.AddSingleton<PageViewModel, ReportViewModel>();
         services.AddSingleton<PageViewModel, DriveViewModel>();
         services.AddSingleton<PageViewModel, SettingsViewModel>();
+        services.AddSingleton<PageViewModel, ExploreViewModel>();
 
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();

@@ -15,6 +15,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
     public DataTemplate? DriveTemplate { get; set; }
     public DataTemplate? ReportTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
+    public DataTemplate? ExploreTemplate { get; set; }
     public DataTemplate? PlaceholderTemplate { get; set; }
 
     public override DataTemplate? SelectTemplate(object item, DependencyObject container) => item switch
@@ -26,6 +27,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
         DriveViewModel => DriveTemplate,
         ReportViewModel => ReportTemplate,
         SettingsViewModel => SettingsTemplate,
+        ExploreViewModel => ExploreTemplate,
         _ => PlaceholderTemplate
     };
 }

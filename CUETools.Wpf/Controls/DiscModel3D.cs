@@ -31,12 +31,29 @@ public sealed class DiscModel3D : Viewport3D
         nameof(RereadFrac), typeof(double), typeof(DiscModel3D), new PropertyMetadata(0.0));
     public static readonly DependencyProperty UnreadableProperty = DependencyProperty.Register(
         nameof(Unreadable), typeof(bool), typeof(DiscModel3D), new PropertyMetadata(false));
+    // Explore mode (stage 2): free orbit + zoom via the mouse, no read/damage camera behaviour.
+    public static readonly DependencyProperty InteractiveProperty = DependencyProperty.Register(
+        nameof(Interactive), typeof(bool), typeof(DiscModel3D), new PropertyMetadata(false));
 
     public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
     public bool RereadActive { get => (bool)GetValue(RereadActiveProperty); set => SetValue(RereadActiveProperty, value); }
     public double RereadFrac { get => (double)GetValue(RereadFracProperty); set => SetValue(RereadFracProperty, value); }
     public bool Unreadable { get => (bool)GetValue(UnreadableProperty); set => SetValue(UnreadableProperty, value); }
+    public bool Interactive { get => (bool)GetValue(InteractiveProperty); set => SetValue(InteractiveProperty, value); }
+
+    // Orbit state for explore mode (spherical: azimuth, elevation, distance).
+    private double _az = -Math.PI / 2, _el = 0.9, _dist = 150;
+
+    /// <summary>Explore mode: orbit the camera by mouse-drag deltas.</summary>
+    public void Orbit(double dAz, double dEl)
+    {
+        _az += dAz;
+        _el = Math.Max(0.12, Math.Min(1.52, _el + dEl));   // keep above the disc, below straight-down
+    }
+
+    /// <summary>Explore mode: dolly the camera in/out (factor &gt; 1 zooms out).</summary>
+    public void Zoom(double factor) => _dist = Math.Max(18, Math.Min(320, _dist * factor));
 
     // Real CD geometry, in millimetres (used only as proportions).
     private const double RHole = 7.5, RData0 = 25.0, RDataN = 58.0, REdge = 60.0;
@@ -151,6 +168,19 @@ public sealed class DiscModel3D : Viewport3D
         double dt = Math.Min(0.05, (now - _last).TotalSeconds);
         _last = now;
 
+        // Explore mode: free-orbit camera, a slow idle spin, data tracks that emerge as you zoom in.
+        if (Interactive)
+        {
+            _spinAngle = (_spinAngle + dt * 15) % 360;
+            ((AxisAngleRotation3D)_spin.Rotation).Angle = _spinAngle;
+            UpdateOrbitCamera();
+            _tracks.Opacity = Math.Max(0.14, Math.Min(0.92, (175 - _dist) / 155));
+            RebuildSurfaceStops(0);
+            _markerScale.ScaleX = _markerScale.ScaleY = _markerScale.ScaleZ = 0;
+            _laserPos.OffsetZ = RData0;
+            return;
+        }
+
         if (Active)
         {
             // the disc spins (visual cue; CLV would vary with radius, shown once pits give it texture)
@@ -169,6 +199,15 @@ public sealed class DiscModel3D : Viewport3D
 
         RebuildSurfaceStops(Progress);
         PlaceLaser();
+    }
+
+    private void UpdateOrbitCamera()
+    {
+        double x = _dist * Math.Cos(_el) * Math.Cos(_az);
+        double y = _dist * Math.Sin(_el);
+        double z = _dist * Math.Cos(_el) * Math.Sin(_az);
+        _cam.Position = new Point3D(x, y, z);
+        _cam.LookDirection = new Vector3D(-x, -y, -z);
     }
 
     private void UpdateCamera()
