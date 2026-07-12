@@ -77,6 +77,17 @@
               <DockPanel Margin="0,3,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCue}"/><TextBlock Text="Create .cue sheet" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
               <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteLog}"/><TextBlock Text="Write rip log" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
               <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedArt}"/><TextBlock Text="Embed cover art" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
+              <!-- preview of the exact cover to be embedded: the largest Apple master (UPC-exact when
+                   the disc carries a barcode), resized with the RIOT-matched filter; database cover if none -->
+              <StackPanel Margin="0,10,0,0" Visibility="{Binding EmbedArt, Converter={StaticResource BoolVis}}">
+                <Border Width="132" Height="132" HorizontalAlignment="Left" CornerRadius="6" ClipToBounds="True"
+                        Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1"
+                        Visibility="{Binding HasArtPreview, Converter={StaticResource BoolVis}}">
+                  <Image Source="{Binding ArtPreview}" Stretch="UniformToFill"/>
+                </Border>
+                <TextBlock Text="{Binding ArtInfo}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="9.5"
+                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+              </StackPanel>
             </StackPanel>
           </Border>
         </StackPanel>

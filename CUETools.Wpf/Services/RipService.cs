@@ -38,8 +38,10 @@ public interface IRipService
     /// <summary>Rip the disc (read + encode + verify) to the given format under
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
     /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
-    /// the codec scope. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null);
+    /// the codec scope. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).
+    /// <paramref name="coverArt"/>, when given, is the hi-res cover to embed (already resized); the
+    /// engine's database cover is used when it is null.</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
@@ -69,9 +71,9 @@ public sealed class RipService : IRipService
     private static void KeepAwake(bool on) => SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS);
 
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -175,6 +177,21 @@ public sealed class RipService : IRipService
                     lastReReads = reReads;
                 }
             };
+
+            // Embed the hi-res Apple cover when we have one; otherwise leave Metadata.AlbumArt intact
+            // so the engine falls back to the CTDB/database cover. Clearing Metadata.AlbumArt stops the
+            // engine re-adding the DB cover on top of ours (LoadAndResizeAlbumArt reads that list).
+            if (encode && _config.embedAlbumArt && coverArt != null && coverArt.Length > 0)
+            {
+                try
+                {
+                    cue.Metadata.AlbumArt.Clear();
+                    cue.AlbumArt.Clear();
+                    cue.AlbumArt.Add(new TagLib.Picture(new TagLib.ByteVector(coverArt)) { Type = TagLib.PictureType.FrontCover });
+                    _log.Info("rip", $"embed hi-res cover {coverArt.Length}B");
+                }
+                catch (Exception ex) { _log.Warn("rip", "cover inject failed: " + ex.GetType().Name); }
+            }
 
             onProgress(0, encode ? "Ripping + verifying..." : "Verifying against AccurateRip + CTDB...");
             string status = cue.Go();
