@@ -30,14 +30,16 @@ public interface IRipService
 {
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
     /// <paramref name="onLevels"/> receives the real per-channel RMS loudness (L,R) of each read.
+    /// <paramref name="onReread"/> reports a real sector re-read: (reReads, maxReReads, errorSectors,
+    /// discFrac); reReads &gt; 0 only when the drive is doing extra passes over a stuck window.
     /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
+    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
     /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
-    /// the codec scope.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
+    /// the codec scope. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
@@ -66,10 +68,10 @@ public sealed class RipService : IRipService
     private const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
     private static void KeepAwake(bool on) => SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS);
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples);
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -137,6 +139,12 @@ public sealed class RipService : IRipService
 
             double total = Math.Max(1, reader.TOC.AudioLength);
             double lastFrac = -1;
+            // re-read reporting: the drive guarantees (cqc + 1) clean passes per window and breaks
+            // early once they agree; any pass BEYOND that is a real re-read of a stuck window. The cap
+            // is (16 << cqc) total passes, so maxReReads extra passes before it gives up.
+            int cqc = Math.Max(0, Math.Min(2, cq));
+            int maxReReads = Math.Max(1, (16 << cqc) - 1 - cqc);
+            int lastReReads = 0, peakReRead = 0, rereadWindows = 0;
             reader.ReadProgress += (s, e) =>
             {
                 double frac = e.Position / total;
@@ -144,6 +152,27 @@ public sealed class RipService : IRipService
                 {
                     lastFrac = frac;
                     onProgress(Math.Min(1.0, Math.Max(0.0, frac)), (encode ? "Ripping" : "Verifying") + $"... {(int)(frac * 100)}%");
+                }
+
+                // Report a re-read only while one is actually happening (pass > cqc), plus one final
+                // "cleared" report so the viz can hide. e.Pass == -1 is the TOC/pregap read, not audio.
+                if (e.Pass >= 0)
+                {
+                    int reReads = Math.Max(0, e.Pass - cqc);
+                    if (reReads > peakReRead) peakReRead = reReads;
+                    if (reReads > 0 && lastReReads == 0)
+                    {
+                        rereadWindows++;   // count each stuck window once
+                        // one line per damaged spot (position + errors only, no titles): tells you
+                        // where a disc is scratched/pin-holed and confirms the re-read path is live.
+                        _log.Info("rip.reread", $"stuck window at {(int)(frac * 100)}% errors={e.ErrorsCount}");
+                    }
+                    if (onReread != null && (reReads > 0 || lastReReads > 0))
+                    {
+                        double wfrac = e.PassEnd > e.PassStart ? (double)e.PassStart / total : frac;
+                        onReread(reReads, maxReReads, e.ErrorsCount, Math.Min(1.0, Math.Max(0.0, wfrac)));
+                    }
+                    lastReReads = reReads;
                 }
             };
 
@@ -157,7 +186,8 @@ public sealed class RipService : IRipService
             try { if (encode && Directory.Exists(outDir)) files = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
 
             _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
-                $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} status={status}");
+                $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
+                $"reread_windows={rereadWindows} reread_peak={peakReRead} status={status}");
 
             int n = Math.Max(0, cue.TrackCount);
             var arpt = new int[n];
