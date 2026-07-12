@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>CUETools.Fuzz</AssemblyName>
+    <RootNamespace>CUETools.Fuzz</RootNamespace>
+    <!-- standalone tool: not part of the app build / solution deliverables -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bwg.Scsi\Bwg.Scsi.csproj" />
+    <ProjectReference Include="..\CUETools.Wpf\CUETools.Wpf.csproj" />
+  </ItemGroup>
+
+</Project>
