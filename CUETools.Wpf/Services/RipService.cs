@@ -38,14 +38,33 @@ public interface IRipService
     /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
     /// the codec scope.</summary>
     VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null);
+
+    /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
+    void Stop();
 }
 
 public sealed class RipService : IRipService
 {
     private readonly CUEConfig _config;
     private readonly IDiagnosticLog _log;
+    private readonly AppSettings _settings;
+    private CUESheet? _current;   // the running sheet, so Stop() can abort it
+    private readonly object _stopGate = new();
 
-    public RipService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
+    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings) { _config = config; _log = log; _settings = settings; }
+
+    public void Stop()
+    {
+        CUESheet? cue; lock (_stopGate) cue = _current;
+        try { cue?.Stop(); _log.Info("rip", "stop requested"); } catch { }
+    }
+
+    // Keep the machine awake for the duration of a rip. ES_CONTINUOUS persists the request until it
+    // is cleared, so it does not matter which thread sets it.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint flags);
+    private const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
+    private static void KeepAwake(bool on) => SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS);
 
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples);
     public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples);
@@ -62,7 +81,14 @@ public sealed class RipService : IRipService
             try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); } catch { }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
-            _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' chosen_release={(metadata != null)}");
+
+            // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
+            // be ejected mid-read (which would fail the read and can crash the drive layer).
+            if (_settings.PreventSleepDuringRip) KeepAwake(true);
+            if (_settings.LockTrayDuringRip) { try { reader.DisableEjectDisc(true); } catch (Exception ex) { _log.Warn("rip", "tray lock failed: " + ex.GetType().Name); } }
+
+            _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' " +
+                $"chosen_release={(metadata != null)} preventSleep={_settings.PreventSleepDuringRip} lockTray={_settings.LockTrayDuringRip}");
 
             // Tap real audio for the VU meter (levels) and the codec scope (a window of real
             // samples); everything else delegates to the drive unchanged.
@@ -71,6 +97,7 @@ public sealed class RipService : IRipService
                 : reader;
 
             var cue = new CUESheet(_config);
+            lock (_stopGate) _current = cue;   // so Stop() can abort this run
             cue.OpenCD(ripper);
             if (metadata != null)
             {
@@ -156,6 +183,11 @@ public sealed class RipService : IRipService
                 CtdbPerTrack = ctpt
             };
         }
+        catch (StopException)
+        {
+            _log.Info("rip", $"stopped by user after {sw.Elapsed.TotalSeconds:0}s");
+            return new VerifyResult { Error = "Stopped." };
+        }
         catch (Exception ex)
         {
             _log.Error("rip", $"failed after {sw.Elapsed.TotalSeconds:0}s", ex);
@@ -163,6 +195,9 @@ public sealed class RipService : IRipService
         }
         finally
         {
+            lock (_stopGate) _current = null;
+            try { if (_settings.LockTrayDuringRip) reader.DisableEjectDisc(false); } catch { }   // always re-allow eject
+            if (_settings.PreventSleepDuringRip) KeepAwake(false);
             try { reader.Close(); } catch { }
         }
     }

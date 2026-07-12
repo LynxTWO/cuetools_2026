@@ -172,8 +172,14 @@
 
       <Border Grid.Row="2" Grid.Column="1" Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,12">
         <DockPanel LastChildFill="False">
-          <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"/>
-          <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"/>
+          <!-- Stop replaces the primary action while a rip/verify runs; Rip/Verify grey out. -->
+          <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource Accent}" Padding="18,9"
+                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}"
+                  ToolTip="Stop the rip or verify. It finishes the current block, then stops cleanly."/>
+          <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9" Margin="0,0,10,0"
+                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+          <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"
+                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
           <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,10,0" VerticalAlignment="Center"
                     ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
                     ToolTip="Output format (only codecs with a working encoder in this build are listed)."/>
