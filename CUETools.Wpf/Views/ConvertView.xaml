@@ -28,7 +28,7 @@
     <!-- body -->
     <Grid Grid.Row="1">
       <!-- instruction state -->
-      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="520"
+      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="600"
                   Visibility="{Binding HasResult, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
         <TextBlock Text="Convert a rip you already have" FontFamily="{StaticResource Serif}" FontSize="22" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"/>
         <TextBlock TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,8,0,0"
@@ -40,9 +40,16 @@
         </StackPanel>
         <TextBlock Text="(default: Music\CUETools\Artist - Album)" Foreground="{DynamicResource Muted}" FontSize="10.5" HorizontalAlignment="Center" Margin="0,6,0,0"/>
 
-        <!-- educational: what the chosen codec actually does -->
-        <Border Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="11" Padding="16,13" Margin="0,22,0,0" MinWidth="520">
-          <ctl:CodecScope Height="118" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsBusy, Mode=OneWay}"/>
+        <!-- educational: the round trip when a source is chosen (source -> PCM -> target), or just
+             what the target codec does before you pick one -->
+        <Border Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="11" Padding="16,13" Margin="0,22,0,0" MinWidth="560">
+          <Grid>
+            <ctl:CodecScope Height="118" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsBusy, Mode=OneWay}"
+                            Visibility="{Binding HasSource, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+            <ctl:ConvertScope Height="150" SourceCodec="{Binding SourceCodec, Mode=OneWay}" TargetCodec="{Binding SelectedFormat, Mode=OneWay}"
+                              Active="{Binding IsBusy, Mode=OneWay}" Samples="{Binding SampleWindow, Mode=OneWay}"
+                              Visibility="{Binding HasSource, Converter={StaticResource BoolVis}}"/>
+          </Grid>
         </Border>
       </StackPanel>
 

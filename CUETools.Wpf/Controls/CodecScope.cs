@@ -2,24 +2,23 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using Pred = CUETools.Wpf.Controls.CodecMath.Pred;
+using Pack = CUETools.Wpf.Controls.CodecMath.Pack;
 
 namespace CUETools.Wpf.Controls;
 
 /// <summary>
 /// A real-time, GPU-drawn view of what a lossless codec actually does to the audio, driven by the
 /// real PCM samples flowing through the rip (see <see cref="Samples"/>). It is NOT a canned loop:
-/// each frame it runs the predictor of the selected codec's family on the true samples, so the
-/// signal, prediction and residual on screen are the real numbers, and the bits-per-sample and
-/// compression ratio are computed from the actual residual (the same Rice-cost principle the
-/// encoders use to size a block).
+/// each frame it runs the predictor of the selected codec's family (via <see cref="CodecMath"/>) on
+/// the true samples, so the signal, prediction and residual on screen are the real numbers, and the
+/// bits/sample and ratio are computed from the actual residual.
 ///
-/// The point of the three panels:
+/// The three things it shows at once:
 ///  - pipeline: signal -> predict -> residual -> pack, the real DSP stages;
 ///  - compression forming: the residual is small, so the live bits/sample and % of PCM build up;
-///  - format contrast: each codec runs a DIFFERENT real predictor (FLAC fixed polynomial, WavPack
-///    cascaded difference, Monkey's Audio adaptive NLMS filter), so a better predictor leaves a
+///  - format contrast: each codec runs a DIFFERENT real predictor, so a better predictor leaves a
 ///    smaller residual and a lower ratio - the difference is earned, not asserted.
-/// The predictors are representative of each family, not a bit-exact reimplementation.
 /// </summary>
 public sealed class CodecScope : FrameworkElement
 {
@@ -42,14 +41,11 @@ public sealed class CodecScope : FrameworkElement
     private static readonly Typeface Face = new("Segoe UI");
     private static readonly Typeface Mono = new("Cascadia Mono, Consolas");
 
-    private enum Pred { None, Fixed2, Adaptive, Cascade, Lms }
-    private enum Pack { Store, Rice, Range }
-
     // rolling window of the real audio (scrolls right-to-left as new windows arrive)
     private const int Roll = 640;
     private readonly float[] _roll = new float[Roll];
-    private float[] _pred = new float[Roll];
-    private float[] _resid = new float[Roll];
+    private readonly float[] _pred = new float[Roll];
+    private readonly float[] _resid = new float[Roll];
     private double _bitsEma = 16, _ratioEma = 1;
     private double _phase;
     private TimeSpan _last;
@@ -83,42 +79,30 @@ public sealed class CodecScope : FrameworkElement
         InvalidateVisual();
     }
 
-    private static (string name, string desc, Pred pred, Pack pack, string predLabel, string packLabel) Info(string codec) =>
-        (codec ?? "").ToLowerInvariant() switch
-        {
-            "wav" => ("WAV", "uncompressed PCM - every sample stored exactly", Pred.None, Pack.Store, "store", "1:1"),
-            "flac" => ("FLAC", "fixed / LPC predictor, then Rice-coded residual", Pred.Fixed2, Pack.Rice, "predict", "Rice pack"),
-            "m4a" or "alac" => ("ALAC", "linear predictor + Rice/Golomb (Apple Lossless)", Pred.Fixed2, Pack.Rice, "predict", "Rice pack"),
-            "tta" => ("TTA", "adaptive predictor + adaptive Rice (True Audio)", Pred.Adaptive, Pack.Rice, "adapt", "Rice pack"),
-            "wv" => ("WavPack", "cascaded decorrelation + entropy coding", Pred.Cascade, Pack.Rice, "decorrelate", "entropy"),
-            "ape" => ("Monkey's Audio", "adaptive NLMS filters + range coder (max ratio)", Pred.Lms, Pack.Range, "adapt filter", "range code"),
-            _ => ((codec ?? "").ToUpperInvariant(), "lossless prediction + entropy coding", Pred.Fixed2, Pack.Rice, "predict", "pack"),
-        };
-
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
-        var info = Info(Codec);
+        var info = CodecMath.Info(Codec);
 
         // run the real predictor on the rolling window; residual + bits are the true figures
-        ComputeResidual(info.pred);
-        double bits = info.pred == Pred.None ? 16.0 : BitsPerSample(info.pred);
+        CodecMath.ComputeResidual(_roll, info.Predictor, _pred, _resid);
+        double bits = info.Predictor == Pred.None ? 16.0 : CodecMath.BitsPerSample(_resid, info.Predictor);
         double ratio = Math.Max(0.02, Math.Min(1.0, bits / 16.0));
         _bitsEma += (bits - _bitsEma) * 0.12;
         _ratioEma += (ratio - _ratioEma) * 0.12;
 
         // header: name + mechanism, then the live compression readout on the right
-        Text(dc, info.name, new Point(2, 0), Mono, 14, Ink, true);
-        Text(dc, info.desc, new Point(2, 20), Face, 10.5, Muted, false);
-        DrawCompression(dc, w, info.pack);
+        Text(dc, info.Name, new Point(2, 0), Mono, 14, Ink, true);
+        Text(dc, info.Desc, new Point(2, 20), Face, 10.5, Muted, false);
+        DrawCompression(dc, w, info.Packer);
 
         double top = 42, bot = h - 15, bh = bot - top;
         if (bh < 24) return;
 
-        string[] stages = info.pred == Pred.None
-            ? new[] { "signal", info.predLabel }
-            : new[] { "signal", info.predLabel, "residual", info.packLabel };
+        string[] stages = info.Predictor == Pred.None
+            ? new[] { "signal", info.PredLabel }
+            : new[] { "signal", info.PredLabel, "residual", info.PackLabel };
         double gap = 10;
         double sw = (w - gap * (stages.Length - 1)) / stages.Length;
         for (int i = 0; i < stages.Length; i++)
@@ -134,89 +118,12 @@ public sealed class CodecScope : FrameworkElement
         }
     }
 
-    // -------- real predictor math (representative of each codec family) --------
-
-    private void ComputeResidual(Pred kind)
-    {
-        var s = _roll; var p = _pred; var r = _resid;
-        switch (kind)
-        {
-            case Pred.None:
-                for (int i = 0; i < Roll; i++) { p[i] = s[i]; r[i] = 0; }
-                break;
-            case Pred.Fixed2:   // FLAC / ALAC: 2nd-order fixed polynomial predictor
-                p[0] = s[0]; p[1] = s[1]; r[0] = r[1] = 0;
-                for (int i = 2; i < Roll; i++) { p[i] = 2 * s[i - 1] - s[i - 2]; r[i] = s[i] - p[i]; }
-                break;
-            case Pred.Adaptive: // TTA-style order-1 adaptive predictor
-            {
-                double a = 1.0; p[0] = s[0]; r[0] = 0;
-                for (int i = 1; i < Roll; i++)
-                {
-                    double pr = a * s[i - 1];
-                    double e = s[i] - pr;
-                    a += 0.004 * e * s[i - 1]; if (a < 0) a = 0; if (a > 1.3) a = 1.3;
-                    p[i] = (float)pr; r[i] = (float)e;
-                }
-                break;
-            }
-            case Pred.Cascade:  // WavPack-style cascaded decorrelation (two difference passes)
-            {
-                p[0] = s[0]; r[0] = 0;
-                float d1prev = 0, prev = s[0];
-                for (int i = 1; i < Roll; i++)
-                {
-                    float d1 = s[i] - prev;      // pass 1: first difference
-                    float e = d1 - d1prev;       // pass 2: difference of differences
-                    p[i] = s[i] - e; r[i] = e;
-                    d1prev = d1; prev = s[i];
-                }
-                break;
-            }
-            case Pred.Lms:      // Monkey's Audio-style adaptive NLMS FIR filter (order 8)
-            {
-                const int P = 8; var wts = new double[P];
-                for (int i = 0; i < Roll; i++)
-                {
-                    if (i < P) { p[i] = s[i]; r[i] = 0; continue; }
-                    double pr = 0, norm = 1e-6;
-                    for (int j = 0; j < P; j++) { pr += wts[j] * s[i - 1 - j]; norm += s[i - 1 - j] * s[i - 1 - j]; }
-                    double e = s[i] - pr;
-                    double g = 0.5 * e / norm;
-                    for (int j = 0; j < P; j++) wts[j] += g * s[i - 1 - j];
-                    p[i] = (float)pr; r[i] = (float)e;
-                }
-                break;
-            }
-        }
-    }
-
-    // Rice-code cost of the residual: the true bits/sample an encoder would spend on this block.
-    private double BitsPerSample(Pred kind)
-    {
-        int start = kind == Pred.Lms ? 8 : 2;
-        double mean = 0; int nn = 0;
-        for (int i = start; i < Roll; i++) { mean += Math.Abs(_resid[i]) * 32768.0; nn++; }
-        if (nn == 0) return 16;
-        mean /= nn;
-        int k = mean > 1 ? (int)Math.Round(Math.Log(mean, 2)) : 0; if (k < 0) k = 0; if (k > 15) k = 15;
-        double bits = 0;
-        for (int i = start; i < Roll; i++)
-        {
-            int v = (int)(Math.Abs(_resid[i]) * 32768.0);
-            bits += (v >> k) + 1 + k;   // Rice codeword length for |residual|
-        }
-        return Math.Max(1.0, Math.Min(16.0, bits / nn));
-    }
-
-    // -------- drawing --------
-
-    private void DrawStage(DrawingContext dc, int index, int count, Rect r, (string name, string desc, Pred pred, Pack pack, string predLabel, string packLabel) info)
+    private void DrawStage(DrawingContext dc, int index, int count, Rect r, CodecMath.CodecInfo info)
     {
         bool isLast = index == count - 1;
         if (index == 0) { Trace(dc, r, _roll, Teal, 1.6); return; }            // signal
-        if (info.pred == Pred.None) { StoreStage(dc, r); return; }             // WAV "store"
-        if (isLast) { PackStage(dc, r, info.pack); return; }                   // pack / range
+        if (info.Predictor == Pred.None) { StoreStage(dc, r); return; }        // WAV "store"
+        if (isLast) { PackStage(dc, r, info.Packer); return; }                 // pack / range
         if (index == 1) { PredictStage(dc, r); return; }                      // predict / adapt / decorrelate
         ResidualStage(dc, r);                                                  // residual
     }
@@ -288,7 +195,6 @@ public sealed class CodecScope : FrameworkElement
         var ftB = MakeText(sub, Mono, 10.5, Muted);
         dc.DrawText(ftA, new Point(w - ftA.Width - 2, 1));
         dc.DrawText(ftB, new Point(w - ftB.Width - 2, 20));
-        // shrink bar
         double bx = w - 150, by = 38, bw = 148;
         var track = new SolidColorBrush(Color.FromArgb(45, Teal.R, Teal.G, Teal.B)); track.Freeze();
         var fill = new SolidColorBrush(pack == Pack.Store ? Amber : Teal); fill.Freeze();
