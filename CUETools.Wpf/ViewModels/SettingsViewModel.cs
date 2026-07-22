@@ -51,9 +51,8 @@ public sealed class SettingsViewModel : PageViewModel
     public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
     public bool StopOnUnrecoverable { get => _app.StopOnUnrecoverable; set { _app.StopOnUnrecoverable = value; Raise(); } }
 
-    // General
-    public bool OneInstance { get => _c.oneInstance; set { _c.oneInstance = value; Raise(); } }
-    public bool CheckForUpdates { get => _c.checkForUpdates; set { _c.checkForUpdates = value; Raise(); } }
+    // General. (OneInstance / CheckForUpdates deliberately not exposed: this app implements
+    // neither yet, and a switch that does nothing would be a lie.)
     public bool SeparateDecodingThread { get => _c.separateDecodingThread; set { _c.separateDecodingThread = value; Raise(); } }
     public bool EjectAfterRip { get => _c.ejectAfterRip; set { _c.ejectAfterRip = value; Raise(); } }
 

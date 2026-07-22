@@ -57,7 +57,7 @@ public sealed class ThemeService
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_prefPath)!);
             System.IO.File.WriteAllText(_prefPath, theme.ToString());
         }
-        catch { /* best-effort persistence */ }
+        catch (Exception ex) { _log?.Warn("theme", "theme preference not saved: " + ex.GetType().Name); }
         _log?.Info("theme", $"apply {theme}");
         Changed?.Invoke(this, EventArgs.Empty);
     }

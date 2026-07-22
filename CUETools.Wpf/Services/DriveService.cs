@@ -23,12 +23,16 @@ public sealed class DriveService : IDriveService
     // the Drive & Read detect would otherwise race for the device. Serialise every device touch.
     private static readonly object _scsiGate = new object();
 
+    /// <summary>The app-wide device gate. RipService takes it around its own drive open so a rip
+    /// start cannot collide with an in-flight tray poll or capability query.</summary>
+    internal static object ScsiGate => _scsiGate;
+
     public DriveService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
     public IReadOnlyList<char> GetDrives()
     {
         try { return CDDrivesList.DrivesAvailable(); }
-        catch { return Array.Empty<char>(); }
+        catch (Exception ex) { _log.Error("drive", "drive enumeration failed", ex); return Array.Empty<char>(); }
     }
 
     public DiscInfo? ReadDisc(char drive, Action<string>? onStatus = null)
@@ -198,7 +202,13 @@ public sealed class DriveService : IDriveService
     public DriveDetails GetDriveDetails(char drive)
     {
         DriveCapabilities caps;
-        lock (_scsiGate) { caps = DriveInspector.Query(drive); }
+        // fail safe like ReadDisc does: a flaky/vanishing drive must degrade, not throw into the UI
+        try { lock (_scsiGate) { caps = DriveInspector.Query(drive); } }
+        catch (Exception ex)
+        {
+            _log.Warn("drive", $"details drive={drive} query failed: {ex.GetType().Name}");
+            return new DriveDetails { Letter = drive, Error = "The drive did not answer." };
+        }
         int offset = 0; bool known = false;
         if (caps.Valid)
         {
@@ -214,7 +224,9 @@ public sealed class DriveService : IDriveService
     // used both for the Eject/Close button label and for the disc-insertion watcher.
     public DriveTrayState GetTrayState(char drive)
     {
-        lock (_scsiGate) { return DriveInspector.GetTray(drive); }
+        // polled every 2s by the tray watcher - a throw here would spam the crash handler
+        try { lock (_scsiGate) { return DriveInspector.GetTray(drive); } }
+        catch { return DriveTrayState.Unknown; }
     }
 
     // Tray control via the storage IOCTLs (the proven path): eject opens the tray with or without

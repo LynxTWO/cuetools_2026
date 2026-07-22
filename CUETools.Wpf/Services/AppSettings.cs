@@ -1,8 +1,9 @@
 namespace CUETools.Wpf.Services;
 
 /// <summary>
-/// App-level behaviour settings (not CUETools engine config). In-memory with sensible defaults for
-/// now; broad settings persistence lands later. Injected where the rip lifecycle needs them.
+/// App-level behaviour settings (not CUETools engine config). Persisted alongside the engine
+/// config by <see cref="SettingsStore"/> (loaded at startup, saved on exit). Injected where the
+/// rip lifecycle needs them.
 /// </summary>
 public sealed class AppSettings
 {
@@ -20,4 +21,10 @@ public sealed class AppSettings
     /// carry on and mark the bad sectors, then let CTDB parity try to fill them). When on, the 3D disc
     /// holds zoomed on the failed spot with a flashing marker until you eject or stop.</summary>
     public bool StopOnUnrecoverable { get; set; } = false;
+
+    // Rip-page preferences that should survive a restart. Empty string means "not set yet" and the
+    // page falls back to its default (MyMusic\CUETools, flac, Secure).
+    public string OutputBaseDir { get; set; } = "";
+    public string SelectedFormat { get; set; } = "";
+    public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid
 }

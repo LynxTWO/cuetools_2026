@@ -40,8 +40,8 @@
       <Border Style="{StaticResource Row}" ToolTip="Stop the rip when the drive exhausts its retries on a sector and still cannot read it, instead of finishing and leaving that spot unread. Off by default. When on, the 3D disc holds zoomed on the failed spot with a flashing marker until you eject or stop."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding StopOnUnrecoverable}"/><TextBlock Style="{StaticResource RowLabel}" Text="Stop the rip on unrecoverable damage"/></DockPanel></Border>
 
       <TextBlock Style="{StaticResource Sec}" Text="GENERAL"/>
-      <Border Style="{StaticResource Row}" ToolTip="Keep only one CUETools window open; launching again focuses the existing one instead of opening a second."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding OneInstance}"/><TextBlock Style="{StaticResource RowLabel}" Text="Single instance"/></DockPanel></Border>
-      <Border Style="{StaticResource Row}" ToolTip="Check online for a newer CUETools version when the app starts."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CheckForUpdates}"/><TextBlock Style="{StaticResource RowLabel}" Text="Check for updates"/></DockPanel></Border>
+      <!-- Single instance / Check for updates removed: this app does not implement either yet, and a
+           switch that does nothing is a lie. They return when the behaviour exists. -->
       <Border Style="{StaticResource Row}" ToolTip="Decode audio on a separate thread from encoding. Can be faster on multi-core CPUs."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding SeparateDecodingThread}"/><TextBlock Style="{StaticResource RowLabel}" Text="Separate decoding thread"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Open the drive tray automatically when a rip finishes."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EjectAfterRip}"/><TextBlock Style="{StaticResource RowLabel}" Text="Eject after rip"/></DockPanel></Border>
 
@@ -108,7 +108,7 @@
       </Border>
 
       <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
-                 Text="These write straight to the live configuration. The remaining sections (Metadata, Encoding &amp; Formats with the codec editor, Ripper &amp; Drives) and settings persistence are the next increments."/>
+                 Text="Changes apply immediately and are saved when the app closes."/>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -60,7 +60,8 @@ public sealed class RipService : IRipService
     public void Stop()
     {
         CUESheet? cue; lock (_stopGate) cue = _current;
-        try { cue?.Stop(); _log.Info("rip", "stop requested"); } catch { }
+        try { cue?.Stop(); _log.Info("rip", "stop requested"); }
+        catch (Exception ex) { _log.Warn("rip", "stop request failed: " + ex.GetType().Name); }
     }
 
     // Keep the machine awake for the duration of a rip. ES_CONTINUOUS persists the request until it
@@ -68,7 +69,12 @@ public sealed class RipService : IRipService
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
     private static extern uint SetThreadExecutionState(uint flags);
     private const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
-    private static void KeepAwake(bool on) => SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS);
+    private void KeepAwake(bool on)
+    {
+        // returns 0 on failure - the machine could then sleep mid-rip, so leave a trace
+        if (SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS) == 0 && on)
+            _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
+    }
 
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
     public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt);
@@ -79,10 +85,15 @@ public sealed class RipService : IRipService
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            if (!reader.Open(drive)) { _log.Warn("rip", "no disc / not ready"); return new VerifyResult { Error = "No disc." }; }
+            // open under the app-wide device gate so a rip start cannot collide with an in-flight
+            // tray poll / capability query (the gate is held only for the open, not the whole rip)
+            bool opened;
+            lock (DriveService.ScsiGate) opened = reader.Open(drive);
+            if (!opened) { _log.Warn("rip", "no disc / not ready"); return new VerifyResult { Error = "No disc." }; }
 
             int offset = 0;
-            try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); } catch { }
+            try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); }
+            catch (Exception ex) { _log.Warn("rip", "read-offset lookup failed - ripping with offset 0: " + ex.GetType().Name); }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
 
@@ -105,7 +116,14 @@ public sealed class RipService : IRipService
             cue.OpenCD(ripper);
             if (metadata != null)
             {
-                try { cue.CopyMetadata(metadata); } catch { }   // honor the user's chosen release
+                // honor the user's chosen release; if it cannot be applied the rip would proceed with
+                // generic tags, so say so rather than silently discarding an explicit choice
+                try { cue.CopyMetadata(metadata); }
+                catch (Exception ex)
+                {
+                    _log.Warn("rip", "chosen release metadata not applied: " + ex.GetType().Name);
+                    onProgress(0, "Warning: the chosen release's metadata could not be applied.");
+                }
             }
             else
             {
@@ -191,12 +209,15 @@ public sealed class RipService : IRipService
             {
                 try
                 {
+                    // build the picture FIRST: if construction throws after the lists were cleared,
+                    // the album would ship with NO art at all (not even the database fallback)
+                    var pic = new TagLib.Picture(new TagLib.ByteVector(coverArt)) { Type = TagLib.PictureType.FrontCover };
                     cue.Metadata.AlbumArt.Clear();
                     cue.AlbumArt.Clear();
-                    cue.AlbumArt.Add(new TagLib.Picture(new TagLib.ByteVector(coverArt)) { Type = TagLib.PictureType.FrontCover });
+                    cue.AlbumArt.Add(pic);
                     _log.Info("rip", $"embed hi-res cover {coverArt.Length}B");
                 }
-                catch (Exception ex) { _log.Warn("rip", "cover inject failed: " + ex.GetType().Name); }
+                catch (Exception ex) { _log.Warn("rip", "cover inject failed (database cover keeps): " + ex.GetType().Name); }
             }
 
             onProgress(0, encode ? "Ripping + verifying..." : "Verifying against AccurateRip + CTDB...");
@@ -204,7 +225,9 @@ public sealed class RipService : IRipService
             onProgress(1, status);
 
             int arConf = 0, arTotal = 0, ctConf = cue.CTDB.Confidence, ctTotal = cue.CTDB.Total;
-            try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); } catch { }
+            // a throw here would otherwise read as "not found in AccurateRip" - a different fact
+            try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
+            catch (Exception ex) { _log.Warn("rip", "AccurateRip result read failed (reported as not found): " + ex.GetType().Name); }
             int files = 0;
             try { if (encode && Directory.Exists(outDir)) files = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
 
@@ -249,7 +272,9 @@ public sealed class RipService : IRipService
         finally
         {
             lock (_stopGate) _current = null;
-            try { if (_settings.LockTrayDuringRip) reader.DisableEjectDisc(false); } catch { }   // always re-allow eject
+            // always re-allow eject; if this fails the eject button stays dead until the handle closes
+            try { if (_settings.LockTrayDuringRip) reader.DisableEjectDisc(false); }
+            catch (Exception ex) { _log.Warn("rip", "tray unlock failed: " + ex.GetType().Name); }
             if (_settings.PreventSleepDuringRip) KeepAwake(false);
             try { reader.Close(); } catch { }
         }
