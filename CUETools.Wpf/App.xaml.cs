@@ -68,7 +68,28 @@ public partial class App : Application
 
         var window = provider.GetRequiredService<MainWindow>();
         window.DataContext = provider.GetRequiredService<MainViewModel>();
-        window.Show();
-        log.Info("app", "window shown");
+
+        // Windows' DWrite / font-cache layer can intermittently throw FileNotFoundException during the
+        // very first text layout. If that escapes Show() it aborts startup and leaves the process
+        // running with no visible window (the app looks like it "did nothing"). Retry the show + layout
+        // a few times - the font cache resolves on a later attempt - and bring the window to the front.
+        bool shown = false;
+        for (int attempt = 1; attempt <= 5 && !shown; attempt++)
+        {
+            try
+            {
+                if (!window.IsVisible) window.Show();
+                window.UpdateLayout();
+                window.Activate();
+                shown = true;
+                log.Info("app", $"window shown (attempt {attempt})");
+            }
+            catch (Exception ex)
+            {
+                log.Warn("app", $"window show/layout failed (attempt {attempt}): {ex.GetType().Name} - retrying");
+                System.Threading.Thread.Sleep(220);
+            }
+        }
+        if (!shown) log.Error("app", "window did not show after retries", null);
     }
 }
