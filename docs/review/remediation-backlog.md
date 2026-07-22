@@ -138,6 +138,32 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Next step:** (C) in `AddPlugin`, load from the explicit path - `Assembly.LoadFrom(plugin_path)` (or an `AssemblyLoadContext` rooted at the plugins dir) instead of `Assembly.Load(name)`; keep the CUETools.*.dll trust-boundary gate noted in the file. Re-check the encoder/decoder/ripper interface scan still finds the exported types.
 - **Verify:** a codec DLL present ONLY under `plugins\` (no project reference, not in the app root) registers and is selectable; encode to that format writes output with no external exe on PATH. Extend the VerifyProbe pattern (Flake only in `plugins\`, no project ref) - it must now transcode instead of falling back to `flac.exe`.
 
+### R17. Stopped rip leaves a truncated track file that poisons later album operations - bucket C, risk low
+
+- **Where:** WPF `RipService` StopException path; the engine's `CUESheet.Go()` leaves the
+  in-progress track file partially written when stopped.
+- **Evidence (2026-07-22):** a Stop-button test in an earlier session left
+  a truncated track 04 flac. Later, converting ANY file from that album pulled in the sibling
+  `album.cue` (whole-album semantics) and the decode died at the truncated file with
+  `BitReader.read_rice_block: read past end of buffer` - a Release-build convert fails with a
+  confusing "corrupt stream" error far from its cause. Diagnosed while wiring MP3: three probes
+  proved the decoder, seek, and engine-source paths all clean; only the cue-driven whole-album
+  path hit the bad file.
+- **Next step options:** (a) on StopException during encode, delete the newest/incomplete
+  destination file (the completed earlier tracks stay); (b) write to a temp name and rename on
+  track completion so a stop never leaves a plausible-looking .flac; (c) at least log which file
+  is incomplete. (b) is the clean fix.
+- **Verify:** stop a rip mid-track; the output dir contains only complete tracks (or a clearly
+  non-audio temp name); converting the album afterwards succeeds.
+
+### R18. WMA lossy encoder for the WPF app - bucket D (enhancement)
+
+- The lossy visualization already carries a distinct WMA profile (pure-MDCT labels, run-level
+  pack). The encoder needs `CUETools.Codecs.WMA` (net47/net20 only) and the `WindowsMediaLib`
+  SUBMODULE multi-targeted to netstandard2.0/net8.0-windows, plus a net8 COM-interop encode
+  verification. The format stays hidden from the app's lists until a real in-process encoder
+  registers (the lists only offer encoders that exist).
+
 ## Ordering
 
 1. R8 (unblocks local builds - do first, enables verifying everything else)
