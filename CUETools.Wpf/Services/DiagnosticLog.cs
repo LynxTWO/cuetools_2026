@@ -83,16 +83,22 @@ public sealed class DiagnosticLog : IDiagnosticLog
     }
 
     // Replace any registered sensitive substring with a token. Case-insensitive on the raw text.
+    // The search resumes AFTER the inserted token: restarting from 0 would loop forever when a
+    // secret matches inside "<redacted>" itself (e.g. the artist "Red" - a real album title).
     private string Scrub(string s)
     {
         if (string.IsNullOrEmpty(s)) return s;
+        const string Token = "<redacted>";
         List<string> secrets;
         lock (_gate) secrets = new List<string>(_secrets);
         foreach (var secret in secrets)
         {
-            int idx;
-            while ((idx = s.IndexOf(secret, StringComparison.OrdinalIgnoreCase)) >= 0)
-                s = s.Substring(0, idx) + "<redacted>" + s.Substring(idx + secret.Length);
+            int start = 0, idx;
+            while (start < s.Length && (idx = s.IndexOf(secret, start, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                s = s.Substring(0, idx) + Token + s.Substring(idx + secret.Length);
+                start = idx + Token.Length;
+            }
         }
         return s;
     }

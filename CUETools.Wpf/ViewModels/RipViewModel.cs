@@ -12,9 +12,9 @@ using CUETools.Wpf.Services;
 namespace CUETools.Wpf.ViewModels;
 
 /// <summary>
-/// Rip page. Increment 1: enumerate drives, read the inserted disc's TOC through the
-/// ripper, show the track list; no-disc shows the recently-ripped list. Encode/verify and
-/// the live disc read-map come in later increments.
+/// Rip page: enumerate drives, read the inserted disc (TOC + metadata + releases), rip or verify
+/// with live visuals (3D disc, VU, speed, re-read), embed the hi-res cover, and keep the
+/// recently-ripped history for the no-disc screen.
 /// </summary>
 public sealed class RipViewModel : PageViewModel
 {
@@ -38,7 +38,7 @@ public sealed class RipViewModel : PageViewModel
     public ObservableCollection<string> Formats { get; } = new();
 
     private string _selectedFormat = "flac";
-    public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
+    public string SelectedFormat { get => _selectedFormat; set { if (Set(ref _selectedFormat, value)) _settings.SelectedFormat = value; } }
 
     // Ranked release matches for the inserted disc; picking one applies its metadata to the rip.
     public ObservableCollection<ReleaseMatch> Releases { get; } = new();
@@ -55,7 +55,7 @@ public sealed class RipViewModel : PageViewModel
 
     // where ripped albums go (an "Artist - Album" folder is created under this base)
     private string _outputBaseDir = "";
-    public string OutputBaseDir { get => _outputBaseDir; set => Set(ref _outputBaseDir, value); }
+    public string OutputBaseDir { get => _outputBaseDir; set { if (Set(ref _outputBaseDir, value)) _settings.OutputBaseDir = value; } }
 
     private string _lastOutputDir = "";
     public string LastOutputDir { get => _lastOutputDir; private set => Set(ref _lastOutputDir, value); }
@@ -128,9 +128,8 @@ public sealed class RipViewModel : PageViewModel
     private bool _isRipping;
     public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) CommandManager.InvalidateRequerySuggested(); } }
 
-    // Weak-hardware fallback (standing perf rule): the 3D disc uses WPF's GPU-rasterized Viewport3D.
-    // With no hardware acceleration (software rendering / RemoteFX, tier 0) fall back to the 2D
-    // read-map. Read once at startup; the dev box's RTX 3060 is tier 2.
+    // Weak-hardware fallback: the 3D disc uses WPF's GPU-rasterized Viewport3D. With no hardware
+    // acceleration (software rendering / RemoteFX, tier 0) fall back to the 2D read-map.
     public bool Supports3DDisc { get; } = (System.Windows.Media.RenderCapability.Tier >> 16) >= 1;
 
     // live read-speed readout for the SpeedGraph (0..1 of a 12x display cap) + "6.4x" text
@@ -188,7 +187,7 @@ public sealed class RipViewModel : PageViewModel
 
     // 0 = Burst, 1 = Secure, 2 = Paranoid (maps to the drive's CorrectionQuality)
     private int _correctionQuality = 1;
-    public int CorrectionQuality { get => _correctionQuality; set => Set(ref _correctionQuality, value); }
+    public int CorrectionQuality { get => _correctionQuality; set { if (Set(ref _correctionQuality, value)) _settings.CorrectionQuality = value; } }
 
     private string _arText = "not checked";
     public string ArText { get => _arText; private set => Set(ref _arText, value); }
@@ -238,9 +237,14 @@ public sealed class RipViewModel : PageViewModel
         _config = config;
         _art = art;
         _settings = settings;
-        _outputBaseDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
+        // restore the persisted rip prefs; empty means never set - fall back to defaults
+        _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
+            ? settings.OutputBaseDir
+            : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
+        _correctionQuality = Math.Max(0, Math.Min(2, settings.CorrectionQuality));
 
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
+        if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
         ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose());
@@ -304,6 +308,10 @@ public sealed class RipViewModel : PageViewModel
     {
         if (_selectedDrive == '\0' || _isBusy) return;
         IsBusy = true;
+        // the finally guarantees the page can never be left stuck "busy" (Rip/Verify/Eject disabled,
+        // tray watcher parked) if a drive query throws mid-read - e.g. the drive letter vanishing
+        try
+        {
         _triedCurrentMedia = true;           // this read counts as our attempt at the current media
         char drive = _selectedDrive;
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
@@ -360,7 +368,8 @@ public sealed class RipViewModel : PageViewModel
         }
         OnPropertyChanged(nameof(SelectedRelease));
         OnPropertyChanged(nameof(HasReleases));
-        IsBusy = false;
+        }
+        finally { IsBusy = false; }
     }
 
     // Choosing a release re-labels the album and re-titles the tracks from that release, and makes
@@ -426,8 +435,12 @@ public sealed class RipViewModel : PageViewModel
             _coverBytes = jpeg;
             ArtPreview = MakeThumb(art.Bytes);
             int outSide = Math.Min(max, Math.Max(art.Width, art.Height));
-            ArtInfo = $"Apple {art.Width}x{art.Height}" + (barcode.Length > 0 ? " (UPC-exact)" : "")
-                + $" -> {outSide}px" + (jpeg != null ? $", {jpeg.Length / 1024}KB JPEG" : "");
+            // when the resize fails the preview would show Apple art while the file gets the DB
+            // cover - say so instead of letting the preview overpromise
+            ArtInfo = jpeg == null
+                ? "cover resize failed - database cover will be embedded"
+                : $"Apple {art.Width}x{art.Height}" + (barcode.Length > 0 ? " (UPC-exact)" : "")
+                    + $" -> {outSide}px, {jpeg.Length / 1024}KB JPEG";
         }
         catch (OperationCanceledException) { }
         catch { ArtInfo = "cover lookup failed - database cover will be used"; }
@@ -584,6 +597,12 @@ public sealed class RipViewModel : PageViewModel
                     + (result.Accurate ? $"  .  AccurateRip verified (confidence {result.ArConfidence})" : "  .  not found in AccurateRip")
                     + (result.CtdbConfidence > 0 ? $"  .  CTDB confidence {result.CtdbConfidence}" : "");
                 RipDone = true;
+                if (_config.ejectAfterRip)
+                {
+                    // honor the "Eject after rip" setting (blocking IOCTL - off the UI thread)
+                    await Task.Run(() => { try { _drives.OpenTray(drive); } catch { } });
+                    TrayState = DriveTrayState.Open;
+                }
             }
             ApplyPerTrack(result);
             PublishReport(encode, result);
@@ -685,8 +704,10 @@ public sealed class RipViewModel : PageViewModel
         {
             if (System.IO.Directory.Exists(LastOutputDir))
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = LastOutputDir, UseShellExecute = true });
+            else
+                StatusText = "Folder not found: " + LastOutputDir;   // e.g. deleted since the rip
         }
-        catch { }
+        catch { StatusText = "Could not open the folder."; }
     }
 
     // Map the whole-disc read fraction onto each track: done tracks fill, the current track shows

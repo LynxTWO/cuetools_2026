@@ -16,7 +16,11 @@ public partial class MainWindow : Window
         _theme = theme;
         // The palette brushes are recolored in place by ThemeService (they are single mutable
         // objects in the app resources), so the window just plays the light-switch animation.
-        _theme.Changed += (_, _) => AnimateLightSwitch(_theme.Current);
+        // Detach on Closed: ThemeService is a singleton and the startup retry loop can create and
+        // discard windows - without the unsubscribe a dead window stays pinned and keeps animating.
+        EventHandler onChanged = (_, _) => AnimateLightSwitch(_theme.Current);
+        _theme.Changed += onChanged;
+        Closed += (_, _) => _theme.Changed -= onChanged;
     }
 
     // Model a real light being switched: going to LIGHT the room brightens (a dark cover fades out

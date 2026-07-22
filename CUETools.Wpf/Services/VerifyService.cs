@@ -50,8 +50,9 @@ public interface IVerifyService
 public sealed class VerifyService : IVerifyService
 {
     private readonly CUEConfig _config;
+    private readonly IDiagnosticLog _log;
 
-    public VerifyService(CUEConfig config) => _config = config;
+    public VerifyService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
     public VerifyFilesResult Verify(string path, Action<double, string> onProgress)
     {
@@ -73,6 +74,7 @@ public sealed class VerifyService : IVerifyService
         }
         catch (Exception ex)
         {
+            _log.Error("verify", "file verify failed", ex);
             return new VerifyFilesResult { Error = ex.Message, Source = path };
         }
     }
@@ -99,18 +101,21 @@ public sealed class VerifyService : IVerifyService
         }
         catch (Exception ex)
         {
+            _log.Error("verify", "repair failed", ex);
             return new VerifyFilesResult { Error = ex.Message, Source = path };
         }
     }
 
-    private static VerifyFilesResult Gather(CUESheet cue, string status, string path, bool ok, string error, bool applied)
+    private VerifyFilesResult Gather(CUESheet cue, string status, string path, bool ok, string error, bool applied)
     {
         int arConf = 0, arTotal = 0;
-        try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); } catch { }
+        // a throw here must not be reported as "not in database" - that is a different fact
+        try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
+        catch (Exception ex) { _log.Warn("verify", "AccurateRip result read failed (shown as not in database): " + ex.GetType().Name); }
 
         int ctConf = 0, ctTotal = 0;
         bool hasErrors = false, canRecover = false;
-        DBEntry rep = null;
+        DBEntry? rep = null;
         try
         {
             ctConf = cue.CTDB.Confidence;
@@ -124,7 +129,8 @@ public sealed class VerifyService : IVerifyService
             }
             if (rep == null) { var se = cue.CTDB.SelectedEntry; if (se != null && se.repair != null && se.hasErrors) rep = se; }
         }
-        catch { }
+        // if this walk throws, CanRepair would silently never enable - repairable damage unreported
+        catch (Exception ex) { _log.Warn("verify", "CTDB entries walk failed (repair state may be understated): " + ex.GetType().Name); }
 
         // Pull the real Reed-Solomon repair detail off the chosen entry: how many samples parity can
         // reconstruct, the parity depth, and the exact damaged-sector map (downsampled for drawing).
@@ -150,7 +156,8 @@ public sealed class VerifyService : IVerifyService
                 for (int b = 0; b < B; b++) repMap[b] = System.Math.Min(1.0, repMap[b] / per);
                 try { repRanges = fx.AffectedSectors; } catch { }
             }
-            catch { }
+            // cosmetic blast radius only (the repair scope hides; CanRepair derives from the walk above)
+            catch (Exception ex) { _log.Warn("verify", "repair detail extraction failed: " + ex.GetType().Name); }
         }
 
         return new VerifyFilesResult

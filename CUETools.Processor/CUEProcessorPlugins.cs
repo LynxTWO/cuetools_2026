@@ -66,8 +66,13 @@ namespace CUETools.Processor
         // widen the search beyond CUETools.*.dll or add auto-download without gating this.
         private static void AddPlugin(string plugin_path)
         {
-            AssemblyName name = AssemblyName.GetAssemblyName(plugin_path);
-            Assembly assembly = Assembly.Load(name);
+            // Load from the explicit path (backlog R16): on .NET (Core) the default load context
+            // does not probe the plugins subdirectory, so Assembly.Load(name) threw
+            // FileNotFoundException for a DLL living only under plugins\ and the codec silently
+            // failed to register (falling back to an absent external exe at encode time). LoadFrom
+            // keeps working on .NET Framework; if the same assembly identity is already loaded from
+            // the app base (a project reference), LoadFrom returns that one - no duplicate types.
+            Assembly assembly = Assembly.LoadFrom(plugin_path);
             System.Diagnostics.Trace.WriteLine("Loaded " + assembly.FullName);
             foreach (Type type in assembly.GetExportedTypes())
             {

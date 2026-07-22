@@ -22,11 +22,14 @@ public sealed class HistoryStore : IHistoryStore
     private const int Cap = 50;
     private readonly string _path;
     private readonly List<Row> _rows;
+    private readonly IDiagnosticLog _log;
 
-    public HistoryStore()
+    public HistoryStore(IDiagnosticLog log)
     {
+        _log = log;
         string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026");
-        Directory.CreateDirectory(dir);
+        // guarded: this runs during DI resolution, before the window-show retry loop can protect us
+        try { Directory.CreateDirectory(dir); } catch { }
         _path = Path.Combine(dir, "history.json");
         _rows = Read(_path);
     }
@@ -63,17 +66,24 @@ public sealed class HistoryStore : IHistoryStore
 
     private void Write()
     {
-        try { File.WriteAllText(_path, JsonSerializer.Serialize(_rows)); } catch { }
+        try { File.WriteAllText(_path, JsonSerializer.Serialize(_rows)); }
+        catch (Exception ex) { _log.Warn("history", "history write failed: " + ex.GetType().Name); }
     }
 
-    private static List<Row> Read(string path)
+    private List<Row> Read(string path)
     {
         try
         {
             if (File.Exists(path))
                 return JsonSerializer.Deserialize<List<Row>>(File.ReadAllText(path)) ?? new List<Row>();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // a corrupt file would otherwise be silently overwritten by the next Add - keep the
+            // evidence aside instead of destroying the user's history
+            _log.Warn("history", "history read failed (keeping the bad file as .bak): " + ex.GetType().Name);
+            try { File.Copy(path, path + ".bak", overwrite: true); } catch { }
+        }
         return new List<Row>();
     }
 

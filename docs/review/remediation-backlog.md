@@ -125,8 +125,14 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Next step:** (C) trace `_framesBuffer`/`pos` bounds and the rice loops; then apply the same end-pointer bound if needed. Reuse the R1 fuzz harness pattern (decode from a `MemoryStream`, truncate/mutate a seed `.m4a`).
 - **Verify:** decoded-PCM identical to pre-change on a valid ALAC seed; malformed inputs fail cleanly; ALAC round-trip test green.
 
-### R16. net8 plugin discovery cannot load an external `plugins\` DLL - bucket C, risk medium
+### R16. net8 plugin discovery cannot load an external `plugins\` DLL - bucket C, risk medium - DONE 2026-07-22
 
+- **Fixed:** `AddPlugin` now uses `Assembly.LoadFrom(plugin_path)`. Verified with the probe this
+  item prescribed: a net8 console app referencing Processor but NOT Flake, with
+  `CUETools.Codecs.Flake.dll` present ONLY under `plugins\`, registers
+  `CUETools.Codecs.Flake.EncoderSettings` (scratchpad R16Probe, "R16 PASS"). The trust-boundary
+  comment stays; `LoadFrom` returns the already-loaded assembly when the identity matches a
+  project reference, so no duplicate types. Original entry below for the record.
 - **Where:** `CUETools.Processor\CUEProcessorPlugins.cs` `AddPlugin` uses `Assembly.Load(AssemblyName.GetAssemblyName(plugin_path))`.
 - **Why:** surfaced while wiring the WPF Convert page (R12). On .NET Framework, `Assembly.Load(name)` probed the app base and found the codec DLL; on .NET 8 the default load context does NOT probe the `plugins\` subdirectory, so `Assembly.Load(name)` for a DLL that lives only under `plugins\` throws `FileNotFoundException`, which `AddPlugin` swallows to `Trace`. The codec then silently does not register, and format defaults fall back to an external command-line encoder (e.g. `flac.exe`) that may be absent - a hard failure at encode time. Proven: a probe with the Flake DLL only in `plugins\` fell back to `flac.exe` and threw; adding Flake as a project reference (so it is in the app probing path) fixed it and wrote real FLAC. The WPF app works ONLY because it project-references `CUETools.Codecs.Flake`; a genuinely external/third-party codec dropped into `plugins\` would not load.
 - **Next step:** (C) in `AddPlugin`, load from the explicit path - `Assembly.LoadFrom(plugin_path)` (or an `AssemblyLoadContext` rooted at the plugins dir) instead of `Assembly.Load(name)`; keep the CUETools.*.dll trust-boundary gate noted in the file. Re-check the encoder/decoder/ripper interface scan still finds the exported types.

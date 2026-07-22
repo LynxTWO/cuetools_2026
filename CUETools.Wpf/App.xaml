@@ -11,15 +11,12 @@
         <ResourceDictionary Source="Theme/Theme.xaml"/>
       </ResourceDictionary.MergedDictionaries>
 
-      <!-- page placeholder (Phase 2); each page gets its real view in Phase 3 -->
+      <!-- selector fallback for an unmapped page (every registered page has a real view; this
+           only renders if a future page forgets its template) -->
       <DataTemplate x:Key="PageTemplate">
         <StackPanel Margin="28" VerticalAlignment="Top">
           <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="30" Foreground="{DynamicResource Ink}"/>
           <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
-          <Border Margin="0,22,0,0" Padding="16,13" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" HorizontalAlignment="Left">
-            <TextBlock Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="12" TextWrapping="Wrap" MaxWidth="520"
-                       Text="Phase 2 shell - the app compiles, launches, and navigates over the .NET 8 engine. This screen gets its real UI in Phase 3, driven through the CUESheet facade."/>
-          </Border>
         </StackPanel>
       </DataTemplate>
 

@@ -8,6 +8,18 @@ namespace CUETools.Wpf;
 
 public partial class App : Application
 {
+    private SettingsStore? _settingsStore;
+    private CUEConfig? _config;
+    private AppSettings? _appSettings;
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        // persist every user setting (engine config + app prefs) on the way out
+        if (_settingsStore != null && _config != null && _appSettings != null)
+            _settingsStore.Save(_config, _appSettings);
+        base.OnExit(e);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -28,6 +40,7 @@ public partial class App : Application
             return c;
         });
         services.AddSingleton<AppSettings>();
+        services.AddSingleton<SettingsStore>();
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
@@ -61,6 +74,12 @@ public partial class App : Application
         DispatcherUnhandledException += (s, e) => { log.Error("crash.ui", "unhandled UI-thread exception (kept alive)", e.Exception); e.Handled = true; };
         AppDomain.CurrentDomain.UnhandledException += (s, e) => log.Error("crash.fatal", "unhandled exception (terminating)", e.ExceptionObject as Exception);
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) => { log.Error("crash.task", "unobserved task exception", e.Exception); e.SetObserved(); };
+
+        // restore the user's saved settings (engine config + app prefs) before anything reads them
+        _settingsStore = provider.GetRequiredService<SettingsStore>();
+        _config = provider.GetRequiredService<CUEConfig>();
+        _appSettings = provider.GetRequiredService<AppSettings>();
+        _settingsStore.Load(_config, _appSettings);
 
         // apply the saved theme (mutates the palette brushes) before the window shows
         var theme = provider.GetRequiredService<ThemeService>();
@@ -121,6 +140,11 @@ public partial class App : Application
             }
         }
         ShutdownMode = ShutdownMode.OnLastWindowClose;
-        if (!shown) log.Error("app", "window did not show after retries", null);
+        if (!shown)
+        {
+            // no window will ever close, so nothing would trigger shutdown - do not linger invisibly
+            log.Error("app", "window did not show after retries - exiting", null);
+            Shutdown(1);
+        }
     }
 }
