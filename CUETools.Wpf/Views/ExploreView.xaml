@@ -10,12 +10,14 @@
 
     <!-- interactive 3D disc: the Border captures the mouse over the whole stage -->
     <Border Grid.Column="0" x:Name="Stage" Background="Transparent" ClipToBounds="True"
-            MouseLeftButtonDown="Stage_Down" MouseLeftButtonUp="Stage_Up" MouseMove="Stage_Move" MouseWheel="Stage_Wheel">
+            MouseLeftButtonDown="Stage_Down" MouseLeftButtonUp="Stage_Up"
+            MouseRightButtonDown="Stage_RightDown" MouseRightButtonUp="Stage_RightUp"
+            MouseMove="Stage_Move" MouseWheel="Stage_Wheel">
       <ctl:DiscModel3D x:Name="Disc" Interactive="True"/>
     </Border>
     <Border Grid.Column="0" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16"
             Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="8" Padding="12,6">
-      <TextBlock Text="drag to orbit  .  scroll to zoom" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+      <TextBlock Text="left-drag orbit  .  right-drag pan  .  scroll zoom" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}"/>
     </Border>
 
     <!-- lesson panel -->
