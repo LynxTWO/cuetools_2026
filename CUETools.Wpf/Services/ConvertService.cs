@@ -33,6 +33,14 @@ public interface IConvertService
     /// Data-driven so a dropped-in codec plugin extends the list without code changes.</summary>
     IReadOnlyList<string> LosslessFormats();
 
+    /// <summary>Lossy output formats with a working IN-PROCESS encoder (e.g. mp3 via the bundled
+    /// libmp3lame). Formats whose only encoder is an external command-line exe are excluded -
+    /// offering a format that fails at encode time because flac.exe/oggenc.exe is absent is a lie.</summary>
+    IReadOnlyList<string> LossyFormats();
+
+    /// <summary>True when the format's output discards audio detail (encodes via a lossy encoder).</summary>
+    bool IsLossy(string format);
+
     ConvertResult Convert(string inputPath, string format, string outputDir, Action<double, string> onProgress);
 
     /// <summary>Decode a short real snippet of the source into mono sample windows (for the
@@ -59,6 +67,29 @@ public sealed class ConvertService : IConvertService
         catch { return new List<string> { "flac", "wav" }; }
     }
 
+    public IReadOnlyList<string> LossyFormats()
+    {
+        try
+        {
+            return _config.formats
+                .Where(f => f.Value.allowLossy && f.Value.encoderLossy != null
+                    // in-process encoders only: a CommandLine.EncoderSettings needs an external exe
+                    // (lame.exe, oggenc.exe...) that this build does not ship
+                    && f.Value.encoderLossy.Settings is not CUETools.Codecs.CommandLine.EncoderSettings)
+                .Select(f => f.Key)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch { return new List<string>(); }
+    }
+
+    public bool IsLossy(string format)
+    {
+        // a format that cannot produce lossless output (or has no lossless encoder) encodes lossy
+        try { return _config.formats.TryGetValue(format, out var f) && (!f.allowLossless || f.encoderLossless == null); }
+        catch { return false; }
+    }
+
     public ConvertResult Convert(string inputPath, string format, string outputDir, Action<double, string> onProgress)
     {
         try
@@ -81,7 +112,8 @@ public sealed class ConvertService : IConvertService
 
             cue.Action = CUEAction.Encode;
             cue.OutputStyle = CUEStyle.GapsAppended;
-            cue.GenerateFilenames(AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
+            cue.GenerateFilenames(IsLossy(format) ? AudioEncoderType.Lossy : AudioEncoderType.Lossless,
+                format, Path.Combine(outDir, "album.cue"));
 
             onProgress(0, $"Converting to {format}...");
             string status = cue.Go();

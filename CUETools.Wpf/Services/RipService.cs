@@ -148,8 +148,12 @@ public sealed class RipService : IRipService
                     : outputBaseDir;
                 outDir = Path.Combine(baseDir, album);
                 Directory.CreateDirectory(outDir);
-                cue.GenerateFilenames(AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
-                onProgress(0, $"Encoding to {format.ToUpperInvariant()} -> {outDir}");
+                // pick the encoder type from the format: mp3 etc. have no lossless encoder, so they
+                // encode via the format's lossy encoder (the bundled libmp3lame for mp3)
+                bool lossy = _config.formats.TryGetValue(format, out var fmtInfo)
+                    && (!fmtInfo.allowLossless || fmtInfo.encoderLossless == null);
+                cue.GenerateFilenames(lossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
+                onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {outDir}");
             }
             else
             {

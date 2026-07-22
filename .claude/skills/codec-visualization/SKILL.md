@@ -81,6 +81,35 @@ signature is long identical-frame runs punctuated by big jumps.
 
 Palette: teal (signal / residual), amber (predictor / uncompressed), muted (structure).
 
+## The lossy pipeline (a different truth, drawn differently)
+
+Lossy codecs get their OWN pipeline via `LossyMath` (portable, UI-free like `CodecMath`):
+**spectrum -> mask -> quantize -> pack**, all computed from the real PCM window:
+
+1. a 1024-point FFT of the Hann-windowed samples (honest: LAME's psychoacoustic model IS
+   FFT-based; the data path's hybrid polyphase+MDCT is named in the stage labels);
+2. Bark-band energies (Traunmuller), Schroeder-style spreading (+25 dB/Bark down, -10 up), a
+   ~14 dB tonal offset, and the Terhardt absolute threshold of hearing -> the real MASKING
+   THRESHOLD per bin;
+3. bins below the mask are inaudible -> DISCARDED (drawn dim red under the amber mask curve); the
+   "% discarded" is measured, not asserted;
+4. kept bins quantize with a mask-shaped step (noise sits at the mask - the real noise-shaping
+   idea), drawn as visibly stepped levels; an entropy estimate of the quantized values gives the
+   ~kbps headline.
+
+Per-codec `LossyMath.Profile` makes each lossy codec its own visualization: MP3 = hybrid-filterbank
+labels + Huffman pack (variable-width bars, short codes for common values); WMA = pure-MDCT labels,
+a coarser noise margin, and run-level packing (grey run markers + level blocks). The differences on
+screen are the real design differences. Never draw a lossy codec with the lossless
+predictor/residual stages, and never draw a lossless codec with a mask - the families are different
+and the scope branches on `LossyMath.IsLossy(codec)` before anything else.
+
+Encoder side (the app): MP3 encodes in-process via the bundled LAME 3.100 (`CUETools.Codecs.libmp3lame`
+plugin + vendored native `libmp3lame.dll` x64). Format lists must offer ONLY formats whose encoder is
+in-process (`Settings is not CommandLine.EncoderSettings`) - offering a format that fails at encode
+time because lame.exe/oggenc.exe is absent is a lie. A settings file saved by an older build can pin
+a stale CLI encoder choice; heal it at load (see `SettingsStore.HealEncoderChoices`).
+
 ## Honesty rules
 
 - The signal, prediction, residual, bits/sample and ratio ARE computed from the real audio - say so.

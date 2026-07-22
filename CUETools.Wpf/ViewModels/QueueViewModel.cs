@@ -32,6 +32,7 @@ public sealed class QueueViewModel : PageViewModel
         _convert = convert;
 
         foreach (var f in convert.LosslessFormats()) Formats.Add(f);
+        foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3 (bundled libmp3lame)
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
 
         AddFilesCommand = new RelayCommand(_ => AddFiles());

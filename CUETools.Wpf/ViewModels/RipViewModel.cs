@@ -244,6 +244,7 @@ public sealed class RipViewModel : PageViewModel
         _correctionQuality = Math.Max(0, Math.Min(2, settings.CorrectionQuality));
 
         foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
+        foreach (var f in codecs.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3 (bundled libmp3lame)
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
