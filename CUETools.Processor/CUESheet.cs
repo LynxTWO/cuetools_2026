@@ -3587,9 +3587,11 @@ namespace CUETools.Processor
 
             ShowProgress(String.Format("{2} track {0:00} ({1:00}%)...", 0, 0, noOutput ? "Verifying" : "Writing"), 0.0, null, null);
 
-#if !DEBUG
+            // Unconditional (was #if !DEBUG): the catch's audioDest.Delete() is what stops a stopped
+            // or failed encode leaving a TRUNCATED track file behind. A leftover partial poisons
+            // later whole-album operations (the sibling cue pulls it in and the decode dies mid-file)
+            // - see backlog R17. Debug builds must clean up the same way Release does.
             try
-#endif
             {
                 for (iTrack = 0; iTrack < TrackCount; iTrack++)
                 {
@@ -3718,7 +3720,6 @@ namespace CUETools.Processor
                     audioDest.Close();
                 audioDest = null;
             }
-#if !DEBUG
             catch (Exception ex)
             {
                 if (hdcdDecoder != null)
@@ -3729,12 +3730,11 @@ namespace CUETools.Processor
                     catch { }
                 audioSource = null;
                 if (audioDest != null)
-                    try { audioDest.Delete(); }
+                    try { audioDest.Delete(); }   // remove the in-progress (truncated) track file
                     catch { }
                 audioDest = null;
                 throw ex;
             }
-#endif
         }
 
         public void VerifyAudio()
