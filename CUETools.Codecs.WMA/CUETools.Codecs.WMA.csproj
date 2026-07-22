@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net47;net20</TargetFrameworks>
+    <!-- net8.0-windows added for the WPF app (backlog R18): WMA encodes via the OS's Windows Media
+         runtime (wmvcore), so no native DLL ships; COM interop works on modern .NET on Windows. -->
+    <TargetFrameworks>net47;net20;net8.0-windows</TargetFrameworks>
     <Version>2.2.6.0</Version>
     <AssemblyName>CUETools.Codecs.WMA</AssemblyName>
     <RootNamespace>CUETools.Codecs.WMA</RootNamespace>
@@ -26,7 +28,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CUETools.Codecs\CUETools.Codecs.csproj" />
+  </ItemGroup>
+
+  <!-- WindowsMediaLib is a net47/net20-only SUBMODULE. For net8.0-windows we compile its four
+       interop sources directly into this assembly instead of multi-targeting the submodule -
+       zero submodule edits, same types (internalized). Rectangle comes from
+       System.Drawing.Primitives, which is part of the net8 framework. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net8.0-windows'">
     <ProjectReference Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WindowsMediaLib.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\MMIO.cs" />
+    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMCore.cs" />
+    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMDefs.cs" />
+    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMUtils.cs" />
   </ItemGroup>
 
 </Project>

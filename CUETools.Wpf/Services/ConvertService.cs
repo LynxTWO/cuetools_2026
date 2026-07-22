@@ -54,12 +54,21 @@ public sealed class ConvertService : IConvertService
 
     public ConvertService(CUEConfig config) => _config = config;
 
+    // The app's rule for a two-faced extension (wma serves both WMA Lossless and WMA Standard):
+    // a format with a working IN-PROCESS lossy encoder is offered as a LOSSY format, once. The
+    // format dropdown means one thing per entry; a lossless/lossy encoder picker can widen this
+    // later. mp3 and wma are lossy; flac/wav/tak stay lossless; m4a stays lossless (ALAC) because
+    // its only lossy encoder is an absent CLI exe.
+    private bool HasInProcessLossy(CUEToolsFormat f) =>
+        f.allowLossy && f.encoderLossy != null
+        && f.encoderLossy.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
+
     public IReadOnlyList<string> LosslessFormats()
     {
         try
         {
             return _config.formats
-                .Where(f => f.Value.allowLossless && f.Value.encoderLossless != null)
+                .Where(f => f.Value.allowLossless && f.Value.encoderLossless != null && !HasInProcessLossy(f.Value))
                 .Select(f => f.Key)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -72,10 +81,7 @@ public sealed class ConvertService : IConvertService
         try
         {
             return _config.formats
-                .Where(f => f.Value.allowLossy && f.Value.encoderLossy != null
-                    // in-process encoders only: a CommandLine.EncoderSettings needs an external exe
-                    // (lame.exe, oggenc.exe...) that this build does not ship
-                    && f.Value.encoderLossy.Settings is not CUETools.Codecs.CommandLine.EncoderSettings)
+                .Where(f => HasInProcessLossy(f.Value))
                 .Select(f => f.Key)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -85,8 +91,7 @@ public sealed class ConvertService : IConvertService
 
     public bool IsLossy(string format)
     {
-        // a format that cannot produce lossless output (or has no lossless encoder) encodes lossy
-        try { return _config.formats.TryGetValue(format, out var f) && (!f.allowLossless || f.encoderLossless == null); }
+        try { return _config.formats.TryGetValue(format, out var f) && HasInProcessLossy(f); }
         catch { return false; }
     }
 
