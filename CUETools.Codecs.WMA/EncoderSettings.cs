@@ -79,7 +79,22 @@ namespace CUETools.Codecs.WMA
                 // would return the wrong stream config.
                 var formats = GetFormats(pProfileManager);
                 if (this.EncoderMode != "")
+                {
+                    var all = new List<WMAFormatInfo>(formats);
                     formats.RemoveAll(fmt => fmt.modeName != this.EncoderMode);
+                    // A stored mode name can be stale: mode names are derived from the enumeration,
+                    // and before PCM is known they carry the long form ("98,_44_kHz,_2_channel_24")
+                    // while the PCM-filtered enumeration uses the short form ("98"). Rather than
+                    // failing the encode over a display-name mismatch, fall back to the default
+                    // (the last = highest-quality format for this PCM).
+                    if (formats.Count == 0 && all.Count > 0)
+                        formats.Add(all[all.Count - 1]);
+                }
+                else if (formats.Count > 1)
+                {
+                    // no mode chosen: take the default (last = highest quality) instead of failing
+                    formats.RemoveRange(0, formats.Count - 1);
+                }
                 if (formats.Count < 1)
                     throw new NotSupportedException("codec/format not found");
                 if (formats.Count > 1)

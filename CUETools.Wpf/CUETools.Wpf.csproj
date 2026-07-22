@@ -42,6 +42,7 @@
     <ProjectReference Include="..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.ALAC\CUETools.Codecs.ALAC.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.libmp3lame\CUETools.Codecs.libmp3lame.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.WMA\CUETools.Codecs.WMA.csproj" />
     <ProjectReference Include="..\Freedb\Freedb.csproj" />
   </ItemGroup>
 
@@ -54,14 +55,17 @@
     <Copy SourceFiles="$(TargetDir)CUETools.Codecs.Flake.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(TargetDir)CUETools.Codecs.ALAC.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(TargetDir)CUETools.Codecs.libmp3lame.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.WMA.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
     <!-- the vendored LAME 3.100 native encoder (x64, matching PlatformTarget) - bundled so MP3
-         works out of the box with no external exe or download -->
+         works out of the box with no external exe or download. WMA needs no DLL at all: it uses
+         the OS's Windows Media runtime. -->
     <Copy SourceFiles="..\ThirdParty\x64\libmp3lame.dll" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="PublishManagedPlugins" AfterTargets="Publish">
     <Copy SourceFiles="$(PublishDir)CUETools.Codecs.Flake.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(PublishDir)CUETools.Codecs.ALAC.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(PublishDir)CUETools.Codecs.libmp3lame.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(PublishDir)CUETools.Codecs.WMA.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="..\ThirdParty\x64\libmp3lame.dll" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
   </Target>
 
