@@ -50,7 +50,7 @@ public partial class App : Application
         services.AddSingleton<PageViewModel, ExploreViewModel>();
 
         services.AddSingleton<MainViewModel>();
-        services.AddSingleton<MainWindow>();
+        // MainWindow is created directly (with a fresh instance per show-retry), not resolved here.
 
         var provider = services.BuildServiceProvider();
 
@@ -66,30 +66,61 @@ public partial class App : Application
         var theme = provider.GetRequiredService<ThemeService>();
         theme.Apply(theme.Current);
 
-        var window = provider.GetRequiredService<MainWindow>();
-        window.DataContext = provider.GetRequiredService<MainViewModel>();
-
-        // Windows' DWrite / font-cache layer can intermittently throw FileNotFoundException during the
-        // very first text layout. If that escapes Show() it aborts startup and leaves the process
-        // running with no visible window (the app looks like it "did nothing"). Retry the show + layout
-        // a few times - the font cache resolves on a later attempt - and bring the window to the front.
-        bool shown = false;
-        for (int attempt = 1; attempt <= 5 && !shown; attempt++)
+        // A broken system font-cache entry for a specific family makes DWrite throw FileNotFoundException
+        // when WPF first lays out text in it, which aborts the whole window (the app then runs with no
+        // visible window - looks like it "did nothing"). Probe each themed font up front; if one is
+        // unusable on this machine, swap its app resource for a standard fallback that renders. Must run
+        // before any window is built so StaticResource lookups pick up the replacement.
+        System.Windows.Media.FontFamily FirstUsableFont(string key, params string[] fallbacks)
         {
+            var candidates = new System.Collections.Generic.List<System.Windows.Media.FontFamily>();
+            if (Resources[key] is System.Windows.Media.FontFamily cur) candidates.Add(cur);
+            foreach (var f in fallbacks) candidates.Add(new System.Windows.Media.FontFamily(f));
+            candidates.Add(new System.Windows.Media.FontFamily("Segoe UI"));   // last resort (proven usable)
+            foreach (var fam in candidates)
+            {
+                try
+                {
+                    var tb = new System.Windows.Controls.TextBlock { Text = "AaGg0123 .-:", FontFamily = fam, FontSize = 18 };
+                    tb.Measure(new Size(600, 600));
+                    tb.Arrange(new Rect(tb.DesiredSize));
+                    return fam;   // this family lays out on this machine
+                }
+                catch (Exception ex) { log.Warn("app", $"font '{fam.Source}' for '{key}' unusable: {ex.GetType().Name}"); }
+            }
+            return new System.Windows.Media.FontFamily("Segoe UI");
+        }
+        Resources["Serif"] = FirstUsableFont("Serif", "Georgia, serif", "Cambria");
+        Resources["Mono"] = FirstUsableFont("Mono", "Consolas", "Courier New");
+        log.Info("app", $"fonts: serif={(Resources["Serif"] as System.Windows.Media.FontFamily)?.Source} mono={(Resources["Mono"] as System.Windows.Media.FontFamily)?.Source}");
+
+        // Even so, keep a fresh-window retry for any residual transient glitch: a half-initialised
+        // window does not recover, so build a NEW one each attempt. Guard ShutdownMode so discarding a
+        // failed window cannot exit the app.
+        var mainVm = provider.GetRequiredService<MainViewModel>();
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        bool shown = false;
+        for (int attempt = 1; attempt <= 6 && !shown; attempt++)
+        {
+            MainWindow window = null;
             try
             {
-                if (!window.IsVisible) window.Show();
-                window.UpdateLayout();
+                window = new MainWindow(theme) { DataContext = mainVm };
+                window.Show();
+                window.UpdateLayout();     // force the deferred layout so a font glitch throws here, caught
                 window.Activate();
                 shown = true;
                 log.Info("app", $"window shown (attempt {attempt})");
             }
             catch (Exception ex)
             {
-                log.Warn("app", $"window show/layout failed (attempt {attempt}): {ex.GetType().Name} - retrying");
-                System.Threading.Thread.Sleep(220);
+                // include the exception so a font/layout failure on a user's machine is diagnosable
+                log.Error("app", $"window show attempt {attempt} failed - fresh retry", ex);
+                try { window?.Close(); } catch { }
+                System.Threading.Thread.Sleep(250);
             }
         }
+        ShutdownMode = ShutdownMode.OnLastWindowClose;
         if (!shown) log.Error("app", "window did not show after retries", null);
     }
 }

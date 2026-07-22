@@ -39,7 +39,7 @@ public sealed class CodecScope : FrameworkElement
     private static readonly Color Muted = Color.FromRgb(0x7D, 0x88, 0x7C);
     private static readonly Color Line = Color.FromRgb(0x28, 0x31, 0x2A);
     private static readonly Typeface Face = new("Segoe UI");
-    private static readonly Typeface Mono = new("Cascadia Mono, Consolas");
+    private static readonly Typeface Mono = new("Consolas");
 
     // The ripper delivers audio in BURSTS (reads a buffer fast, then pauses while the drive
     // re-reads in secure mode). So we do not scroll in lockstep with delivery - we append into a
