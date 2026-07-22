@@ -42,8 +42,9 @@ public sealed class DiscModel3D : Viewport3D
     public bool Unreadable { get => (bool)GetValue(UnreadableProperty); set => SetValue(UnreadableProperty, value); }
     public bool Interactive { get => (bool)GetValue(InteractiveProperty); set => SetValue(InteractiveProperty, value); }
 
-    // Orbit state for explore mode (spherical: azimuth, elevation, distance).
+    // Orbit state for explore mode (spherical az/el/dist about a movable look-at target).
     private double _az = -Math.PI / 2, _el = 0.9, _dist = 150;
+    private Point3D _target;   // right-drag pans this, so zoom homes in on any point, not just centre
 
     /// <summary>Explore mode: orbit the camera by mouse-drag deltas.</summary>
     public void Orbit(double dAz, double dEl)
@@ -53,7 +54,22 @@ public sealed class DiscModel3D : Viewport3D
     }
 
     /// <summary>Explore mode: dolly the camera in/out (factor &gt; 1 zooms out).</summary>
-    public void Zoom(double factor) => _dist = Math.Max(18, Math.Min(320, _dist * factor));
+    public void Zoom(double factor) => _dist = Math.Max(9, Math.Min(320, _dist * factor));
+
+    /// <summary>Explore mode: pan the look-at target in the camera's screen plane (right-drag), so the
+    /// next zoom homes in on that point. Scaled by distance so it feels the same at any zoom.</summary>
+    public void Pan(double dx, double dy)
+    {
+        double ce = Math.Cos(_el), se = Math.Sin(_el), ca = Math.Cos(_az), sa = Math.Sin(_az);
+        var dir = new Vector3D(-ce * ca, -se, -ce * sa);                 // camera -> target
+        var right = Vector3D.CrossProduct(dir, new Vector3D(0, 1, 0)); right.Normalize();
+        var up = Vector3D.CrossProduct(right, dir); up.Normalize();
+        double k = _dist * 0.0026;
+        _target += right * (-dx * k) + up * (dy * k);
+        _target = new Point3D(Clamp(_target.X, -58, 58), Clamp(_target.Y, -12, 12), Clamp(_target.Z, -58, 58));
+    }
+
+    private static double Clamp(double v, double lo, double hi) => v < lo ? lo : v > hi ? hi : v;
 
     // Real CD geometry, in millimetres (used only as proportions).
     private const double RHole = 7.5, RData0 = 25.0, RDataN = 58.0, REdge = 60.0;
@@ -107,7 +123,7 @@ public sealed class DiscModel3D : Viewport3D
             RadiusY = 0.5
         };
         RebuildSurfaceStops(0);
-        _tracks = MakeTracks(512);   // fine data-track rings, brought up when zoomed in on the surface
+        _tracks = MakeTracks(1024);   // data spiral with pit/land dashes, brought up when zoomed in
         var topMaterial = new MaterialGroup
         {
             Children =
@@ -206,8 +222,9 @@ public sealed class DiscModel3D : Viewport3D
         double x = _dist * Math.Cos(_el) * Math.Cos(_az);
         double y = _dist * Math.Sin(_el);
         double z = _dist * Math.Cos(_el) * Math.Sin(_az);
-        _cam.Position = new Point3D(x, y, z);
-        _cam.LookDirection = new Vector3D(-x, -y, -z);
+        var pos = new Point3D(_target.X + x, _target.Y + y, _target.Z + z);
+        _cam.Position = pos;
+        _cam.LookDirection = _target - pos;
     }
 
     private void UpdateCamera()
@@ -272,24 +289,46 @@ public sealed class DiscModel3D : Viewport3D
         return BrushFrom(px, size);
     }
 
-    // Fine concentric rings across the data band: a REPRESENTATIVE data spiral (not the literal 1.6 um
-    // pitch, which is sub-pixel), faint so it does not moire at overview and reads when zoomed in.
+    // The data spiral, with pit/land structure. Each track carries a hashed run of pits (dark bumps)
+    // and lands (bright flats); the groove between tracks is dark. Faint at overview (fades in with
+    // zoom) so it does not moire; zoom in far enough and the individual pits resolve. Representative,
+    // not the literal 1.6 um pitch (that is sub-pixel), and stated as such in the honesty rules.
     private static ImageBrush MakeTracks(int size)
     {
         var px = new byte[size * size * 4];
         double c = size / 2.0;
+        const double trackFreq = 0.34;   // tracks per texel of radius (wider, so grooves read on zoom)
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)
             {
-                double dx = x - c, dy = y - c, r = Math.Sqrt(dx * dx + dy * dy) / c;
+                double dx = x - c, dy = y - c, rr = Math.Sqrt(dx * dx + dy * dy), r = rr / c;
                 if (r > 0.985 || r < 0.42) continue;               // the 25..58 mm data band
-                double ring = 0.5 + 0.5 * Math.Sin(r * c * 0.7);   // representative track frequency
-                double a = ring * ring * ring;                     // thin bright lines, dark gaps
                 int i = (y * size + x) * 4;
-                byte t = 0xC8;
-                px[i] = t; px[i + 1] = t; px[i + 2] = t; px[i + 3] = (byte)(a * 120);
+
+                double tf = rr * trackFreq;                        // which track, and where in its pitch
+                int track = (int)tf;
+                double within = tf - track;
+                if (within > 0.6) continue;                        // groove between tracks -> transparent
+                bool trackEdge = within > 0.5;                     // darken the groove edge for definition
+
+                // pit/land dashes along the track: hashed runs (grouped cells => EFM-like run lengths),
+                // constant density around the turn (more cells further out)
+                double ang = Math.Atan2(dy, dx) + Math.PI;         // 0..2pi
+                int cells = 260 + track * 2;
+                int cell = (int)(ang / (2 * Math.PI) * cells);
+                bool pit = (Hash((uint)(track * 73856093) ^ (uint)((cell / 3) * 19349663)) & 3u) == 0u;
+
+                byte v = pit || trackEdge ? (byte)0x22 : (byte)0xDE;   // pit / groove-edge dark, land bright
+                double a = pit ? 0.6 : trackEdge ? 0.4 : 0.85;
+                px[i] = v; px[i + 1] = v; px[i + 2] = v; px[i + 3] = (byte)(a * 135);
             }
         return BrushFrom(px, size);
+    }
+
+    private static uint Hash(uint x)
+    {
+        x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16;
+        return x;
     }
 
     private static ImageBrush BrushFrom(byte[] bgra, int size)
