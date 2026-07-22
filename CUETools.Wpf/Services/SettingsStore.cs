@@ -32,6 +32,7 @@ public sealed class SettingsStore
 
             var sr = new SettingsReader(AppName, FileName, null);
             config.Load(sr);
+            HealEncoderChoices(config);
             app.PreventSleepDuringRip = sr.LoadBoolean("WpfPreventSleep") ?? app.PreventSleepDuringRip;
             app.LockTrayDuringRip = sr.LoadBoolean("WpfLockTray") ?? app.LockTrayDuringRip;
             app.StopOnUnrecoverable = sr.LoadBoolean("WpfStopOnUnrecoverable") ?? app.StopOnUnrecoverable;
@@ -45,6 +46,41 @@ public sealed class SettingsStore
             // a corrupt file must not stop the app from launching; defaults stand
             _log.Warn("settings", "settings load failed - using defaults: " + ex.GetType().Name);
         }
+    }
+
+    // A settings file saved by an older build can pin a format's encoder to an external
+    // command-line exe (e.g. mp3 -> "lame.exe") from before the in-process codec was bundled.
+    // That exe does not ship, so the choice would fail at encode time and hide the format from
+    // the lossy list. Heal: when the saved choice is a CLI encoder but the fresh defaults now
+    // prefer an in-process one, take the in-process one.
+    private void HealEncoderChoices(CUEConfig config)
+    {
+        try
+        {
+            foreach (var kv in config.formats)
+            {
+                var f = kv.Value;
+                if (f.encoderLossy != null && f.encoderLossy.Settings is CUETools.Codecs.CommandLine.EncoderSettings)
+                {
+                    var d = config.Encoders.GetDefault(kv.Key, false);
+                    if (d != null && d.Settings is not CUETools.Codecs.CommandLine.EncoderSettings)
+                    {
+                        f.encoderLossy = d;
+                        _log.Info("settings", $"format {kv.Key}: lossy encoder healed to {d.Name}");
+                    }
+                }
+                if (f.encoderLossless != null && f.encoderLossless.Settings is CUETools.Codecs.CommandLine.EncoderSettings)
+                {
+                    var d = config.Encoders.GetDefault(kv.Key, true);
+                    if (d != null && d.Settings is not CUETools.Codecs.CommandLine.EncoderSettings)
+                    {
+                        f.encoderLossless = d;
+                        _log.Info("settings", $"format {kv.Key}: lossless encoder healed to {d.Name}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex) { _log.Warn("settings", "encoder heal failed: " + ex.GetType().Name); }
     }
 
     public void Save(CUEConfig config, AppSettings app)

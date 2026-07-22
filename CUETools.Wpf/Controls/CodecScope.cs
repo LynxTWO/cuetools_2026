@@ -59,6 +59,11 @@ public sealed class CodecScope : FrameworkElement
     private double _phase;
     private TimeSpan _last;
 
+    // lossy pipeline state: a longer window for the FFT analysis + smoothed readouts
+    private readonly float[] _fftWin = new float[LossyMath.N];
+    private readonly float[] _fftDemo = new float[LossyMath.N];
+    private double _kbpsEma = 192, _discEma = 50;
+
     public CodecScope()
     {
         _show = _view;
@@ -123,6 +128,12 @@ public sealed class CodecScope : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
+
+        // lossy codecs get their OWN pipeline (perceptual: spectrum -> mask -> quantize -> pack);
+        // they never draw the lossless predictor/residual stages - different family, different truth
+        var lossy = LossyMath.Info(Codec);
+        if (lossy != null) { RenderLossy(dc, w, h, lossy); return; }
+
         var info = CodecMath.Info(Codec);
 
         // real audio when it is flowing; a gentle demo when idle so the pipeline stays legible
@@ -288,5 +299,156 @@ public sealed class CodecScope : FrameworkElement
     {
         var ft = MakeText(s, bold ? new Typeface(tf.FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal) : tf, size, c);
         dc.DrawText(ft, p);
+    }
+
+    // ---------------- lossy pipeline (perceptual coding, a different truth) ----------------
+
+    private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
+
+    // extract the LossyMath.N-length window ending at the smooth read position
+    private void BuildFftView()
+    {
+        long end = (long)_readPos;
+        for (int i = 0; i < LossyMath.N; i++)
+        {
+            long idx = end - LossyMath.N + i;
+            _fftWin[i] = idx >= 0 ? _ring[(int)(((idx % RingSize) + RingSize) % RingSize)] : 0f;
+        }
+    }
+
+    private void RenderLossy(DrawingContext dc, double w, double h, LossyMath.Profile prof)
+    {
+        BuildFftView();
+        float[] show = _fftWin;
+        if (!CodecMath.HasSignal(_fftWin)) { CodecMath.FillDemo(_fftDemo, _phase); show = _fftDemo; }
+
+        // the REAL perceptual pipeline on the real window
+        var a = LossyMath.Analyze(show, prof);
+        _kbpsEma += (a.EstKbps - _kbpsEma) * 0.10;
+        _discEma += (a.PercentDiscarded - _discEma) * 0.10;
+
+        // header + live readout: estimated rate and how much was judged inaudible. The tagline is
+        // clipped so it never collides with the right-side readout at narrow widths.
+        Text(dc, prof.Name, new Point(2, 0), Mono, 14, Ink, true);
+        string head = $"~{_kbpsEma:0} kbps est";
+        var ft = MakeText(head, Mono, 14, Amber);
+        dc.DrawText(ft, new Point(w - ft.Width - 2, 0));
+        string sub = $"{_discEma:0}% of spectral detail inaudible - discarded";
+        var ft2 = MakeText(sub, Face, 10, Muted);
+        dc.DrawText(ft2, new Point(w - ft2.Width - 2, 20));
+        var tag = MakeText(prof.Tagline, Face, 10.5, Muted);
+        tag.MaxTextWidth = Math.Max(40, w - ft2.Width - 24);
+        tag.MaxLineCount = 1;
+        tag.Trimming = TextTrimming.CharacterEllipsis;
+        dc.DrawText(tag, new Point(2, 20));
+
+        double top = 42, bot = h - 15, bh = bot - top;
+        if (bh < 24) return;
+
+        var stages = prof.Stages;
+        double gap = 10;
+        double sw = (w - gap * (stages.Length - 1)) / stages.Length;
+        for (int i = 0; i < stages.Length; i++)
+        {
+            double x = i * (sw + gap);
+            var r = new Rect(x, top, sw, bh);
+            DrawCard(dc, r);
+            dc.PushClip(new RectangleGeometry(r, 8, 8));
+            switch (i)
+            {
+                case 0: SpectrumStage(dc, r, a, withMask: false); break;
+                case 1: SpectrumStage(dc, r, a, withMask: true); break;
+                case 2: QuantStage(dc, r, a); break;
+                default: LossyPackStage(dc, r, a, prof); break;
+            }
+            dc.Pop();
+            Text(dc, stages[i], new Point(x + 8, bot + 1), Mono, 9, Muted, false);
+            if (i < stages.Length - 1) Arrow(dc, new Point(x + sw + 1, top + bh / 2), new Point(x + sw + gap - 1, top + bh / 2));
+        }
+    }
+
+    // log-frequency x mapping (50 Hz .. 20 kHz), dB y mapping (-96 .. 0)
+    private static double Fx(int bin, Rect r)
+    {
+        double f = Math.Max(50, bin * 44100.0 / LossyMath.N);
+        return r.Left + 4 + (r.Width - 8) * Math.Log(f / 50.0) / Math.Log(20000.0 / 50.0);
+    }
+    private static double Dy(double db, Rect r) => r.Top + 5 + (r.Height - 10) * Math.Min(1, Math.Max(0, -db / 96.0));
+
+    // Stage 1/2: the real spectrum; with the mask on, the amber threshold curve overlays it and
+    // everything below the curve turns dim red - the discard, made visible.
+    private void SpectrumStage(DrawingContext dc, Rect r, LossyMath.Analysis a, bool withMask)
+    {
+        var keep = new Pen(new SolidColorBrush(Teal), 1.2); keep.Freeze();
+        var drop = new Pen(new SolidColorBrush(Color.FromArgb(120, Crit.R, Crit.G, Crit.B)), 1.0); drop.Freeze();
+        for (int k = 2; k < LossyMath.Bins; k += 2)
+        {
+            double x = Fx(k, r);
+            double y = Dy(a.SpectrumDb[k], r);
+            bool dropped = withMask && !a.Kept[k];
+            dc.DrawLine(dropped ? drop : keep, new Point(x, r.Bottom - 4), new Point(x, y));
+        }
+        if (withMask)
+        {
+            var maskPen = new Pen(new SolidColorBrush(Amber), 1.6); maskPen.Freeze();
+            Point? prev = null;
+            for (int k = 2; k < LossyMath.Bins; k += 4)
+            {
+                var p = new Point(Fx(k, r), Dy(a.MaskDb[k], r));
+                if (prev != null) dc.DrawLine(maskPen, prev.Value, p);
+                prev = p;
+            }
+        }
+    }
+
+    // Stage 3: kept components redrawn at their QUANTIZED (stepped) levels - the coarse steps are
+    // where the bits are saved; dropped bins are simply gone.
+    private void QuantStage(DrawingContext dc, Rect r, LossyMath.Analysis a)
+    {
+        var q = new Pen(new SolidColorBrush(Teal), 2.2) { StartLineCap = PenLineCap.Flat }; q.Freeze();
+        var tick = new SolidColorBrush(Color.FromArgb(200, Amber.R, Amber.G, Amber.B));
+        tick.Freeze();
+        for (int k = 2; k < LossyMath.Bins; k += 4)
+        {
+            if (!a.Kept[k]) continue;
+            double x = Fx(k, r);
+            double y = Dy(a.QuantDb[k], r);
+            dc.DrawLine(q, new Point(x, r.Bottom - 4), new Point(x, y));
+            dc.DrawRectangle(tick, null, new Rect(x - 1.6, y - 1, 3.2, 2));   // the step top
+        }
+    }
+
+    // Stage 4: the entropy pack. Huffman (MP3): variable-width bars, short codes for common small
+    // values. Run-level (WMA family): runs of dropped bins collapse to a marker + one level block.
+    private void LossyPackStage(DrawingContext dc, Rect r, LossyMath.Analysis a, LossyMath.Profile prof)
+    {
+        double x = r.Left + 6, baseY = r.Bottom - 8, maxH = r.Height - 18;
+        var bar = new SolidColorBrush(Teal); bar.Freeze();
+        var runB = new SolidColorBrush(Color.FromArgb(90, Muted.R, Muted.G, Muted.B)); runB.Freeze();
+        int run = 0;
+        for (int k = 2; k < LossyMath.Bins && x < r.Right - 8; k += 4)
+        {
+            if (!a.Kept[k]) { run++; continue; }
+            if (prof.HuffmanPack)
+            {
+                // bar width ~ code length: rarer/larger values cost more bits
+                double snr = Math.Max(0, a.SpectrumDb[k] - a.MaskDb[k]);
+                double bits = Math.Max(1, Math.Log2(1 + Math.Pow(10, snr / 20.0)));
+                double bw = 1.5 + bits * 0.8;
+                double bhh = Math.Min(maxH, 4 + bits * (maxH / 14.0));
+                dc.DrawRectangle(bar, null, new Rect(x, baseY - bhh, bw, bhh));
+                x += bw + 1.5;
+            }
+            else
+            {
+                // run-level: a thin grey run marker (skipped bins) then one level block
+                if (run > 0) { dc.DrawRectangle(runB, null, new Rect(x, baseY - 3, Math.Min(10, 2 + run), 3)); x += Math.Min(10, 2 + run) + 1; }
+                double lvl = Math.Max(0, a.QuantDb[k] + 96) / 96.0;
+                double bhh = Math.Min(maxH, 4 + lvl * maxH);
+                dc.DrawRectangle(bar, null, new Rect(x, baseY - bhh, 3.5, bhh));
+                x += 5;
+            }
+            run = 0;
+        }
     }
 }
