@@ -138,7 +138,13 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Next step:** (C) in `AddPlugin`, load from the explicit path - `Assembly.LoadFrom(plugin_path)` (or an `AssemblyLoadContext` rooted at the plugins dir) instead of `Assembly.Load(name)`; keep the CUETools.*.dll trust-boundary gate noted in the file. Re-check the encoder/decoder/ripper interface scan still finds the exported types.
 - **Verify:** a codec DLL present ONLY under `plugins\` (no project reference, not in the app root) registers and is selectable; encode to that format writes output with no external exe on PATH. Extend the VerifyProbe pattern (Flake only in `plugins\`, no project ref) - it must now transcode instead of falling back to `flac.exe`.
 
-### R17. Stopped rip leaves a truncated track file that poisons later album operations - bucket C, risk low
+### R17. Stopped rip leaves a truncated track file that poisons later album operations - bucket C, risk low - DONE 2026-07-22
+
+- **Fixed:** the cleanup catch in `CUESheet.WriteAudioFilesPass` (which `audioDest.Delete()`s the
+  in-progress file on any exception, including StopException) was Release-only (`#if !DEBUG`);
+  it is now unconditional. Verified live: mp3 rip started, partial file present, stopped
+  mid-track, output folder left with zero partial files. The existing truncated leftover was
+  quarantined as `.partial`. Original entry below for the record.
 
 - **Where:** WPF `RipService` StopException path; the engine's `CUESheet.Go()` leaves the
   in-progress track file partially written when stopped.
@@ -156,8 +162,17 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Verify:** stop a rip mid-track; the output dir contains only complete tracks (or a clearly
   non-audio temp name); converting the album afterwards succeeds.
 
-### R18. WMA lossy encoder for the WPF app - bucket D (enhancement)
+### R18. WMA lossy encoder for the WPF app - bucket D (enhancement) - DONE 2026-07-22
 
+- **Fixed:** `CUETools.Codecs.WMA` gained net8.0-windows WITHOUT touching the WindowsMediaLib
+  submodule (its four interop sources compile directly into the WMA assembly for that TFM).
+  Also fixed a real encoder bug surfaced on the modern path: a stale `EncoderMode` name (long
+  pre-PCM form vs the short PCM-filtered form) made `GetWriter` throw "codec/format not found";
+  a stale/empty mode now falls back to the highest-quality format for the PCM. Verified: net8
+  probe encode produced real "Microsoft Multichannel WMA Audio"; app-path album convert wrote
+  11 wma tracks in 51s; format lists show lossy mp3,wma. The app treats "wma" as WMA Standard
+  (lossy) only - one meaning per dropdown entry; WMA Lossless waits for a lossless/lossy
+  encoder picker. Original entry below for the record.
 - The lossy visualization already carries a distinct WMA profile (pure-MDCT labels, run-level
   pack). The encoder needs `CUETools.Codecs.WMA` (net47/net20 only) and the `WindowsMediaLib`
   SUBMODULE multi-targeted to netstandard2.0/net8.0-windows, plus a net8 COM-interop encode
