@@ -25,8 +25,11 @@
   <Color x:Key="LampCapMid">#5A45D6C9</Color>
   <Color x:Key="LampCapEdge">#0034CFC0</Color>
 
+  <!-- Lead each stack with a font that ships on every Windows and is unlikely to have a broken
+       font-cache entry (Cascadia Mono was found broken on a test machine, throwing FileNotFoundException
+       in DWrite and aborting the whole window). The nicer faces stay as fallbacks. -->
   <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
-  <FontFamily x:Key="Mono">Cascadia Mono, Consolas, monospace</FontFamily>
+  <FontFamily x:Key="Mono">Consolas, Cascadia Mono, monospace</FontFamily>
 
   <!-- Panel button: reads like a milled bench-gear key. Dark brushed face, hairline edge that
        lights teal on hover, sinks on press. Implicit, so every plain Button picks it up. -->

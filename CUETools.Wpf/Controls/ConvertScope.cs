@@ -36,7 +36,7 @@ public sealed class ConvertScope : FrameworkElement
     private static readonly Color Muted = Color.FromRgb(0x7D, 0x88, 0x7C);
     private static readonly Color Line = Color.FromRgb(0x28, 0x31, 0x2A);
     private static readonly Typeface Face = new("Segoe UI");
-    private static readonly Typeface Mono = new("Cascadia Mono, Consolas");
+    private static readonly Typeface Mono = new("Consolas");
 
     private const int Roll = 640;
     private readonly float[] _roll = new float[Roll];
