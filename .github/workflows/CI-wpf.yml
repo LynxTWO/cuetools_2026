@@ -1,0 +1,49 @@
+---
+name: CI-wpf
+
+# Builds the .NET 8 WPF app (CUETools 2026) and runs a bounded fuzz smoke. The legacy
+# CI-windows.yml builds the full VS solution with devenv; this job needs only the .NET 8 SDK
+# because every CUETools.Wpf project reference is managed C# (the native encoders are vendored
+# DLLs, already tracked in ThirdParty/x64). Kept as its own workflow so a break in the modern
+# app is obvious and independent of the legacy solution build.
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The WPF managed build closure pulls in two submodule sources: CUETools.Processor references
+      # the taglib-sharp submodule project, and CUETools.Codecs.WMA compiles the WindowsMediaLib
+      # interop sources directly for net8. Both need their CUETools patches applied (same patches the
+      # legacy CI applies). The other patches (flac, WavPack, MAC_SDK) are native-only and not in
+      # this closure, so they are skipped here.
+      - name: Apply submodule patches (managed closure)
+        shell: cmd
+        run: |
+          git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose --whitespace=nowarn
+          git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose --whitespace=nowarn
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build CUETools.Wpf (Release, net8)
+        run: dotnet build CUETools.Wpf/CUETools.Wpf.csproj -c Release --nologo
+
+      - name: Build the fuzz harness
+        run: dotnet build CUETools.Fuzz/CUETools.Fuzz.csproj -c Release --nologo
+
+      # Bounded, deterministic, HEADLESS smoke: the SCSI/TOC parsers and CodecMath under 20k fuzz
+      # iterations. A non-zero exit (a parser throw, a math NaN/inf) fails the job. The full 300k
+      # run and the toggle/GUI-walk sweeps need a live window, so they stay local/manual steps.
+      - name: Fuzz smoke - parsers + CodecMath (20k iters)
+        run: dotnet run --project CUETools.Fuzz/CUETools.Fuzz.csproj -c Release --no-build -- 20260712 20000
