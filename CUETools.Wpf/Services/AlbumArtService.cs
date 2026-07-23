@@ -29,12 +29,13 @@ public interface IAlbumArtService
 
     /// <summary>Find hi-res art and re-encode it as JPEG downscaled so its longest side is at most
     /// <paramref name="maxSize"/> px (RIOT-matched). Returns null if nothing is found.</summary>
-    Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, string? barcode = null, CancellationToken ct = default);
+    Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 95, string? barcode = null, CancellationToken ct = default);
 
     /// <summary>Downscale already-fetched image bytes to a JPEG whose longest side is at most
     /// <paramref name="maxSize"/> px, using the RIOT-matching resampler. No network - lets a caller
-    /// that already fetched a master (for a preview) produce the embed copy without fetching twice.</summary>
-    byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 90);
+    /// that already fetched a master (for a preview) produce the embed copy without fetching twice.
+    /// Never upscales; a JPEG source that already fits is returned byte-for-byte (zero loss).</summary>
+    byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 95);
 }
 
 public sealed class AlbumArtService : IAlbumArtService
@@ -88,31 +89,36 @@ public sealed class AlbumArtService : IAlbumArtService
             top.TryGetProperty("artistName", out var an) ? an.GetString() ?? artist : artist);
     }
 
-    public async Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 90, string? barcode = null, CancellationToken ct = default)
+    public async Task<byte[]?> FindResizedJpeg(string artist, string album, int maxSize, int quality = 95, string? barcode = null, CancellationToken ct = default)
     {
         var art = await FindHiRes(artist, album, barcode, ct);
         return art == null ? null : ResizeToJpeg(art.Bytes, maxSize, quality);
     }
 
-    public byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 90)
+    public byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality = 95)
     {
         var src = Decode(source);
         if (src == null) return null;
         int w = src.PixelWidth, h = src.PixelHeight;
 
-        BitmapSource result;
+        // NEVER upscale: if the master already fits within maxSize, keep its own pixels.
         if (Math.Max(w, h) <= maxSize)
         {
-            result = src; // already small enough - just re-encode
+            // a JPEG that needs no resize passes through byte-for-byte - re-encoding an unchanged
+            // JPEG only adds generational loss. (FFD8 = JPEG SOI marker.)
+            if (source.Length >= 2 && source[0] == 0xFF && source[1] == 0xD8)
+                return source;
+            // PNG or other source: one encode at the visually-lossless quality
+            return EncodeJpeg(src, quality);
         }
-        else
-        {
-            double f = (double)maxSize / Math.Max(w, h);
-            int dw = Math.Max(1, (int)Math.Round(w * f));
-            int dh = Math.Max(1, (int)Math.Round(h * f));
-            result = RiotResampler.Resize(src, dw, dh);
-        }
-        return EncodeJpeg(result, quality);
+
+        double f = (double)maxSize / Math.Max(w, h);
+        int dw = Math.Max(1, (int)Math.Round(w * f));
+        int dh = Math.Max(1, (int)Math.Round(h * f));
+        // Mitchell-Netravali downscale (the RIOT-matched resampler), then a quality-95 encode:
+        // at q95 on a freshly downscaled image, JPEG block/ringing artifacts sit below visual
+        // threshold at 1:1 viewing - the compression must never visibly change the scaled result.
+        return EncodeJpeg(RiotResampler.Resize(src, dw, dh), quality);
     }
 
     private static BitmapSource? Decode(byte[] bytes)

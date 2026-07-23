@@ -216,6 +216,9 @@ public sealed class RipViewModel : PageViewModel
     private bool _artLoading;
     public bool ArtLoading { get => _artLoading; private set => Set(ref _artLoading, value); }
     private byte[]? _coverBytes;
+    private byte[]? _artMaster;   // the hi-res master as fetched, kept so a size change re-derives without re-fetching
+    private string _artLabel = "";   // "Apple WxH (UPC-exact)" - reused when re-deriving
+    private int _artMasterSide;      // the master's longest side - scaling never goes above it
     private System.Threading.CancellationTokenSource? _artCts;
 
     public ICommand ReadDiscCommand { get; }
@@ -255,6 +258,8 @@ public sealed class RipViewModel : PageViewModel
         RebuildFormats();
         // an imported external encoder (e.g. mppenc.exe for Musepack) lights its format up live
         catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac"); };
+        // a cover-size change in Settings re-derives the already-fetched cover at the new size
+        settings.ArtSizeChanged += (_, _) => RefreshArtSize();
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
@@ -294,12 +299,23 @@ public sealed class RipViewModel : PageViewModel
         _trayWatch.Start();
     }
 
+    private DriveTrayState _pendingTray = DriveTrayState.Unknown;   // debounce: last raw reading
+
     private async Task PollTrayAsync()
     {
         if (_selectedDrive == '\0' || _isBusy || IsRipping) return;
         char drive = _selectedDrive;
         DriveTrayState tray = await Task.Run(() => _drives.GetTrayState(drive));
         if (tray == DriveTrayState.Unknown) return;
+        // Debounce: the GESN media-status poll can flap for one reading around drive activity
+        // (measured live: a 15 s phantom "tray open" and a spurious disc re-read with no tray event).
+        // Accept a CHANGE only when two consecutive polls agree; matching reads pass straight through.
+        if (tray != TrayState && tray != _pendingTray)
+        {
+            _pendingTray = tray;
+            return;
+        }
+        _pendingTray = tray;
         TrayState = tray;
 
         if (tray == DriveTrayState.ClosedWithDisc)
@@ -421,9 +437,28 @@ public sealed class RipViewModel : PageViewModel
     {
         _artCts?.Cancel();
         _coverBytes = null;
+        _artMaster = null;
+        _artLabel = "";
         ArtPreview = null;
         ArtInfo = "";
         ArtLoading = false;
+    }
+
+    // The cover max-size changed in Settings: re-derive the embed JPEG from the cached master at
+    // the new size - no re-fetch, and the info line updates so the change is visible immediately.
+    private async void RefreshArtSize()
+    {
+        var master = _artMaster;
+        if (master == null) return;
+        int max = Math.Max(200, _config.maxAlbumArtSize);
+        var jpeg = await Task.Run(() => _art.ResizeToJpeg(master, max));
+        if (_artMaster != master) return;   // a newer fetch replaced the master meanwhile
+        _coverBytes = jpeg;
+        if (jpeg != null)
+        {
+            int outSide = Math.Min(max, _artMasterSide);   // never scaled above the master
+            ArtInfo = $"{_artLabel} -> re-scaled {outSide}px, {jpeg.Length / 1024}KB JPEG";
+        }
     }
 
     private async Task FetchArtAsync(string artist, string album, string barcode)
@@ -445,6 +480,10 @@ public sealed class RipViewModel : PageViewModel
                 ArtInfo = "no Apple cover - database cover will be used";
                 return;
             }
+            // keep the master: a later size change in Settings re-derives the embed copy from it
+            _artMaster = art.Bytes;
+            _artMasterSide = Math.Max(art.Width, art.Height);
+            _artLabel = $"Apple {art.Width}x{art.Height}" + (barcode.Length > 0 ? " (UPC-exact)" : "");
             // resize to the configured max with the RIOT-matched resampler (off the UI thread)
             var jpeg = await Task.Run(() => _art.ResizeToJpeg(art.Bytes, max), ct);
             if (ct.IsCancellationRequested) return;
@@ -455,8 +494,7 @@ public sealed class RipViewModel : PageViewModel
             // cover - say so instead of letting the preview overpromise
             ArtInfo = jpeg == null
                 ? "cover resize failed - database cover will be embedded"
-                : $"Apple {art.Width}x{art.Height}" + (barcode.Length > 0 ? " (UPC-exact)" : "")
-                    + $" -> {outSide}px, {jpeg.Length / 1024}KB JPEG";
+                : $"{_artLabel} -> {outSide}px, {jpeg.Length / 1024}KB JPEG";
         }
         catch (OperationCanceledException) { }
         catch { ArtInfo = "cover lookup failed - database cover will be used"; }

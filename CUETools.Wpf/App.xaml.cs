@@ -98,6 +98,16 @@ public partial class App : Application
             catalog.ApplyArchivalDefaults(_config);
             _appSettings.ArchivalDefaultsApplied = true;
         }
+        // one-time owner-default migration round 2: a settings file written before these defaults
+        // existed carries the stale engine values (300 px covers, AR tags off). Shift once; after
+        // that the user's own choices stick.
+        if (!_appSettings.DefaultsV2Applied)
+        {
+            if (_config.maxAlbumArtSize == 300) _config.maxAlbumArtSize = 1000;
+            _config.writeArTagsOnEncode = true;
+            _appSettings.DefaultsV2Applied = true;
+            log.Info("settings", $"defaults v2 applied: cover max {_config.maxAlbumArtSize}px, AR tags on encode on");
+        }
 
         // apply the saved theme (mutates the palette brushes) before the window shows
         var theme = provider.GetRequiredService<ThemeService>();
