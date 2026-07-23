@@ -63,6 +63,31 @@ public static class LossyMath
             NoiseMarginDb = 2,
             HuffmanPack = false
         },
+        // external (imported) lossy codecs - each labeled with ITS real pipeline:
+        "mpc" => new Profile
+        {
+            Name = "Musepack (SV8)",
+            Tagline = "pure 32-subband filterbank (no MDCT), psychoacoustic mask, Huffman pack",
+            Stages = new[] { "subbands", "mask", "quantize", "Huffman" },
+            NoiseMarginDb = -2,   // Musepack keeps a little more margin - tuned for transparency
+            HuffmanPack = true
+        },
+        "ogg" => new Profile
+        {
+            Name = "Ogg Vorbis",
+            Tagline = "pure-MDCT filterbank, floor-curve mask, codebook (VQ) pack",
+            Stages = new[] { "MDCT", "floor", "quantize", "codebook" },
+            NoiseMarginDb = 1,
+            HuffmanPack = true    // codebook lookup draws like variable-length codes
+        },
+        "opus" => new Profile
+        {
+            Name = "Opus (CELT)",
+            Tagline = "MDCT bands with constrained energy, per-band allocation, range coding",
+            Stages = new[] { "MDCT", "band energy", "allocate", "range code" },
+            NoiseMarginDb = 1,
+            HuffmanPack = false   // range coder: run-level style drawing reads closer
+        },
         _ => null
     };
 

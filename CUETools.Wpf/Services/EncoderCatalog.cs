@@ -131,9 +131,19 @@ public sealed class EncoderCatalog
         return ResolveExe(enc) != null;
     }
 
-    /// <summary>The app's lossy-ness rule for a format: it encodes lossy when it has a USABLE lossy
-    /// encoder (mp3, wma; mpc once its exe is imported). One meaning per dropdown entry.</summary>
-    public bool IsLossyFormat(CUEToolsFormat f) => f.allowLossy && IsUsable(f.encoderLossy);
+    /// <summary>The app's lossy-ness rule for a format, one meaning per dropdown entry, with a
+    /// priority: an IN-PROCESS lossy encoder wins (mp3, wma); otherwise a usable command-line lossy
+    /// encoder wins only when the format has no in-process lossless alternative (mpc/ogg/opus have
+    /// none - but m4a keeps its in-process ALAC identity even if qaac.exe gets imported).</summary>
+    public bool IsLossyFormat(CUEToolsFormat f)
+    {
+        if (!f.allowLossy || !IsUsable(f.encoderLossy)) return false;
+        bool lossyInProcess = f.encoderLossy!.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
+        if (lossyInProcess) return true;
+        bool losslessInProcess = f.allowLossless && f.encoderLossless != null
+            && f.encoderLossless.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
+        return !losslessInProcess;
+    }
 
     /// <summary>Find a command-line encoder's exe: an absolute configured path, the app's encoders
     /// folder, next to the app, then PATH. Fixes up the configured path when found locally.</summary>
