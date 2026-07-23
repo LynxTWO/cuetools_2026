@@ -40,6 +40,12 @@ public sealed class SettingsStore
             app.SelectedFormat = sr.Load("WpfSelectedFormat") ?? "";
             app.CorrectionQuality = Math.Max(0, Math.Min(2, sr.LoadInt32("WpfCorrectionQuality", 0, 2) ?? 1));
             app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
+            app.NamingTemplate = sr.Load("WpfNamingTemplate") ?? app.NamingTemplate;
+            app.NamingExtractFeatured = sr.LoadBoolean("WpfNamingExtractFeatured") ?? true;
+            app.NamingUnifySeparators = sr.LoadBoolean("WpfNamingUnifySeparators") ?? true;
+            app.NamingHandleArticles = sr.LoadBoolean("WpfNamingHandleArticles") ?? true;
+            app.NamingStripIllegal = sr.LoadBoolean("WpfNamingStripIllegal") ?? true;
+            app.NamingReleaseDescriptor = sr.LoadBoolean("WpfNamingReleaseDescriptor") ?? true;
             _log.Info("settings", "settings loaded");
         }
         catch (Exception ex)
@@ -97,6 +103,12 @@ public sealed class SettingsStore
             sw.Save("WpfSelectedFormat", app.SelectedFormat);
             sw.Save("WpfCorrectionQuality", app.CorrectionQuality);
             sw.Save("WpfArchivalDefaultsApplied", app.ArchivalDefaultsApplied);
+            sw.Save("WpfNamingTemplate", app.NamingTemplate);
+            sw.Save("WpfNamingExtractFeatured", app.NamingExtractFeatured);
+            sw.Save("WpfNamingUnifySeparators", app.NamingUnifySeparators);
+            sw.Save("WpfNamingHandleArticles", app.NamingHandleArticles);
+            sw.Save("WpfNamingStripIllegal", app.NamingStripIllegal);
+            sw.Save("WpfNamingReleaseDescriptor", app.NamingReleaseDescriptor);
             sw.Close();
             _log.Info("settings", "settings saved");
         }

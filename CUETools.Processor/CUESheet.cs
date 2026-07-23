@@ -2150,6 +2150,9 @@ namespace CUETools.Processor
             string album = cueSheet == null ? "Album" : cueSheet.Metadata.Title == "" ? "Unknown Title" : cueSheet.Metadata.Title;
             vars.Add("artist", General.EmptyStringToNull(_config.CleanseString(artist)));
             vars.Add("album", General.EmptyStringToNull(_config.CleanseString(album)));
+            // album artist for the WPF Naming scheme; CD metadata rarely separates it from the
+            // track artist, so it mirrors artist here (falls back cleanly)
+            vars.Add("albumartist", General.EmptyStringToNull(_config.CleanseString(artist)));
 
             if (cueSheet != null)
             {
@@ -2165,6 +2168,25 @@ namespace CUETools.Processor
                 vars.Add("totaldiscs", General.EmptyStringToNull(_config.CleanseString(cueSheet.Metadata.TotalDiscs)));
                 vars.Add("releasedateandlabel", General.EmptyStringToNull(_config.CleanseString(cueSheet.Metadata.ReleaseDateAndLabel)));
                 vars.Add("discnumberandname", General.EmptyStringToNull(_config.CleanseString(cueSheet.Metadata.DiscNumberAndName.Replace("/", " of "))));
+
+                // Derived variables the WPF Naming scheme uses. Registered with EMPTY-STRING (never
+                // null) defaults so the archival template never leaves a literal %token% and never
+                // fails generation (an unresolved token returns null upstream). %featsuffix% needs a
+                // per-track guest credit the CD metadata model does not carry, and %releasedescriptor%
+                // here is the year + disc-count subset (the MusicBrainz release-type brackets need
+                // type metadata a plain CD lacks); both are shown in fuller form in the Naming
+                // preview. See docs/review/r12-naming-system-design.md.
+                int _td = 0, _dn = 0;
+                int.TryParse(cueSheet.Metadata.TotalDiscs, out _td);
+                int.TryParse(cueSheet.Metadata.DiscNumber01, out _dn);
+                vars.Add("disc", (_td > 1 && _dn > 0) ? "Disc " + _dn + "/" : "");
+                string _rd = "";
+                if (_td > 1) _rd += " [" + _td + "-CD Set]";
+                string _yr = cueSheet.Metadata.Year ?? "";
+                if (_yr.Length >= 4) _rd += " (" + _yr.Substring(0, 4) + ")";
+                vars.Add("releasedescriptor", _rd);
+                vars.Add("featsuffix", "");
+
                 NameValueCollection tags = cueSheet.Tags;
                 if (tags != null)
                     foreach (string tag in tags.AllKeys)
