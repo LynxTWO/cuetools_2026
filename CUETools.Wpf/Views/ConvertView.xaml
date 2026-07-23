@@ -47,9 +47,9 @@
              what the target codec does before you pick one -->
         <Border Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="11" Padding="16,13" Margin="0,22,0,0" MinWidth="560">
           <Grid>
-            <ctl:CodecScope Height="118" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsBusy, Mode=OneWay}"
+            <ctl:CodecScope Height="118" Codec="{Binding ScopeCodec, Mode=OneWay}" Active="{Binding IsBusy, Mode=OneWay}"
                             Visibility="{Binding HasSource, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
-            <ctl:ConvertScope Height="150" SourceCodec="{Binding SourceCodec, Mode=OneWay}" TargetCodec="{Binding SelectedFormat, Mode=OneWay}"
+            <ctl:ConvertScope Height="150" SourceCodec="{Binding SourceCodec, Mode=OneWay}" TargetCodec="{Binding ScopeCodec, Mode=OneWay}"
                               Active="{Binding IsBusy, Mode=OneWay}" Samples="{Binding SampleWindow, Mode=OneWay}"
                               Visibility="{Binding HasSource, Converter={StaticResource BoolVis}}"/>
           </Grid>

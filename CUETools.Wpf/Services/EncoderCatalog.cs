@@ -34,13 +34,15 @@ public sealed class ExternalEncoderInfo
 public sealed class EncoderCatalog
 {
     private readonly IDiagnosticLog _log;
+    private readonly AppSettings _app;
     public static string EncodersDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "encoders");
 
-    /// <summary>Raised when an encoder was imported, so format dropdowns can rebuild live.</summary>
+    /// <summary>Raised when an encoder was imported or a format's lossless/lossy type changed,
+    /// so format dropdowns can rebuild live.</summary>
     public event EventHandler? Changed;
 
-    public EncoderCatalog(IDiagnosticLog log) => _log = log;
+    public EncoderCatalog(IDiagnosticLog log, AppSettings app) { _log = log; _app = app; }
 
     // The externally-obtainable encoders this app curates. Download links are the OFFICIAL project
     // pages (never mirrors), and the import copies the exe under the app's own folder.
@@ -131,18 +133,39 @@ public sealed class EncoderCatalog
         return ResolveExe(enc) != null;
     }
 
-    /// <summary>The app's lossy-ness rule for a format, one meaning per dropdown entry, with a
-    /// priority: an IN-PROCESS lossy encoder wins (mp3, wma); otherwise a usable command-line lossy
-    /// encoder wins only when the format has no in-process lossless alternative (mpc/ogg/opus have
-    /// none - but m4a keeps its in-process ALAC identity even if qaac.exe gets imported).</summary>
+    /// <summary>The app's lossy-ness rule for a format, one meaning per dropdown entry. The USER'S
+    /// explicit type choice (the picker in the encoder dialog, persisted) wins when that side is
+    /// actually usable. Otherwise the default priority: an IN-PROCESS lossy encoder wins (mp3,
+    /// wma); a usable command-line lossy encoder wins only when the format has no in-process
+    /// lossless alternative (mpc/ogg/opus have none - m4a keeps ALAC even if qaac is imported).</summary>
     public bool IsLossyFormat(CUEToolsFormat f)
     {
-        if (!f.allowLossy || !IsUsable(f.encoderLossy)) return false;
+        bool lossyUsable = f.allowLossy && IsUsable(f.encoderLossy);
+        bool losslessUsable = f.allowLossless && IsUsable(f.encoderLossless);
+        bool? choice = _app.GetFormatTypeOverride(f.extension);
+        if (choice == true && lossyUsable) return true;
+        if (choice == false && losslessUsable) return false;
+
+        if (!lossyUsable) return false;
         bool lossyInProcess = f.encoderLossy!.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
         if (lossyInProcess) return true;
         bool losslessInProcess = f.allowLossless && f.encoderLossless != null
             && f.encoderLossless.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
         return !losslessInProcess;
+    }
+
+    /// <summary>A format where BOTH faces are genuinely usable (wma always: WMA Lossless and WMA
+    /// Standard are both in-process; m4a once an AAC encoder is imported) - these get the
+    /// lossless/lossy type picker in the encoder dialog.</summary>
+    public bool HasBothTypes(CUEToolsFormat f) =>
+        f.allowLossy && f.allowLossless && IsUsable(f.encoderLossy) && IsUsable(f.encoderLossless);
+
+    /// <summary>Persist the user's type choice for a two-faced format and rebuild every format list.</summary>
+    public void SetFormatType(string ext, bool lossy)
+    {
+        _app.SetFormatTypeOverride(ext, lossy);
+        _log.Info("encoders", $"format {ext}: type set to {(lossy ? "lossy" : "lossless")}");
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Find a command-line encoder's exe: an absolute configured path, the app's encoders

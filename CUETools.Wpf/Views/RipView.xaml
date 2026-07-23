@@ -193,7 +193,7 @@
       <Border Grid.Row="1" Grid.Column="1" VerticalAlignment="Bottom" Margin="18,0,18,10"
               Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="14,11"
               Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}">
-        <ctl:CodecScope Height="150" Codec="{Binding SelectedFormat, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"
+        <ctl:CodecScope Height="150" Codec="{Binding ScopeCodec, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"
                         Samples="{Binding SampleWindow, Mode=OneWay}"/>
       </Border>
 

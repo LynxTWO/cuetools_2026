@@ -42,6 +42,30 @@ public sealed class AppSettings
     public event System.EventHandler? ArtSizeChanged;
     public void NotifyArtSizeChanged() => ArtSizeChanged?.Invoke(this, System.EventArgs.Empty);
 
+    // Per-format lossless/lossy choice for two-faced extensions (wma = WMA Lossless vs Standard;
+    // m4a = ALAC vs imported AAC). Compact persisted form: "wma=lossy;m4a=lossless".
+    public string FormatTypeOverrides { get; set; } = "";
+
+    public bool? GetFormatTypeOverride(string ext)
+    {
+        foreach (var part in (FormatTypeOverrides ?? "").Split(';'))
+        {
+            var kv = part.Split('=');
+            if (kv.Length == 2 && kv[0] == ext)
+                return kv[1] == "lossy";
+        }
+        return null;
+    }
+
+    public void SetFormatTypeOverride(string ext, bool lossy)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+        foreach (var part in (FormatTypeOverrides ?? "").Split(';'))
+            if (part.Length > 0 && !part.StartsWith(ext + "=")) parts.Add(part);
+        parts.Add(ext + "=" + (lossy ? "lossy" : "lossless"));
+        FormatTypeOverrides = string.Join(";", parts);
+    }
+
     // The naming scheme (template + clean-up rule flags), edited on the Naming page. Defaults to the
     // owner's archival scheme with all rules on.
     public string NamingTemplate { get; set; } = NamingScheme.ArchivalTemplate;

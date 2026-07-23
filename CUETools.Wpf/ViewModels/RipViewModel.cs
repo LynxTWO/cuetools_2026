@@ -25,6 +25,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly CUEConfig _config;
     private readonly IAlbumArtService _art;
     private readonly AppSettings _settings;
+    private readonly IConvertService _codecs;
     private readonly AppStatusService _status;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
@@ -40,7 +41,27 @@ public sealed class RipViewModel : PageViewModel
     public ObservableCollection<string> Formats { get; } = new();
 
     private string _selectedFormat = "flac";
-    public string SelectedFormat { get => _selectedFormat; set { if (Set(ref _selectedFormat, value)) _settings.SelectedFormat = value; } }
+    public string SelectedFormat
+    {
+        get => _selectedFormat;
+        set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); } }
+    }
+
+    /// <summary>What the codec scope should draw for the selected format. A two-faced format is
+    /// remapped so the visualization matches the ENCODER that will actually run: wma flipped to
+    /// lossless draws WMA Lossless's predictor pipeline (not the MDCT mask), and m4a flipped to an
+    /// imported AAC draws AAC's lossy pipeline (not ALAC's).</summary>
+    public string ScopeCodec
+    {
+        get
+        {
+            string f = _selectedFormat;
+            bool lossy = _codecs.IsLossy(f);
+            if (lossy && Controls.LossyMath.Info(f) == null) return f + "-lossy";
+            if (!lossy && Controls.LossyMath.Info(f) != null) return f + "-lossless";
+            return f;
+        }
+    }
 
     // Ranked release matches for the inserted disc; picking one applies its metadata to the rip.
     public ObservableCollection<ReleaseMatch> Releases { get; } = new();
@@ -243,6 +264,7 @@ public sealed class RipViewModel : PageViewModel
         _art = art;
         _settings = settings;
         _status = status;
+        _codecs = codecs;
         // restore the persisted rip prefs; empty means never set - fall back to defaults
         _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
             ? settings.OutputBaseDir
@@ -257,7 +279,12 @@ public sealed class RipViewModel : PageViewModel
         }
         RebuildFormats();
         // an imported external encoder (e.g. mppenc.exe for Musepack) lights its format up live
-        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac"); };
+        catalog.Changed += (_, _) =>
+        {
+            var keep = SelectedFormat; RebuildFormats();
+            SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac");
+            OnPropertyChanged(nameof(ScopeCodec));   // a type flip changes what the scope must draw
+        };
         // a cover-size change in Settings re-derives the already-fetched cover at the new size
         settings.ArtSizeChanged += (_, _) => RefreshArtSize();
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
