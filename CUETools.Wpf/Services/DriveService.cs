@@ -66,6 +66,30 @@ public sealed class DriveService : IDriveService
                 foreach (var r in releases)
                     if (r is CUEMetadataEntry e) matches.Add(BuildMatch(e, idx++, (int)toc.AudioTracks));
 
+                // CD-Text: titles burned onto the disc itself - the only source that works fully
+                // offline and for discs no database knows. Read on demand (a drive that stalls on
+                // the command cannot break detection) and offered as its own release entry.
+                try
+                {
+                    var cdtext = reader.ReadCDText();
+                    if (cdtext != null && cdtext.HasText)
+                    {
+                        var meta = new CUEMetadata(toc.TOCID, (int)toc.AudioTracks);
+                        meta.Title = cdtext.AlbumTitle;
+                        meta.Artist = cdtext.AlbumPerformer;
+                        for (int t = 1; t <= (int)toc.AudioTracks && t - 1 < meta.Tracks.Count; t++)
+                        {
+                            string tt, tp;
+                            if (cdtext.TrackTitles.TryGetValue(t, out tt)) meta.Tracks[t - 1].Title = tt;
+                            if (cdtext.TrackPerformers.TryGetValue(t, out tp)) meta.Tracks[t - 1].Artist = tp;
+                        }
+                        matches.Add(BuildMatch(new CUEMetadataEntry(meta, toc, "cdtext"), idx++, (int)toc.AudioTracks));
+                        _log.Info("disc", $"cdtext present: album={(cdtext.AlbumTitle.Length > 0 ? "yes" : "no")} " +
+                            $"tracks={cdtext.TrackTitles.Count} packs={cdtext.PacksTotal} badcrc={cdtext.PacksBadCrc}");
+                    }
+                }
+                catch (Exception ex) { _log.Warn("disc", "cdtext read failed: " + ex.GetType().Name); }
+
                 // rank best-first by source quality + metadata completeness; apply the best.
                 matches.Sort((a, b) => b.Score.CompareTo(a.Score));
                 if (matches.Count > 0 && matches[0].Metadata != null)
@@ -177,6 +201,7 @@ public sealed class DriveService : IDriveService
         if (s.Contains("discogs")) return "Discogs";
         if (s.Contains("freedb") || s.Contains("gnudb")) return "freedb";
         if (s.Contains("ctdb") || s.Contains("cuetools")) return "CTDB";
+        if (s == "cdtext") return "CD-Text";
         if (s == "local") return "local cache";
         if (s == "cue") return "embedded cue";
         if (s == "tags") return "file tags";
@@ -189,6 +214,9 @@ public sealed class DriveService : IDriveService
         if (s.Contains("musicbrainz")) return 100;
         if (s.Contains("discogs")) return 90;
         if (s.Contains("ctdb") || s.Contains("cuetools")) return 85;
+        // disc-burned titles: authoritative for THIS pressing, but no year/label/cover - ranks
+        // above freedb text matches, below the full databases
+        if (s == "cdtext") return 60;
         if (s.Contains("freedb") || s.Contains("gnudb")) return 45;
         if (s == "local") return 35;
         if (s == "cue") return 25;
