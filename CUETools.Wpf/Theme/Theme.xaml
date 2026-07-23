@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ctl="clr-namespace:CUETools.Wpf.Controls">
 
   <!-- Accent colors (same in both themes). The THEMEABLE structural brushes - Ground, Bar, Face,
        Panel, Line, Ink, InkDim, Muted, Glass, GlassLine, ButtonPressed, ButtonFace - are NOT
@@ -39,6 +40,9 @@
     <Setter Property="Padding" Value="14,7"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <!-- squishy rubber-hose feel: deform toward the click point, spring back with overshoot -->
+    <Setter Property="ctl:BendyButton.Enabled" Value="True"/>
+    <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
     <Setter Property="BorderBrush" Value="{DynamicResource GlassLine}"/>
     <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
     <Setter Property="Template">
@@ -226,6 +230,19 @@
               </Border.Background>
             </Border>
 
+            <!-- carved channel: a top-dark / bottom-light inner rim so the cap reads as sitting
+                 DOWN INSIDE the housing (WPF has no inner-shadow, so this thin gradient stroke
+                 fakes the recess - shadow pooling under the top lip, a faint lit bottom edge). -->
+            <Border x:Name="channel" CornerRadius="11" Margin="1" BorderThickness="1.2">
+              <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="#B0000000" Offset="0"/>
+                  <GradientStop Color="#40000000" Offset="0.45"/>
+                  <GradientStop Color="#2AFFFFFF" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.BorderBrush>
+            </Border>
+
             <!-- bulb glow behind the plastic (lit lens on the left) + the outer teal halo, both
                  carried by this layer's Opacity (0 off, warms to 1 on). -->
             <Border x:Name="glow" CornerRadius="12" Opacity="0" Margin="1">
@@ -265,7 +282,8 @@
                     <GradientStop Color="#242B25" Offset="1"/>
                   </LinearGradientBrush>
                 </Border.Background>
-                <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1.5" Direction="270" Opacity="0.55"/></Border.Effect>
+                <!-- deeper cast so the cap reads as seated down in the channel, not raised above it -->
+                <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="2.2" Direction="270" Opacity="0.7"/></Border.Effect>
               </Border>
 
               <!-- light bleeding through the thick plastic cap, on the lens-facing edge -->
