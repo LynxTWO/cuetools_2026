@@ -25,6 +25,8 @@ public sealed class RipViewModel : PageViewModel
     private readonly CUEConfig _config;
     private readonly IAlbumArtService _art;
     private readonly AppSettings _settings;
+    private readonly AppStatusService _status;
+    private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
     // (drive, offset, TOC) rather than just the AR/CTDB numbers.
@@ -225,7 +227,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog)
+    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog, AppStatusService status)
     {
         Title = "Rip";
         Group = "Work";
@@ -237,6 +239,7 @@ public sealed class RipViewModel : PageViewModel
         _config = config;
         _art = art;
         _settings = settings;
+        _status = status;
         // restore the persisted rip prefs; empty means never set - fall back to defaults
         _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
             ? settings.OutputBaseDir
@@ -262,7 +265,7 @@ public sealed class RipViewModel : PageViewModel
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
-        DismissDoneCommand = new RelayCommand(_ => RipDone = false);
+        DismissDoneCommand = new RelayCommand(_ => { RipDone = false; _status.Report(AppActivity.Idle); });
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         LoadRecent();
@@ -316,6 +319,7 @@ public sealed class RipViewModel : PageViewModel
     {
         if (_selectedDrive == '\0' || _isBusy) return;
         IsBusy = true;
+        _status.Report(AppActivity.ReadingDisc);
         // the finally guarantees the page can never be left stuck "busy" (Rip/Verify/Eject disabled,
         // tray watcher parked) if a drive query throws mid-read - e.g. the drive letter vanishing
         try
@@ -377,7 +381,11 @@ public sealed class RipViewModel : PageViewModel
         OnPropertyChanged(nameof(SelectedRelease));
         OnPropertyChanged(nameof(HasReleases));
         }
-        finally { IsBusy = false; }
+        finally
+        {
+            IsBusy = false;
+            if (!IsRipping) _status.Report(AppActivity.Idle);
+        }
     }
 
     // Choosing a release re-labels the album and re-titles the tracks from that release, and makes
@@ -519,6 +527,8 @@ public sealed class RipViewModel : PageViewModel
         IsRipping = true;
         RipDone = false;
         RipProgress = 0;
+        _baseActivity = encode ? AppActivity.Ripping : AppActivity.Verifying;
+        _status.Report(_baseActivity, 0);
         StatusText = encode ? "Starting rip..." : "Starting verify...";
         _discSeconds = _lastDisc?.TotalLength.TotalSeconds ?? 0;
         _lastSpeedFrac = 0;
@@ -543,7 +553,13 @@ public sealed class RipViewModel : PageViewModel
 
         // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() => { RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac); }));
+            => dispatcher?.BeginInvoke(new Action(() =>
+            {
+                RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac);
+                // feed the taskbar progress; keep a re-read/unreadable state's badge while it lasts
+                var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
+                _status.Report(act, frac);
+            }));
         void Levels(double l, double r)
             => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
         void Samples(float[] win)
@@ -569,6 +585,7 @@ public sealed class RipViewModel : PageViewModel
                     bool failed = n >= RereadMax && errs > 0;
                     RereadActive = !failed;
                     Unreadable = failed;
+                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
                     if (failed && _settings.StopOnUnrecoverable && IsRipping)
                     {
                         _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
@@ -580,6 +597,7 @@ public sealed class RipViewModel : PageViewModel
                 {
                     RereadActive = false;   // cleared: stop animating, let the box linger then hide
                     RereadErrors = 0;
+                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
                 }
             }));
 
@@ -625,6 +643,8 @@ public sealed class RipViewModel : PageViewModel
         StopRereadTimer();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
+        _baseActivity = AppActivity.Idle;
+        _status.Report(result.Ok && encode ? AppActivity.Done : AppActivity.Idle);   // green badge until dismissed
     }
 
     // Convert progress deltas into read speed as a multiple of realtime (1x = 75 sectors/s).

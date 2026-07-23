@@ -45,6 +45,7 @@ public partial class App : Application
         services.AddSingleton<AppSettings>();
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<EncoderCatalog>();
+        services.AddSingleton<AppStatusService>();
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
@@ -140,7 +141,7 @@ public partial class App : Application
             MainWindow window = null;
             try
             {
-                window = new MainWindow(theme) { DataContext = mainVm };
+                window = new MainWindow(theme, provider.GetRequiredService<AppStatusService>()) { DataContext = mainVm };
                 window.Show();
                 window.UpdateLayout();     // force the deferred layout so a font glitch throws here, caught
                 window.Activate();

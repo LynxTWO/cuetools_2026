@@ -29,6 +29,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- live-icon assets: 8 spin frames for the window/taskbar icon while ripping, plus the
+         taskbar overlay badges (amber re-read, red unreadable, green done). app.ico doubles as a
+         Resource so the window can restore its crisp multi-size icon after animating. -->
+    <Resource Include="Assets\*.png" />
+    <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CUETools.Processor\CUETools.Processor.csproj" />
     <ProjectReference Include="..\CUETools.Codecs\CUETools.Codecs.csproj" />
     <ProjectReference Include="..\CUETools.CDImage\CUETools.CDImage.csproj" />
