@@ -88,6 +88,27 @@ namespace CUETools.Ripper.SCSI
 			}
 		}
 
+		/// <summary>Read the disc's CD-Text (READ TOC format 0x05) on demand and decode it. Kept
+		/// OUT of the TOC path so a drive that stalls on the command cannot break disc detection;
+		/// callers treat null as "this disc has no CD-Text". Cached after the first read.</summary>
+		public CDTextInfo ReadCDText()
+		{
+			if (_cdTextRead) return _cdText;
+			_cdTextRead = true;
+			try
+			{
+				byte[] raw;
+				if (m_device.ReadCDText(out raw, _timeout) != Device.CommandStatus.Success || raw == null)
+					return null;
+				var parsed = CDTextParser.Parse(raw);
+				_cdText = parsed.HasText ? parsed : null;
+			}
+			catch { _cdText = null; }
+			return _cdText;
+		}
+		private CDTextInfo _cdText;
+		private bool _cdTextRead;
+
         public byte[] RetryCount
         {
             get
