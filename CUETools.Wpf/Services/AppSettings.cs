@@ -27,4 +27,8 @@ public sealed class AppSettings
     public string OutputBaseDir { get; set; } = "";
     public string SelectedFormat { get; set; } = "";
     public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid
+
+    /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)
+    /// were applied to this profile. After that, every encoder-mode choice is the user's.</summary>
+    public bool ArchivalDefaultsApplied { get; set; } = false;
 }

@@ -51,24 +51,22 @@ public interface IConvertService
 public sealed class ConvertService : IConvertService
 {
     private readonly CUEConfig _config;
+    private readonly EncoderCatalog _catalog;
 
-    public ConvertService(CUEConfig config) => _config = config;
+    public ConvertService(CUEConfig config, EncoderCatalog catalog) { _config = config; _catalog = catalog; }
 
     // The app's rule for a two-faced extension (wma serves both WMA Lossless and WMA Standard):
-    // a format with a working IN-PROCESS lossy encoder is offered as a LOSSY format, once. The
-    // format dropdown means one thing per entry; a lossless/lossy encoder picker can widen this
-    // later. mp3 and wma are lossy; flac/wav/tak stay lossless; m4a stays lossless (ALAC) because
-    // its only lossy encoder is an absent CLI exe.
-    private bool HasInProcessLossy(CUEToolsFormat f) =>
-        f.allowLossy && f.encoderLossy != null
-        && f.encoderLossy.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
-
+    // a format with a USABLE lossy encoder is offered as a LOSSY format, once (the dropdown means
+    // one thing per entry; a lossless/lossy encoder picker can widen this later). Usable = the
+    // catalog's rule: in-process always; command-line only when its exe is actually present -
+    // which is how an imported mppenc.exe/ofr.exe lights its format up.
     public IReadOnlyList<string> LosslessFormats()
     {
         try
         {
             return _config.formats
-                .Where(f => f.Value.allowLossless && f.Value.encoderLossless != null && !HasInProcessLossy(f.Value))
+                .Where(f => f.Value.allowLossless && _catalog.IsUsable(f.Value.encoderLossless)
+                    && !_catalog.IsLossyFormat(f.Value))
                 .Select(f => f.Key)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -81,7 +79,7 @@ public sealed class ConvertService : IConvertService
         try
         {
             return _config.formats
-                .Where(f => HasInProcessLossy(f.Value))
+                .Where(f => _catalog.IsLossyFormat(f.Value))
                 .Select(f => f.Key)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -91,7 +89,7 @@ public sealed class ConvertService : IConvertService
 
     public bool IsLossy(string format)
     {
-        try { return _config.formats.TryGetValue(format, out var f) && HasInProcessLossy(f); }
+        try { return _config.formats.TryGetValue(format, out var f) && _catalog.IsLossyFormat(f); }
         catch { return false; }
     }
 

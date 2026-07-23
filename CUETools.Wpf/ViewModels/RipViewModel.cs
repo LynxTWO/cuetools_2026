@@ -225,7 +225,7 @@ public sealed class RipViewModel : PageViewModel
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings)
+    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog)
     {
         Title = "Rip";
         Group = "Work";
@@ -243,8 +243,15 @@ public sealed class RipViewModel : PageViewModel
             : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
         _correctionQuality = Math.Max(0, Math.Min(2, settings.CorrectionQuality));
 
-        foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
-        foreach (var f in codecs.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3 (bundled libmp3lame)
+        void RebuildFormats()
+        {
+            Formats.Clear();
+            foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
+            foreach (var f in codecs.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3, wma
+        }
+        RebuildFormats();
+        // an imported external encoder (e.g. mppenc.exe for Musepack) lights its format up live
+        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac"); };
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 

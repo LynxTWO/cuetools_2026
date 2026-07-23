@@ -96,6 +96,26 @@
         <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
       </StackPanel>
 
+      <TextBlock Style="{StaticResource Sec}" Text="ENCODERS"/>
+      <TextBlock Margin="2,0,0,8" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                 Text="Built in and ready: FLAC, ALAC, WAV, MP3 (bundled LAME), WMA (Windows). The encoders below are made by third parties and cannot be bundled - use Download to get the official program, then Locate to import it. Its format then appears in every format list. Per-format compression settings live behind the tune button next to each format choice."/>
+      <ItemsControl ItemsSource="{Binding ExternalEncoders}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Style="{StaticResource Row}" ToolTip="{Binding Tip}">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Locate..." Command="{Binding LocateCommand}" Padding="10,5" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                <Button DockPanel.Dock="Right" Content="Download" Command="{Binding DownloadCommand}" Padding="10,5" VerticalAlignment="Center"/>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource RowLabel}" Text="{Binding Display}"/>
+                  <TextBlock Text="{Binding StatusText}" FontFamily="{StaticResource Mono}" FontSize="10" Foreground="{DynamicResource Muted}"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
       <TextBlock Style="{StaticResource Sec}" Text="DIAGNOSTICS"/>
       <Border Style="{StaticResource Row}" ToolTip="A privacy-safe log of what the app does this run - phases, counts, timings, and full error detail if something fails - with no album/artist/track names, and paths scrubbed of your user name and folders. Open the folder to attach it to a bug report.">
         <DockPanel>
