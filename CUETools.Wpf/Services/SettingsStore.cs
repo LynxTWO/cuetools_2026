@@ -39,6 +39,7 @@ public sealed class SettingsStore
             app.OutputBaseDir = sr.Load("WpfOutputBaseDir") ?? "";
             app.SelectedFormat = sr.Load("WpfSelectedFormat") ?? "";
             app.CorrectionQuality = Math.Max(0, Math.Min(2, sr.LoadInt32("WpfCorrectionQuality", 0, 2) ?? 1));
+            app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
             _log.Info("settings", "settings loaded");
         }
         catch (Exception ex)
@@ -95,6 +96,7 @@ public sealed class SettingsStore
             sw.Save("WpfOutputBaseDir", app.OutputBaseDir);
             sw.Save("WpfSelectedFormat", app.SelectedFormat);
             sw.Save("WpfCorrectionQuality", app.CorrectionQuality);
+            sw.Save("WpfArchivalDefaultsApplied", app.ArchivalDefaultsApplied);
             sw.Close();
             _log.Info("settings", "settings saved");
         }

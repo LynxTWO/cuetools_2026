@@ -8,6 +8,9 @@ namespace CUETools.Wpf;
 
 public partial class App : Application
 {
+    /// <summary>The DI container, for view code-behind that opens dialogs (encoder settings).</summary>
+    public static System.IServiceProvider? Services { get; private set; }
+
     private SettingsStore? _settingsStore;
     private CUEConfig? _config;
     private AppSettings? _appSettings;
@@ -41,6 +44,7 @@ public partial class App : Application
         });
         services.AddSingleton<AppSettings>();
         services.AddSingleton<SettingsStore>();
+        services.AddSingleton<EncoderCatalog>();
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
@@ -66,6 +70,7 @@ public partial class App : Application
         // MainWindow is created directly (with a fresh instance per show-retry), not resolved here.
 
         var provider = services.BuildServiceProvider();
+        Services = provider;
 
         // Diagnostic log + global crash handlers first, so anything below is captured. The log is
         // privacy-safe (see DiagnosticLog): structure only, no album/artist/track names.
@@ -80,6 +85,17 @@ public partial class App : Application
         _config = provider.GetRequiredService<CUEConfig>();
         _appSettings = provider.GetRequiredService<AppSettings>();
         _settingsStore.Load(_config, _appSettings);
+
+        // register externally-obtainable codecs (Musepack, OptimFROG) and, ONCE per profile, apply
+        // the archival default modes (max compression lossless, sweet-spot lossy); after that every
+        // encoder-mode choice is the user's
+        var catalog = provider.GetRequiredService<EncoderCatalog>();
+        catalog.EnsureRegistered(_config);
+        if (!_appSettings.ArchivalDefaultsApplied)
+        {
+            catalog.ApplyArchivalDefaults(_config);
+            _appSettings.ArchivalDefaultsApplied = true;
+        }
 
         // apply the saved theme (mutates the palette brushes) before the window shows
         var theme = provider.GetRequiredService<ThemeService>();

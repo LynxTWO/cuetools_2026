@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using CUETools.Processor;
@@ -17,8 +18,9 @@ public sealed class SettingsViewModel : PageViewModel
     private readonly CUEConfig _c;
     private readonly AppSettings _app;
     private readonly IDiagnosticLog _log;
+    private readonly EncoderCatalog _catalog;
 
-    public SettingsViewModel(CUEConfig config, AppSettings app, IDiagnosticLog log)
+    public SettingsViewModel(CUEConfig config, AppSettings app, IDiagnosticLog log, EncoderCatalog catalog)
     {
         Title = "Settings";
         Group = "Setup";
@@ -26,7 +28,20 @@ public sealed class SettingsViewModel : PageViewModel
         _c = config;
         _app = app;
         _log = log;
+        _catalog = catalog;
         OpenLogFolderCommand = new RelayCommand(_ => OpenLogFolder());
+        RefreshExternalEncoders();
+    }
+
+    // ---- external encoders: download links + import for codecs the app cannot bundle ----
+
+    public System.Collections.ObjectModel.ObservableCollection<ExternalEncoderRow> ExternalEncoders { get; } = new();
+
+    private void RefreshExternalEncoders()
+    {
+        ExternalEncoders.Clear();
+        foreach (var info in _catalog.Snapshot(_c))
+            ExternalEncoders.Add(new ExternalEncoderRow(info, _c, _catalog, RefreshExternalEncoders));
     }
 
     private void Raise([CallerMemberName] string? n = null) => OnPropertyChanged(n);
@@ -90,4 +105,53 @@ public sealed class SettingsViewModel : PageViewModel
     public bool DetectHdcd { get => _c.detectHDCD; set { _c.detectHDCD = value; Raise(); } }
     public bool DecodeHdcd { get => _c.decodeHDCD; set { _c.decodeHDCD = value; Raise(); } }
     public bool DecodeHdcdTo24 { get => _c.decodeHDCDto24bit; set { _c.decodeHDCDto24bit = value; Raise(); } }
+}
+
+/// <summary>One externally-obtainable encoder on the Settings page: its install status, the
+/// OFFICIAL download link, and an import (Locate...) that copies the picked exe into the app's
+/// encoders folder and lights the format up everywhere.</summary>
+public sealed class ExternalEncoderRow : ViewModelBase
+{
+    private readonly ExternalEncoderInfo _info;
+    private readonly CUEConfig _config;
+    private readonly EncoderCatalog _catalog;
+    private readonly Action _refresh;
+
+    public ExternalEncoderRow(ExternalEncoderInfo info, CUEConfig config, EncoderCatalog catalog, Action refresh)
+    {
+        _info = info; _config = config; _catalog = catalog; _refresh = refresh;
+        DownloadCommand = new RelayCommand(_ => OpenSite());
+        LocateCommand = new RelayCommand(_ => Locate());
+    }
+
+    public string Display => $"{_info.FormatName}  (.{_info.Extension}, {(_info.Lossless ? "lossless" : "lossy")})";
+    public string StatusText => _info.Found ? "installed" : "not installed - download " + _info.ExeName + ", then Locate it here";
+    public bool Found => _info.Found;
+    public string Tip => _info.Found
+        ? $"Using {_info.ResolvedPath}"
+        : $"Get {_info.ExeName} from the official site ({_info.DownloadUrl}), then click Locate to import it. " +
+          "The file is copied into this app's own encoders folder.";
+
+    public System.Windows.Input.ICommand DownloadCommand { get; }
+    public System.Windows.Input.ICommand LocateCommand { get; }
+
+    private void OpenSite()
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = _info.DownloadUrl, UseShellExecute = true }); }
+        catch { }
+    }
+
+    private void Locate()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Locate " + _info.ExeName,
+            Filter = _info.ExeName + "|" + _info.ExeName + "|Programs|*.exe"
+        };
+        if (dlg.ShowDialog() != true) return;
+        string? err = _catalog.Import(_config, _info, dlg.FileName);
+        if (err != null)
+            System.Windows.MessageBox.Show(err, "Import failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        _refresh();
+    }
 }

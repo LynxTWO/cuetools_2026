@@ -23,7 +23,7 @@ public sealed class QueueViewModel : PageViewModel
     public ObservableCollection<string> Actions { get; } = new() { "Verify", "Convert" };
     public ObservableCollection<string> Formats { get; } = new();
 
-    public QueueViewModel(IVerifyService verify, IConvertService convert)
+    public QueueViewModel(IVerifyService verify, IConvertService convert, EncoderCatalog catalog)
     {
         Title = "Queue";
         Group = "Session";
@@ -31,8 +31,14 @@ public sealed class QueueViewModel : PageViewModel
         _verify = verify;
         _convert = convert;
 
-        foreach (var f in convert.LosslessFormats()) Formats.Add(f);
-        foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3 (bundled libmp3lame)
+        void RebuildFormats()
+        {
+            Formats.Clear();
+            foreach (var f in convert.LosslessFormats()) Formats.Add(f);
+            foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last
+        }
+        RebuildFormats();
+        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac"; };
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
 
         AddFilesCommand = new RelayCommand(_ => AddFiles());

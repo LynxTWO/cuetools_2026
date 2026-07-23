@@ -22,15 +22,22 @@ public sealed class ConvertViewModel : PageViewModel
 
     public ObservableCollection<string> Formats { get; } = new();
 
-    public ConvertViewModel(IConvertService convert)
+    public ConvertViewModel(IConvertService convert, EncoderCatalog catalog)
     {
         Title = "Convert";
         Group = "Work";
         Subtitle = "Transcode existing files to another format, layout, or tagging.";
         _convert = convert;
 
-        foreach (var f in convert.LosslessFormats()) Formats.Add(f);
-        foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3 (bundled libmp3lame)
+        void RebuildFormats()
+        {
+            Formats.Clear();
+            foreach (var f in convert.LosslessFormats()) Formats.Add(f);
+            foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last
+        }
+        RebuildFormats();
+        // an imported external encoder lights its format up without a restart
+        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac"; };
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile());

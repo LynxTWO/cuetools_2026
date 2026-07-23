@@ -52,10 +52,12 @@ public sealed class RipService : IRipService
     private readonly CUEConfig _config;
     private readonly IDiagnosticLog _log;
     private readonly AppSettings _settings;
+    private readonly EncoderCatalog _catalog;
     private CUESheet? _current;   // the running sheet, so Stop() can abort it
     private readonly object _stopGate = new();
 
-    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings) { _config = config; _log = log; _settings = settings; }
+    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog)
+    { _config = config; _log = log; _settings = settings; _catalog = catalog; }
 
     public void Stop()
     {
@@ -148,12 +150,10 @@ public sealed class RipService : IRipService
                     : outputBaseDir;
                 outDir = Path.Combine(baseDir, album);
                 Directory.CreateDirectory(outDir);
-                // pick the encoder type from the format, same rule as ConvertService.IsLossy: a
-                // format with an in-process lossy encoder encodes lossy (mp3 via bundled libmp3lame,
-                // wma via the OS Windows Media runtime)
-                bool lossy = _config.formats.TryGetValue(format, out var fmtInfo)
-                    && fmtInfo.allowLossy && fmtInfo.encoderLossy != null
-                    && fmtInfo.encoderLossy.Settings is not CUETools.Codecs.CommandLine.EncoderSettings;
+                // pick the encoder type from the format via the catalog's single rule: a format
+                // with a USABLE lossy encoder encodes lossy (mp3 bundled, wma OS runtime, mpc when
+                // its exe has been imported)
+                bool lossy = _config.formats.TryGetValue(format, out var fmtInfo) && _catalog.IsLossyFormat(fmtInfo);
                 cue.GenerateFilenames(lossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
                 onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {outDir}");
             }
