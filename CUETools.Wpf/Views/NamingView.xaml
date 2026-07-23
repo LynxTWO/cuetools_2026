@@ -1,0 +1,91 @@
+<UserControl x:Class="CUETools.Wpf.Views.NamingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,22,28,24">
+    <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+      <TextBlock Text="Naming" FontFamily="{StaticResource Serif}" FontSize="30" Foreground="{DynamicResource Ink}"/>
+      <TextBlock Text="Design how ripped files and folders are named. The preview updates as you type - and shows the disc in your tray when one is loaded."
+                 Foreground="{DynamicResource Muted}" FontSize="12.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+      <!-- PRESET -->
+      <TextBlock Text="PRESET" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,20,0,6"/>
+      <ComboBox x:Name="PresetBox" Width="230" HorizontalAlignment="Left" ItemsSource="{Binding PresetNames}"
+                SelectionChanged="Preset_Changed" ToolTip="Load a starting scheme. Archival is the default; you can edit any preset afterwards."/>
+
+      <!-- TEMPLATE -->
+      <TextBlock Text="TEMPLATE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,16,0,6"/>
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="12,10">
+        <StackPanel>
+          <TextBox x:Name="TemplateBox" Text="{Binding Template, UpdateSourceTrigger=PropertyChanged}"
+                   FontFamily="{StaticResource Mono}" FontSize="13" TextWrapping="Wrap" AcceptsReturn="False"
+                   Background="{DynamicResource Glass}" Foreground="{DynamicResource Ink}" BorderBrush="{DynamicResource Line}" Padding="8,6"/>
+          <TextBlock Text="Fields (click to insert). Use / for folders."
+                     Foreground="{DynamicResource Muted}" FontSize="10.5" Margin="0,10,0,4"/>
+          <ItemsControl ItemsSource="{Binding PaletteFields}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Content="{Binding}" Click="Field_Click" Margin="0,0,6,6" Padding="8,3"
+                        FontFamily="{StaticResource Mono}" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- RULES -->
+      <TextBlock Text="CLEAN-UP RULES" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Amber}" Margin="0,16,0,6"/>
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="12,4">
+        <StackPanel>
+          <DockPanel Margin="0,7" ToolTip="When a track credits a guest the album artist does not (Artist feat. X), append ' (feat. X)' to the filename.">
+            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ExtractFeatured}"/>
+            <TextBlock Text="Extract featured artists -> (feat. X)" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,7" ToolTip="Turn the many collaboration separators (X, vs, meets, +, with, ;, |, ...) into a single ' &amp; '.">
+            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding UnifySeparators}"/>
+            <TextBlock Text="Unify collaboration separators -> &amp;" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,7" ToolTip="Move a leading article to the end for sort-friendly folders: 'The Beatles' becomes 'Beatles, The'.">
+            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding HandleArticles}"/>
+            <TextBlock Text="Handle leading articles (The, A, Die...)" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,7" ToolTip="Remove characters Windows forbids in names (&quot; * ? &lt; &gt; |) and turn ':' into ' - '.">
+            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding StripIllegal}"/>
+            <TextBlock Text="Strip illegal filename characters" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,7" ToolTip="Append the release descriptor: (year), and brackets like [Live] [OST] [EP] [2-CD Set] where the metadata says so. CD-only - no vinyl/hi-res tags.">
+            <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ReleaseDescriptor}"/>
+            <TextBlock Text="Release descriptor: (year) [Live] [OST] [EP]..." Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- LIVE PREVIEW -->
+      <TextBlock Text="LIVE PREVIEW" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,16,0,6"/>
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="14,10">
+        <ItemsControl ItemsSource="{Binding Preview}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Margin="0,4,0,10">
+                <TextBlock Text="{Binding Label}" Foreground="{StaticResource Amber}" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                <ItemsControl ItemsSource="{Binding Lines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{DynamicResource Ink}"
+                                 TextWrapping="Wrap" Margin="10,1,0,1"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+
+      <TextBlock Margin="2,16,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                 Text="Changes apply immediately to new rips and are saved when the app closes."/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

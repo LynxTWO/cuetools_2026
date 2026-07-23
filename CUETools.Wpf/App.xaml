@@ -31,6 +31,7 @@
       <DataTemplate x:Key="DriveTemplate"><views:DriveView/></DataTemplate>
       <DataTemplate x:Key="ReportTemplate"><views:ReportView/></DataTemplate>
       <DataTemplate x:Key="SettingsTemplate"><views:SettingsView/></DataTemplate>
+      <DataTemplate x:Key="NamingTemplate"><views:NamingView/></DataTemplate>
       <DataTemplate x:Key="ExploreTemplate"><views:ExploreView/></DataTemplate>
       <sel:PageTemplateSelector x:Key="PageSelector"
                                 RipTemplate="{StaticResource RipTemplate}"
@@ -40,6 +41,7 @@
                                 DriveTemplate="{StaticResource DriveTemplate}"
                                 ReportTemplate="{StaticResource ReportTemplate}"
                                 SettingsTemplate="{StaticResource SettingsTemplate}"
+                                NamingTemplate="{StaticResource NamingTemplate}"
                                 ExploreTemplate="{StaticResource ExploreTemplate}"
                                 PlaceholderTemplate="{StaticResource PageTemplate}"/>
 

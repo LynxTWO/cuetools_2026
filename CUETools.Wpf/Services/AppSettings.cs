@@ -31,4 +31,33 @@ public sealed class AppSettings
     /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)
     /// were applied to this profile. After that, every encoder-mode choice is the user's.</summary>
     public bool ArchivalDefaultsApplied { get; set; } = false;
+
+    // The naming scheme (template + clean-up rule flags), edited on the Naming page. Defaults to the
+    // owner's archival scheme with all rules on.
+    public string NamingTemplate { get; set; } = NamingScheme.ArchivalTemplate;
+    public bool NamingExtractFeatured { get; set; } = true;
+    public bool NamingUnifySeparators { get; set; } = true;
+    public bool NamingHandleArticles { get; set; } = true;
+    public bool NamingStripIllegal { get; set; } = true;
+    public bool NamingReleaseDescriptor { get; set; } = true;
+
+    public NamingScheme LoadNamingScheme() => new NamingScheme
+    {
+        Template = string.IsNullOrWhiteSpace(NamingTemplate) ? NamingScheme.ArchivalTemplate : NamingTemplate,
+        ExtractFeatured = NamingExtractFeatured,
+        UnifySeparators = NamingUnifySeparators,
+        HandleArticles = NamingHandleArticles,
+        StripIllegal = NamingStripIllegal,
+        ReleaseDescriptor = NamingReleaseDescriptor,
+    };
+
+    public void SaveNamingScheme(NamingScheme s)
+    {
+        NamingTemplate = s.Template;
+        NamingExtractFeatured = s.ExtractFeatured;
+        NamingUnifySeparators = s.UnifySeparators;
+        NamingHandleArticles = s.HandleArticles;
+        NamingStripIllegal = s.StripIllegal;
+        NamingReleaseDescriptor = s.ReleaseDescriptor;
+    }
 }
