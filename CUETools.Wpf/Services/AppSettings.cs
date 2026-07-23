@@ -32,6 +32,16 @@ public sealed class AppSettings
     /// were applied to this profile. After that, every encoder-mode choice is the user's.</summary>
     public bool ArchivalDefaultsApplied { get; set; } = false;
 
+    /// <summary>One-time owner-default migration, round 2: cover size 300 (the stale engine
+    /// default) -> 1000 px, and AccurateRip tags on encode ON. After it runs once, the user's
+    /// choices stick.</summary>
+    public bool DefaultsV2Applied { get; set; } = false;
+
+    /// <summary>Raised when the cover max-size setting changes, so an already-fetched cover is
+    /// re-derived from its cached master at the new size (no re-fetch).</summary>
+    public event System.EventHandler? ArtSizeChanged;
+    public void NotifyArtSizeChanged() => ArtSizeChanged?.Invoke(this, System.EventArgs.Empty);
+
     // The naming scheme (template + clean-up rule flags), edited on the Naming page. Defaults to the
     // owner's archival scheme with all rules on.
     public string NamingTemplate { get; set; } = NamingScheme.ArchivalTemplate;

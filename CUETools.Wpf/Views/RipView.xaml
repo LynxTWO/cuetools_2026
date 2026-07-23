@@ -151,6 +151,21 @@
 
       <ListView Grid.Row="1" Grid.Column="1" Margin="18,4,18,4" ItemsSource="{Binding Tracks}"
                 Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" Foreground="{DynamicResource Ink}">
+        <!-- selection: solid teal fill + FIXED dark text. The cells inherit Foreground, and dark
+             ink on the teal fill keeps contrast in BOTH themes (dark mode's normal ink is light,
+             which washes out on teal). -->
+        <ListView.ItemContainerStyle>
+          <Style TargetType="ListViewItem">
+            <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+            <Style.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource Teal}"/>
+                <Setter Property="Foreground" Value="#10201C"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Teal}"/>
+              </Trigger>
+            </Style.Triggers>
+          </Style>
+        </ListView.ItemContainerStyle>
         <ListView.View>
           <GridView>
             <GridViewColumn Header="#" Width="32" DisplayMemberBinding="{Binding Number}"/>

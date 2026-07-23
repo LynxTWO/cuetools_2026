@@ -110,7 +110,11 @@ public sealed class SettingsViewModel : PageViewModel
     // Album art
     public bool EmbedAlbumArt { get => _c.embedAlbumArt; set { _c.embedAlbumArt = value; Raise(); } }
     public bool ExtractAlbumArt { get => _c.extractAlbumArt; set { _c.extractAlbumArt = value; Raise(); } }
-    public int MaxAlbumArtSize { get => _c.maxAlbumArtSize; set { _c.maxAlbumArtSize = value; Raise(); } }
+    public int MaxAlbumArtSize
+    {
+        get => _c.maxAlbumArtSize;
+        set { _c.maxAlbumArtSize = value; Raise(); _app.NotifyArtSizeChanged(); }   // re-derives a fetched cover live
+    }
 
     // HDCD
     public bool DetectHdcd { get => _c.detectHDCD; set { _c.detectHDCD = value; Raise(); } }
