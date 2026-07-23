@@ -35,6 +35,10 @@ public static class CodecMath
         "m4a" or "alac" => new CodecInfo("ALAC", "linear predictor + Rice/Golomb (Apple Lossless)", Pred.Fixed2, Pack.Rice, "predict", "Rice pack"),
         "tta" => new CodecInfo("TTA", "adaptive predictor + adaptive Rice (True Audio)", Pred.Adaptive, Pack.Rice, "adapt", "Rice pack"),
         "wv" => new CodecInfo("WavPack", "cascaded decorrelation + entropy coding", Pred.Cascade, Pack.Rice, "decorrelate", "entropy"),
+        // wma with the TYPE picker set to lossless: WMA Lossless is an adaptive-LMS predictor
+        // codec - a different FAMILY from WMA Standard's MDCT pipeline, so it draws the lossless
+        // scope (the VMs remap the scope codec string when the type picker flips a format)
+        "wma-lossless" => new CodecInfo("WMA Lossless", "adaptive LMS prediction + entropy coding", Pred.Adaptive, Pack.Rice, "adapt", "entropy"),
         "tak" => new CodecInfo("TAK", "LPC prediction + Rice coding", Pred.Fixed2, Pack.Rice, "predict", "Rice pack"),
         "ape" => new CodecInfo("Monkey's Audio", "adaptive NLMS filters + range coder (max ratio)", Pred.Lms, Pack.Range, "adapt filter", "range code"),
         _ => new CodecInfo((codec ?? "").ToUpperInvariant(), "lossless prediction + entropy coding", Pred.Fixed2, Pack.Rice, "predict", "pack"),

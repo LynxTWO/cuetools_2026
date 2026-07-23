@@ -18,7 +18,10 @@ public partial class EncoderSettingsWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-    /// <summary>Open for a format, resolving lossy-ness the same way the format lists do.</summary>
+    /// <summary>Open for a format, resolving lossy-ness the same way the format lists do. A
+    /// two-faced format (wma; m4a with an imported AAC) carries the TYPE picker: choosing the
+    /// other type persists the choice, rebuilds every format list, and rebuilds this dialog
+    /// around the other encoder.</summary>
     public static void Open(Window owner, CUEConfig config, Services.EncoderCatalog catalog, string format)
     {
         if (string.IsNullOrWhiteSpace(format) || !config.formats.ContainsKey(format)) return;
@@ -26,6 +29,7 @@ public partial class EncoderSettingsWindow : Window
         try
         {
             var w = new EncoderSettingsWindow(config, format, lossy) { Owner = owner };
+            WireTypePicker(w, config, catalog, format, lossy);
             w.ShowDialog();
         }
         catch (System.Exception ex)
@@ -34,5 +38,19 @@ public partial class EncoderSettingsWindow : Window
             MessageBox.Show("Could not open encoder settings: " + ex.Message, "Encoder settings",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private static void WireTypePicker(EncoderSettingsWindow w, CUEConfig config,
+        Services.EncoderCatalog catalog, string format, bool lossy)
+    {
+        if (w.DataContext is not EncoderSettingsViewModel vm) return;
+        vm.HasTypeChoice = catalog.HasBothTypes(config.formats[format]);
+        vm.IsLossyType = lossy;
+        vm.TypeChanged += chooseLossy =>
+        {
+            catalog.SetFormatType(format, chooseLossy);   // persists + rebuilds the format lists
+            w.DataContext = new EncoderSettingsViewModel(config, format, chooseLossy);
+            WireTypePicker(w, config, catalog, format, chooseLossy);
+        };
     }
 }

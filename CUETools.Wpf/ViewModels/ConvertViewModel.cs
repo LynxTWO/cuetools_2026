@@ -37,7 +37,12 @@ public sealed class ConvertViewModel : PageViewModel
         }
         RebuildFormats();
         // an imported external encoder lights its format up without a restart
-        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac"; };
+        catalog.Changed += (_, _) =>
+        {
+            var keep = SelectedFormat; RebuildFormats();
+            SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac";
+            OnPropertyChanged(nameof(ScopeCodec));   // a type flip changes what the scope must draw
+        };
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile());
@@ -58,7 +63,26 @@ public sealed class ConvertViewModel : PageViewModel
     public string OutputDir { get => _outputDir; private set => Set(ref _outputDir, value); }
 
     private string _selectedFormat;
-    public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
+    public string SelectedFormat
+    {
+        get => _selectedFormat;
+        set { if (Set(ref _selectedFormat, value)) OnPropertyChanged(nameof(ScopeCodec)); }
+    }
+
+    /// <summary>Scope remap for two-faced formats - same rule as the Rip page: the visualization
+    /// must match the encoder that will actually run (WMA Lossless's predictor vs Standard's MDCT
+    /// mask; imported AAC vs ALAC).</summary>
+    public string ScopeCodec
+    {
+        get
+        {
+            string f = _selectedFormat;
+            bool lossy = _convert.IsLossy(f);
+            if (lossy && Controls.LossyMath.Info(f) == null) return f + "-lossy";
+            if (!lossy && Controls.LossyMath.Info(f) != null) return f + "-lossless";
+            return f;
+        }
+    }
 
     // the source codec (for the round-trip scope) - guessed from the extension, refined by the
     // real decode when the convert runs

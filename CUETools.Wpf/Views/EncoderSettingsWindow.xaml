@@ -10,6 +10,21 @@
       <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="20" Foreground="{DynamicResource Ink}"/>
       <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
+      <!-- TYPE: only for two-faced formats (wma = WMA Lossless vs Standard; m4a = ALAC vs AAC).
+           Switching persists the choice, moves the format between the lossless/lossy lists, and
+           rebuilds this dialog around the other encoder. -->
+      <StackPanel Visibility="{Binding HasTypeChoice, Converter={StaticResource BoolVis}}">
+        <TextBlock Text="TYPE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,14,0,6"/>
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="12,9">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton Content="Lossless" IsChecked="{Binding TypeLossless}" GroupName="fmtType" Foreground="{DynamicResource Ink}"
+                         ToolTip="Bit-exact archival encoding (WMA Lossless / ALAC). The format moves to the lossless list."/>
+            <RadioButton Content="Lossy" IsChecked="{Binding TypeLossy}" GroupName="fmtType" Margin="22,0,0,0" Foreground="{DynamicResource Ink}"
+                         ToolTip="Perceptual encoding at the quality mode below (WMA Standard / AAC). The format moves to the lossy list."/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <!-- COMMON: the compression / quality mode -->
       <StackPanel Visibility="{Binding HasModes, Converter={StaticResource BoolVis}}">
         <TextBlock Text="COMPRESSION / QUALITY" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,16,0,6"/>

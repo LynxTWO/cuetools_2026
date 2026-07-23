@@ -76,6 +76,15 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
     public bool HasModes => Modes.Count > 0;
     public bool HasAdvanced => Advanced.Count > 0;
 
+    // The lossless/lossy TYPE picker for two-faced formats (wma: WMA Lossless vs Standard; m4a:
+    // ALAC vs an imported AAC encoder). Populated by the window's Open path; choosing the other
+    // type raises TypeChanged so the dialog rebuilds around the other encoder.
+    public bool HasTypeChoice { get; set; }
+    public bool IsLossyType { get; set; }
+    public event Action<bool>? TypeChanged;
+    public bool TypeLossless { get => !IsLossyType; set { if (value && IsLossyType) TypeChanged?.Invoke(false); } }
+    public bool TypeLossy { get => IsLossyType; set { if (value && !IsLossyType) TypeChanged?.Invoke(true); } }
+
     public string SelectedMode
     {
         get => _enc.Settings.EncoderMode ?? "";

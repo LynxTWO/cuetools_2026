@@ -88,6 +88,15 @@ public static class LossyMath
             NoiseMarginDb = 1,
             HuffmanPack = false   // range coder: run-level style drawing reads closer
         },
+        // m4a with the TYPE picker set to lossy (an imported AAC encoder): AAC's real pipeline
+        "m4a-lossy" => new Profile
+        {
+            Name = "AAC",
+            Tagline = "pure-MDCT filterbank (1024-line), perceptual mask, Huffman pack",
+            Stages = new[] { "MDCT", "mask", "quantize", "Huffman" },
+            NoiseMarginDb = 1,
+            HuffmanPack = true
+        },
         _ => null
     };
 
