@@ -65,6 +65,7 @@ public sealed class SettingsViewModel : PageViewModel
     public bool PreventSleepDuringRip { get => _app.PreventSleepDuringRip; set { _app.PreventSleepDuringRip = value; Raise(); } }
     public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
     public bool StopOnUnrecoverable { get => _app.StopOnUnrecoverable; set { _app.StopOnUnrecoverable = value; Raise(); } }
+    public bool DisableEject { get => _c.disableEjectDisc; set { _c.disableEjectDisc = value; Raise(); } }
 
     // General. (OneInstance / CheckForUpdates deliberately not exposed: this app implements
     // neither yet, and a switch that does nothing would be a lie.)
@@ -74,17 +75,27 @@ public sealed class SettingsViewModel : PageViewModel
     // AccurateRip & CTDB
     public bool NoUnverifiedOutput { get => _c.noUnverifiedOutput; set { _c.noUnverifiedOutput = value; Raise(); } }
     public bool FixOffset { get => _c.fixOffset; set { _c.fixOffset = value; Raise(); } }
+    public bool FixOffsetToNearest { get => _c.fixOffsetToNearest; set { _c.fixOffsetToNearest = value; Raise(); } }
     public bool WriteArTagsOnEncode { get => _c.writeArTagsOnEncode; set { _c.writeArTagsOnEncode = value; Raise(); } }
+    public bool WriteArTagsOnVerify { get => _c.writeArTagsOnVerify; set { _c.writeArTagsOnVerify = value; Raise(); } }
     public bool WriteArLogOnConvert { get => _c.writeArLogOnConvert; set { _c.writeArLogOnConvert = value; Raise(); } }
+    public bool WriteArLogOnVerify { get => _c.writeArLogOnVerify; set { _c.writeArLogOnVerify = value; Raise(); } }
+    public bool ArLogToSourceFolder { get => _c.arLogToSourceFolder; set { _c.arLogToSourceFolder = value; Raise(); } }
+    public bool ArLogVerbose { get => _c.arLogVerbose; set { _c.arLogVerbose = value; Raise(); } }
     public bool CtdbSubmit { get => _c.advanced.CTDBSubmit; set { _c.advanced.CTDBSubmit = value; Raise(); } }
     public bool CtdbAsk { get => _c.advanced.CTDBAsk; set { _c.advanced.CTDBAsk = value; Raise(); } }
 
-    // File naming & output
+    // File naming & output. (Filename-hygiene rules - remove special chars, replace spaces,
+    // ANSI-safe - are owned by the dedicated naming editor, not duplicated here.)
     public string TrackFilenameFormat { get => _c.trackFilenameFormat; set { _c.trackFilenameFormat = value; Raise(); } }
     public bool CreateCueInTracksMode { get => _c.createCUEFileInTracksMode; set { _c.createCUEFileInTracksMode = value; Raise(); } }
+    public bool CreateCueWhenEmbedded { get => _c.createCUEFileWhenEmbedded; set { _c.createCUEFileWhenEmbedded = value; Raise(); } }
     public bool CreateM3U { get => _c.createM3U; set { _c.createM3U = value; Raise(); } }
     public bool CreateEacLog { get => _c.createEACLOG; set { _c.createEACLOG = value; Raise(); } }
+    public bool EmbedLog { get => _c.embedLog; set { _c.embedLog = value; Raise(); } }
     public bool WriteUtf8Bom { get => _c.writeUTF8BOM; set { _c.writeUTF8BOM = value; Raise(); } }
+    public bool AlwaysWriteUtf8Cue { get => _c.alwaysWriteUTF8CUEFile; set { _c.alwaysWriteUTF8CUEFile = value; Raise(); } }
+    public bool FillUpCue { get => _c.fillUpCUE; set { _c.fillUpCUE = value; Raise(); } }
 
     // Gaps & HTOA
     public bool DetectGaps { get => _c.detectGaps; set { _c.detectGaps = value; Raise(); } }
@@ -105,6 +116,7 @@ public sealed class SettingsViewModel : PageViewModel
     public bool DetectHdcd { get => _c.detectHDCD; set { _c.detectHDCD = value; Raise(); } }
     public bool DecodeHdcd { get => _c.decodeHDCD; set { _c.decodeHDCD = value; Raise(); } }
     public bool DecodeHdcdTo24 { get => _c.decodeHDCDto24bit; set { _c.decodeHDCDto24bit = value; Raise(); } }
+    public bool Wait750ForHdcd { get => _c.wait750FramesForHDCD; set { _c.wait750FramesForHDCD = value; Raise(); } }
 }
 
 /// <summary>One externally-obtainable encoder on the Settings page: its install status, the
