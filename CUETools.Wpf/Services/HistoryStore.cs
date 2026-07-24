@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using CUETools.Wpf.Models;
 
 namespace CUETools.Wpf.Services;
@@ -66,22 +65,22 @@ public sealed class HistoryStore : IHistoryStore
 
     private void Write()
     {
-        try { File.WriteAllText(_path, JsonSerializer.Serialize(_rows)); }
+        try { GzJson.Save(_path, _rows); }
         catch (Exception ex) { _log.Warn("history", "history write failed: " + ex.GetType().Name); }
     }
 
     private List<Row> Read(string path)
     {
-        try
+        var rows = GzJson.Load<List<Row>>(path);
+        if (rows != null) return rows;
+
+        // GzJson.Load never throws - it returns null both when the file is simply missing and
+        // when it exists but failed to parse. Only the latter is a corrupt file, and a corrupt
+        // file would otherwise be silently overwritten by the next Add - keep the evidence aside
+        // instead of destroying the user's history.
+        if (File.Exists(path))
         {
-            if (File.Exists(path))
-                return JsonSerializer.Deserialize<List<Row>>(File.ReadAllText(path)) ?? new List<Row>();
-        }
-        catch (Exception ex)
-        {
-            // a corrupt file would otherwise be silently overwritten by the next Add - keep the
-            // evidence aside instead of destroying the user's history
-            _log.Warn("history", "history read failed (keeping the bad file as .bak): " + ex.GetType().Name);
+            _log.Warn("history", "history read failed (keeping the bad file as .bak)");
             try { File.Copy(path, path + ".bak", overwrite: true); } catch { }
         }
         return new List<Row>();

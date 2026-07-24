@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Accuracy;
 
@@ -53,25 +53,11 @@ public sealed class DriveCalibrationStore
     {
         var all = Load();
         all[Key(cal.DriveSignature)] = cal;
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, JsonSerializer.Serialize(all, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch { /* best-effort */ }
+        GzJson.Save(_path, all);
     }
 
     private Dictionary<string, DriveCalibration> Load()
-    {
-        try
-        {
-            if (File.Exists(_path))
-                return JsonSerializer.Deserialize<Dictionary<string, DriveCalibration>>(File.ReadAllText(_path))
-                       ?? new Dictionary<string, DriveCalibration>();
-        }
-        catch { }
-        return new Dictionary<string, DriveCalibration>();
-    }
+        => GzJson.Load<Dictionary<string, DriveCalibration>>(_path) ?? new Dictionary<string, DriveCalibration>();
 
     private static string Key(string signature) => (signature ?? "").Trim();
 }
