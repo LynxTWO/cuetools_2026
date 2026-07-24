@@ -54,6 +54,11 @@ namespace CUETools.Ripper
 		/// ErrorsCount (the running consensus across passes). A value near the window size means the
 		/// pass slipped (wholesale disagreement), not that the media is that damaged.</summary>
 		public int ThisPassErrors;
+		/// <summary>Deep recovery slip classification, surfaced once when a persistent slip is probed.
+		/// SlipStrengthPct >= 0 means a verdict is present this event: high with a nonzero SlipOffset =
+		/// recoverable jitter; high with offset 0 = identical reads; low = dead media. -1 = no verdict.</summary>
+		public int SlipStrengthPct = -1;
+		public int SlipOffset;
 		public DateTime PassTime;
 
 		public ReadProgressArgs()
