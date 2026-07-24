@@ -213,6 +213,10 @@
             <TextBlock Text="Rip complete" Foreground="{DynamicResource Ink}" FontFamily="{StaticResource Serif}" FontSize="16" FontWeight="SemiBold"/>
             <TextBlock Text="{Binding RipSummary}" Foreground="{DynamicResource InkDim}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding LastOutputDir}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+            <!-- verify-history verdict: a second, offline, AccurateRip-independent bit-exactness check
+                 against this app's own earlier reads of the same disc -->
+            <TextBlock Text="{Binding HistoryText}" FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Foreground="{Binding HistoryIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
           </StackPanel>
         </DockPanel>
       </Border>
