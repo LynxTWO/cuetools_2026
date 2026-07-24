@@ -57,9 +57,12 @@ later read the disc on a different drive - identical audio, identical stored CRC
 
 In `RipService.Run`, after `cue.Go()` produces the AR/CTDB result:
 
-1. Build the `VerifyRecord` from the engine's per-track AR/CTDB checksums. (Integration note: the
-   per-track CRCs live on the cue's AccurateRipVerify / CTDB verify objects after Go(); confirm the
-   exact accessors during implementation.)
+1. Build the `VerifyRecord` from the engine's per-track AR/CTDB checksums. (Integration CONFIRMED
+   2026-07-24 by code trace: after `cue.Go()`, the disc id is `cue.TOC.TOCID`, and per audio track
+   `i` in `[0, cue.TOC.AudioTracks)` the checksums are `cue.ArVerify.CRC(i)` (AccurateRip v1),
+   `cue.ArVerify.CRCV2(i)` (v2), and `cue.ArVerify.CRC32(i)` (CRC32). `ArVerify` is an IAudioDest
+   the verify stream writes through - it is what produces the AR/CTDB confidence we already read -
+   so the CRCs are a deterministic function of the read bytes. No guessing remains.)
 2. `VerifyHistoryStore.CompareAndUpsert(record)` returns an outcome: `KnownDisc`, `Matches`,
    `PriorReads`, `DiffTrackCount`. If the disc id is already stored, compare per track: a track
    MATCHES when its AccurateRip CRC agrees with the most recent stored read (compare v2, fall back
