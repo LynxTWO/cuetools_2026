@@ -71,11 +71,15 @@ namespace CUETools.Wpf.Accuracy
             if (outcome.KnownDisc)
             {
                 var prev = reads[reads.Count - 1];   // newest stored read
+                // A corrupt-but-valid-gzip history file can deserialize a record whose Tracks is
+                // null (JSON "Tracks":null); treat that as an empty track list rather than crash.
+                var pt = prev.Tracks ?? Array.Empty<TrackCrc>();
+                var rt = r.Tracks ?? Array.Empty<TrackCrc>();
                 int diff = 0;
-                int n = Math.Min(prev.Tracks.Length, r.Tracks.Length);
+                int n = Math.Min(pt.Length, rt.Length);
                 for (int i = 0; i < n; i++)
-                    if (!SameTrack(prev.Tracks[i], r.Tracks[i])) diff++;
-                diff += Math.Abs(prev.Tracks.Length - r.Tracks.Length);   // track-count change counts as diff
+                    if (!SameTrack(pt[i], rt[i])) diff++;
+                diff += Math.Abs(pt.Length - rt.Length);   // track-count change counts as diff
                 outcome.DiffTrackCount = diff;
                 outcome.Matches = diff == 0;
             }
