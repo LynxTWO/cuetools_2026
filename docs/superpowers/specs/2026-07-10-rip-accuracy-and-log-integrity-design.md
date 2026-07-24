@@ -160,3 +160,33 @@ endpoint, to store the hash for a direct match later. The spec does not block on
 After R12 Phase 3 (base rip flow through `CUESheet`). Order within: (1) log integrity
 self-check (pure, testable now), (2) cache defeat, (3) overread, (4) adaptive speed,
 (5) the authoritative log record once a server field exists.
+
+## Live-wiring finding (2026-07-24): mid-read SET CD SPEED crashes the read path
+
+First attempt at Feature 3 (adaptive read speed) wired the AdaptiveSpeedController into RipService:
+the two SCSI primitives (`GetSupportedSpeeds`, `SetReadSpeed`) were added to `CDDriveReader`, the
+initial speed set at rip start, and speed changes applied mid-read from the `ReadProgress` handler
+on stuck windows / clean stretches. Results on the ASUS BW-16D1HT:
+
+- **Init works.** GetSpeed returns only the drive's MAX (one descriptor), so we synthesize the
+  standard CD ladder from it: "adaptive speed on: 9 steps 704-8468 kB/s, start 8468" (48x). Setting
+  the initial speed before reading is safe.
+- **Mid-read SET CD SPEED CRASHES.** ~18 s into a verify on the pin-holed disc, at the first stuck
+  window where the handler issued SET CD SPEED, the very next READ CD failed with
+  `SCSIException: illegal request: INVALID FIELD IN CDB` (FetchSectors). Because that read runs on a
+  background thread with no catch, the unhandled exception TERMINATED the app.
+
+Two root causes, both to fix before Feature 3 ships:
+1. **SET CD SPEED must not be issued concurrently with, or interleaved badly against, an in-flight
+   READ CD.** The `ReadProgress` event and the prefetch read are not the same thread / not
+   serialized against the device handle. The speed change has to be applied INSIDE the reader,
+   between reads, on the read thread (e.g. a volatile "pending speed" the read loop consumes), not
+   from an external event handler. It's also possible the drive rejects READ CD immediately after a
+   CLVandNonPureCav SET CD SPEED and needs the read mode re-established - needs a per-drive probe.
+2. **A read-thread SCSI exception terminates the whole app** (no handler on the AudioPipe/prefetch
+   thread). This pre-existing fragility should be caught and surfaced as a failed rip, not a crash -
+   independent of Feature 3, and worth its own fix.
+
+Status: reverted to stable. Feature 3 needs the serialized-apply redesign + the read-thread crash
+guard before another live attempt. The two primitives and the synthesized-ladder logic are sound
+and saved (scratchpad SCSIDrive-adaptivespeed-attempt.cs / RipService-adaptivespeed-attempt.cs).
