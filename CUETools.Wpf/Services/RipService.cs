@@ -253,9 +253,10 @@ public sealed class RipService : IRipService
                         // reader applies it when the NEXT window starts, never mid-recovery)
                         speedCtl?.OnErrorCluster(); RequestSpeed(); lastEaseFrac = frac;
                     }
-                    // deep recovery: a window STILL re-reading past the first stuck report goes all the
-                    // way to the drive floor (slow reads recover marginal sectors best)
-                    if (_settings.DeepRecovery && deepFloor > 0 && reReads > 0 && lastReReads > 0 && lastRequested != deepFloor)
+                    // deep recovery: only a GENUINELY persistent window (8+ re-reads deep) drops to the
+                    // drive floor - not every minor stuck spot. Slow reads recover marginal sectors best,
+                    // but 4x on a window that would clear fast just wastes time.
+                    if (_settings.DeepRecovery && deepFloor > 0 && reReads >= 8 && lastRequested != deepFloor)
                     {
                         lastRequested = deepFloor;
                         reader.RequestReadSpeed(deepFloor);
