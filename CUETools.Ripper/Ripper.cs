@@ -50,6 +50,10 @@ namespace CUETools.Ripper
 		public int Pass;
 		public int PassStart, PassEnd;
 		public int ErrorsCount;
+		/// <summary>Diagnostic only (read-only): sectors flagged by THIS single pass, as opposed to
+		/// ErrorsCount (the running consensus across passes). A value near the window size means the
+		/// pass slipped (wholesale disagreement), not that the media is that damaged.</summary>
+		public int ThisPassErrors;
 		public DateTime PassTime;
 
 		public ReadProgressArgs()
