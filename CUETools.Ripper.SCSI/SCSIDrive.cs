@@ -45,6 +45,10 @@ namespace CUETools.Ripper.SCSI
 		int _driveOffset = 0;
 		DriveC2ErrorModeSetting _driveC2ErrorMode = DriveC2ErrorModeSetting.Auto;
 		int _correctionQuality = 1;
+
+		/// <summary>Opt-in deep recovery (see AppSettings.DeepRecovery). When false the re-read loop
+		/// and read path behave exactly as before. Set before the rip starts.</summary>
+		public bool DeepRecovery { get; set; } = false;
 		int _currentStart = -1, _currentEnd = -1, _currentErrorsCount = 0;
 		// Diagnostic only (read-only): sectors THIS pass flagged as erroneous, reset each pass. A value
 		// near the window size means the pass slipped (wholesale disagreement), not that much media is
