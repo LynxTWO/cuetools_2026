@@ -238,6 +238,9 @@ public sealed class RipViewModel : PageViewModel
 
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
+    /// <summary>Opt-in deep recovery for damaged discs (progress-aware cap + slow-to-floor + slip
+    /// re-alignment). Off by default; the default rip path is unchanged.</summary>
+    public bool DeepRecovery { get => _settings.DeepRecovery; set { if (_settings.DeepRecovery != value) { _settings.DeepRecovery = value; OnPropertyChanged(); } } }
     public bool WriteLog { get => _config.createEACLOG; set { _config.createEACLOG = value; OnPropertyChanged(); } }
     public bool EmbedArt { get => _config.embedAlbumArt; set { _config.embedAlbumArt = value; OnPropertyChanged(); if (value) TriggerArtFetch(); else ClearArt(); } }
 

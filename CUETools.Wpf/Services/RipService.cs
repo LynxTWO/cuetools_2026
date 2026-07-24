@@ -99,6 +99,8 @@ public sealed class RipService : IRipService
             catch (Exception ex) { _log.Warn("rip", "read-offset lookup failed - ripping with offset 0: " + ex.GetType().Name); }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
+            reader.DeepRecovery = _settings.DeepRecovery;
+            if (reader.DeepRecovery) _log.Info("rip", "deep recovery ON: progress-aware cap + slow-to-floor + slip probe");
 
             // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive
             // gets stuck on a window, ease back up after clean stretches. Only REQUESTS are made
