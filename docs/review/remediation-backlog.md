@@ -104,7 +104,11 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **What this touches:**
  - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0 pinned; check for newer), `WavPack` (5.8.1; check newer), MAC_SDK (10.86; APE), taglib-sharp, `libmp3lame` (3.100, already current), ffmpeg (built on demand by `build_ffmpeg_dlls.yml`). Each bump means re-checking that `ThirdParty/*.patch` still applies.
  - Managed wrappers in S6/S7 that must match new native ABIs (P/Invoke signatures, struct layouts).
- - FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`): confirmed orphaned (absent from sln) and superseded by FLACCL; retire under D5 once D6 lands. Verify FLACCL itself builds/runs on current OpenCL runtimes and consider whether it should replace FlaCuda outright or be modernized to managed SIMD (idea 14).
+ - FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`): DELETED 2026-07-23 (decision D5).
+   Confirmed dead first: absent from the sln, referenced by no csproj/cs/sln outside its own two
+   dirs, and superseded by FLACCL (OpenCL, live in the sln). 12 tracked files removed via git rm
+   (recoverable from history). Still open under R13: verify FLACCL builds/runs on current OpenCL
+   runtimes, and consider managed-SIMD modernization (idea 14).
  - Missing/desired codecs: enumerate against current CUETools upstream and user wants (e.g. Opus, newer ALAC, DSD?) - needs a requirements list from the user before implementation.
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
 - **Next step:** produce a per-codec version-vs-latest table (current pin -> latest stable) and a patch-reapply risk note; get the user's list of missing codecs to add; then upgrade one codec at a time with round-trip verification. Sequence after R8 (buildable) and ideally after golden-corpus tests (R10/idea 3).
