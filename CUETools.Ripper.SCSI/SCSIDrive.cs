@@ -1503,11 +1503,18 @@ namespace CUETools.Ripper.SCSI
 				}
 				if (pass >= _correctionQuality && _currentErrorsCount == 0)
 					break;
-				// Deep recovery: stop when the window plateaus or hits the time ceiling (RecoveryPolicy).
-				// Off -> this never runs and the loop is bounded by max_scans exactly as before.
-				if (DeepRecovery && pass >= _correctionQuality &&
-				    !_recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds))
-					break;
+				// Deep recovery: feed the policy every pass so it tracks the best-so-far, but only ACT
+				// on its stop decision in the EXTENSION zone (pass+1 >= max_scans). This makes deep
+				// recovery a strict SUPERSET of baseline: it runs at least the old max_scans passes just
+				// like today (a window that only resolves at pass 15 still does - the plateau rule must
+				// never cut it off early), and only EXTENDS beyond the old cap while the error count is
+				// still improving. It can never stop earlier than today.
+				if (DeepRecovery && pass >= _correctionQuality)
+				{
+					bool keepGoing = _recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds);
+					if (pass + 1 >= max_scans && !keepGoing)
+						break;
+				}
 			}
 		}
 
