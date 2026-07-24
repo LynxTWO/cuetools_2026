@@ -57,6 +57,10 @@ namespace CUETools.Ripper.SCSI
 		// Deep recovery: pure progress-aware cap decision for a stuck window. No SCSI, no state that
 		// feeds the vote. Only consulted when DeepRecovery is on.
 		private readonly RecoveryPolicy _recovery = new RecoveryPolicy();
+		// Deep recovery slip classification (read-only): per-window state. Classifies a persistent slip
+		// as recoverable jitter vs dead media by correlating repeated raw reads. Never touches the vote.
+		private bool _slipClassified, _slipVerdictPending;
+		private int _slipStreak, _slipVerdictOff, _slipVerdictPct;
 		const int CB_AUDIO = 4 * 588 + 2 + 294 + 16;
 		const int NSECTORS = 16;
 		//const int MSECTORS = 5*1024*1024 / (4 * 588);
@@ -835,6 +839,53 @@ namespace CUETools.Ripper.SCSI
             return floor;
         }
 
+        /// <summary>Read-only slip classification: raw-read the window's first chunk a few times and
+        /// cross-correlate the extra reads against the first. Strong correlation at a nonzero offset =
+        /// real audio shifting between reads (recoverable jitter); strong at offset 0 = identical reads
+        /// (cache or stable); weak = no shared signal (dead media). Reads audio only, into its OWN
+        /// buffer - does NOT fold into the vote and never modifies rip data. Returns (best offset,
+        /// best correlation strength as 0-100).</summary>
+        private unsafe (int offset, int strengthPct) ClassifySlip(int startSector)
+        {
+            try
+            {
+                int chunk = Math.Min(m_max_sectors, _currentEnd - startSector);
+                if (chunk < 1) return (0, 0);
+                int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
+                int perSector = 4 * 588 + c2Size;
+                var buf = new byte[chunk * perSector];
+                uint lba = (uint)startSector + (uint)_toc[_toc.FirstAudio][0].Start;
+
+                bool RawRead()
+                {
+                    fixed (byte* p = buf)
+                        return (_readCDCommand == ReadCDCommand.ReadCdBEh
+                            ? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+                            : m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout)) == Device.CommandStatus.Success;
+                }
+                short[] AudioShorts()
+                {
+                    var s = new short[chunk * 588 * 2];
+                    for (int iSec = 0; iSec < chunk; iSec++)
+                        Buffer.BlockCopy(buf, iSec * perSector, s, iSec * 2352, 2352);   // audio bytes only, skip C2
+                    return s;
+                }
+
+                if (!RawRead()) return (0, 0);
+                short[] reference = AudioShorts();
+                int bestPct = 0, bestOff = 0;
+                for (int k = 0; k < 3; k++)
+                {
+                    if (!RawRead()) continue;
+                    var (off, str) = SlipCorrelator.FindOffset(reference, AudioShorts(), 32);
+                    int pct = (int)(str * 100);
+                    if (pct > bestPct) { bestPct = pct; bestOff = off; }
+                }
+                return (bestOff, bestPct);
+            }
+            catch { return (0, 0); }
+        }
+
         public void DisableEjectDisc(bool bDisable)
         {
             if (m_device != null)
@@ -1361,6 +1412,7 @@ namespace CUETools.Ripper.SCSI
 			//correctFile.Close();
 
 			_currentErrorsCount = 0;
+			_slipClassified = false; _slipStreak = 0; _slipVerdictPending = false;   // deep recovery: fresh slip state per window
 
 			// Adaptive read speed: apply a pending request HERE and only here - a fresh-window
 			// boundary, on the read thread, after TestReadCommand and before any FetchSectors of
@@ -1427,9 +1479,27 @@ namespace CUETools.Ripper.SCSI
 						progressArgs.PassEnd = _currentEnd;
 						progressArgs.ErrorsCount = _currentErrorsCount;
 						progressArgs.ThisPassErrors = _thisPassErrors;
+						progressArgs.SlipStrengthPct = _slipVerdictPending ? _slipVerdictPct : -1;
+						progressArgs.SlipOffset = _slipVerdictOff;
 						progressArgs.PassTime = PassTime;
 						ReadProgress(this, progressArgs);
+						_slipVerdictPending = false;   // surfaced once
 					}
+				}
+				// Deep recovery: classify a persistent slip ONCE per window (read-only probe - repeated
+				// raw reads of the first chunk, correlated; never touches the vote or the audio bytes).
+				if (DeepRecovery && !_slipClassified && pass > _correctionQuality)
+				{
+					int windowSize = _currentEnd - _currentStart;
+					if (_currentErrorsCount >= (windowSize * 85) / 100)
+					{
+						if (++_slipStreak >= 2)
+						{
+							(_slipVerdictOff, _slipVerdictPct) = ClassifySlip(_currentStart);
+							_slipClassified = true; _slipVerdictPending = true;
+						}
+					}
+					else _slipStreak = 0;
 				}
 				if (pass >= _correctionQuality && _currentErrorsCount == 0)
 					break;

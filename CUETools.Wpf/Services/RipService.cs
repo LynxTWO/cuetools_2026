@@ -296,6 +296,12 @@ public sealed class RipService : IRipService
                             _log.Info("rip.recovery", $"window={e.PassStart} pass={e.Pass} running={e.ErrorsCount} fresh={e.ThisPassErrors}/{winSize} speed={(lastRequested > 0 ? lastRequested / 176 : 0)}x slip={(slip ? 1 : 0)}");
                         }
                     }
+                    // deep recovery: slip classification verdict (read-only probe result, numbers only)
+                    if (e.SlipStrengthPct >= 0)
+                        _log.Info("rip.recovery", $"slip probe window={e.PassStart} strength={e.SlipStrengthPct}% offset={e.SlipOffset} " +
+                            (e.SlipStrengthPct >= 90 && e.SlipOffset != 0 ? "-> recoverable JITTER (real audio, shifting)"
+                             : e.SlipStrengthPct >= 90 ? "-> reads identical (cache or stable, not jittering)"
+                             : "-> DEAD MEDIA (no shared signal)"));
                     lastReReads = reReads;
                 }
             };
