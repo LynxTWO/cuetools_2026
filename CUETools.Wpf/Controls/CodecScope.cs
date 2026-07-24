@@ -24,12 +24,21 @@ public sealed class CodecScope : FrameworkElement
 {
     public static readonly DependencyProperty CodecProperty = DependencyProperty.Register(
         nameof(Codec), typeof(string), typeof(CodecScope), new FrameworkPropertyMetadata("flac", FrameworkPropertyMetadataOptions.AffectsRender));
+    // The user's configured encoder mode for this codec (e.g. "320", "V2", a compression level).
+    // Shown in the header so the scope echoes the ACTUAL setting, not just the codec family.
+    public static readonly DependencyProperty ModeProperty = DependencyProperty.Register(
+        nameof(Mode), typeof(string), typeof(CodecScope), new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.AffectsRender));
+    // True while the drive re-reads a stuck window: the scope veils its (frozen) scene and says so.
+    public static readonly DependencyProperty RecoveringProperty = DependencyProperty.Register(
+        nameof(Recovering), typeof(bool), typeof(CodecScope), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ActiveProperty = DependencyProperty.Register(
         nameof(Active), typeof(bool), typeof(CodecScope), new PropertyMetadata(false));
     public static readonly DependencyProperty SamplesProperty = DependencyProperty.Register(
         nameof(Samples), typeof(float[]), typeof(CodecScope), new PropertyMetadata(null, OnSamplesChanged));
 
     public string Codec { get => (string)GetValue(CodecProperty); set => SetValue(CodecProperty, value); }
+    public string Mode { get => (string)GetValue(ModeProperty); set => SetValue(ModeProperty, value); }
+    public bool Recovering { get => (bool)GetValue(RecoveringProperty); set => SetValue(RecoveringProperty, value); }
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
     public float[]? Samples { get => (float[]?)GetValue(SamplesProperty); set => SetValue(SamplesProperty, value); }
 
@@ -124,11 +133,29 @@ public sealed class CodecScope : FrameworkElement
         }
     }
 
+    // Veil drawn over the frozen scene while the drive re-reads a stuck window: dim the stalled
+    // visualization and label it, so a long pause reads as deliberate error recovery, not a hang.
+    private void DrawRecoveryVeil(DrawingContext dc, double w, double h)
+    {
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xB4, 0x0F, 0x11, 0x15)), null, new Rect(0, 0, w, h));
+        var ft = MakeText("recovering read errors", Mono, 13, Amber);
+        dc.DrawText(ft, new Point((w - ft.Width) / 2, h / 2 - 16));
+        var ft2 = MakeText("re-reading the disc - audio paused until the window is clean", Face, 10, Muted);
+        dc.DrawText(ft2, new Point((w - ft2.Width) / 2, h / 2 + 4));
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
+        RenderContent(dc, w, h);
+        // during a stuck-window re-read no new audio flows, so the scope would otherwise sit frozen;
+        // veil it and say so, so the pause reads as intentional recovery, not a hang
+        if (Recovering) DrawRecoveryVeil(dc, w, h);
+    }
 
+    private void RenderContent(DrawingContext dc, double w, double h)
+    {
         // lossy codecs get their OWN pipeline (perceptual: spectrum -> mask -> quantize -> pack);
         // they never draw the lossless predictor/residual stages - different family, different truth
         var lossy = LossyMath.Info(Codec);
@@ -329,8 +356,12 @@ public sealed class CodecScope : FrameworkElement
 
         // header + live readout: estimated rate and how much was judged inaudible. The tagline is
         // clipped so it never collides with the right-side readout at narrow widths.
-        Text(dc, prof.Name, new Point(2, 0), Mono, 14, Ink, true);
-        string head = $"~{_kbpsEma:0} kbps est";
+        // header LEFT: codec + the user's configured mode, so the scope echoes the real setting
+        string title = string.IsNullOrWhiteSpace(Mode) ? prof.Name : $"{prof.Name} - {Mode}";
+        Text(dc, title, new Point(2, 0), Mono, 14, Ink, true);
+        // header RIGHT: what the CONTENT needs to stay transparent (from the masking model), NOT the
+        // encoder's output rate - it honestly dips low on simple/quiet passages.
+        string head = $"content ~{_kbpsEma:0} kbps";
         var ft = MakeText(head, Mono, 14, Amber);
         dc.DrawText(ft, new Point(w - ft.Width - 2, 0));
         string sub = $"{_discEma:0}% of spectral detail inaudible - discarded";

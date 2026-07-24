@@ -44,7 +44,7 @@ public sealed class RipViewModel : PageViewModel
     public string SelectedFormat
     {
         get => _selectedFormat;
-        set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); } }
+        set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode)); } }
     }
 
     /// <summary>What the codec scope should draw for the selected format. A two-faced format is
@@ -60,6 +60,21 @@ public sealed class RipViewModel : PageViewModel
             if (lossy && Controls.LossyMath.Info(f) == null) return f + "-lossy";
             if (!lossy && Controls.LossyMath.Info(f) != null) return f + "-lossless";
             return f;
+        }
+    }
+
+    /// <summary>The configured encoder mode for the selected format (e.g. "320", "V2", or a
+    /// compression level), surfaced in the scope header so it reflects the ACTUAL setting rather
+    /// than just the codec family. Read from the encoder that will actually run for this format;
+    /// empty when none is resolved.</summary>
+    public string ScopeMode
+    {
+        get
+        {
+            string f = _selectedFormat;
+            if (_config.formats == null || !_config.formats.TryGetValue(f, out var fmt)) return "";
+            var enc = _codecs.IsLossy(f) ? fmt.encoderLossy : fmt.encoderLossless;
+            return enc?.Settings?.EncoderMode ?? "";
         }
     }
 
@@ -283,7 +298,7 @@ public sealed class RipViewModel : PageViewModel
         {
             var keep = SelectedFormat; RebuildFormats();
             SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac");
-            OnPropertyChanged(nameof(ScopeCodec));   // a type flip changes what the scope must draw
+            OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode));   // a type flip changes what the scope draws + its mode
         };
         // a cover-size change in Settings re-derives the already-fetched cover at the new size
         settings.ArtSizeChanged += (_, _) => RefreshArtSize();
