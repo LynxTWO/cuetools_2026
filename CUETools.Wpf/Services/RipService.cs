@@ -25,6 +25,13 @@ public sealed class VerifyResult
     /// <summary>Per-audio-track AccurateRip / CTDB confidence, index-aligned to the track list.</summary>
     public int[] ArPerTrack { get; init; } = System.Array.Empty<int>();
     public int[] CtdbPerTrack { get; init; } = System.Array.Empty<int>();
+
+    /// <summary>Local verify-history outcome (second-source bit-exactness): whether this disc was read
+    /// before, whether the read matched, how many prior reads, and how many tracks differed.</summary>
+    public bool HistoryKnown { get; init; }
+    public bool HistoryMatches { get; init; }
+    public int HistoryPriorReads { get; init; }
+    public int HistoryDiffTracks { get; init; }
 }
 
 public interface IRipService
@@ -58,9 +65,10 @@ public sealed class RipService : IRipService
     private readonly object _stopGate = new();
 
     private readonly CUETools.Wpf.Accuracy.DriveCalibrationStore _calStore;
+    private readonly CUETools.Wpf.Accuracy.VerifyHistoryStore _history;
 
-    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore)
-    { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; }
+    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history)
+    { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; }
 
     public void Stop()
     {
@@ -350,6 +358,46 @@ public sealed class RipService : IRipService
                 try { ctpt[t] = cue.CTDB.GetConfidence(t); } catch { }
             }
 
+            // Verify history: capture the per-track AccurateRip CRCs this read produced (deterministic
+            // in the bytes) and compare against our own earlier reads of this disc - a second, offline,
+            // AccurateRip-independent bit-exactness check.
+            var vh = new CUETools.Wpf.Accuracy.VerifyOutcome();
+            try
+            {
+                var tracks = new CUETools.Wpf.Accuracy.TrackCrc[n];
+                for (int t = 0; t < n; t++)
+                {
+                    uint v1 = 0, v2 = 0, c32 = 0;
+                    try { v1 = cue.ArVerify.CRC(t); } catch { }
+                    try { v2 = cue.ArVerify.CRCV2(t); } catch { }
+                    try { c32 = cue.ArVerify.CRC32(t); } catch { }
+                    tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc { ArV1 = v1, ArV2 = v2, Crc32 = c32 };
+                }
+                var record = new CUETools.Wpf.Accuracy.VerifyRecord
+                {
+                    DiscId = cue.TOC.TOCID ?? "",
+                    Tracks = tracks,
+                    ArConfidence = arConf, ArTotal = arTotal,
+                    CtdbConfidence = ctConf, CtdbTotal = ctTotal,
+                    Drive = (reader.ARName ?? "").Trim(),
+                    ReadOffset = offset,
+                    CorrectionQuality = cq,
+                    DeepRecovery = _settings.DeepRecovery,
+                    Title = cue.Metadata?.Title ?? "",
+                    Artist = cue.Metadata?.Artist ?? "",
+                    Utc = DateTime.UtcNow,
+                    RipperVersion = "2026.1.0",
+                };
+                vh = _history.CompareAndUpsert(record);
+                _log.Info("verify.history", $"disc={record.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
+                if (encode && Directory.Exists(outDir))
+                {
+                    try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(record)); }
+                    catch (Exception ex) { _log.Warn("verify.history", "sidecar write failed: " + ex.GetType().Name); }
+                }
+            }
+            catch (Exception ex) { _log.Warn("verify.history", "record build failed: " + ex.GetType().Name); }
+
             return new VerifyResult
             {
                 Ok = true,
@@ -362,7 +410,11 @@ public sealed class RipService : IRipService
                 OutputDir = outDir,
                 FileCount = files,
                 ArPerTrack = arpt,
-                CtdbPerTrack = ctpt
+                CtdbPerTrack = ctpt,
+                HistoryKnown = vh.KnownDisc,
+                HistoryMatches = vh.Matches,
+                HistoryPriorReads = vh.PriorReads,
+                HistoryDiffTracks = vh.DiffTrackCount,
             };
         }
         catch (StopException)
