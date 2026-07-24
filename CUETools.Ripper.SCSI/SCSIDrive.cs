@@ -711,6 +711,77 @@ namespace CUETools.Ripper.SCSI
             catch { return new int[0]; }
         }
 
+        /// <summary>Raw result of a read-only calibration probe (no rip). All timings in ms.</summary>
+        public struct DriveProbe
+        {
+            public bool Probed;              // a probe actually ran
+            public int[] SupportedSpeeds;    // synthesized ladder (kB/s)
+            public double FirstReadMs;       // time to read the target region from media
+            public double ReReadMs;          // time to read the SAME region again
+            public bool CachesReReads;       // re-read much faster => the drive cached it
+        }
+
+        /// <summary>Read-only cache-behaviour probe. Read a mid-disc audio region to warm any cache,
+        /// time an immediate re-read (fast if the drive caches), then read a LARGE unrelated region
+        /// to flush the cache and time the target again (a real media read if it was evicted). If
+        /// the warm re-read is much faster than the post-flush read, the drive serves re-reads from
+        /// cache - so a secure re-read must defeat it. Runs OUTSIDE a rip, synchronously; every
+        /// ReadCDDA status is checked (a failure => Probed false, honest "Unconfirmed"). Reads audio
+        /// sectors only - never writes rip output, cannot corrupt anything.</summary>
+        public unsafe DriveProbe Probe()
+        {
+            var r = new DriveProbe { SupportedSpeeds = GetSupportedSpeeds() };
+            try
+            {
+                if (m_device == null || _toc == null || _toc.AudioLength < 8000) return r;   // need room for a flush region
+                if (!TestReadCommand()) return r;   // autodetect the drive's working read command/mode
+
+                uint firstStart = (uint)_toc[_toc.FirstAudio][0].Start;
+                long len = _toc.AudioLength;
+                int chunk = Math.Max(1, m_max_sectors);              // sectors per read command
+                int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
+                int perSector = 4 * 588 + c2Size;                    // bytes the drive returns per sector
+                var buf = new byte[chunk * perSector];
+
+                uint target = firstStart + (uint)(len / 2);          // mid-disc (past the 10-13% pin-holes)
+                uint flushBase = firstStart + (uint)(len / 5);       // ~20%, far from the target
+
+                // one read command via the autodetected path (same dispatch the rip uses)
+                bool ReadOne(uint lba, out double ms)
+                {
+                    fixed (byte* p = buf)
+                    {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        Device.CommandStatus st = _readCDCommand == ReadCDCommand.ReadCdBEh
+                            ? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+                            : m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+                        ms = sw.Elapsed.TotalMilliseconds;
+                        return st == Device.CommandStatus.Success;
+                    }
+                }
+
+                // warm the cache, then time an immediate re-read (fast if the drive caches)
+                if (!ReadOne(target, out _)) return r;
+                if (!ReadOne(target, out double warmMs)) return r;
+
+                // flush with a big unrelated read (~6.5 MB, larger than any optical read cache),
+                // looping chunks since one command is limited to m_max_sectors
+                int flushChunks = (int)(6_500_000L / (chunk * 2352)) + 1;
+                for (int i = 0; i < flushChunks; i++)
+                    if (!ReadOne(flushBase + (uint)(i * chunk), out _)) return r;
+
+                // time the target again - a real media read if the flush evicted it
+                if (!ReadOne(target, out double flushedMs)) return r;
+
+                r.FirstReadMs = flushedMs;   // honest media-read time
+                r.ReReadMs = warmMs;         // cached re-read time
+                r.CachesReReads = flushedMs > 3 && warmMs < flushedMs * 0.5;
+                r.Probed = true;
+            }
+            catch { }
+            return r;
+        }
+
         public void DisableEjectDisc(bool bDisable)
         {
             if (m_device != null)

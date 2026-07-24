@@ -35,6 +35,8 @@
         </StackPanel>
         <Button DockPanel.Dock="Right" Content="Detect" Command="{Binding DetectCommand}" Style="{StaticResource Accent}" Padding="16,8" VerticalAlignment="Top"
                 ToolTip="Re-read the drive over SCSI (identity, capabilities, speeds, offset)."/>
+        <Button DockPanel.Dock="Right" Content="Calibrate" Command="{Binding CalibrateCommand}" Padding="14,8" Margin="0,0,10,0" VerticalAlignment="Top"
+                ToolTip="Probe this drive's read behaviour with the loaded disc: does it serve re-reads from its cache (so a secure re-read must defeat the cache), and its top read speed. Read-only - it reads audio sectors and writes nothing. Saved per drive."/>
       </DockPanel>
 
       <!-- identity + read offset -->
@@ -112,6 +114,28 @@
           </DockPanel>
         </Border>
       </UniformGrid>
+
+      <!-- per-drive calibration (probed with a disc; persisted). Cache behaviour drives whether a
+           secure re-read needs cache defeat; max speed is the adaptive-speed ceiling. -->
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="15,13" Margin="0,0,0,10"
+              Visibility="{Binding HasDetails, Converter={StaticResource BoolVis}}">
+        <StackPanel>
+          <DockPanel LastChildFill="False" Margin="0,0,0,8">
+            <TextBlock DockPanel.Dock="Left" Text="CALIBRATION" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CalWhenText}" FontFamily="{StaticResource Mono}" FontSize="10" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,3" ToolTip="Whether the drive serves a repeated read from its own cache. If it does, a 'secure' re-read is not a real re-read unless the cache is defeated; if it re-reads from the media, re-reads are already genuine. Confidence: Confirmed = measured no cache; Estimated = cache seen (flush sizing is a follow-up); Unconfirmed = probe did not run.">
+            <TextBlock DockPanel.Dock="Left" Text="Cache behaviour" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center" MinWidth="160"/>
+            <TextBlock Text="{Binding CacheText}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{StaticResource Teal}" VerticalAlignment="Center"/>
+          </DockPanel>
+          <DockPanel Margin="0,3" ToolTip="The drive's top read speed, used as the ceiling for adaptive read speed.">
+            <TextBlock DockPanel.Dock="Left" Text="Max read speed" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center" MinWidth="160"/>
+            <TextBlock Text="{Binding CalMaxSpeedText}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
+          </DockPanel>
+          <TextBlock Text="Overread lead-in/out and cache flush sizing are probed in a later pass; today re-reads use the conservative path when a cache is detected."
+                     Foreground="{DynamicResource Muted}" FontSize="10.5" TextWrapping="Wrap" Margin="0,7,0,0"/>
+        </StackPanel>
+      </Border>
 
       <!-- supported media (profiles) -->
       <TextBlock Text="SUPPORTED MEDIA" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="2,18,0,8"
