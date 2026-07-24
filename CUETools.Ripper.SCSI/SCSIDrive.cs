@@ -793,6 +793,48 @@ namespace CUETools.Ripper.SCSI
             return r;
         }
 
+        /// <summary>Read-only: find the lowest read speed the drive actually accepts, by stepping SET
+        /// CD SPEED down through the slow rungs and doing one probe read at each. Returns kB/s (a
+        /// multiple of 176), or 0 if none below max is accepted or probing failed. Uses the
+        /// autodetected read command; restores a fast speed on the way out so a normal rip is not left
+        /// crawling. Reads audio only - never writes rip output, cannot corrupt anything.</summary>
+        public unsafe int ProbeMinSpeedKbps()
+        {
+            int floor = 0;
+            try
+            {
+                if (m_device == null || _toc == null || _toc.AudioLength < 100) return 0;
+                if (!TestReadCommand()) return 0;
+                int chunk = Math.Max(1, m_max_sectors);
+                int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
+                var buf = new byte[chunk * (4 * 588 + c2Size)];
+                uint target = (uint)_toc[_toc.FirstAudio][0].Start + (uint)(_toc.AudioLength / 2);
+
+                bool ReadOne(uint lba)
+                {
+                    fixed (byte* p = buf)
+                        return (_readCDCommand == ReadCDCommand.ReadCdBEh
+                            ? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+                            : m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout)) == Device.CommandStatus.Success;
+                }
+
+                foreach (int x in new[] { 8, 4, 2, 1 })   // only genuinely slow rungs
+                {
+                    ushort v = (ushort)(x * 176);
+                    if (m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, v, v) != Device.CommandStatus.Success)
+                        break;                 // drive refused this speed -> the previous accepted one is the floor
+                    if (!ReadOne(target)) break; // could not read at this speed -> stop
+                    floor = v;
+                }
+            }
+            catch { }
+            finally
+            {
+                try { var s = GetSupportedSpeeds(); if (s.Length > 0) { ushort mx = (ushort)Math.Min(0xFFFE, s[s.Length - 1]); m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, mx, mx); } } catch { }
+            }
+            return floor;
+        }
+
         public void DisableEjectDisc(bool bDisable)
         {
             if (m_device != null)

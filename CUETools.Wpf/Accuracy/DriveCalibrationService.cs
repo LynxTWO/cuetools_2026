@@ -41,13 +41,15 @@ public sealed class DriveCalibrationService
 
             string sig = (reader.ARName ?? "").Trim();
             CDDriveReader.DriveProbe probe;
-            lock (DriveService.ScsiGate) probe = reader.Probe();
+            int minSpeedKbps;
+            lock (DriveService.ScsiGate) { probe = reader.Probe(); minSpeedKbps = reader.ProbeMinSpeedKbps(); }
 
             var cal = new DriveCalibration
             {
                 DriveSignature = sig,
                 MaxSpeedKbps = (probe.SupportedSpeeds != null && probe.SupportedSpeeds.Length > 0)
                     ? probe.SupportedSpeeds[probe.SupportedSpeeds.Length - 1] : 0,
+                MinSpeedKbps = minSpeedKbps,
                 CalibratedUtc = DateTime.UtcNow,
                 RipperVersion = Version,
                 // overread not probed yet (finicky lead-in/out addressing) - left false, a follow-up
@@ -77,7 +79,7 @@ public sealed class DriveCalibrationService
 
             _store.Save(cal);
             _log.Info("calibrate", $"drive {drive}: cache={cal.CacheDefeat} ({cal.CacheConfidence}) " +
-                $"maxSpeed={cal.MaxSpeedKbps}kBps read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
+                $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
             return cal;
         }
         catch (Exception ex)
