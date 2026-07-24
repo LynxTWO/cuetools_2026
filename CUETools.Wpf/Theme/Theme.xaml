@@ -34,38 +34,99 @@
 
   <!-- Panel button: reads like a milled bench-gear key. Dark brushed face, hairline edge that
        lights teal on hover, sinks on press. Implicit, so every plain Button picks it up. -->
+  <!-- Soft rubber button, lit from behind, modelling a real backlit rubber cap. Layers (bottom to
+       top): a blurred teal BACKLIGHT halo that bleeds through the translucent rubber (brighter on
+       hover, brightest when PRESSED - the rubber squeezed toward the light, never going dark); the
+       rubber BODY (a volume gradient via TemplateBinding Background, so the accent style only swaps
+       that brush); an inner teal CORE glow; a top specular SHEEN and a lit top RIM giving the domed
+       rubber its shape; the CONTENT on top. A DropShadow floats the cap above the surface and
+       shrinks on press (the cap pushes down). The BendyButton behaviour adds the click-point squish
+       and rubber-hose spring-back on top of this. -->
   <Style TargetType="Button">
     <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="FontSize" Value="12.5"/>
     <Setter Property="Padding" Value="14,7"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <!-- squishy rubber-hose feel: deform toward the click point, spring back with overshoot -->
     <Setter Property="ctl:BendyButton.Enabled" Value="True"/>
     <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource GlassLine}"/>
+    <Setter Property="BorderBrush" Value="#3AFFFFFF"/>
     <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="b" CornerRadius="7" BorderThickness="1"
-                  Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                  Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
+          <Grid>
+            <!-- backlight halo behind the rubber -->
+            <Border x:Name="halo" CornerRadius="11" Margin="-3" Opacity="0.42">
+              <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.66" Center="0.5,0.66" RadiusX="0.72" RadiusY="0.95">
+                  <GradientStop Color="#DFFFFB" Offset="0"/>
+                  <GradientStop Color="#8F5FE0D3" Offset="0.32"/>
+                  <GradientStop Color="#3327A99C" Offset="0.62"/>
+                  <GradientStop Color="#0034CFC0" Offset="1"/>
+                </RadialGradientBrush>
+              </Border.Background>
+              <Border.Effect><BlurEffect Radius="10"/></Border.Effect>
+            </Border>
+
+            <!-- rubber body (colour = TemplateBinding Background) + the 3D drop -->
+            <Border x:Name="body" CornerRadius="9" BorderThickness="1"
+                    Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}">
+              <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="4" Direction="270" Opacity="0.55"/></Border.Effect>
+            </Border>
+
+            <!-- inner teal core: the light welling up through the rubber -->
+            <Border x:Name="core" CornerRadius="9" Margin="1" Opacity="0.3">
+              <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.72" Center="0.5,0.72" RadiusX="0.62" RadiusY="0.8">
+                  <GradientStop Color="#7034CFC0" Offset="0"/>
+                  <GradientStop Color="#0034CFC0" Offset="1"/>
+                </RadialGradientBrush>
+              </Border.Background>
+            </Border>
+
+            <!-- top specular sheen (the rounded rubber catching room light) -->
+            <Border x:Name="sheen" CornerRadius="8,8,14,14" Margin="3,2,3,14" VerticalAlignment="Top" Height="16" Opacity="0.42">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="#EEFFFFFF" Offset="0"/>
+                  <GradientStop Color="#00FFFFFF" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+
+            <!-- lit top rim: hairline highlight along the top edge -->
+            <Border x:Name="rim" CornerRadius="9,9,2,2" Height="14" VerticalAlignment="Top" Margin="1.5,1,1.5,0"
+                    BorderThickness="0,1.2,0,0" Opacity="0.65">
+              <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                  <GradientStop Color="#7AD8FFF6" Offset="0"/>
+                  <GradientStop Color="#00FFFFFF" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.BorderBrush>
+            </Border>
+
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+          </Grid>
           <ControlTemplate.Triggers>
+            <!-- hover: the backlight warms up and the rim brightens -->
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Teal}"/>
-              <Setter TargetName="b" Property="Effect">
-                <Setter.Value><DropShadowEffect Color="#34CFC0" BlurRadius="9" ShadowDepth="0" Opacity="0.4"/></Setter.Value>
+              <Setter TargetName="halo" Property="Opacity" Value="0.72"/>
+              <Setter TargetName="core" Property="Opacity" Value="0.4"/>
+              <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource Teal}"/>
+            </Trigger>
+            <!-- pressed: rubber squeezed toward the light (halo + core brightest), sheen dims, and
+                 the cap pushes DOWN (the drop shrinks). Never a dark fill. -->
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="halo" Property="Opacity" Value="0.98"/>
+              <Setter TargetName="core" Property="Opacity" Value="0.6"/>
+              <Setter TargetName="sheen" Property="Opacity" Value="0.12"/>
+              <Setter TargetName="body" Property="Effect">
+                <Setter.Value><DropShadowEffect Color="#000000" BlurRadius="5" ShadowDepth="1" Direction="270" Opacity="0.45"/></Setter.Value>
               </Setter>
             </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{DynamicResource ButtonPressed}"/>
-              <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Line}"/>
-            </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter TargetName="b" Property="Opacity" Value="0.4"/>
+              <Setter Property="Opacity" Value="0.4"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -73,11 +134,12 @@
     </Setter>
   </Style>
 
-  <!-- Accent button for the primary action on a page (Rip, Verify, Convert). Teal-lit lens. -->
+  <!-- Accent button (Rip, Verify, Convert): the same lit-rubber template, but the rubber itself is
+       teal - a glowing lens cap. Only the body Background + text colour differ. -->
   <Style x:Key="Accent" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="Foreground" Value="#04110F"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
-    <Setter Property="BorderBrush" Value="{StaticResource Teal}"/>
+    <Setter Property="BorderBrush" Value="#66FFFFFF"/>
     <Setter Property="Background">
       <Setter.Value>
         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
