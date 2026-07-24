@@ -155,3 +155,44 @@ The recovery fix designed from this log: quarantine a slip pass so it does not p
 or reset progress; slow the drive on a stuck window via real SET CD SPEED; re-read only the
 still-erroneous sectors so extra passes are cheap; and a progress-aware plateau rule that
 replaces the blind pass cap.
+
+## Findings (2026-07-24 pinholed-disc run)
+
+The instrument ran the whole pinholed disc (Surround Sounds, 24 tracks) end to end. Final result:
+`ar_conf=0/82 accurate=False reread_windows=14 failed_windows=8`, elapsed 2611 s. That matches the
+pre-diagnostic baseline (15 reread / 10 failed) within run-to-run variance, which corroborates that
+the read-only instrumentation changed nothing about the rip (on top of the code-inspection proof).
+
+The 14 re-read windows, categorized:
+
+| Mode | Windows (minFresh) | Signature | More passes help? |
+|------|--------------------|-----------|-------------------|
+| Converged | 33600, 48000, 184800, 264000, 288000, 290400 | resolved within the 30-pass cap | n/a |
+| Near-miss capped | 259200 (2), 266400 (3), 36000 (5) | monotonic descent, cut off 2-5 short | YES (few more passes) |
+| Slow-converging capped | 40800 (110), 38400 (158), 43200 (201) | steady descent, still dropping at the cap | YES (many more passes) |
+| Persistent slip | 45600 (2250) | pegged ~2400, slipPasses=30, never a consensus | NO |
+| Oscillating | 285600 (1172) | hard floor ~1172 + a ~125-sector band flip-flopping 1172<->1297 | NO (marginal reads are unstable) |
+
+Key reads:
+
+- 6 of the 8 FAILED windows (the near-miss + slow-converging groups) were still genuinely
+  converging when the blind 30-pass cap cut them off. A progress-aware cap would likely rescue
+  them, which could move the disc from 0/82 toward an AccurateRip match. This is the primary win.
+- 1 window (45600) is a persistent slip: 30 of 30 passes near-full, no consensus ever forms.
+- 1 window (285600) oscillates: a floor of genuinely-dead sectors plus a marginal band whose reads
+  come back different every pass, so those never get two clean agreeing reads.
+- The vote is robust to a TRANSIENT slip: window 288000 converged in 5 passes despite slipPasses=1.
+  So the recovery fix should react to PERSISTENT slips, not the occasional one.
+
+Correction to the design's premise: the added `_thisPassErrors` counter came out equal to the
+running `_currentErrorsCount` on every line, because `fError` is a consensus verdict recomputed each
+pass, not a comparison of this one raw read against the consensus. It still flags a consensus-level
+slip (count near-full), which is what "2400" looks like in the UI, and that flag correctly caught
+45600. But telling a recoverable slip (jitter/misalignment) from an unrecoverable one (destruction)
+needs a different measurement - cross-correlating consecutive RAW reads - which belongs to the
+recovery-fix spec, not here.
+
+Implication for the recovery fix: a progress-aware cap (keep going while minFresh is still falling,
+stop on a plateau) addresses 6 of 8 failures; a persistent-slip detector plus a raw-read
+correlation probe (jitter vs destruction) addresses the other 2. Slip QUARANTINE is unnecessary -
+the vote already absorbs transient slips.
