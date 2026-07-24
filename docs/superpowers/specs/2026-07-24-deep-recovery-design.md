@@ -216,3 +216,30 @@ Deferred (follow-up): the auto-apply shift, and ONLY with a safety gate - either
 slip-recovered window solely when the final AccurateRip matches, or mark it "unverified, check
 against AccurateRip" so a shifted result can never masquerade as a secure read. Decide after the
 detection data shows whether real jitter occurs on this drive.
+
+## Verification result (2026-07-24)
+
+Implemented as tasks T1-T6 (see docs/superpowers/plans/2026-07-24-deep-recovery.md); 8 unit tests
+green (RecoveryPolicy + SlipCorrelator).
+
+First pinholed-disc run caught a regression: the 8-pass plateau rule cut window 33600 off at pass
+11 (1 error left) where baseline ran to pass 15 and converged - the plateau misread a window that
+was slowly earning its second clean agreeing read as "stuck." Fixed: the plateau/ceiling give-up
+now fires ONLY in the extension zone (pass+1 >= max_scans), making deep recovery a strict superset
+of baseline (never stops earlier than today; only extends while still improving). Slow-to-floor
+also gated to genuinely persistent windows (8+ re-reads), not every stuck spot.
+
+Re-run confirmed the fix: windows now run the full cap before giving up (33600 passes=30, not 11).
+The rescue upside (extending past max_scans) is real but was variance-obscured on the pinholed disc
+this run - its reads swing a window between converging and full-slip run to run, so no clean
+steady-descent case appeared to extend.
+
+BIT-EXACT GATE PASSED: clean Genesis disc, same drive/session, verified with Deep recovery OFF then
+ON. Both accurate=True with IDENTICAL AccurateRip (107/424) and CTDB (114/544) confidence and zero
+re-reads. Since AccurateRip CRCs are an exact function of the audio bytes, identical confidence
+means identical audio - deep recovery ON is byte-for-byte the same as OFF on clean media. The
+opt-in mode never touches clean audio.
+
+Known limitation confirmed: on the ASUS (a caching drive) the slip classifier reads cached-identical
+bytes and reports "reads identical", so it cannot see jitter through the cache. It needs the gentle
+sized cache defeat (next work) to give a real jitter-vs-dead-media verdict.
