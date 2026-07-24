@@ -187,3 +187,32 @@ Part 2 (the data-path change) earns a stronger gate:
 - Retune the plateau / ceiling / slow-to-floor step schedule against more damaged discs.
 - Consider a targeted re-read (only still-erroneous sectors) to make extra passes cheaper - a pure
   optimization, safe to add later.
+
+## Implementation finding (2026-07-24): Part 2 re-scoped to detection-only
+
+Plain English: while implementing the slip-recovery re-alignment, the "never corrupt" safety
+argument turned out to have a hole. The auto-apply shift is deferred; the read-only classification
+half shipped.
+
+The hole: the safety rested on "the unchanged clean-agreement vote is the sole gate, so a wrong
+offset just fails to recover." But the vote validates AGREEMENT, not correctness relative to the
+true audio position. Re-alignment works by shifting reads to match a reference read. If that
+reference is itself jitter-shifted by K samples (which is exactly what a slipping drive produces -
+every read is at some varying offset), aligning the others to it makes them all agree on audio
+shifted by K. The vote sees agreement and accepts it. The result is uniformly shifted - wrong.
+AccurateRip catches it (its CRC is position-sensitive), so on a disc that is in AccurateRip the
+rescue is self-checking. But a disc NOT in AccurateRip would get a silently-shifted rip. That
+violates the standing rule that recovery must never corrupt, so the auto-apply is not shipped.
+
+Shipped instead (read-only, cannot corrupt): `ClassifySlip` raw-reads a persistent-slip window's
+first chunk a few times into its OWN buffer and cross-correlates the extra reads against the first
+via SlipCorrelator. It never goes through FetchSectors/ReorganiseSectors, so the vote and the audio
+are untouched. It classifies the slip - recoverable jitter (strong correlation at a nonzero offset),
+identical reads (strong at offset 0), or dead media (weak) - and logs the verdict. This answers the
+open question from the diagnostic (is window 45600 recoverable jitter or dead media?) at zero risk,
+and tells us whether the gated auto-apply is even worth building.
+
+Deferred (follow-up): the auto-apply shift, and ONLY with a safety gate - either accept a
+slip-recovered window solely when the final AccurateRip matches, or mark it "unverified, check
+against AccurateRip" so a shifted result can never masquerade as a secure read. Decide after the
+detection data shows whether real jitter occurs on this drive.
