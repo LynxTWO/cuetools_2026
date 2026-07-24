@@ -71,6 +71,25 @@
               <TextBlock Text="{Binding CtdbText}" FontFamily="{StaticResource Mono}" FontSize="13" Foreground="{StaticResource Good}"/>
             </StackPanel>
           </Border>
+          <!-- verify-history verdict: a second, offline, AccurateRip-independent bit-exactness check
+               against this app's own earlier reads of the same disc. Shown after either a rip or a
+               verify (HistoryText is set in both paths); hidden until there is a result. -->
+          <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13" Margin="0,0,0,11">
+            <Border.Style>
+              <Style TargetType="Border">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding HistoryText}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Border.Style>
+            <StackPanel>
+              <TextBlock Text="VERIFY HISTORY" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,7"/>
+              <TextBlock Text="{Binding HistoryText}" FontSize="12" TextWrapping="Wrap"
+                         Foreground="{Binding HistoryIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
+            </StackPanel>
+          </Border>
           <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13">
             <StackPanel>
               <TextBlock Text="OPTIONS" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,8"/>
@@ -213,10 +232,6 @@
             <TextBlock Text="Rip complete" Foreground="{DynamicResource Ink}" FontFamily="{StaticResource Serif}" FontSize="16" FontWeight="SemiBold"/>
             <TextBlock Text="{Binding RipSummary}" Foreground="{DynamicResource InkDim}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding LastOutputDir}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-            <!-- verify-history verdict: a second, offline, AccurateRip-independent bit-exactness check
-                 against this app's own earlier reads of the same disc -->
-            <TextBlock Text="{Binding HistoryText}" FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Foreground="{Binding HistoryIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
           </StackPanel>
         </DockPanel>
       </Border>
