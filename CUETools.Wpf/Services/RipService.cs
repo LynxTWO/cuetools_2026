@@ -5,6 +5,7 @@ using CUETools.CTDB;
 using CUETools.Processor;
 using CUETools.Ripper;
 using CUETools.Ripper.SCSI;
+using CUETools.Wpf.Accuracy;
 
 namespace CUETools.Wpf.Services;
 
@@ -99,6 +100,33 @@ public sealed class RipService : IRipService
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
 
+            // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive
+            // gets stuck on a window, ease back up after clean stretches. Only REQUESTS are made
+            // here; the reader applies them at the next fresh-window boundary on its own read
+            // thread (a mid-window SET CD SPEED crashed the read - see PrefetchSector). The audio
+            // is identical at any speed, so accuracy is unaffected either way.
+            AdaptiveSpeedController speedCtl = null;
+            int lastRequested = 0;
+            if (_settings.AdaptiveReadSpeed)
+            {
+                int[] speeds = reader.GetSupportedSpeeds();
+                if (speeds.Length > 1)
+                {
+                    speedCtl = new AdaptiveSpeedController(speeds);
+                    lastRequested = speedCtl.CurrentSpeed;
+                    reader.RequestReadSpeed(lastRequested);
+                    _log.Info("rip", $"adaptive speed on: {speeds.Length} steps {speeds[0]}-{speeds[speeds.Length - 1]} kB/s, start {lastRequested} ({lastRequested / 176}x)");
+                }
+                else _log.Info("rip", "adaptive speed: drive reports no speed list - using drive default");
+            }
+            void RequestSpeed()
+            {
+                if (speedCtl == null || speedCtl.CurrentSpeed == lastRequested) return;
+                lastRequested = speedCtl.CurrentSpeed;
+                reader.RequestReadSpeed(lastRequested);
+                _log.Info("rip.speed", $"read speed request -> {lastRequested} kB/s ({lastRequested / 176}x)");
+            }
+
             // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
             // be ejected mid-read (which would fail the read and can crash the drive layer).
             if (_settings.PreventSleepDuringRip) KeepAwake(true);
@@ -171,6 +199,7 @@ public sealed class RipService : IRipService
             int cqc = Math.Max(0, Math.Min(2, cq));
             int maxReReads = Math.Max(1, (16 << cqc) - 1 - cqc);
             int lastReReads = 0, peakReRead = 0, rereadWindows = 0, failedWindows = 0;
+            double lastEaseFrac = 0;   // progress point of the last speed ease-up
             reader.ReadProgress += (s, e) =>
             {
                 double frac = e.Position / total;
@@ -192,6 +221,14 @@ public sealed class RipService : IRipService
                         // one line per damaged spot (position + errors only, no titles): tells you
                         // where a disc is scratched/pin-holed and confirms the re-read path is live.
                         _log.Info("rip.reread", $"stuck window at {(int)(frac * 100)}% errors={e.ErrorsCount}");
+                        // adaptive speed: the drive is struggling - request one step down (the
+                        // reader applies it when the NEXT window starts, never mid-recovery)
+                        speedCtl?.OnErrorCluster(); RequestSpeed(); lastEaseFrac = frac;
+                    }
+                    // adaptive speed: a clean ~5% stretch with no re-read eases back up one step
+                    if (speedCtl != null && reReads == 0 && lastReReads == 0 && frac - lastEaseFrac >= 0.05)
+                    {
+                        speedCtl.OnCleanRegion(); RequestSpeed(); lastEaseFrac = frac;
                     }
                     // last pass and the sectors still disagree: the drive has given up on this window
                     if (reReads >= maxReReads && e.ErrorsCount > 0 && lastReReads < maxReReads)

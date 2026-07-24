@@ -190,3 +190,30 @@ Two root causes, both to fix before Feature 3 ships:
 Status: reverted to stable. Feature 3 needs the serialized-apply redesign + the read-thread crash
 guard before another live attempt. The two primitives and the synthesized-ladder logic are sound
 and saved (scratchpad SCSIDrive-adaptivespeed-attempt.cs / RipService-adaptivespeed-attempt.cs).
+
+## Feature 3 SHIPPED (2026-07-24) - adaptive read speed, with both fixes
+
+The two required fixes from the previous finding are done and the feature is proven on the
+pin-holed disc:
+
+- **Fix A - read-thread crash guard.** `AudioPipe.Decompress`'s try/catch is now unconditional
+  (was `#if !DEBUG`), so a SCSI read failure mid-rip becomes a clean exception rethrown on the
+  consumer thread (a failed rip) instead of an unhandled background-thread exception that
+  terminates the process. Same pattern as backlog R17.
+- **Fix B - serialized speed apply.** `CDDriveReader.RequestReadSpeed(kbps)` only STORES a pending
+  value (volatile); the read loop applies it in `PrefetchSector` at the next fresh-window boundary
+  (on the read thread, after TestReadCommand, before any FetchSectors of that window) - exactly
+  where the original author's commented SetCdSpeed sat. No more mid-window SET CD SPEED, so no more
+  INVALID FIELD IN CDB. A refused command is swallowed and stops further attempts.
+- **Policy.** RipService builds an `AdaptiveSpeedController` from the synthesised ladder (steps
+  clearly below the drive's reported max, then the true max on top - no near-duplicate top step),
+  requests one step down when a stuck window starts, and eases up one step per clean ~5% stretch.
+  Setting: "Adaptive read speed" (on by default), persisted.
+
+Live proof on the pin-holed disc (ASUS BW-16D1HT): init "9 steps 704-8467 kB/s, start 48x", then
+across the 10-13% pin-holed zone the speed stepped 48x -> 40x -> 32x -> 24x through hundreds of
+errors and several "unreadable by drive" give-ups, with ZERO crash lines (attempt 1 died at the
+first stuck window). Verify stopped cleanly by the user after 219 s.
+
+Still open in this program: Feature 1 (cache defeat, touches the data path), Feature 2 (lead-in/out
+overread), and the per-drive calibration record + Drive & Read surfacing.
