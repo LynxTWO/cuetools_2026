@@ -17,6 +17,7 @@
 - History DB is bounded to 5 records per disc.
 - Build via `dotnet build CUETools.Wpf/CUETools.Wpf.csproj` (the ripper .csproj alone fails on the Bwg.Scsi net20 ResGen quirk). Run WPF-side unit tests via `dotnet test CUETools.Wpf.Tests/CUETools.Wpf.Tests.csproj`.
 - Commit after each task. Push is a separate owner action (not part of tasks).
+- FUZZ the file-parsing surface (these read untrusted files that can be corrupt/truncated/hostile): `GzJson.Load` must NEVER throw on arbitrary bytes - random, empty, truncated gzip, gzip-of-non-JSON, valid-gzip-wrong-type - it returns default(T). Task 1 includes a fuzz-style test that runs many random/edge byte inputs through `GzJson.Load` and asserts no exception. Task 2 includes a fuzz-style test that points `VerifyHistoryStore` at malformed/empty/garbage history files and asserts it degrades gracefully (treats them as empty, never throws). Deterministic seed so failures reproduce.
 
 ## File Structure
 
