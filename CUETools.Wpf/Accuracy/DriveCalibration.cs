@@ -22,6 +22,7 @@ public sealed class DriveCalibration
     public bool OverreadLeadIn { get; set; }
     public bool OverreadLeadOut { get; set; }
     public int MaxSpeedKbps { get; set; }
+    public int MinSpeedKbps { get; set; }   // lowest read speed the drive accepts (probed); 0 = unknown
     public DateTime CalibratedUtc { get; set; }
     public string RipperVersion { get; set; } = "";
 }

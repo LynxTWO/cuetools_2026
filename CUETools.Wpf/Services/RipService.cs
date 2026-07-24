@@ -57,8 +57,10 @@ public sealed class RipService : IRipService
     private CUESheet? _current;   // the running sheet, so Stop() can abort it
     private readonly object _stopGate = new();
 
-    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog)
-    { _config = config; _log = log; _settings = settings; _catalog = catalog; }
+    private readonly CUETools.Wpf.Accuracy.DriveCalibrationStore _calStore;
+
+    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore)
+    { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; }
 
     public void Stop()
     {
@@ -127,6 +129,19 @@ public sealed class RipService : IRipService
                 lastRequested = speedCtl.CurrentSpeed;
                 reader.RequestReadSpeed(lastRequested);
                 _log.Info("rip.speed", $"read speed request -> {lastRequested} kB/s ({lastRequested / 176}x)");
+            }
+
+            // Deep recovery: a window that stays stuck drops to the drive's floor (probed min speed, or
+            // the lowest supported) - slow reads track marginal/scratched sectors better. Requested only
+            // at window boundaries via the same path as adaptive speed; the audio is unchanged.
+            var cal = _settings.DeepRecovery ? _calStore.Get((reader.ARName ?? "").Trim()) : null;
+            int deepFloor = 0;
+            if (_settings.DeepRecovery)
+            {
+                var sp = reader.GetSupportedSpeeds();
+                int ladderLow = sp.Length > 0 ? sp[0] : 0;
+                deepFloor = (cal != null && cal.MinSpeedKbps > 0) ? cal.MinSpeedKbps : ladderLow;
+                if (deepFloor > 0) _log.Info("rip", $"deep recovery floor {deepFloor} kB/s ({deepFloor / 176}x)");
             }
 
             // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
@@ -237,6 +252,14 @@ public sealed class RipService : IRipService
                         // adaptive speed: the drive is struggling - request one step down (the
                         // reader applies it when the NEXT window starts, never mid-recovery)
                         speedCtl?.OnErrorCluster(); RequestSpeed(); lastEaseFrac = frac;
+                    }
+                    // deep recovery: a window STILL re-reading past the first stuck report goes all the
+                    // way to the drive floor (slow reads recover marginal sectors best)
+                    if (_settings.DeepRecovery && deepFloor > 0 && reReads > 0 && lastReReads > 0 && lastRequested != deepFloor)
+                    {
+                        lastRequested = deepFloor;
+                        reader.RequestReadSpeed(deepFloor);
+                        _log.Info("rip.speed", $"deep recovery: drive floor {deepFloor} kB/s ({deepFloor / 176}x)");
                     }
                     // adaptive speed: a clean ~5% stretch with no re-read eases back up one step
                     if (speedCtl != null && reReads == 0 && lastReReads == 0 && frac - lastEaseFrac >= 0.05)
