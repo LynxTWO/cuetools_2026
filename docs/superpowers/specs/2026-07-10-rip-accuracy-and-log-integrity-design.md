@@ -217,3 +217,30 @@ first stuck window). Verify stopped cleanly by the user after 219 s.
 
 Still open in this program: Feature 1 (cache defeat, touches the data path), Feature 2 (lead-in/out
 overread), and the per-drive calibration record + Drive & Read surfacing.
+
+## Calibration foundation SHIPPED (2026-07-24) - cache-behaviour probe + Drive & Read surfacing
+
+The per-drive calibration record is now real and populated by a read-only probe:
+
+- `CDDriveReader.Probe()` (new, read-only): after TestReadCommand autodetects the drive's read
+  command, it warms a mid-disc audio region, times an immediate re-read (cached => fast), reads a
+  ~6.5 MB unrelated region to flush the cache, then times the target again (a real media read if
+  evicted). Every ReadCDDA/ReadCDAndSubChannel status is checked (a failure => Probed false =>
+  honest "Unconfirmed"). Reads audio sectors only; writes nothing; runs OUTSIDE a rip under the app
+  SCSI gate. NOTE: the probe MUST use the autodetected read command (ReadCdBEh/D8h with the
+  drive's main-channel + C2 mode) and the matching per-sector buffer (2352 + C2 size); plain
+  ReadCDDA fails on drives that need READ CD (which is why the first attempt read 0-1 ms garbage).
+- `DriveCalibrationService` maps the probe to a `DriveCalibration` (CacheDefeat + confidence,
+  MaxSpeedKbps) keyed by AR name, persisted to drive-calibration.json.
+- Drive & Read: a "Calibrate" button (needs a disc) + a CALIBRATION panel (cache behaviour,
+  max speed, confidence, timestamp).
+
+Live proof: on the ASUS BW-16D1HT the probe correctly found **"Caches re-reads - flush needed"
+(Estimated)** - warm re-read 1 ms vs post-flush media read 388 ms - and persisted it. This is
+exactly the drive fact that says a secure re-read there is not genuine without cache defeat.
+
+Still to do in this program (all documented, not blocking): the flush-SIZING search
+(CacheDefeatSearch core exists; needs the timing oracle wired), the overread lead-in/out probe
+(finicky addressing), and the DATA-PATH APPLICATION - actually flushing before each secure re-read,
+and reading boundary samples from lead-in/out - which touches the rip read loop and needs bit-exact
+verification, the careful part.

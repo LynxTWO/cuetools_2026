@@ -46,6 +46,8 @@ public partial class App : Application
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<EncoderCatalog>();
         services.AddSingleton<AppStatusService>();
+        services.AddSingleton<CUETools.Wpf.Accuracy.DriveCalibrationStore>();
+        services.AddSingleton<CUETools.Wpf.Accuracy.DriveCalibrationService>();
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
