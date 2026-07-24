@@ -48,6 +48,7 @@ public partial class App : Application
         services.AddSingleton<AppStatusService>();
         services.AddSingleton<CUETools.Wpf.Accuracy.DriveCalibrationStore>();
         services.AddSingleton<CUETools.Wpf.Accuracy.DriveCalibrationService>();
+        services.AddSingleton<CUETools.Wpf.Accuracy.VerifyHistoryStore>(_ => new CUETools.Wpf.Accuracy.VerifyHistoryStore());
         services.AddSingleton<IDriveService, DriveService>();
         services.AddSingleton<IRipService, RipService>();
         services.AddSingleton<IVerifyService, VerifyService>();
