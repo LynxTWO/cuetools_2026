@@ -123,12 +123,24 @@ proof:
 1. By construction: the counter and logging are read-only. Verify by inspection that no added
    line writes to any variable that feeds the correction decision.
 2. Deterministic replay: the author's offline harness ("the algorithm TestRipper exercises
-   offline", SCSIDrive.cs:1233) replays fixed read data through `CorrectSectors`. Identical
-   harness output before and after is a deterministic proof the decision path is unchanged.
-   Confirm this harness still exists during implementation and use it as the gate.
-   Fallback if the harness is gone: a clean-disc (Genesis) AccurateRip/CTDB result identical to
-   the pre-change build. Damaged-disc rips are not reproducible read-to-read, so they are never
-   byte-compared.
+   offline", SCSIDrive.cs:1233) was meant to replay fixed read data through `CorrectSectors`.
+
+   FINDING (2026-07-24, during implementation): TestRipper is NOT usable as a gate as it stands.
+   It reads fixed dumps from a hardcoded `Y:\Temp\dbg\960\` path that does not exist on this
+   machine, and it re-implements the vote math inline (CUETools/TestRipper/CDDriveReaderTest.cs:148-175)
+   rather than calling the production `CorrectSectors`, so it proves nothing about the real code
+   path. Making it a real gate would mean adding fixtures and exposing `CorrectSectors` for test,
+   which is its own task, out of scope for this read-only diagnostic.
+
+   Gate actually used:
+   - Code inspection (conclusive for this change): `_thisPassErrors` is written in exactly three
+     places - reset to 0 at each pass top, `++` on a flagged sector, and copied to
+     `progressArgs.ThisPassErrors` - and read in exactly one - that same copy. It never appears in
+     `bestValue`, `currentData`, `_currentErrorsCount`, `m_retryCount`, or the early-break, so the
+     audio and the secure decision are unchanged by construction.
+   - Clean-disc corroboration: a Genesis (clean) verify must still report AccurateRip-accurate
+     after the change, confirming the normal audio path is intact. Damaged-disc rips are not
+     reproducible read-to-read, so they are never byte-compared.
 
 ## Deliverable
 

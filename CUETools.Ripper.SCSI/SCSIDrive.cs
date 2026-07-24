@@ -46,6 +46,10 @@ namespace CUETools.Ripper.SCSI
 		DriveC2ErrorModeSetting _driveC2ErrorMode = DriveC2ErrorModeSetting.Auto;
 		int _correctionQuality = 1;
 		int _currentStart = -1, _currentEnd = -1, _currentErrorsCount = 0;
+		// Diagnostic only (read-only): sectors THIS pass flagged as erroneous, reset each pass. A value
+		// near the window size means the pass slipped (wholesale disagreement), not that much media is
+		// damaged. Never feeds bestValue, _currentErrorsCount, m_retryCount, or the early-break.
+		int _thisPassErrors = 0;
 		const int CB_AUDIO = 4 * 588 + 2 + 294 + 16;
 		const int NSECTORS = 16;
 		//const int MSECTORS = 5*1024*1024 / (4 * 588);
@@ -1267,6 +1271,8 @@ namespace CUETools.Ripper.SCSI
 					currentData.Bytes[pos * 4 * 588 + iPar] = (byte)bestValue;
 				}
                 
+                if (fError) _thisPassErrors++;   // diagnostic (read-only): sector flagged on THIS pass
+
                 if (pass > _correctionQuality || fError)
                 {
                     int olderr = pass > _correctionQuality && m_retryCount[sector + iSector] == pass + 1 ? 1 : 0;
@@ -1334,6 +1340,7 @@ namespace CUETools.Ripper.SCSI
 			for (int pass = 0; pass < max_scans; pass++)
 			{
 //				dbg_pass = pass;
+				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
 				DateTime PassTime = DateTime.Now, LastFetch = DateTime.Now;
 
 				for (int sector = _currentStart; sector < _currentEnd; sector += m_max_sectors)
@@ -1363,6 +1370,7 @@ namespace CUETools.Ripper.SCSI
 						progressArgs.PassStart = _currentStart;
 						progressArgs.PassEnd = _currentEnd;
 						progressArgs.ErrorsCount = _currentErrorsCount;
+						progressArgs.ThisPassErrors = _thisPassErrors;
 						progressArgs.PassTime = PassTime;
 						ReadProgress(this, progressArgs);
 					}

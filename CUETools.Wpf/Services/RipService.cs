@@ -200,6 +200,17 @@ public sealed class RipService : IRipService
             int maxReReads = Math.Max(1, (16 << cqc) - 1 - cqc);
             int lastReReads = 0, peakReRead = 0, rereadWindows = 0, failedWindows = 0;
             double lastEaseFrac = 0;   // progress point of the last speed ease-up
+            // rip.recovery diagnostic: quantify the re-read sawtooth on stuck windows only (numbers
+            // only - no titles/paths). fresh = ThisPassErrors (this pass alone); running = consensus.
+            // A pass whose fresh count is near the whole window is a drive slip, not new damage.
+            int rcWin = -1, rcMinFresh = int.MaxValue, rcSlips = 0, rcPasses = 0, rcLastPass = -1;
+            bool rcConverged = false;
+            void RcFlushWindow()
+            {
+                if (rcWin >= 0 && rcPasses > 0)
+                    _log.Info("rip.recovery", $"window={rcWin} DONE passes={rcPasses} converged={(rcConverged ? 1 : 0)} minFresh={(rcMinFresh == int.MaxValue ? 0 : rcMinFresh)} slipPasses={rcSlips} speed={(lastRequested > 0 ? lastRequested / 176 : 0)}x");
+                rcWin = -1; rcMinFresh = int.MaxValue; rcSlips = 0; rcPasses = 0; rcLastPass = -1; rcConverged = false;
+            }
             reader.ReadProgress += (s, e) =>
             {
                 double frac = e.Position / total;
@@ -241,6 +252,25 @@ public sealed class RipService : IRipService
                         double wfrac = e.PassEnd > e.PassStart ? (double)e.PassStart / total : frac;
                         onReread(reReads, maxReReads, e.ErrorsCount, Math.Min(1.0, Math.Max(0.0, wfrac)));
                     }
+                    // rip.recovery: one line per re-read pass of a stuck window (logged at the pass's
+                    // last chunk, where its fresh count is complete), plus a per-window summary flushed
+                    // when the next stuck window starts or the rip ends. Stuck windows only, so the log
+                    // stays small - this is the sawtooth data the recovery-fix spec will consume.
+                    if (reReads > 0)
+                    {
+                        if (e.PassStart != rcWin) { RcFlushWindow(); rcWin = e.PassStart; }
+                        int winSize = Math.Max(1, e.PassEnd - e.PassStart);
+                        if (e.Position >= e.PassEnd && e.Pass != rcLastPass)
+                        {
+                            rcLastPass = e.Pass;
+                            bool slip = e.ThisPassErrors >= 0.85 * winSize;
+                            rcPasses++;
+                            if (e.ThisPassErrors < rcMinFresh) rcMinFresh = e.ThisPassErrors;
+                            if (slip) rcSlips++;
+                            if (e.ErrorsCount == 0) rcConverged = true;
+                            _log.Info("rip.recovery", $"window={e.PassStart} pass={e.Pass} running={e.ErrorsCount} fresh={e.ThisPassErrors}/{winSize} speed={(lastRequested > 0 ? lastRequested / 176 : 0)}x slip={(slip ? 1 : 0)}");
+                        }
+                    }
                     lastReReads = reReads;
                 }
             };
@@ -266,6 +296,7 @@ public sealed class RipService : IRipService
             onProgress(0, encode ? "Ripping + verifying..." : "Verifying against AccurateRip + CTDB...");
             string status = cue.Go();
             onProgress(1, status);
+            RcFlushWindow();   // emit the summary for the last stuck window (it never advances past)
 
             int arConf = 0, arTotal = 0, ctConf = cue.CTDB.Confidence, ctTotal = cue.CTDB.Total;
             // a throw here would otherwise read as "not found in AccurateRip" - a different fact
