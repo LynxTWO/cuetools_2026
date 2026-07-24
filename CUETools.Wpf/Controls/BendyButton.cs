@@ -120,25 +120,23 @@ public static class BendyButton
         double ox = rig.Face.ActualWidth > 0 ? Clamp01(p.X / rig.Face.ActualWidth) : 0.5;
         double oy = rig.Face.ActualHeight > 0 ? Clamp01(p.Y / rig.Face.ActualHeight) : 0.5;
 
-        // The clicked CORNER dips. Transform is center-anchored (see Setup), so:
-        //   AngleY (vertical shear from X): + shifts the RIGHT side down. (ox-0.5) makes the side
-        //     you pressed the lower one - press right, right dips; press left, left dips.
-        //   AngleX (horizontal shear from Y): (oy-0.5) leans the top/bottom you pressed, so a corner
-        //     press reads as that whole corner giving way, not just a left/right tilt.
-        // A mild compression + the drop into the edge complete the "mush".
-        double skewY = (ox - 0.5) * 22;   // clicked horizontal side sinks
-        double skewX = (oy - 0.5) * 14;   // clicked vertical side leans
+        // A real rubber button presses mostly straight DOWN into its base; the off-centre lean is
+        // SUBTLE, not a full parallelogram shear (that looked like a tilting card). So the dominant
+        // motion is the drop into the edge + a small vertical squish; the skew toward the click is
+        // just a few degrees so the side you pressed gives a touch more.
+        double skewY = (ox - 0.5) * 7;    // clicked horizontal side dips slightly
+        double skewX = (oy - 0.5) * 4;    // clicked vertical side leans slightly
         if (!Motion)
         {
-            rig.Move.Y = -PressBy; rig.Scale.ScaleX = 0.96; rig.Scale.ScaleY = 0.9;
+            rig.Move.Y = -PressBy; rig.Scale.ScaleX = 0.99; rig.Scale.ScaleY = 0.94;
             rig.Skew.AngleX = skewX; rig.Skew.AngleY = skewY; return;
         }
         var q = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-        Anim(rig.Move, TranslateTransform.YProperty, -PressBy, 90, q);
-        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 0.96, 90, q);
-        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 0.9, 90, q);
-        Anim(rig.Skew, SkewTransform.AngleXProperty, skewX, 90, q);
-        Anim(rig.Skew, SkewTransform.AngleYProperty, skewY, 90, q);
+        Anim(rig.Move, TranslateTransform.YProperty, -PressBy, 80, q);
+        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 0.99, 80, q);
+        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 0.94, 80, q);
+        Anim(rig.Skew, SkewTransform.AngleXProperty, skewX, 80, q);
+        Anim(rig.Skew, SkewTransform.AngleYProperty, skewY, 80, q);
     }
 
     private static void OnUp(object sender, MouseButtonEventArgs e)
@@ -151,13 +149,14 @@ public static class BendyButton
         {
             rig.Move.Y = rest; rig.Scale.ScaleX = rig.Scale.ScaleY = 1; rig.Skew.AngleX = rig.Skew.AngleY = 0; return;
         }
-        // rubber-hose spring back: overshoot then settle
-        var elastic = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 2, Springiness = 4 };
-        Anim(rig.Move, TranslateTransform.YProperty, rest, 520, elastic);
-        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 1, 520, elastic);
-        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 1, 520, elastic);
-        Anim(rig.Skew, SkewTransform.AngleXProperty, 0, 520, elastic);
-        Anim(rig.Skew, SkewTransform.AngleYProperty, 0, 520, elastic);
+        // spring back like real rubber: one small overshoot, then settle quickly (damped, not a
+        // cartoon wobble)
+        var elastic = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 6 };
+        Anim(rig.Move, TranslateTransform.YProperty, rest, 340, elastic);
+        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 1, 340, elastic);
+        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 1, 340, elastic);
+        Anim(rig.Skew, SkewTransform.AngleXProperty, 0, 340, elastic);
+        Anim(rig.Skew, SkewTransform.AngleYProperty, 0, 340, elastic);
     }
 
     private static void Anim(DependencyObject t, DependencyProperty p, double to, int ms, IEasingFunction ease)
