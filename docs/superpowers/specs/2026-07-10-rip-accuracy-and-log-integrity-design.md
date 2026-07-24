@@ -244,3 +244,34 @@ Still to do in this program (all documented, not blocking): the flush-SIZING sea
 (finicky addressing), and the DATA-PATH APPLICATION - actually flushing before each secure re-read,
 and reading boundary samples from lead-in/out - which touches the rip read loop and needs bit-exact
 verification, the careful part.
+
+## Cache-defeat DATA-PATH application: ATTEMPTED, REVERTED (2026-07-24)
+
+Plain English: turning cache defeat on in the rip read loop was too aggressive and destabilized
+the drive. It is backed out. The read-only calibration above (probe + display) stays; only the
+data-path flush is removed. The crash guard did its job - the failure surfaced as a failed rip,
+not an app crash.
+
+What was tried: `CDDriveReader.SetCacheDefeat(flushSectors)` plus a `FlushCache()` that read a
+~6.5 MB unrelated region into a scratch buffer (audio never touched) before a secure re-read pass,
+injected in PrefetchSector at `pass > 0`, enabled from calibration when the drive caches re-reads.
+
+Why it failed (measured): at Secure (correctionQuality = 1) EVERY window is read twice for the
+comparison (pass 0 + pass 1), so `pass > 0` fired the 6.5 MB flush before every single window
+across the whole disc - not just before error-recovery re-reads of stuck windows. That is both far
+too slow and, on the ASUS BW-16D1HT, it put the drive into a state where the NEXT window read was
+rejected with `INVALID FIELD IN CDB`. A whole-disc verify failed at 18 s (07:29 run). The crash
+guard (unconditional AudioPipe catch, shipped with Feature 3) turned it into "rip failed after 18s"
+with the app still alive - exactly the graceful-failure design. An earlier run survived 318 s before
+being stopped, so the destabilization is intermittent, which is why it was not caught immediately.
+
+What it needs to be done right (follow-up, not blocking):
+- Flush SIZING first (CacheDefeatSearch core exists): find the SMALLEST region that actually evicts
+  the target, so a flush is milliseconds, not ~6.5 MB, before it is ever put in the read loop.
+- Gate the flush to ACTUAL error-recovery re-reads (pass > correctionQuality), not the normal
+  secure 2-pass comparison - or restructure to re-read stuck spots after a full pass.
+- Re-test that the drive tolerates the flush read interleaved with window reads at each speed,
+  and that the whole disc still verifies bit-exact.
+
+The attempt is saved under scratchpad (SCSIDrive-cachedefeat-attempt.cs, RipService-cachedefeat-attempt.cs)
+for the redo; it is NOT in the tree.
