@@ -54,6 +54,9 @@ namespace CUETools.Ripper.SCSI
 		// near the window size means the pass slipped (wholesale disagreement), not that much media is
 		// damaged. Never feeds bestValue, _currentErrorsCount, m_retryCount, or the early-break.
 		int _thisPassErrors = 0;
+		// Deep recovery: pure progress-aware cap decision for a stuck window. No SCSI, no state that
+		// feeds the vote. Only consulted when DeepRecovery is on.
+		private readonly RecoveryPolicy _recovery = new RecoveryPolicy();
 		const int CB_AUDIO = 4 * 588 + 2 + 294 + 16;
 		const int NSECTORS = 16;
 		//const int MSECTORS = 5*1024*1024 / (4 * 588);
@@ -1341,7 +1344,14 @@ namespace CUETools.Ripper.SCSI
 			// TODO:
 			//int max_scans = 1 << _correctionQuality;
 			int max_scans = 16 << _correctionQuality;
-			for (int pass = 0; pass < max_scans; pass++)
+			// Deep recovery: the blind cap becomes progress-aware. RecoveryPolicy keeps us going while
+			// the error count is still improving and stops on a plateau or a time ceiling. When deep
+			// recovery is off, hard_cap stays at max_scans and the policy is never consulted, so this
+			// loop is identical to before.
+			int hard_cap = DeepRecovery ? int.MaxValue : max_scans;
+			DateTime recoveryStart = DateTime.Now;
+			if (DeepRecovery) _recovery.StartWindow();
+			for (int pass = 0; pass < hard_cap; pass++)
 			{
 //				dbg_pass = pass;
 				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
@@ -1380,6 +1390,11 @@ namespace CUETools.Ripper.SCSI
 					}
 				}
 				if (pass >= _correctionQuality && _currentErrorsCount == 0)
+					break;
+				// Deep recovery: stop when the window plateaus or hits the time ceiling (RecoveryPolicy).
+				// Off -> this never runs and the loop is bounded by max_scans exactly as before.
+				if (DeepRecovery && pass >= _correctionQuality &&
+				    !_recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds))
 					break;
 			}
 		}
