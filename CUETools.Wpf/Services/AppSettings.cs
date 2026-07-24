@@ -28,6 +28,11 @@ public sealed class AppSettings
     public string SelectedFormat { get; set; } = "";
     public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid
 
+    /// <summary>Adaptive read speed: start at the drive's max, request a step down when the drive
+    /// gets stuck on a window, ease back up over clean stretches. The reader applies requests only
+    /// at safe window boundaries; the audio is identical at any speed. On by default.</summary>
+    public bool AdaptiveReadSpeed { get; set; } = true;
+
     /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)
     /// were applied to this profile. After that, every encoder-mode choice is the user's.</summary>
     public bool ArchivalDefaultsApplied { get; set; } = false;

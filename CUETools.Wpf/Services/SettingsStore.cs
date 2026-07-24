@@ -42,6 +42,7 @@ public sealed class SettingsStore
             app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
             app.DefaultsV2Applied = sr.LoadBoolean("WpfDefaultsV2Applied") ?? false;
             app.FormatTypeOverrides = sr.Load("WpfFormatTypeOverrides") ?? "";
+            app.AdaptiveReadSpeed = sr.LoadBoolean("WpfAdaptiveReadSpeed") ?? true;
             app.NamingTemplate = sr.Load("WpfNamingTemplate") ?? app.NamingTemplate;
             app.NamingExtractFeatured = sr.LoadBoolean("WpfNamingExtractFeatured") ?? true;
             app.NamingUnifySeparators = sr.LoadBoolean("WpfNamingUnifySeparators") ?? true;
@@ -107,6 +108,7 @@ public sealed class SettingsStore
             sw.Save("WpfArchivalDefaultsApplied", app.ArchivalDefaultsApplied);
             sw.Save("WpfDefaultsV2Applied", app.DefaultsV2Applied);
             sw.Save("WpfFormatTypeOverrides", app.FormatTypeOverrides);
+            sw.Save("WpfAdaptiveReadSpeed", app.AdaptiveReadSpeed);
             sw.Save("WpfNamingTemplate", app.NamingTemplate);
             sw.Save("WpfNamingExtractFeatured", app.NamingExtractFeatured);
             sw.Save("WpfNamingUnifySeparators", app.NamingUnifySeparators);

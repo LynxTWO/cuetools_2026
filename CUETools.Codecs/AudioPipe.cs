@@ -117,9 +117,12 @@ namespace CUETools.Codecs
 
         private void Decompress(object o)
         {
-#if !DEBUG
-			try
-#endif
+            // Unconditional (was #if !DEBUG): this catch turns a source failure (e.g. a SCSI read
+            // error mid-rip) into a clean exception rethrown on the CONSUMER thread (Read throws
+            // _ex) instead of an unhandled background-thread exception that TERMINATES the whole
+            // process. Debug builds must fail the same way Release does - see backlog R17 for the
+            // same pattern in CUESheet.
+            try
             {
                 bool done = false;
                 do
@@ -139,7 +142,6 @@ namespace CUETools.Codecs
                     }
                 } while (!done);
             }
-#if !DEBUG
 			catch (Exception ex)
 			{
 				lock (this)
@@ -148,7 +150,6 @@ namespace CUETools.Codecs
 					Monitor.Pulse(this);
 				}
 			}
-#endif
         }
 
         private void Go()

@@ -667,6 +667,50 @@ namespace CUETools.Ripper.SCSI
             }
         }
 
+        // ---- adaptive read speed (Feature 3) ----
+        // The request is only STORED here; the read loop applies it at the next fresh-window
+        // boundary in PrefetchSector (see there for why it must never be applied mid-window).
+        private volatile int _pendingSpeedKbps;
+        private int _appliedSpeedKbps;
+
+        /// <summary>Ask the reader to change read speed (kB/s, CD 1x = 176) at the next safe point.
+        /// Safe from any thread; only changes HOW FAST sectors are read - the audio data is
+        /// identical at any speed, so accuracy is unaffected.</summary>
+        public void RequestReadSpeed(int kbps) { if (kbps > 0) _pendingSpeedKbps = kbps; }
+
+        /// <summary>The read speed (kB/s) most recently accepted by the drive, 0 if never set.</summary>
+        public int AppliedReadSpeed => _appliedSpeedKbps;
+
+        /// <summary>The read speeds (kB/s) the drive can step through for adaptive speed, ascending.
+        /// Most drives report only their MAX via GET PERFORMANCE, so the standard CD ladder
+        /// (4x..max) is synthesized from it - SET CD SPEED rounds each step to what the drive
+        /// really supports. Empty if the drive reports no speed. Read-only query.</summary>
+        public int[] GetSupportedSpeeds()
+        {
+            try
+            {
+                if (m_device == null) return new int[0];
+                SpeedDescriptorList list;
+                if (m_device.GetSpeed(out list) != Device.CommandStatus.Success || list == null) return new int[0];
+
+                // the drive's true max read speed (guard a malformed high-bit reply, per DriveInspector)
+                const int SaneMax = 200000, X = 176;
+                int maxKBps = 0;
+                foreach (SpeedDescriptor d in list) if (d.ReadSpeed > maxKBps && d.ReadSpeed <= SaneMax) maxKBps = d.ReadSpeed;
+                if (maxKBps < 2 * X) return new int[0];   // no usable range
+
+                // ladder steps clearly BELOW the max, then the true max on top - so the top step is
+                // not a near-duplicate of the max (e.g. an 8448 "48x" step vs the drive's 8467 max,
+                // whose first step-down would be imperceptible)
+                int[] steps = { 4 * X, 8 * X, 12 * X, 16 * X, 24 * X, 32 * X, 40 * X, 48 * X };
+                var set = new SortedSet<int>();
+                foreach (int s in steps) if (s <= maxKBps * 97 / 100) set.Add(s);
+                set.Add(maxKBps);
+                return new List<int>(set).ToArray();
+            }
+            catch { return new int[0]; }
+        }
+
         public void DisableEjectDisc(bool bDisable)
         {
             if (m_device != null)
@@ -1192,9 +1236,26 @@ namespace CUETools.Ripper.SCSI
 
 			_currentErrorsCount = 0;
 
-            //Device.CommandStatus st = m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, (ushort)(176 * 4), 65535);
-			//if (st != Device.CommandStatus.Success)
-			//    System.Console.WriteLine("SetCdSpeed: {0}", (st == Device.CommandStatus.DeviceFailed ? Device.LookupSenseError(m_device.GetSenseAsc(), m_device.GetSenseAscq()) : st.ToString()));
+			// Adaptive read speed: apply a pending request HERE and only here - a fresh-window
+			// boundary, on the read thread, after TestReadCommand and before any FetchSectors of
+			// this window. Issuing SET CD SPEED from the ReadProgress callback (which fires BETWEEN
+			// FetchSectors passes of an in-flight window) made the next READ CD fail with
+			// "illegal request: INVALID FIELD IN CDB" on an ASUS BW-16D1HT and crashed the rip.
+			// This is also exactly where the upstream author left speed control (the commented
+			// SetCdSpeed that used to sit here). A refused command stops further attempts.
+			int wantSpeed = _pendingSpeedKbps;
+			if (wantSpeed > 0 && wantSpeed != _appliedSpeedKbps)
+			{
+				try
+				{
+					ushort v = (ushort)Math.Min(0xFFFE, wantSpeed);
+					if (m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, v, v) == Device.CommandStatus.Success)
+						_appliedSpeedKbps = wantSpeed;
+					else
+						_pendingSpeedKbps = 0;   // drive refused: keep its current speed, stop asking
+				}
+				catch { _pendingSpeedKbps = 0; }
+			}
 
 			// TODO:
 			//int max_scans = 1 << _correctionQuality;

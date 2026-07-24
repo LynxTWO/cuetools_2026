@@ -66,6 +66,7 @@ public sealed class SettingsViewModel : PageViewModel
     public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
     public bool StopOnUnrecoverable { get => _app.StopOnUnrecoverable; set { _app.StopOnUnrecoverable = value; Raise(); } }
     public bool DisableEject { get => _c.disableEjectDisc; set { _c.disableEjectDisc = value; Raise(); } }
+    public bool AdaptiveReadSpeed { get => _app.AdaptiveReadSpeed; set { _app.AdaptiveReadSpeed = value; Raise(); } }
 
     // General. (OneInstance / CheckForUpdates deliberately not exposed: this app implements
     // neither yet, and a switch that does nothing would be a lie.)
