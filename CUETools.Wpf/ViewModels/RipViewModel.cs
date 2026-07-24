@@ -236,6 +236,13 @@ public sealed class RipViewModel : PageViewModel
     private bool _accurate;
     public bool Accurate { get => _accurate; private set => Set(ref _accurate, value); }
 
+    // verify-history verdict: a second, offline, AccurateRip-independent bit-exactness check
+    // against this app's own earlier reads of the same disc (see VerifyHistoryStore).
+    private string _historyText = "";
+    public string HistoryText { get => _historyText; private set => Set(ref _historyText, value); }
+    private bool _historyIsWarning;
+    public bool HistoryIsWarning { get => _historyIsWarning; private set => Set(ref _historyIsWarning, value); }
+
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
     /// <summary>Opt-in deep recovery for damaged discs (progress-aware cap + slow-to-floor + slip
@@ -698,6 +705,12 @@ public sealed class RipViewModel : PageViewModel
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
+            if (!result.HistoryKnown)
+            { HistoryText = "First read of this disc - recorded to your verify history."; HistoryIsWarning = false; }
+            else if (result.HistoryMatches)
+            { HistoryText = $"Consistent with your {result.HistoryPriorReads} earlier read(s) - bytes match."; HistoryIsWarning = false; }
+            else
+            { HistoryText = $"DIFFERS from your earlier read on {result.HistoryDiffTracks} track(s) - investigate."; HistoryIsWarning = true; }
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
             if (encode)
             {
