@@ -8,14 +8,20 @@ using System.Windows.Media.Animation;
 namespace CUETools.Wpf.Controls;
 
 /// <summary>
-/// Makes a button feel like squishy rubber: it deforms TOWARD the exact point clicked (a
-/// press-in scale anchored at the cursor plus a slight shear in the drag direction) and springs
-/// back with an elastic "rubber-hose" overshoot on release. Attached behavior so any Button can
-/// opt in via style (BendyButton.Enabled="True") with no per-button code. Honors
-/// prefers-reduced-motion by respecting the system's animations-enabled setting.
+/// Physical 3D rubber-button feel. The button template raises a "face" layer above a darker "edge"
+/// layer (the visible thickness); this behavior animates that face: it LIFTS a touch on hover, and
+/// on press it drops down INTO the edge and tilts TOWARD the exact point clicked - press a corner
+/// and that corner dips more than the far one, like squashing a soft rubber cap. Release springs
+/// back with an elastic rubber-hose overshoot. Attached so any Button opts in via style
+/// (BendyButton.Enabled="True"); the template must name the lifted layer "face". Honors
+/// reduced-motion / no-GPU (snaps instead of animating).
 /// </summary>
 public static class BendyButton
 {
+    private const double RaisedBy = 6;   // px the face sits above the edge at rest
+    private const double HoverBy = 8;    // lifts to here on hover
+    private const double PressBy = 1.5;  // drops to here when pressed (into the edge)
+
     public static readonly DependencyProperty EnabledProperty =
         DependencyProperty.RegisterAttached("Enabled", typeof(bool), typeof(BendyButton),
             new PropertyMetadata(false, OnEnabledChanged));
@@ -28,87 +34,136 @@ public static class BendyButton
         if (d is not Button b) return;
         if ((bool)e.NewValue)
         {
+            b.Loaded += OnLoaded;
+            b.MouseEnter += OnEnter;
+            b.MouseLeave += OnLeave;
             b.PreviewMouseLeftButtonDown += OnDown;
             b.PreviewMouseLeftButtonUp += OnUp;
-            b.MouseLeave += OnUp;
+            if (b.IsLoaded) Setup(b);
         }
         else
         {
+            b.Loaded -= OnLoaded;
+            b.MouseEnter -= OnEnter;
+            b.MouseLeave -= OnLeave;
             b.PreviewMouseLeftButtonDown -= OnDown;
             b.PreviewMouseLeftButtonUp -= OnUp;
-            b.MouseLeave -= OnUp;
         }
     }
 
-    // one shared transform per button: scale (the squish) + skew (the lean toward the click)
+    private static void OnLoaded(object sender, RoutedEventArgs e) => Setup((Button)sender);
+
+    // the interactive transform group living on the template's "face" element
     private sealed class Rig
     {
+        public FrameworkElement Face = null!;
         public ScaleTransform Scale = new(1, 1);
         public SkewTransform Skew = new(0, 0);
+        public TranslateTransform Move = new(0, -RaisedBy);
     }
 
-    private static Rig Ensure(Button b)
-    {
-        if (b.RenderTransform is TransformGroup g && g.Children.Count == 2
-            && g.Children[0] is ScaleTransform s && g.Children[1] is SkewTransform k)
-            return new Rig { Scale = s, Skew = k };
+    private static readonly DependencyProperty RigProperty =
+        DependencyProperty.RegisterAttached("Rig", typeof(Rig), typeof(BendyButton));
 
-        var rig = new Rig();
-        var grp = new TransformGroup();
-        grp.Children.Add(rig.Scale);
-        grp.Children.Add(rig.Skew);
-        b.RenderTransform = grp;
+    private static Rig? Get(Button b)
+    {
+        if (b.GetValue(RigProperty) is Rig r) return r;
+        return Setup(b);
+    }
+
+    private static Rig? Setup(Button b)
+    {
+        if (b.GetValue(RigProperty) is Rig existing) return existing;
+        // the template names the lifted layer "face"; without it, do nothing (plain button)
+        if (b.Template?.FindName("face", b) is not FrameworkElement face) return null;
+        var rig = new Rig { Face = face };
+        var g = new TransformGroup();
+        g.Children.Add(rig.Scale);
+        g.Children.Add(rig.Skew);
+        g.Children.Add(rig.Move);
+        face.RenderTransform = g;
+        face.RenderTransformOrigin = new Point(0.5, 0.5);
+        b.SetValue(RigProperty, rig);
         return rig;
     }
 
     private static bool Motion => SystemParameters.ClientAreaAnimation && RenderCapability.Tier > 0;
 
+    private static void OnEnter(object sender, MouseEventArgs e)
+    {
+        var rig = Get((Button)sender);
+        if (rig == null) return;
+        if (!Motion) { rig.Move.Y = -HoverBy; return; }
+        Anim(rig.Move, TranslateTransform.YProperty, -HoverBy, 160, new QuadraticEase { EasingMode = EasingMode.EaseOut });
+    }
+
+    private static void OnLeave(object sender, MouseEventArgs e)
+    {
+        var rig = Get((Button)sender);
+        if (rig == null) return;
+        if (!Motion) { rig.Move.Y = -RaisedBy; rig.Scale.ScaleX = rig.Scale.ScaleY = 1; rig.Skew.AngleX = rig.Skew.AngleY = 0; return; }
+        var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        Anim(rig.Move, TranslateTransform.YProperty, -RaisedBy, 220, ease);
+        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 1, 220, ease);
+        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 1, 220, ease);
+        Anim(rig.Skew, SkewTransform.AngleXProperty, 0, 220, ease);
+        Anim(rig.Skew, SkewTransform.AngleYProperty, 0, 220, ease);
+    }
+
     private static void OnDown(object sender, MouseButtonEventArgs e)
     {
         var b = (Button)sender;
-        var rig = Ensure(b);
+        var rig = Get(b);
+        if (rig == null) return;
 
-        // anchor the squish at the click point (0..1 within the button)
-        Point p = e.GetPosition(b);
-        double ox = b.ActualWidth > 0 ? Clamp01(p.X / b.ActualWidth) : 0.5;
-        double oy = b.ActualHeight > 0 ? Clamp01(p.Y / b.ActualHeight) : 0.5;
-        b.RenderTransformOrigin = new Point(ox, oy);
+        Point p = e.GetPosition(rig.Face);
+        double ox = rig.Face.ActualWidth > 0 ? Clamp01(p.X / rig.Face.ActualWidth) : 0.5;
+        double oy = rig.Face.ActualHeight > 0 ? Clamp01(p.Y / rig.Face.ActualHeight) : 0.5;
 
-        // lean the shear toward the side clicked: a click off-centre bends that way
-        double skew = (ox - 0.5) * 7.0;   // degrees
-
+        // The clicked CORNER dips. Transform is center-anchored (see Setup), so:
+        //   AngleY (vertical shear from X): + shifts the RIGHT side down. (ox-0.5) makes the side
+        //     you pressed the lower one - press right, right dips; press left, left dips.
+        //   AngleX (horizontal shear from Y): (oy-0.5) leans the top/bottom you pressed, so a corner
+        //     press reads as that whole corner giving way, not just a left/right tilt.
+        // A mild compression + the drop into the edge complete the "mush".
+        double skewY = (ox - 0.5) * 22;   // clicked horizontal side sinks
+        double skewX = (oy - 0.5) * 14;   // clicked vertical side leans
         if (!Motion)
         {
-            rig.Scale.ScaleX = rig.Scale.ScaleY = 0.94;
-            rig.Skew.AngleX = skew;
-            return;
+            rig.Move.Y = -PressBy; rig.Scale.ScaleX = 0.96; rig.Scale.ScaleY = 0.9;
+            rig.Skew.AngleX = skewX; rig.Skew.AngleY = skewY; return;
         }
         var q = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-        Animate(rig.Scale, ScaleTransform.ScaleXProperty, 0.93, 90, q);
-        Animate(rig.Scale, ScaleTransform.ScaleYProperty, 0.90, 90, q);
-        Animate(rig.Skew, SkewTransform.AngleXProperty, skew, 90, q);
+        Anim(rig.Move, TranslateTransform.YProperty, -PressBy, 90, q);
+        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 0.96, 90, q);
+        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 0.9, 90, q);
+        Anim(rig.Skew, SkewTransform.AngleXProperty, skewX, 90, q);
+        Anim(rig.Skew, SkewTransform.AngleYProperty, skewY, 90, q);
     }
 
-    private static void OnUp(object sender, MouseEventArgs e)
+    private static void OnUp(object sender, MouseButtonEventArgs e)
     {
         var b = (Button)sender;
-        var rig = Ensure(b);
+        var rig = Get(b);
+        if (rig == null) return;
+        double rest = b.IsMouseOver ? -HoverBy : -RaisedBy;
         if (!Motion)
         {
-            rig.Scale.ScaleX = rig.Scale.ScaleY = 1; rig.Skew.AngleX = 0;
-            return;
+            rig.Move.Y = rest; rig.Scale.ScaleX = rig.Scale.ScaleY = 1; rig.Skew.AngleX = rig.Skew.AngleY = 0; return;
         }
-        // rubber-hose spring back: overshoot then settle (the "bendy" bounce)
+        // rubber-hose spring back: overshoot then settle
         var elastic = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 2, Springiness = 4 };
-        Animate(rig.Scale, ScaleTransform.ScaleXProperty, 1.0, 480, elastic);
-        Animate(rig.Scale, ScaleTransform.ScaleYProperty, 1.0, 480, elastic);
-        Animate(rig.Skew, SkewTransform.AngleXProperty, 0.0, 480, elastic);
+        Anim(rig.Move, TranslateTransform.YProperty, rest, 520, elastic);
+        Anim(rig.Scale, ScaleTransform.ScaleXProperty, 1, 520, elastic);
+        Anim(rig.Scale, ScaleTransform.ScaleYProperty, 1, 520, elastic);
+        Anim(rig.Skew, SkewTransform.AngleXProperty, 0, 520, elastic);
+        Anim(rig.Skew, SkewTransform.AngleYProperty, 0, 520, elastic);
     }
 
-    private static void Animate(DependencyObject t, DependencyProperty p, double to, int ms, IEasingFunction ease)
+    private static void Anim(DependencyObject t, DependencyProperty p, double to, int ms, IEasingFunction ease)
     {
         var a = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = ease };
-        ((System.Windows.Media.Animation.Animatable)t).BeginAnimation(p, a);
+        ((Animatable)t).BeginAnimation(p, a);
     }
 
     private static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
