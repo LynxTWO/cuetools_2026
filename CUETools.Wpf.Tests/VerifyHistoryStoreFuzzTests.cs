@@ -139,5 +139,39 @@ namespace CUETools.Wpf.Tests
                 }
             }
         }
+
+        // A corrupt-but-valid-gzip history file can deserialize a stored VerifyRecord whose
+        // Tracks is null (well-formed JSON, "Tracks":null). CompareAndUpsert must treat that as
+        // an empty track list rather than dereference a null array - this is the disc's one
+        // prior (null-Tracks) read, so it's a known disc, and the compare must not throw.
+        [TestMethod]
+        public void NullTracksInStoredRecordDoesNotThrow()
+        {
+            string path = TempPath();
+            try
+            {
+                byte[] bytes = ValidGzipOf("{\"D1\":[{\"DiscId\":\"D1\",\"Tracks\":null}]}");
+                File.WriteAllBytes(path, bytes);
+
+                var store = new VerifyHistoryStore(path);
+                VerifyOutcome outcome;
+                try
+                {
+                    outcome = store.CompareAndUpsert(Rec("D1", 10, 20, 30));
+                }
+                catch (Exception ex)
+                {
+                    Assert.Fail($"CompareAndUpsert threw on a stored record with null Tracks: {ex}");
+                    return;
+                }
+
+                Assert.IsTrue(outcome.KnownDisc, "one prior (null-Tracks) read is on file, so the disc must be known");
+                Assert.AreEqual(1, outcome.PriorReads);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
     }
 }
