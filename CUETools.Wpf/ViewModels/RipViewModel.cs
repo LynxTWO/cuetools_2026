@@ -100,7 +100,7 @@ public sealed class RipViewModel : PageViewModel
 
     // "rip complete" state shown after a successful rip
     private bool _ripDone;
-    public bool RipDone { get => _ripDone; private set => Set(ref _ripDone, value); }
+    public bool RipDone { get => _ripDone; private set { if (Set(ref _ripDone, value)) OnPropertyChanged(nameof(ShowDiscArea)); } }
 
     private string _ripSummary = "";
     public string RipSummary { get => _ripSummary; private set => Set(ref _ripSummary, value); }
@@ -121,7 +121,11 @@ public sealed class RipViewModel : PageViewModel
     }
 
     private bool _isDiscPresent;
-    public bool IsDiscPresent { get => _isDiscPresent; private set => Set(ref _isDiscPresent, value); }
+    public bool IsDiscPresent { get => _isDiscPresent; private set { if (Set(ref _isDiscPresent, value)) OnPropertyChanged(nameof(ShowDiscArea)); } }
+
+    /// <summary>Whether to show the disc area. It stays up after the disc is gone while a rip
+    /// completion panel is still showing, so ejecting after a rip does not take the result with it.</summary>
+    public bool ShowDiscArea => IsDiscPresent || RipDone;
 
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
@@ -768,7 +772,7 @@ public sealed class RipViewModel : PageViewModel
                 await FinishRipAsync(result.OutputDir, drive);   // shared tail: RipDone + eject
             }
             ApplyPerTrack(result);
-            PublishReport(encode, result);
+            PublishReport(encode, result, cq);   // cq = the snapshot taken when this job started
         }
         else
         {
@@ -915,6 +919,12 @@ public sealed class RipViewModel : PageViewModel
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
             RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified by {result.ReadsUsed} reads";
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
+            // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
+            // trace: it never published, so the report page and RECENTLY RIPPED had no record that
+            // the most carefully verified rips ever happened.
+            PublishReport($"Test & Copy ({result.ReadsUsed} reads)", cq, result.ArConfidence, result.ArTotal,
+                result.CtdbConfidence, result.CtdbTotal, result.Accurate,
+                $"verified by {result.ReadsUsed} independent reads", result.OutputDir, result.FileCount);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -975,7 +985,13 @@ public sealed class RipViewModel : PageViewModel
         StatusText = TestCopyText;
         // A committed copy read IS a finished rip: it needs the same tail as any other, which it never
         // used to get (no eject, and no RipDone so the "Open folder" panel never appeared).
-        if (ok) await FinishRipAsync(dir, _selectedDrive);
+        if (ok)
+        {
+            PublishReport("Test & Copy (accepted, NOT verified)", CorrectionQuality, held.ArConfidence,
+                held.ArTotal, held.CtdbConfidence, held.CtdbTotal, held.Accurate,
+                "accepted without agreement - NOT test-verified", dir, held.FileCount);
+            await FinishRipAsync(dir, _selectedDrive);
+        }
     }
 
     private void DiscardHeld()
@@ -1057,7 +1073,10 @@ public sealed class RipViewModel : PageViewModel
     private void ClearDiscView(DriveTrayState tray)
     {
         IsDiscPresent = false;
-        RipDone = false;
+        // RipDone is deliberately NOT cleared here. With "Eject after rip" on, the tray opens right
+        // after a rip finishes, the tray poll sees the change and lands in this method about two
+        // seconds later - which wiped the completion panel before the user could read the output
+        // path or press Open folder. It is cleared when the NEXT job starts, or by Dismiss.
         Tracks.Clear();
         Releases.Clear();
         _chosenMetadata = null;
@@ -1126,26 +1145,36 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
-    private void PublishReport(bool encode, VerifyResult result)
+    private void PublishReport(bool encode, VerifyResult result, int correctionQualityUsed)
+        => PublishReport(encode ? "Rip" : "Verify", correctionQualityUsed, result.ArConfidence, result.ArTotal,
+            result.CtdbConfidence, result.CtdbTotal, result.Accurate, result.Status, result.OutputDir, result.FileCount);
+
+    /// <summary>Record a finished job in the report page and the history list. Every completed operation
+    /// belongs here - a Test &amp; Copy most of all, since it is the highest-assurance mode and used to be
+    /// the ONE that left no trace: it never called this, so the app's own history had no record that the
+    /// most carefully verified rips had ever happened.</summary>
+    private void PublishReport(string mode, int correctionQualityUsed, int arConf, int arTotal,
+        int ctConf, int ctTotal, bool accurate, string status, string outputDir, int fileCount)
     {
         var d = _lastDisc;
         var report = new RipReport
         {
-            Mode = encode ? "Rip" : "Verify",
+            Mode = mode,
             Album = d?.Album ?? AlbumTitle,
             Artist = d?.Artist ?? "",
             Year = d?.Year ?? "",
             DriveName = d?.DriveName ?? "",
             Offset = d?.Offset ?? 0,
-            CorrectionQuality = CorrectionQuality,
-            ArConfidence = result.ArConfidence,
-            ArTotal = result.ArTotal,
-            CtdbConfidence = result.CtdbConfidence,
-            CtdbTotal = result.CtdbTotal,
-            Accurate = result.Accurate,
-            Status = result.Status,
-            OutputDir = result.OutputDir,
-            FileCount = result.FileCount,
+            // the mode the disc was ACTUALLY read at, not whatever the dropdown says now
+            CorrectionQuality = correctionQualityUsed,
+            ArConfidence = arConf,
+            ArTotal = arTotal,
+            CtdbConfidence = ctConf,
+            CtdbTotal = ctTotal,
+            Accurate = accurate,
+            Status = status,
+            OutputDir = outputDir,
+            FileCount = fileCount,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
             TocId = d?.TocId ?? ""
         };
