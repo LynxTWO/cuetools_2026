@@ -80,30 +80,22 @@ namespace CUETools.Wpf.Tests
         public void VerifyOn_DoesNotChangeTheEncodedSize()
         {
             // Byte-for-byte equality is NOT a valid invariant here, unlike FLAC: the MP4/m4a container
-            // embeds creation/modification timestamps, so two runs of the SAME settings differ in the
-            // header. The control below asserts exactly that, so this test documents why it compares
-            // sizes rather than bytes. Equal encoded size still catches verify altering the encoding.
-            string off1 = null, off2 = null, on = null;
+            // embeds a creation/modification timestamp, so two runs of the SAME settings can differ in
+            // the header (measured: they differed at byte 55). Do not assert that they DO differ either
+            // - the timestamp has one-second resolution, so two back-to-back encodes often land in the
+            // same second and would be byte-identical. Size is the invariant that is both meaningful
+            // and stable: it still catches verify altering the encoding.
+            string off = null, on = null;
             try
             {
-                off1 = Encode(false, 5.0, "10", 55);
-                off2 = Encode(false, 5.0, "10", 55);
+                off = Encode(false, 5.0, "10", 55);
                 on = Encode(true, 5.0, "10", 55);
-
-                long lenOff = new FileInfo(off1).Length;
-                Assert.AreEqual(lenOff, new FileInfo(off2).Length,
-                    "two identical verify-off encodes should at least agree on size");
-                Assert.AreEqual(lenOff, new FileInfo(on).Length,
+                Assert.AreEqual(new FileInfo(off).Length, new FileInfo(on).Length,
                     "ALAC verify-on-encode changed the encoded size; it must only observe");
-
-                // control: same settings, different bytes -> the container is not byte-deterministic
-                CollectionAssert.AreNotEqual(File.ReadAllBytes(off1), File.ReadAllBytes(off2),
-                    "expected the m4a container to embed a timestamp; if this ever becomes stable, "
-                    + "tighten the assertions above to byte equality");
             }
             finally
             {
-                foreach (var p in new[] { off1, off2, on })
+                foreach (var p in new[] { off, on })
                     if (p != null) try { File.Delete(p); } catch { }
             }
         }
