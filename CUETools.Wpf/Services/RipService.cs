@@ -75,6 +75,11 @@ public sealed class TestCopyRunResult
     /// <summary>The rendered album folder relative to the output base (see VerifyResult.OutputRelDir).
     /// Accepting a held read must re-home the staging with THIS, not its last path segment.</summary>
     public string OutputRelDir { get; init; } = "";
+
+    /// <summary>The accuracy mode the reads were actually performed at (forced to at least Secure). The
+    /// caller must report THIS when it later commits a held result: by then the dropdown may say
+    /// something else entirely, and the archived report would claim a mode the disc was never read at.</summary>
+    public int CorrectionQuality { get; init; }
 }
 
 public interface IRipService
@@ -749,6 +754,7 @@ public sealed class RipService : IRipService
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
+                    CorrectionQuality = rq,   // the mode the reads were really made at
                     HeldTracks = heldTracks,
                     CopyStagingDir = copyResult.OutputDir,
                     StagingDirs = dirs,
@@ -813,6 +819,7 @@ public sealed class RipService : IRipService
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
+                    CorrectionQuality = rq,   // the mode the reads were really made at
                     OutputDir = outDir,
                     FileCount = fileCount,
                     ArConfidence = last?.ArConfidence ?? 0,
