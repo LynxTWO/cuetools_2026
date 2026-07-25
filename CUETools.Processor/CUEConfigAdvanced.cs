@@ -99,7 +99,10 @@ namespace CUETools.Processor
         [DefaultValue("db.cuetools.net"), Category("CTDB"), DisplayName("CTDB Server")]
         public string CTDBServer { get; set; }
 
-        [DefaultValue(CUETools.CTDB.CTDBMetadataSearch.Default), Category("CTDB"), DisplayName("Metadata search")]
+        // Extensive, because that is what this app has always used to IDENTIFY a disc; the value used to
+        // be ignored entirely, so shipping "Default" here would have quietly made identification worse
+        // the moment the setting was honored.
+        [DefaultValue(CUETools.CTDB.CTDBMetadataSearch.Extensive), Category("CTDB"), DisplayName("Metadata search")]
         public CUETools.CTDB.CTDBMetadataSearch metadataSearch { get; set; }
 
         [DefaultValue(CTDBCoversSize.Large), Category("CTDB"), DisplayName("Album art size")]

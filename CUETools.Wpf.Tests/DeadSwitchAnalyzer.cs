@@ -268,6 +268,14 @@ namespace CUETools.Wpf.Tests
                         if (IsLiteralAssignmentLine(codePart, member)) continue;
                         if (IsCopyCtorLine(codePart, member)) continue;
                         if (PersistenceMarkers.Any(codePart.Contains)) continue;
+                        // A config field is always reached through something: "_config.x",
+                        // "advanced.x", "cfg.advanced.x". A BARE occurrence of the same word is a
+                        // different symbol that merely shares the name - a method parameter or a local.
+                        // That is not a theoretical concern: CUESheet.LookupAlbumInfo takes a parameter
+                        // called "metadataSearch", which made the genuinely dead
+                        // CUEConfigAdvanced.metadataSearch look alive and slipped a real dead switch
+                        // past this guard.
+                        if (!IsQualifiedMemberAccess(codePart, member)) continue;
 
                         scan.Count++;
                         if (scan.SampleLines.Count < 3) scan.SampleLines.Add($"{file}:{lineNo}: {line.Trim()}");
@@ -276,6 +284,29 @@ namespace CUETools.Wpf.Tests
             }
             return scan;
         }
+
+        /// <summary>True when at least one occurrence of <paramref name="member"/> on this line is
+        /// preceded by a '.', i.e. an actual member access rather than a same-named parameter or local.
+        /// Only such a reference can be a real read of the config field.</summary>
+        private static bool IsQualifiedMemberAccess(string codePart, string member)
+        {
+            int from = 0;
+            while (true)
+            {
+                int at = codePart.IndexOf(member, from, StringComparison.Ordinal);
+                if (at < 0) return false;
+                int after = at + member.Length;
+                bool wholeWord = (at == 0 || !IsIdentChar(codePart[at - 1]) || codePart[at - 1] == '.')
+                                 && (after >= codePart.Length || !IsIdentChar(codePart[after]));
+                // walk back over any whitespace to find the character that introduces this token
+                int p = at - 1;
+                while (p >= 0 && char.IsWhiteSpace(codePart[p])) p--;
+                if (wholeWord && p >= 0 && codePart[p] == '.') return true;
+                from = at + 1;
+            }
+        }
+
+        private static bool IsIdentChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
         private static bool PathHasSegment(string path, string segment)
         {
