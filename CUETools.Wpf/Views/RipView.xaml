@@ -170,13 +170,20 @@
 
       <ListView Grid.Row="1" Grid.Column="1" Margin="18,4,18,4" ItemsSource="{Binding Tracks}"
                 Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" Foreground="{DynamicResource Ink}">
-        <!-- selection: solid teal fill + FIXED dark text. The cells inherit Foreground, and dark
+        <!-- hover: a low-opacity teal tint (TealSoft) over the panel, not the default near-white
+             system highlight - subtle enough that the normal Ink text keeps its contrast, so no
+             Foreground override is needed here.
+             selection: solid teal fill + FIXED dark text. The cells inherit Foreground, and dark
              ink on the teal fill keeps contrast in BOTH themes (dark mode's normal ink is light,
-             which washes out on teal). -->
+             which washes out on teal). Selected+hovered still resolves to the selected look,
+             since this trigger is declared after IsMouseOver. -->
         <ListView.ItemContainerStyle>
           <Style TargetType="ListViewItem">
             <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
             <Style.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource TealSoft}"/>
+              </Trigger>
               <Trigger Property="IsSelected" Value="True">
                 <Setter Property="Background" Value="{StaticResource Teal}"/>
                 <Setter Property="Foreground" Value="#10201C"/>
