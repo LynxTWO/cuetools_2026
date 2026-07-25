@@ -19,7 +19,7 @@ public sealed class NamingPreviewGroup
 /// The Naming editor page. Edits the filename/folder scheme (template + clean-up rules), picks a
 /// preset, and shows a LIVE PREVIEW that updates from canned examples AND from the disc currently
 /// loaded on the Rip page. On any change it persists the scheme and writes the template into the
-/// engine's trackFilenameFormat so real rips/converts use it.
+/// scheme the rip and convert paths render with (via NamingEngine), so the preview equals the output.
 /// </summary>
 public sealed class NamingViewModel : PageViewModel
 {
@@ -44,8 +44,10 @@ public sealed class NamingViewModel : PageViewModel
         _config = config;
         _settings = settings;
         _scheme = settings.LoadNamingScheme();
-        // reflect the loaded template into the engine so a rip uses it even before the page is opened
-        _config.trackFilenameFormat = _scheme.Template;
+        // The template is NOT pushed into the engine's trackFilenameFormat any more: rip and convert
+        // render names with NamingEngine and hand the engine explicit per-track names, and the engine's
+        // token vocabulary differs from the WPF one (it has no "%albumartist%"), so writing a WPF
+        // template there only corrupts a setting the user can also see and edit on the Settings page.
         Refresh();          // examples only (see _ready) - safe during container build
         _ready = true;
     }
