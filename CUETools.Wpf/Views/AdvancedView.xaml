@@ -1,0 +1,70 @@
+<UserControl x:Class="CUETools.Wpf.Views.AdvancedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <UserControl.Resources>
+    <Style x:Key="Sec" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="9.5"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+      <Setter Property="Margin" Value="2,20,0,6"/>
+    </Style>
+    <Style x:Key="RowLabel" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="Row" TargetType="Border">
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="Padding" Value="2,9"/>
+    </Style>
+    <Style x:Key="Box" TargetType="TextBox">
+      <Setter Property="Background" Value="{DynamicResource Glass}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassLine}"/>
+      <Setter Property="Padding" Value="6,4"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+  </UserControl.Resources>
+
+  <ScrollViewer Background="{DynamicResource Ground}" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="24,20" MaxWidth="720" HorizontalAlignment="Left">
+      <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{DynamicResource Ink}"/>
+      <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,2,0,4" TextWrapping="Wrap"/>
+
+      <TextBlock Style="{StaticResource Sec}" Text="OUTPUT EXTRAS"/>
+      <Border Style="{StaticResource Row}" ToolTip="Also write a .toc file listing each track's start, length and sector range next to the rip."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateTOC}"/><TextBlock Style="{StaticResource RowLabel}" Text="Create TOC files"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Include the full per-track detail in the CUETools Database (CTDB) log instead of a short summary."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetailedCTDBLog}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detailed CTDB log"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Embed CTDB (CUETools Database) confidence and repair info into the encoded files' tags when ripping."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteCTDBTagsOnEncode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write CTDB tags on encode"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Also embed CTDB tags when verifying existing files, not just when ripping."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteCTDBTagsOnVerify}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write CTDB tags on verify"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Write MP3 tags in the newer ID3v2.4 format instead of the more widely-compatible ID3v2.3. Turn on only if your player supports it."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding UseId3v24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Use ID3v2.4 instead of ID3v2.3"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Embed the disc's table of contents (track offsets) as a tag in the encoded files, so the file can be matched back to a specific pressing later."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteCDTOCTag}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write CDTOC tag"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="COVER ART"/>
+      <Border Style="{StaticResource Row}" ToolTip="Semicolon-separated list of filenames to look for as the album cover when scanning a source folder (folder.jpg, cover.jpg, etc.). %album% is replaced with the album title."><DockPanel><TextBox DockPanel.Dock="Right" Width="300" Style="{StaticResource Box}" Text="{Binding CoverArtFiles, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Cover art file names"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Also look in subfolders when searching for a local cover art file, not just the album's own folder."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CoverArtSearchSubdirs}"/><TextBlock Style="{StaticResource RowLabel}" Text="Search subfolders for cover art"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Preferred image size when fetching album art from the CUETools Database (CTDB): Small or Large."><DockPanel><ComboBox DockPanel.Dock="Right" Width="140" ItemsSource="{Binding CoversSizes}" SelectedItem="{Binding CoversSize}"/><TextBlock Style="{StaticResource RowLabel}" Text="Album art size"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="How hard to search CTDB for album art: None (never fetch), Primary (front cover only), Extensive (every available image)."><DockPanel><ComboBox DockPanel.Dock="Right" Width="140" ItemsSource="{Binding CoversSearches}" SelectedItem="{Binding CoversSearch}"/><TextBlock Style="{StaticResource RowLabel}" Text="Album art search"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="METADATA"/>
+      <Border Style="{StaticResource Row}" ToolTip="How thoroughly to search CTDB for album and track metadata when identifying a disc: None (skip), Fast (quick match only), Default (normal), Extensive (try harder, slower)."><DockPanel><ComboBox DockPanel.Dock="Right" Width="140" ItemsSource="{Binding MetadataSearches}" SelectedItem="{Binding MetadataSearch}"/><TextBlock Style="{StaticResource RowLabel}" Text="Metadata search"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Keep a local cache of fetched metadata so repeat lookups for the same disc do not need the network."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CacheMetadata}"/><TextBlock Style="{StaticResource RowLabel}" Text="Cache metadata"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Hostname of the CUETools Database server to query for disc metadata, album art and verification data."><DockPanel><TextBox DockPanel.Dock="Right" Width="260" Style="{StaticResource Box}" Text="{Binding CTDBServer, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="CTDB server"/></DockPanel></Border>
+
+      <TextBlock Style="{StaticResource Sec}" Text="NETWORK"/>
+      <Border Style="{StaticResource Row}" ToolTip="How outgoing lookups (CTDB, FreeDB/gnudb) reach the network: None (direct connection), System (use Windows' configured proxy), or Custom (use the proxy settings below)."><DockPanel><ComboBox DockPanel.Dock="Right" Width="140" ItemsSource="{Binding ProxyModes}" SelectedItem="{Binding ProxyMode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy mode"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Custom proxy server hostname or IP address. Used only when Proxy mode is set to Custom."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding ProxyServer, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy server"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Custom proxy server port. Used only when Proxy mode is set to Custom."><DockPanel><TextBox DockPanel.Dock="Right" Width="90" Style="{StaticResource Box}" Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy port"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Username for the custom proxy, if it requires authentication."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding ProxyUser, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy user"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Password for the custom proxy, if it requires authentication. Shown as plain text here because the engine itself stores it unencrypted in the settings file - there is no hidden value to protect."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding ProxyPassword, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy password"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="The 'user' part of the email address sent to the FreeDB/gnudb metadata server when looking up disc info. Most servers accept any value here."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding FreedbUser, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Freedb email user"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="The domain part of the email address sent to the FreeDB/gnudb metadata server when looking up disc info."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding FreedbDomain, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Freedb email domain"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Hostname of the FreeDB/gnudb-compatible server used for legacy disc metadata lookups."><DockPanel><TextBox DockPanel.Dock="Right" Width="260" Style="{StaticResource Box}" Text="{Binding FreedbSiteAddress, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Freedb site address"/></DockPanel></Border>
+
+      <TextBlock Margin="2,22,0,0" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                 Text="Changes apply immediately and are saved when the app closes."/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
