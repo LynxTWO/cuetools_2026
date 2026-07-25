@@ -433,7 +433,9 @@ public sealed class RipService : IRipService
                     uint v1 = 0, v2 = 0, c32 = 0;
                     try { v1 = cue.ArVerify.CRC(t); } catch { }
                     try { v2 = cue.ArVerify.CRCV2(t); } catch { }
-                    try { c32 = cue.ArVerify.CRC32(t); } catch { }
+                    // CRC32 is 1-indexed unlike CRC/CRCV2: CRC32(0) is the whole-disc row, CRC32(N) is
+                    // track N, so track t needs CRC32(t + 1).
+                    try { c32 = cue.ArVerify.CRC32(t + 1); } catch { }
                     tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc { ArV1 = v1, ArV2 = v2, Crc32 = c32 };
                 }
                 built = new CUETools.Wpf.Accuracy.VerifyRecord
