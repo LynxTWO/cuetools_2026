@@ -766,6 +766,12 @@ public sealed class RipViewModel : PageViewModel
     private async Task RunTestCopyAsync()
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
+        if (_heldResult != null)
+        {
+            _rip.DiscardStaging(_heldResult);
+            _heldResult = null;
+            TestCopyHeld = false;
+        }
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         IsRipping = true;
@@ -892,8 +898,9 @@ public sealed class RipViewModel : PageViewModel
     private void AcceptCopyAnyway()
     {
         var held = _heldResult; if (held == null) return;
-        bool ok = _rip.CommitCopyReadAnyway(held, OutputBaseDir);
-        LastOutputDir = ok ? System.IO.Path.Combine(OutputBaseDir, "") : LastOutputDir;
+        string dir = _rip.CommitCopyReadAnyway(held, OutputBaseDir);
+        bool ok = dir.Length > 0;
+        if (ok) LastOutputDir = dir;
         TestCopyHeld = false; _heldResult = null;
         TestCopyText = ok ? "Copy read accepted anyway - written and flagged NOT test-verified." : "Could not write the copy read.";
         StatusText = TestCopyText;

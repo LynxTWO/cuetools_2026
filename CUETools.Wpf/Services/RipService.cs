@@ -86,8 +86,9 @@ public interface IRipService
     TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
-    /// test-verified, and discard the staging. Returns success.</summary>
-    bool CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir);
+    /// test-verified, and discard the staging. Returns the committed output directory, or "" on
+    /// failure.</summary>
+    string CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir);
 
     /// <summary>Delete the staging folders a held Test & Copy retained.</summary>
     void DiscardStaging(TestCopyRunResult held);
@@ -649,7 +650,8 @@ public sealed class RipService : IRipService
 
         onProgress(0, "Calibrating drive...");
         var newCal = _calService.Calibrate(drive);
-        return newCal != null;
+        bool newSized = newCal != null && ((newCal.CacheDefeat ?? "").StartsWith("Flush:") || newCal.CacheDefeat == "Media re-reads (no cache)");
+        return newSized;
     }
 
     /// <summary>Assemble the committed album folder and write the Test &amp; Copy proof. A 2-read pass
@@ -740,13 +742,14 @@ public sealed class RipService : IRipService
     }
 
     /// <summary>Accept a held Test &amp; Copy's Copy read into the output folder anyway, flagged not
-    /// test-verified, and discard the staging. Never writes to outputBaseDir on failure.</summary>
-    public bool CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir)
+    /// test-verified, and discard the staging. Never writes to outputBaseDir on failure. Returns the
+    /// committed output directory, or "" on failure.</summary>
+    public string CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir)
     {
         if (held == null || string.IsNullOrEmpty(held.CopyStagingDir) || !Directory.Exists(held.CopyStagingDir))
         {
             _log.Warn("rip", "test&copy accept-anyway: no staged copy read available");
-            return false;
+            return "";
         }
         try
         {
@@ -766,12 +769,12 @@ public sealed class RipService : IRipService
 
             _log.Info("rip", $"testcopy accept-anyway reads={held.ReadsUsed} heldTracks={held.HeldTracks.Length}");
             DiscardStaging(held);
-            return true;
+            return outDir;
         }
         catch (Exception ex)
         {
             _log.Warn("rip", "test&copy accept-anyway failed: " + ex.GetType().Name);
-            return false;
+            return "";
         }
     }
 

@@ -31,6 +31,12 @@ namespace CUETools.Wpf.Tests
             Assert.IsFalse(VerifyHistoryStore.SameAudio(null, null));
         }
 
+        [TestMethod]
+        public void SameAudio_AllZeroCrcIsNeverEqual()
+        {
+            Assert.IsFalse(VerifyHistoryStore.SameAudio(T(0), T(0)));
+        }
+
         private static VerifyRecord Read(params uint[] v2)
         {
             var t = new TrackCrc[v2.Length];
