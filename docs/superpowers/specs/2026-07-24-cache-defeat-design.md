@@ -1,7 +1,9 @@
 # Gentle sized cache defeat - design + validation
 
 Date: 2026-07-24
-Status: apply-mechanism opt-in (proven); promote-to-default is a follow-up
+Status: proven opt-in, then promoted to default - Deep recovery is now ON by default, so cache
+defeat runs by default on a drive calibrated as caching. Still gated by the Deep recovery toggle,
+so it can be turned off. Full decouple (own gate, independent of Deep recovery) remains a follow-up.
 Scope: CUETools.Ripper.SCSI (CDDriveReader probe + FlushCache), CUETools.Wpf (DriveCalibration,
 DriveCalibrationService, RipService). Built measure-first, interactively with the drive.
 
@@ -54,9 +56,10 @@ read the calibrated size from an unrelated in-program region into scratch, evict
 window so the re-read hits media. Scratch-only - it can recover error detection but can never touch
 the audio.
 
-Gated (opt-in proving phase): RipService turns it on only when Deep recovery is on AND the drive is
-calibrated as caching (`Flush:<N>`), using the drive's OWN calibrated N (self-sizes for any drive,
-not a hardcode).
+Gated: RipService turns it on when Deep recovery is on AND the drive is calibrated as caching
+(`Flush:<N>`), using the drive's OWN calibrated N (self-sizes for any drive, not a hardcode). Deep
+recovery is now ON by default (proven bit-exact), so this is a default behaviour on a caching drive,
+not opt-in - the toggle can still turn it off.
 
 ## Validation (2026-07-24)
 

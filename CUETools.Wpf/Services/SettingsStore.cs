@@ -43,6 +43,10 @@ public sealed class SettingsStore
             app.DefaultsV2Applied = sr.LoadBoolean("WpfDefaultsV2Applied") ?? false;
             app.FormatTypeOverrides = sr.Load("WpfFormatTypeOverrides") ?? "";
             app.AdaptiveReadSpeed = sr.LoadBoolean("WpfAdaptiveReadSpeed") ?? true;
+            // Deep recovery defaults ON (proven bit-exact, engages only on stuck windows / caching
+            // drives). A profile with no saved value gets the new default; once the user toggles it,
+            // that choice persists.
+            app.DeepRecovery = sr.LoadBoolean("WpfDeepRecovery") ?? true;
             app.NamingTemplate = sr.Load("WpfNamingTemplate") ?? app.NamingTemplate;
             app.NamingExtractFeatured = sr.LoadBoolean("WpfNamingExtractFeatured") ?? true;
             app.NamingUnifySeparators = sr.LoadBoolean("WpfNamingUnifySeparators") ?? true;
@@ -109,6 +113,7 @@ public sealed class SettingsStore
             sw.Save("WpfDefaultsV2Applied", app.DefaultsV2Applied);
             sw.Save("WpfFormatTypeOverrides", app.FormatTypeOverrides);
             sw.Save("WpfAdaptiveReadSpeed", app.AdaptiveReadSpeed);
+            sw.Save("WpfDeepRecovery", app.DeepRecovery);
             sw.Save("WpfNamingTemplate", app.NamingTemplate);
             sw.Save("WpfNamingExtractFeatured", app.NamingExtractFeatured);
             sw.Save("WpfNamingUnifySeparators", app.NamingUnifySeparators);

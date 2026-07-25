@@ -33,12 +33,12 @@ public sealed class AppSettings
     /// at safe window boundaries; the audio is identical at any speed. On by default.</summary>
     public bool AdaptiveReadSpeed { get; set; } = true;
 
-    /// <summary>Deep recovery: an opt-in mode that recovers more audio from damaged discs by
-    /// re-reading a stuck window while it is still improving (instead of a blind pass cap), slowing
-    /// the drive to its floor on stuck spots, and re-aligning a persistent slip. Trades time for
-    /// data. OFF by default - the default rip path is unchanged. The audio is only ever accepted by
-    /// the same clean-agreement vote, so this can recover more but never corrupt.</summary>
-    public bool DeepRecovery { get; set; } = false;
+    /// <summary>Deep recovery: recovers more audio from damaged discs by re-reading a stuck window
+    /// while it is still improving (a strict superset of the old blind cap - never worse), slowing the
+    /// drive to its floor on stuck spots, and on a caching drive flushing the cache before each secure
+    /// re-read so the comparison is genuine. ON by default now (proven bit-exact); it only engages on
+    /// stuck windows / caching drives, so a clean disc or Burst mode pays nothing. Toggle to disable.</summary>
+    public bool DeepRecovery { get; set; } = true;
 
     /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)
     /// were applied to this profile. After that, every encoder-mode choice is the user's.</summary>
