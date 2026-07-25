@@ -268,6 +268,28 @@ public sealed class RipService : IRipService
             cue.OpenCD(ripper);
             if (metadata != null)
             {
+                // DISC-SWAP GUARD. The release was chosen for the disc that was in the drive when it was
+                // read. Nothing else notices a swap: the tray poll and the disc re-read are both
+                // suppressed while a job runs (deliberately - a mid-rip re-read used to file results
+                // against a different album), and no code invalidates the cached release afterwards. So
+                // a disc changed mid-run would be ripped under the PREVIOUS disc's album name and track
+                // titles. Compare what the release was built from against the disc actually loaded, and
+                // refuse rather than mislabel. A missing id is treated as unknown, never as a mismatch,
+                // so this can only ever reject a genuine disagreement.
+                string loadedId = reader.TOC?.TOCID ?? "";
+                int loadedTracks = (int)(reader.TOC?.AudioTracks ?? 0);
+                bool idDisagrees;
+                if (DiscDisagreesWithRelease(metadata.Id, metadata.Tracks?.Count ?? 0, loadedId, loadedTracks, out idDisagrees))
+                {
+                    _log.Warn("rip", $"disc mismatch: release built for tracks={metadata.Tracks?.Count ?? 0} " +
+                        $"but the loaded disc has tracks={loadedTracks} (id match={!idDisagrees}) - refusing to rip");
+                    return new VerifyResult
+                    {
+                        Error = "The disc in the drive is not the disc that was identified - it looks like it "
+                              + "was changed. Read the disc again before ripping.",
+                    };
+                }
+
                 // honor the user's chosen release; if it cannot be applied the rip would proceed with
                 // generic tags, so say so rather than silently discarding an explicit choice
                 try { cue.CopyMetadata(metadata); }
@@ -596,6 +618,19 @@ public sealed class RipService : IRipService
 
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
 
+
+    /// <summary>True when the loaded disc disagrees with the release the user picked - the disc-swap
+    /// check, split out so it can be tested without a drive. An EMPTY id or a zero track count on either
+    /// side means "unknown" and never counts as a disagreement, so this can only reject a genuine
+    /// mismatch, never a legitimate rip whose source simply did not carry a TOC id.</summary>
+    public static bool DiscDisagreesWithRelease(string releaseId, int releaseTracks, string loadedId,
+        int loadedTracks, out bool idDisagrees)
+    {
+        idDisagrees = !string.IsNullOrEmpty(releaseId) && !string.IsNullOrEmpty(loadedId)
+            && !string.Equals(releaseId, loadedId, StringComparison.Ordinal);
+        bool countDisagrees = releaseTracks > 0 && loadedTracks > 0 && releaseTracks != loadedTracks;
+        return idDisagrees || countDisagrees;
+    }
 
     /// <summary>"Artist - Album" (or "Unknown Album") for use as the album directory when the naming
     /// scheme does not produce one. Every rip needs its own folder: without it the .cue, rip log, cover
