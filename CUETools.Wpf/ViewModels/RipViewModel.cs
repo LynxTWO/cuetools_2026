@@ -920,6 +920,10 @@ public sealed class RipViewModel : PageViewModel
     private void UpdateSpeed(double frac)
     {
         var now = DateTime.UtcNow;
+        // Test & Copy runs 2-3 reads over the same disc, so frac drops from ~1.0 back to ~0 at each
+        // new read. Re-baseline on that reset instead of falling into the dFrac <= 0 early-return
+        // below forever - otherwise the speed readout stalls for the rest of the operation.
+        if (frac < _lastSpeedFrac) { _lastSpeedFrac = frac; _lastSpeedTick = now; return; }
         double dt = (now - _lastSpeedTick).TotalSeconds;
         double dFrac = frac - _lastSpeedFrac;
         if (dt < 0.08 || dFrac <= 0 || _discSeconds <= 0) return;
