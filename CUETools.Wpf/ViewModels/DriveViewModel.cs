@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using CUETools.Wpf.Accuracy;
@@ -43,10 +44,11 @@ public sealed class DriveViewModel : PageViewModel
 
     // Per-drive calibration (persisted). Loaded on detect; refreshed by Calibrate (a disc needed).
     private DriveCalibration? _cal;
-    public DriveCalibration? Cal { get => _cal; private set { if (Set(ref _cal, value)) { OnPropertyChanged(nameof(HasCal)); OnPropertyChanged(nameof(CacheText)); OnPropertyChanged(nameof(CalMaxSpeedText)); OnPropertyChanged(nameof(CalWhenText)); } } }
+    public DriveCalibration? Cal { get => _cal; private set { if (Set(ref _cal, value)) { OnPropertyChanged(nameof(HasCal)); OnPropertyChanged(nameof(CacheText)); OnPropertyChanged(nameof(CalMaxSpeedText)); OnPropertyChanged(nameof(CalMinSpeedText)); OnPropertyChanged(nameof(CalWhenText)); } } }
     public bool HasCal => _cal != null;
     public string CacheText => _cal == null ? "not calibrated" : $"{_cal.CacheDefeat}  ({_cal.CacheConfidence})";
     public string CalMaxSpeedText => _cal == null || _cal.MaxSpeedKbps <= 0 ? "--" : $"{_cal.MaxSpeedKbps} kB/s  (~{_cal.MaxSpeedKbps / 176}x)";
+    public string CalMinSpeedText => _cal == null || _cal.MinSpeedKbps <= 0 ? "--" : $"{(_cal.MinSpeedKbps / 176.0).ToString("0.##", CultureInfo.InvariantCulture)}x ({_cal.MinSpeedKbps} kB/s)";
     public string CalWhenText => _cal == null ? "" : "calibrated " + _cal.CalibratedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
     public ICommand DetectCommand { get; }

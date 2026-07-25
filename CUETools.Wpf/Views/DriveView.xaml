@@ -132,6 +132,10 @@
             <TextBlock DockPanel.Dock="Left" Text="Max read speed" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center" MinWidth="160"/>
             <TextBlock Text="{Binding CalMaxSpeedText}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
           </DockPanel>
+          <DockPanel Margin="0,3" ToolTip="The drive's lowest read speed, probed - can be sub-1x on some drives.">
+            <TextBlock DockPanel.Dock="Left" Text="Min read speed" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center" MinWidth="160"/>
+            <TextBlock Text="{Binding CalMinSpeedText}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
+          </DockPanel>
           <TextBlock Text="Overread lead-in/out and cache flush sizing are probed in a later pass; today re-reads use the conservative path when a cache is detected."
                      Foreground="{DynamicResource Muted}" FontSize="10.5" TextWrapping="Wrap" Margin="0,7,0,0"/>
         </StackPanel>
