@@ -16,6 +16,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
     public DataTemplate? ReportTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
     public DataTemplate? NamingTemplate { get; set; }
+    public DataTemplate? AdvancedTemplate { get; set; }
     public DataTemplate? ExploreTemplate { get; set; }
     public DataTemplate? PlaceholderTemplate { get; set; }
 
@@ -29,6 +30,7 @@ public sealed class PageTemplateSelector : DataTemplateSelector
         ReportViewModel => ReportTemplate,
         SettingsViewModel => SettingsTemplate,
         NamingViewModel => NamingTemplate,
+        AdvancedViewModel => AdvancedTemplate,
         ExploreViewModel => ExploreTemplate,
         _ => PlaceholderTemplate
     };
