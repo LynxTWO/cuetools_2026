@@ -24,6 +24,13 @@ public sealed class NamingContext
     public string PrimaryType = "album";           // album | single | ep | broadcast | other
     public IReadOnlyList<string> SecondaryTypes = Array.Empty<string>();  // live, compilation, soundtrack, remix, demo, dj-mix, ...
     public string ReleaseStatus = "official";      // official | promo | bootleg | pseudo-release
+    public string Label = "";
+    public string Catalog = "";        // catalog number (NOT the barcode)
+    public string Barcode = "";
+    public string Country = "";
+    public string Genre = "";
+    public string OriginalYear = "";   // release-group first-release year (falls back to Year)
+    public string Isrc = "";           // per-track ISRC
 }
 
 /// <summary>The user's naming scheme: the path template plus the clean-up rule toggles. Serialized
@@ -67,6 +74,8 @@ public static class NamingEngine
     {
         "%albumartist%", "%artist%", "%album%", "%title%", "%tracknumber%", "%year%",
         "%disc%", "%discnumber%", "%totaldiscs%", "%discsubtitle%", "%releasedescriptor%", "%featsuffix%",
+        "%label%", "%catalog%", "%barcode%", "%country%", "%genre%", "%originalyear%", "%isrc%",
+        "%releasetype%", "%releasestatus%",
     };
 
     /// <summary>Render a full relative path for one track.</summary>
@@ -110,6 +119,16 @@ public static class NamingEngine
             ["disc"] = DiscFolder(c, s),
             ["releasedescriptor"] = s.ReleaseDescriptor ? ReleaseDescriptorText(c) : "",
             ["featsuffix"] = s.ExtractFeatured ? FeatSuffix(c, s) : "",
+            ["label"] = Normalize(c.Label ?? "", s, 80, swapArticles: false),
+            ["catalog"] = Normalize(c.Catalog ?? "", s, 40, swapArticles: false),
+            ["barcode"] = Normalize(c.Barcode ?? "", s, 40, swapArticles: false),
+            ["country"] = Normalize(c.Country ?? "", s, 40, swapArticles: false),
+            ["genre"] = Normalize(c.Genre ?? "", s, 40, swapArticles: false),
+            ["originalyear"] = (c.OriginalYear ?? "").Length >= 4 ? c.OriginalYear.Substring(0, 4)
+                                : (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : "",
+            ["isrc"] = Normalize(c.Isrc ?? "", s, 40, swapArticles: false),
+            ["releasetype"] = ReleaseTypeText(c),
+            ["releasestatus"] = TitleCase(c.ReleaseStatus ?? ""),
         };
     }
 
@@ -253,6 +272,32 @@ public static class NamingEngine
 
     private static string FirstNonEmpty(params string[] xs)
         => xs.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? "";
+
+    // "Live Album", "Compilation Album", or just "Album"/"EP"/"Single" - empty when no primary type set
+    private static string ReleaseTypeText(NamingContext c)
+    {
+        string primary = TitleCase(c.PrimaryType ?? "");
+        if (primary.Length == 0) return "";
+        var sec = c.SecondaryTypes ?? Array.Empty<string>();
+        foreach (var t in sec)
+        {
+            string s = (t ?? "").ToLowerInvariant();
+            if (s == "live") return "Live " + primary;
+            if (s == "compilation") return "Compilation " + primary;
+            if (s == "soundtrack") return "Soundtrack";
+            if (s == "remix") return "Remix " + primary;
+            if (s == "demo") return "Demo " + primary;
+        }
+        return primary;
+    }
+
+    private static string TitleCase(string v)
+    {
+        v = (v ?? "").Trim();
+        if (v.Length == 0) return "";
+        if (v == "ep") return "EP";
+        return char.ToUpperInvariant(v[0]) + v.Substring(1);
+    }
 
     // ---- canned example albums for the live preview (no disc needed) ----
     public static IReadOnlyList<(string Label, NamingContext[] Tracks)> Examples()
