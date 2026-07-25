@@ -22,6 +22,12 @@ public sealed class VerifyResult
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
 
+    /// <summary>The per-track checksum record this read produced (used by Test & Copy to compare
+    /// reads). Null when the record build failed.</summary>
+    public CUETools.Wpf.Accuracy.VerifyRecord? Record { get; init; }
+    /// <summary>Count of windows the drive could not read even after every retry (0 on a clean read).</summary>
+    public int FailedWindows { get; init; }
+
     /// <summary>Per-audio-track AccurateRip / CTDB confidence, index-aligned to the track list.</summary>
     public int[] ArPerTrack { get; init; } = System.Array.Empty<int>();
     public int[] CtdbPerTrack { get; init; } = System.Array.Empty<int>();
@@ -92,7 +98,7 @@ public sealed class RipService : IRipService
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
     public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -142,7 +148,7 @@ public sealed class RipService : IRipService
             // Deep recovery: a window that stays stuck drops to the drive's floor (probed min speed, or
             // the lowest supported) - slow reads track marginal/scratched sectors better. Requested only
             // at window boundaries via the same path as adaptive speed; the audio is unchanged.
-            var cal = _settings.DeepRecovery ? _calStore.Get((reader.ARName ?? "").Trim()) : null;
+            var cal = (_settings.DeepRecovery || forceCacheDefeat) ? _calStore.Get((reader.ARName ?? "").Trim()) : null;
             int deepFloor = 0;
             if (_settings.DeepRecovery)
             {
@@ -157,11 +163,12 @@ public sealed class RipService : IRipService
             // the rip (AccurateRip still catches it at the end, but not on a non-AR disc). When the drive
             // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
             // hits media. Scratch-only - it can recover error detection but can never corrupt the audio.
-            if (_settings.DeepRecovery && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
+            if ((_settings.DeepRecovery || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
                 && int.TryParse(cal.CacheDefeat.Substring(6), out int flushBytes) && flushBytes > 0)
             {
                 reader.SetCacheDefeat(flushBytes);
-                _log.Info("rip", $"cache defeat on: flush {flushBytes}B before each secure re-read (drive caches, calibrated)");
+                _log.Info("rip", $"cache defeat on: flush {flushBytes}B before each secure re-read" +
+                    (forceCacheDefeat ? " (forced: Test & Copy)" : " (drive caches, calibrated)"));
             }
 
             // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
@@ -374,6 +381,7 @@ public sealed class RipService : IRipService
             // in the bytes) and compare against our own earlier reads of this disc - a second, offline,
             // AccurateRip-independent bit-exactness check.
             var vh = new CUETools.Wpf.Accuracy.VerifyOutcome();
+            CUETools.Wpf.Accuracy.VerifyRecord? built = null;
             try
             {
                 var tracks = new CUETools.Wpf.Accuracy.TrackCrc[n];
@@ -385,7 +393,7 @@ public sealed class RipService : IRipService
                     try { c32 = cue.ArVerify.CRC32(t); } catch { }
                     tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc { ArV1 = v1, ArV2 = v2, Crc32 = c32 };
                 }
-                var record = new CUETools.Wpf.Accuracy.VerifyRecord
+                built = new CUETools.Wpf.Accuracy.VerifyRecord
                 {
                     DiscId = cue.TOC.TOCID ?? "",
                     Tracks = tracks,
@@ -400,12 +408,15 @@ public sealed class RipService : IRipService
                     Utc = DateTime.UtcNow,
                     RipperVersion = "2026.1.0",
                 };
-                vh = _history.CompareAndUpsert(record);
-                _log.Info("verify.history", $"disc={record.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
-                if (encode && Directory.Exists(outDir))
+                if (!stageOnly)
                 {
-                    try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(record)); }
-                    catch (Exception ex) { _log.Warn("verify.history", "sidecar write failed: " + ex.GetType().Name); }
+                    vh = _history.CompareAndUpsert(built);
+                    _log.Info("verify.history", $"disc={built.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
+                    if (encode && Directory.Exists(outDir))
+                    {
+                        try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(built)); }
+                        catch (Exception ex) { _log.Warn("verify.history", "sidecar write failed: " + ex.GetType().Name); }
+                    }
                 }
             }
             catch (Exception ex) { _log.Warn("verify.history", "record build failed: " + ex.GetType().Name); }
@@ -427,6 +438,8 @@ public sealed class RipService : IRipService
                 HistoryMatches = vh.Matches,
                 HistoryPriorReads = vh.PriorReads,
                 HistoryDiffTracks = vh.DiffTrackCount,
+                Record = built,
+                FailedWindows = failedWindows,
             };
         }
         catch (StopException)
