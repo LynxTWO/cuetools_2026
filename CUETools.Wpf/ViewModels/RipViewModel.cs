@@ -109,7 +109,15 @@ public sealed class RipViewModel : PageViewModel
     public char SelectedDrive
     {
         get => _selectedDrive;
-        set { if (Set(ref _selectedDrive, value)) _ = ReadDiscAsync(); }
+        set
+        {
+            if (!Set(ref _selectedDrive, value)) return;
+            // publish the choice so the Drive & Read page detects and CALIBRATES this same drive - it
+            // used to act on GetDrives()[0], so calibrating there while ripping a different drive left
+            // the rip with no calibration and silently skipped cache defeat
+            _drives.SelectedDrive = value;
+            _ = ReadDiscAsync();
+        }
     }
 
     private bool _isDiscPresent;
@@ -357,6 +365,7 @@ public sealed class RipViewModel : PageViewModel
         if (Drives.Count > 0)
         {
             _selectedDrive = Drives[0];   // set the field to avoid a double read from the setter
+            _drives.SelectedDrive = _selectedDrive;   // ...but still publish it for the Drive & Read page
             OnPropertyChanged(nameof(SelectedDrive));
             _ = ReadDiscAsync();
             StartTrayWatch();
