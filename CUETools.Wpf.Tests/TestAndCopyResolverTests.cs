@@ -98,5 +98,31 @@ namespace CUETools.Wpf.Tests
             Assert.AreEqual(TestCopyOutcome.Passed, r.Outcome);
             Assert.AreEqual(2, r.Tracks[0].SourceReadIndex);
         }
+
+        [TestMethod]
+        public void FullyVerified_TwoReadsAgree_ReturnsCopy()
+        {
+            var reads = new[] { Read(10, 20), Read(10, 20) };
+            Assert.AreEqual(1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
+        }
+
+        [TestMethod]
+        public void FullyVerified_ThirdReadCleanThroughout_ReturnsIt()
+        {
+            // Copy (index 1) has a blip on track 2 only; the third read (index 2) agrees with
+            // Test (index 0) on both tracks, so it alone is clean throughout.
+            var reads = new[] { Read(10, 20), Read(10, 99), Read(10, 20) };
+            Assert.AreEqual(2, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(3)));
+        }
+
+        [TestMethod]
+        public void FullyVerified_ScatteredErrors_ReturnsMinusOne()
+        {
+            // Track 1: read0=1, read1=1 agree; read2=2 is alone.
+            // Track 2: read0=50, read2=50 agree; read1=60 is alone.
+            // Read1 fails track 2, read2 fails track 1 - no staged read is clean on both tracks.
+            var reads = new[] { Read(1, 50), Read(1, 60), Read(2, 50) };
+            Assert.AreEqual(-1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(3)));
+        }
     }
 }

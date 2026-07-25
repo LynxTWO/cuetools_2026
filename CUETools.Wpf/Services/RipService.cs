@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using CUETools.AccurateRip;
 using CUETools.CTDB;
@@ -557,9 +558,65 @@ public sealed class RipService : IRipService
             string driveSig = copyResult.Record?.Drive ?? "";
             int offset = copyResult.Record?.ReadOffset ?? 0;
 
+            // Held: write nothing to outputBaseDir. Retain staging for the VM's Accept anyway /
+            // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
+            TestCopyRunResult BuildHeld(int[] heldTracks)
+            {
+                keepStaging = true;
+                var last = reads[reads.Count - 1];
+                var dirs = string.IsNullOrEmpty(stage2) ? new[] { stage1 } : new[] { stage1, stage2 };
+                return new TestCopyRunResult
+                {
+                    Ok = true,
+                    Outcome = TestCopyOutcome.Held,
+                    ReadsUsed = resolve.ReadsUsed,
+                    HeldTracks = heldTracks,
+                    CopyStagingDir = copyResult.OutputDir,
+                    StagingDirs = dirs,
+                    ArConfidence = last?.ArConfidence ?? 0,
+                    ArTotal = last?.ArTotal ?? 0,
+                    CtdbConfidence = last?.CtdbConfidence ?? 0,
+                    CtdbTotal = last?.CtdbTotal ?? 0,
+                    Accurate = (last?.ArConfidence ?? 0) > 0,
+                };
+            }
+
             if (resolve.Outcome == TestCopyOutcome.Passed)
             {
-                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs, outputBaseDir, discId, driveSig, offset, failedWindows, fmt);
+                // The old per-track resolver only requires SOME agreement per track, which can be
+                // satisfied by mixing tracks from different reads - that is the fragile file-sort
+                // assembly this replaces. Only commit when a SINGLE staged read agrees with some
+                // other read on EVERY track: its folder is then track-aligned by construction and
+                // can be copied wholesale, with nothing to sort or index.
+                int whole = TestAndCopyResolver.FullyVerifiedReadIndex(reads, staged);
+                if (whole < 0)
+                {
+                    // Scattered errors: each track found agreement somewhere, but no one read was
+                    // clean throughout. Report which tracks the Copy read (index 1) itself got
+                    // wrong, so the user sees why nothing was committed.
+                    var copyTracks = reads.Count > 1 ? reads[1]?.Tracks : null;
+                    int trackCount = copyTracks?.Length ?? 0;
+                    var mismatches = new List<int>();
+                    for (int t = 0; t < trackCount; t++)
+                    {
+                        var ct = copyTracks[t];
+                        bool agreesAny = false;
+                        for (int j = 0; j < reads.Count && !agreesAny; j++)
+                        {
+                            if (j == 1) continue;
+                            var ot = reads[j]?.Tracks;
+                            var otc = (ot != null && t < ot.Length) ? ot[t] : null;
+                            if (VerifyHistoryStore.SameAudio(ct, otc)) agreesAny = true;
+                        }
+                        if (!agreesAny) mismatches.Add(t);
+                    }
+                    _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=0 heldTracks={mismatches.Count}");
+                    _log.Info("rip", "testcopy held: no single read was clean on every track (scattered errors across reads) - refusing to assemble per track");
+                    _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=held");
+                    return BuildHeld(mismatches.ToArray());
+                }
+
+                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt);
                 var last = reads[reads.Count - 1];
                 _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
                 _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=passed");
@@ -579,29 +636,9 @@ public sealed class RipService : IRipService
             }
             else
             {
-                // Held: write nothing to outputBaseDir. Retain staging for the VM's Accept anyway /
-                // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
-                keepStaging = true;
-                var last = reads[reads.Count - 1];
-                var dirs = string.IsNullOrEmpty(stage2)
-                    ? new[] { stage1 }
-                    : new[] { stage1, stage2 };
                 _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=0 heldTracks={resolve.HeldTracks.Length}");
                 _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=held");
-                return new TestCopyRunResult
-                {
-                    Ok = true,
-                    Outcome = TestCopyOutcome.Held,
-                    ReadsUsed = resolve.ReadsUsed,
-                    HeldTracks = resolve.HeldTracks,
-                    CopyStagingDir = copyResult.OutputDir,
-                    StagingDirs = dirs,
-                    ArConfidence = last?.ArConfidence ?? 0,
-                    ArTotal = last?.ArTotal ?? 0,
-                    CtdbConfidence = last?.CtdbConfidence ?? 0,
-                    CtdbTotal = last?.CtdbTotal ?? 0,
-                    Accurate = (last?.ArConfidence ?? 0) > 0,
-                };
+                return BuildHeld(resolve.HeldTracks);
             }
         }
         catch (StopException)
@@ -654,57 +691,30 @@ public sealed class RipService : IRipService
         return newSized;
     }
 
-    /// <summary>Assemble the committed album folder and write the Test &amp; Copy proof. A 2-read pass
-    /// commits the whole Copy staging folder (it is the only staged read, so every track necessarily
-    /// sourced from it); a 3-read pass copies each track's audio file from whichever staged read the
-    /// resolver picked, then the shared auxiliary files from staging 1 (Copy).</summary>
-    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, System.Collections.Generic.List<VerifyRecord> reads, System.Collections.Generic.List<string> stagingAlbumDirs, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format)
+    /// <summary>Assemble the committed album folder and write the Test &amp; Copy proof. Always
+    /// commits ONE staged read's folder wholesale - the read <see cref="TestAndCopyResolver.FullyVerifiedReadIndex"/>
+    /// found to agree with some other read on every track - so the files are track-aligned by
+    /// construction and there is nothing to sort or index per track.</summary>
+    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads, string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format)
     {
-        string stage1Album = stagingAlbumDirs[1];   // Copy read's staged album folder - always present
-        string albumName = Path.GetFileName(stage1Album);
+        string albumName = Path.GetFileName(sourceStagingAlbumDir);
         string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
             : outputBaseDir;
         string outDir = Path.Combine(realBase, albumName);
 
-        if (stagingAlbumDirs.Count < 3)
-        {
-            // 2-read pass: read index 1 (Copy) is the only staged read, so every agreed track
-            // necessarily sourced from it - commit the whole staged folder as-is.
-            CopyDirectoryRecursive(stage1Album, outDir);
-        }
-        else
-        {
-            // 3-read pass: tracks may have sourced from either staged read - assemble per track.
-            Directory.CreateDirectory(outDir);
-            string stage2Album = stagingAlbumDirs[2];
-            var files1 = SortedAudioFiles(stage1Album, format);
-            var files2 = SortedAudioFiles(stage2Album, format);
-            foreach (var v in resolve.Tracks)
-            {
-                var src = v.SourceReadIndex == 2 ? files2 : files1;
-                if (v.TrackIndex < 0 || v.TrackIndex >= src.Length) continue;
-                string s = src[v.TrackIndex];
-                try { File.Copy(s, Path.Combine(outDir, Path.GetFileName(s)), true); }
-                catch (Exception ex) { _log.Warn("rip", $"testcopy assemble: track file copy failed: {ex.GetType().Name}"); }
-            }
-            CopyAuxFiles(stage1Album, outDir);
-        }
+        // Wholesale commit only: the chosen read's own staged folder is copied as-is, so its files
+        // can never misalign with its own track order.
+        CopyDirectoryRecursive(sourceStagingAlbumDir, outDir);
 
-        // Build the committed record: per track, the checksums of whichever read actually supplied
-        // the committed audio (equal to the other member of its agreeing pair, by construction).
+        // Build the committed record from the single committed read's own checksums (never a
+        // per-track mix of different reads).
+        var source = (sourceReadIndex >= 0 && sourceReadIndex < reads.Count) ? reads[sourceReadIndex] : null;
         var newest = reads[reads.Count - 1];
-        var committedTracks = new TrackCrc[resolve.Tracks.Length];
-        for (int t = 0; t < resolve.Tracks.Length; t++)
-        {
-            var v = resolve.Tracks[t];
-            var src = (v.SourceReadIndex >= 0 && v.SourceReadIndex < reads.Count) ? reads[v.SourceReadIndex] : null;
-            committedTracks[t] = (src?.Tracks != null && t < src.Tracks.Length) ? src.Tracks[t] : new TrackCrc();
-        }
         var committedRecord = new VerifyRecord
         {
             DiscId = discId,
-            Tracks = committedTracks,
+            Tracks = source?.Tracks ?? Array.Empty<TrackCrc>(),
             ArConfidence = newest?.ArConfidence ?? 0,
             ArTotal = newest?.ArTotal ?? 0,
             CtdbConfidence = newest?.CtdbConfidence ?? 0,
@@ -801,25 +811,4 @@ public sealed class RipService : IRipService
             File.Copy(file, Path.Combine(dstDir, Path.GetRelativePath(srcDir, file)), true);
     }
 
-    private static string[] SortedAudioFiles(string albumDir, string format)
-    {
-        if (string.IsNullOrEmpty(albumDir) || !Directory.Exists(albumDir)) return System.Array.Empty<string>();
-        var files = Directory.GetFiles(albumDir, "*." + format);
-        System.Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-        return files;
-    }
-
-    private static void CopyAuxFiles(string srcDir, string dstDir)
-    {
-        string[] patterns = { "*.cue", "*.m3u", "*.log", "*.jpg", "*.png", "rip.verify" };
-        foreach (var pat in patterns)
-        {
-            string[] found;
-            try { found = Directory.GetFiles(srcDir, pat); } catch { continue; }
-            foreach (var f in found)
-            {
-                try { File.Copy(f, Path.Combine(dstDir, Path.GetFileName(f)), true); } catch { }
-            }
-        }
-    }
 }
