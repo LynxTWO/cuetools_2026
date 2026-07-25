@@ -166,6 +166,17 @@ public sealed class RipViewModel : PageViewModel
     private bool _isRipping;
     public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) CommandManager.InvalidateRequerySuggested(); } }
 
+    // The codec dropdown stays editable through a Test read (a change there is honored - see
+    // RunTestCopyAsync's liveFormat), but locks the instant the first track actually starts
+    // encoding so it stops "lying": from then on the encode is guaranteed to use what's shown.
+    // Cleared back to false wherever IsRipping is reset to false, on every path (success/error/stop).
+    private bool _codecLocked;
+    public bool CodecLocked { get => _codecLocked; private set { if (Set(ref _codecLocked, value)) OnPropertyChanged(nameof(CodecUnlocked)); } }
+    /// <summary>Inverse of <see cref="CodecLocked"/>, for the format ComboBox's IsEnabled (mirrors the
+    /// TrayState -&gt; IsTrayOpen / ArtPreview -&gt; HasArtPreview derived-property pattern used elsewhere
+    /// in this view model, rather than a converter).</summary>
+    public bool CodecUnlocked => !CodecLocked;
+
     // Weak-hardware fallback: the 3D disc uses WPF's GPU-rasterized Viewport3D. With no hardware
     // acceleration (software rendering / RemoteFX, tier 0) fall back to the 2D read-map.
     public bool Supports3DDisc { get; } = (System.Windows.Media.RenderCapability.Tier >> 16) >= 1;
@@ -713,7 +724,8 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
+        void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
+        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover, onEncodeStart: LockCodec) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
@@ -755,6 +767,7 @@ public sealed class RipViewModel : PageViewModel
         StopRereadTimer();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
+        CodecLocked = false;
         _baseActivity = AppActivity.Idle;
         _status.Report(result.Ok && encode ? AppActivity.Done : AppActivity.Idle);   // green badge until dismissed
     }
@@ -858,7 +871,10 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
-        var result = await Task.Run(() => _rip.RunTestAndCopy(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover));
+        void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
+        // liveFormat is polled just before each encode read (Copy, and the third read on a mismatch),
+        // so a codec change made while the Test read is still running is honored.
+        var result = await Task.Run(() => _rip.RunTestAndCopy(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover, liveFormat: () => SelectedFormat, onEncodeStart: LockCodec));
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed)
@@ -891,6 +907,7 @@ public sealed class RipViewModel : PageViewModel
         StopRereadTimer();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed) t.Progress = 1; }
         IsRipping = false;
+        CodecLocked = false;
         _baseActivity = AppActivity.Idle;
         _status.Report(AppActivity.Idle);
     }
