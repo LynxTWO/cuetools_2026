@@ -887,7 +887,11 @@ public sealed class RipViewModel : PageViewModel
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
-            RipSummary = $"Test & Copy: {result.FileCount} {fmt} files, verified by {result.ReadsUsed} reads";
+            // report the format that was ACTUALLY encoded (polled at encode start), not the one that
+            // was selected when the button was pressed - otherwise a mid-verify codec switch makes
+            // this summary name the wrong format
+            string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
+            RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified by {result.ReadsUsed} reads";
             RipDone = true;
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
         }

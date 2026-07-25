@@ -59,6 +59,11 @@ public sealed class TestCopyRunResult
     public bool Accurate { get; init; }
     public string CopyStagingDir { get; init; } = "";
     public string[] StagingDirs { get; init; } = System.Array.Empty<string>();
+
+    /// <summary>The format actually encoded, polled at encode start - not the one selected when the
+    /// button was pressed. The caller must report THIS in the completion summary, or a mid-verify
+    /// codec change makes the summary lie about what was written.</summary>
+    public string Format { get; init; } = "";
 }
 
 public interface IRipService
@@ -570,7 +575,7 @@ public sealed class RipService : IRipService
             // actual encode read, so re-poll the live codec choice now (a change made during the Test
             // read above is honored) and carry it forward - fmt then also drives the final commit's
             // file-extension count below, so it stays consistent with what was actually encoded.
-            fmt = liveFormat?.Invoke() ?? fmt;
+            { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
             var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
 
@@ -587,7 +592,7 @@ public sealed class RipService : IRipService
                 // somewhere. Re-resolve with all three reads staged (Test is still index 0/unstaged).
                 // The codec is locked by the Copy read's onEncodeStart above by the time we get here,
                 // so this re-poll is just for consistency - it will report the same locked choice.
-                fmt = liveFormat?.Invoke() ?? fmt;
+                { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
                 var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
 
@@ -615,6 +620,7 @@ public sealed class RipService : IRipService
                     Ok = true,
                     Outcome = TestCopyOutcome.Held,
                     ReadsUsed = resolve.ReadsUsed,
+                    Format = fmt,
                     HeldTracks = heldTracks,
                     CopyStagingDir = copyResult.OutputDir,
                     StagingDirs = dirs,
@@ -670,6 +676,7 @@ public sealed class RipService : IRipService
                     Ok = true,
                     Outcome = TestCopyOutcome.Passed,
                     ReadsUsed = resolve.ReadsUsed,
+                    Format = fmt,
                     OutputDir = outDir,
                     FileCount = fileCount,
                     ArConfidence = last?.ArConfidence ?? 0,
