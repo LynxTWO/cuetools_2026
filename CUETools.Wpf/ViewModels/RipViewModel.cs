@@ -1062,6 +1062,17 @@ public sealed class RipViewModel : PageViewModel
         Releases.Clear();
         _chosenMetadata = null;
         _selectedRelease = null;
+        // A held Test & Copy belongs to the disc that produced it. Leaving it live across a disc change
+        // meant "Accept anyway" would commit the PREVIOUS disc's audio while the page showed a different
+        // disc - and the panel is nested in the disc-present view, so it silently vanished rather than
+        // being dismissed. Release it here, and free its staging so a full album is not orphaned.
+        if (_heldResult != null)
+        {
+            try { _rip.DiscardStaging(_heldResult); } catch { }
+            _heldResult = null;
+            TestCopyHeld = false;
+            TestCopyText = "The held Test & Copy was dropped because the disc changed.";
+        }
         bool open = tray == DriveTrayState.Open;
         AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc - insert an audio CD";
         AlbumArtist = "";

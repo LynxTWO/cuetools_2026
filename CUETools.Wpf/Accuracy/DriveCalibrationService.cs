@@ -32,6 +32,8 @@ public sealed class DriveCalibrationService
     /// there is no rip in progress; holds the app SCSI gate only for the probe.</summary>
     public DriveCalibration Calibrate(char drive)
     {
+        // the probe opens its own handle, so it counts as drive-busy too
+        using var ripScope = CUETools.Wpf.Services.DriveService.EnterRip();
         var reader = new CDDriveReader();
         try
         {
