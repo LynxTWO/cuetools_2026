@@ -316,11 +316,14 @@ public sealed class RipService : IRipService
             }
             else
             {
-                try { var rel = cue.LookupAlbumInfo(_config.advanced.CacheMetadata, false, true, CTDBMetadataSearch.Fast); if (rel.Count > 0) cue.CopyMetadata(((CUEMetadataEntry)rel[0]).metadata); } catch { }
+                try { var rel = cue.LookupAlbumInfo(_config.advanced.CacheMetadata, false, true, _config.advanced.metadataSearch); if (rel.Count > 0) cue.CopyMetadata(((CUEMetadataEntry)rel[0]).metadata); } catch { }
             }
             // from here on, any album/artist text (incl. in paths or errors) is scrubbed from the log
             _log.Redact(cue.Metadata?.Artist, cue.Metadata?.Title);
 
+            // Fast on purpose: this call is the CTDB VERIFICATION contact, not disc identification.
+            // The release is already chosen by now, so a broader metadata sweep here would only add
+            // latency to every rip. The "Metadata search" setting governs identification instead.
             cue.UseCUEToolsDB("CUETools 2026", reader.ARName, false, CTDBMetadataSearch.Fast);
             cue.UseAccurateRip();
             cue.ArTestVerify = null;
