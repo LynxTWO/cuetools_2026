@@ -52,7 +52,9 @@ namespace CUETools.Wpf.Tests
                 var segs = commonDir.Split('/');
                 Assert.AreEqual(2, segs.Length, "album dir should be album + disc, got: " + commonDir);
                 StringAssert.Contains(segs[0], "[100-CD Set]");
-                Assert.AreEqual("Disc " + disc, segs[1]);
+                // padded to the set's width (100 discs -> 3 digits) so folders sort in disc order;
+                // see DiscPaddingTests for the padding rules themselves
+                Assert.AreEqual("Disc " + disc.ToString("000"), segs[1]);
 
                 album ??= segs[0];
                 Assert.AreEqual(album, segs[0], "all discs must share one album folder");
@@ -71,7 +73,7 @@ namespace CUETools.Wpf.Tests
 
             string combined = Path.Combine(baseDir, commonDir.Replace('/', Path.DirectorySeparatorChar));
             StringAssert.StartsWith(combined, baseDir + Path.DirectorySeparatorChar);
-            StringAssert.EndsWith(combined, Path.DirectorySeparatorChar + "Disc 57");
+            StringAssert.EndsWith(combined, Path.DirectorySeparatorChar + "Disc 057");
             // and it is genuinely nested, not flattened onto the base
             Assert.AreEqual(baseDir.Split(Path.DirectorySeparatorChar).Length + 2,
                 combined.Split(Path.DirectorySeparatorChar).Length,
