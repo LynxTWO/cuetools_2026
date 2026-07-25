@@ -91,7 +91,9 @@ public sealed class NamingViewModel : PageViewModel
 
     private void Apply()
     {
-        _config.trackFilenameFormat = _scheme.Template;   // real output uses this
+        // Real rip/convert output now renders through NamingEngine (RipService/ConvertService inject
+        // explicit names), so the engine's trackFilenameFormat is no longer used for track naming and
+        // must not be overwritten with WPF-token syntax the old engine cannot parse.
         _settings.SaveNamingScheme(_scheme);
         Refresh();
     }
