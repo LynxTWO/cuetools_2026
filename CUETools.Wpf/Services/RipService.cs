@@ -29,6 +29,13 @@ public sealed class VerifyResult
     /// <summary>Count of windows the drive could not read even after every retry (0 on a clean read).</summary>
     public int FailedWindows { get; init; }
 
+    /// <summary>The album folder the namer rendered, RELATIVE to the output base (e.g.
+    /// "Artist - Album (1995)" or "Artist - Album [2-CD Set]/Disc 2"). Callers that re-home the output
+    /// (Test &amp; Copy commits from a staging folder) must reuse this instead of taking the last path
+    /// segment - a multi-disc scheme renders more than one segment, and dropping the leading ones makes
+    /// every disc 2 land in the same "Disc 2" folder.</summary>
+    public string OutputRelDir { get; init; } = "";
+
     /// <summary>Per-audio-track AccurateRip / CTDB confidence, index-aligned to the track list.</summary>
     public int[] ArPerTrack { get; init; } = System.Array.Empty<int>();
     public int[] CtdbPerTrack { get; init; } = System.Array.Empty<int>();
@@ -64,6 +71,10 @@ public sealed class TestCopyRunResult
     /// button was pressed. The caller must report THIS in the completion summary, or a mid-verify
     /// codec change makes the summary lie about what was written.</summary>
     public string Format { get; init; } = "";
+
+    /// <summary>The rendered album folder relative to the output base (see VerifyResult.OutputRelDir).
+    /// Accepting a held read must re-home the staging with THIS, not its last path segment.</summary>
+    public string OutputRelDir { get; init; } = "";
 }
 
 public interface IRipService
@@ -259,6 +270,7 @@ public sealed class RipService : IRipService
             cue.OutputStyle = CUEStyle.GapsAppended;
 
             string outDir = "";
+            string outRelDir = "";   // the album folder relative to baseDir - see VerifyResult.OutputRelDir
             if (encode)
             {
                 cue.Action = CUEAction.Encode;
@@ -281,6 +293,7 @@ public sealed class RipService : IRipService
                         rel[t] = CUETools.Wpf.Services.NamingEngine.Render(
                             NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
                     var split = NamingPaths.Split(rel);
+                    outRelDir = split.commonDir;
                     outDir = Path.Combine(baseDir, split.commonDir);
                     Directory.CreateDirectory(outDir);
                     foreach (var r in split.remainders)
@@ -296,6 +309,7 @@ public sealed class RipService : IRipService
                     string artist = Safe(cue.Metadata.Artist), title = Safe(cue.Metadata.Title);
                     string album = (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title))
                         ? "Unknown Album" : $"{artist} - {title}";
+                    outRelDir = album;
                     outDir = Path.Combine(baseDir, album);
                     Directory.CreateDirectory(outDir);
                 }
@@ -523,6 +537,7 @@ public sealed class RipService : IRipService
                 HistoryDiffTracks = vh.DiffTrackCount,
                 Record = built,
                 FailedWindows = failedWindows,
+                OutputRelDir = outRelDir,
             };
         }
         catch (StopException)
@@ -626,6 +641,7 @@ public sealed class RipService : IRipService
                     Outcome = TestCopyOutcome.Held,
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
+                    OutputRelDir = copyResult.OutputRelDir,
                     HeldTracks = heldTracks,
                     CopyStagingDir = copyResult.OutputDir,
                     StagingDirs = dirs,
@@ -672,7 +688,7 @@ public sealed class RipService : IRipService
                     return BuildHeld(mismatches.ToArray());
                 }
 
-                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt);
+                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir);
                 var last = reads[reads.Count - 1];
                 _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
                 _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=passed");
@@ -682,6 +698,7 @@ public sealed class RipService : IRipService
                     Outcome = TestCopyOutcome.Passed,
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
+                    OutputRelDir = copyResult.OutputRelDir,
                     OutputDir = outDir,
                     FileCount = fileCount,
                     ArConfidence = last?.ArConfidence ?? 0,
@@ -752,9 +769,13 @@ public sealed class RipService : IRipService
     /// commits ONE staged read's folder wholesale - the read <see cref="TestAndCopyResolver.FullyVerifiedReadIndex"/>
     /// found to agree with some other read on every track - so the files are track-aligned by
     /// construction and there is nothing to sort or index per track.</summary>
-    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads, string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format)
+    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads, string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format, string albumRelDir)
     {
-        string albumName = Path.GetFileName(sourceStagingAlbumDir);
+        // Re-home the staged album folder using the RENDERED relative dir, not its last path segment:
+        // a multi-disc scheme renders "Artist - Album [2-CD Set]/Disc 2", so taking the last segment
+        // would commit every disc 2 of every set into one shared "Disc 2" folder and overwrite.
+        string albumName = string.IsNullOrWhiteSpace(albumRelDir)
+            ? Path.GetFileName(sourceStagingAlbumDir) : albumRelDir;
         string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
             : outputBaseDir;
@@ -820,7 +841,9 @@ public sealed class RipService : IRipService
         }
         try
         {
-            string albumName = Path.GetFileName(held.CopyStagingDir);
+            // rendered relative dir, not the last segment - see AssembleAndCommit
+            string albumName = string.IsNullOrWhiteSpace(held.OutputRelDir)
+                ? Path.GetFileName(held.CopyStagingDir) : held.OutputRelDir;
             string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                 : outputBaseDir;
