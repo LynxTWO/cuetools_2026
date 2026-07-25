@@ -256,19 +256,23 @@ namespace CUETools.Wpf.Tests
             var members = GetSimpleMembers(typeof(AppSettings), AppSettingsSkip);
             Assert.IsTrue(members.Count > 0, "reflection found no round-trippable members - the selector is broken");
 
-            // SettingsStore.Save/Load hardcode %AppData%\CUETools2026\settings.txt - AppName and
-            // FileName are private consts and appPath is always passed as null - so there is no test
-            // seam to redirect this to a temp file without touching product code. Back up whatever
-            // is really there, run the round trip against the real path, then restore it
-            // byte-for-byte in `finally` so this test leaves no residue in the user's real profile.
-            string realPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "settings.txt");
-            bool hadBackup = File.Exists(realPath);
-            byte[] backup = hadBackup ? File.ReadAllBytes(realPath) : null;
+            // Run against an isolated directory, never the user's real profile: SettingsStore takes an
+            // appPath test seam for exactly this. A test that mutates the real settings.txt would risk
+            // the user's configuration if it ever died mid-run.
+            // appPath follows the engine's portable-mode convention: it is a FILE path, and the profile
+            // lands in <its directory>\CUETools2026. A unique directory therefore isolates this run
+            // completely - passing a directory instead would resolve to the PARENT and be shared.
+            string tempAppData = Path.Combine(Path.GetTempPath(), "cuetools-rt-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempAppData);
+            string fakeExe = Path.Combine(tempAppData, "CUETools.Wpf.exe");
 
             try
             {
-                var store = new SettingsStore(new FakeLog());
+                var store = new SettingsStore(new FakeLog(), fakeExe);
+                string realPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "settings.txt");
+                Assert.AreNotEqual(realPath, store.SettingsFilePath,
+                    "the test must not read or write the user's real settings file");
                 var sourceApp = new AppSettings();
                 var problems = new List<string>();
                 var expected = new Dictionary<string, object>();
@@ -306,8 +310,7 @@ namespace CUETools.Wpf.Tests
             }
             finally
             {
-                if (hadBackup) File.WriteAllBytes(realPath, backup);
-                else if (File.Exists(realPath)) File.Delete(realPath);
+                try { Directory.Delete(tempAppData, true); } catch { }
             }
         }
 
