@@ -44,7 +44,7 @@
     </Border>
 
     <!-- disc present: metadata + tracks + action bar -->
-    <Grid Grid.Row="1" Visibility="{Binding IsDiscPresent, Converter={StaticResource BoolVis}}">
+    <Grid Grid.Row="1" Visibility="{Binding ShowDiscArea, Converter={StaticResource BoolVis}}">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
