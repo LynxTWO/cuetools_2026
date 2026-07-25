@@ -1,8 +1,8 @@
 # FLAC verify-on-encode crashes the encode (Flake encoder)
 
 Date: 2026-07-25
-Status: default reverted to OFF (encodes work again). The verify path itself is BROKEN and needs a fix
-before the option can default to ON, which is the owner's stated preference.
+Status: FIXED and ON by default. Root cause found, fixed in the encoder, and gated by a test that
+fails without the fix. ALAC checked too and is not affected.
 Severity: was blocking - every FLAC encode failed while the option defaulted to ON.
 
 ## Plain English
@@ -41,20 +41,58 @@ died about 16 s in. The failure is in the CHECKER, not the audio. The encoder's 
   sample mismatch would instead throw `ExceptionValidationFailed` (the explicit check at ~line 2024
   and the MemCmp at ~line 2029), which is NOT what happened.
 
-## Fix taken now
+## Root cause (found)
 
-`CUETools.Codecs.Flake/EncoderSettings.cs`: `DoVerify` back to `[DefaultValue(false)]`, with a comment
-pointing here so nobody re-flips it without fixing the path first.
+The verify path hands the decoder ONE frame in a buffer that ends exactly at that frame's last byte:
+`verify.DecodeFrame(frame_buffer, 0, fs)`. But `BitReader` keeps a 56-bit cache filled SPECULATIVELY,
+and its own comment (BitReader.fill, CUETools.Codecs/BitReader.cs:113-119) says so: "on a valid last
+frame this legitimately reaches a few bytes past end_m". The hardened unbounded scans deliberately
+throw instead of running off the buffer - `read_rice_block` throws at `end_m` (BitReader.cs:326-330).
 
-## To actually deliver the feature (owner wants it ON by default)
+Those two facts collide only when the buffer ends at the frame end:
 
-1. Reproduce in isolation: encode a known WAV with `DoVerify = true` in a unit test, no drive involved.
-   That turns a 6-minute rip cycle into a fast test and pins the failing frame.
-2. Inspect how `verify` (the `AudioDecoder` field) is constructed and whether it needs the STREAMINFO
-   header, a per-frame reset, or the running blocksize/partition context that `DecodeFrame` assumes.
-   Suspect the first partial/final frame of a track (`bs < m_blockSize`, handled at ~line 2049) and the
-   `verifyBuffer` copy at ~line 1986, which copies `m_blockSize` samples but is compared over `bs`.
-3. Once a frame-level test passes, flip the default and re-run a full FLAC rip plus a Test & Copy.
-4. Keep the independent ffmpeg decode check as the outer gate: encoder output must stay CRC-clean.
+- File decoding never hit it, because that path passes a 128 KB buffer holding MANY frames
+  (`DecodeFrame(_framesBuffer, _framesBufferOffset, _framesBufferLength)`), so the speculative
+  lookahead always lands on real, in-bounds bytes.
+- The verify path passes exactly one frame, so the lookahead runs straight into the guard.
 
-Do not re-enable the default until step 3 passes.
+It is data-dependent, which is why it looked random: the guard only trips when a rice unary run near
+the frame's end needs another byte. A long unary run means a LARGE residual, i.e. a big prediction
+miss - common on real music transients, absent from smooth synthetic test signals. Measured: a clean
+tone, uniform noise, silence and full-scale square waves all encode fine with verify ON even at 30 s
+and every compression mode, while real CD audio failed at frame 111 (sample 454656) and a synthetic
+signal with sparse full-scale spikes over a quiet tone fails in ~250 ms.
+
+## The fix
+
+`CUETools.Codecs.Flake/AudioEncoder.cs`:
+
+- `frame_buffer` is allocated with `VerifyLookaheadPad` (16) extra bytes. The BitWriter is still bounded
+  to `max_frame_size` and only `fs` bytes are ever written out, so encoding is untouched.
+- The verify block zeroes those pad bytes and calls `DecodeFrame(frame_buffer, 0, fs + pad)`. The
+  speculative reads now land on in-bounds zeros - byte-identical to what `fill()` substitutes anyway -
+  and the decoder stays hard-bounded, so a genuinely corrupt frame still trips the guard.
+
+`CUETools.Codecs.Flake/EncoderSettings.cs`: `DoVerify` is `[DefaultValue(true)]`. The owner's saved
+config carries no `DoVerify` entry for FLAC, so the new default takes effect; a user who turns it off
+persists that choice via `[JsonProperty]`.
+
+## Verification
+
+- `CUETools.Wpf.Tests/FlacVerifyOnEncodeTests.cs` - the permanent gate. Its transient-content case
+  FAILS without the fix and passes with it (RED then GREEN, confirmed in that order). Also sweeps every
+  compression mode, covers silence/noise/loud/music, and asserts verify-ON produces byte-identical
+  output to verify-OFF (verify must only observe).
+- The full real 345 s track that crashed in production now encodes with verify ON.
+- Full suite green.
+- Independent check: the encoder's output decodes cleanly under ffmpeg and each file's decoded audio
+  matches its own STREAMINFO MD5 (11/11 on a real rip), so encoder output was and remains valid FLAC.
+
+## ALAC checked as well - not affected
+
+`CUETools.Codecs.ALAC/ALACWriter.cs:1331` uses the same exact-length `DecodeFrame(frame_buffer, 0, fs)`
+shape AND ships with `DoVerify` already true in the config, so it was a prime suspect. It is NOT
+affected: ALAC's decoder has its own bit-reading code and does not use the guarded
+`BitReader.read_rice_block`. Measured by `CUETools.Wpf.Tests/AlacVerifyOnEncodeTests.cs`, which runs
+the same transient content that reproduces the FLAC bug, at ALAC's archival mode 10 - passes. No ALAC
+change was made; the test stays as a gate.
