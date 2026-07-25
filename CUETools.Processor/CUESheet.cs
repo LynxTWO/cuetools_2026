@@ -3338,8 +3338,13 @@ namespace CUETools.Processor
                     }
                 }
 
-                if ((_action != CUEAction.Verify && _config.writeArLogOnConvert) ||
+                if (((_action != CUEAction.Verify && _config.writeArLogOnConvert) ||
                     (_action == CUEAction.Verify && _config.writeArLogOnVerify))
+                    // A file-verify never calls GenerateFilenames, so _outputPath - and therefore
+                    // OutputDir - is null. Without this guard, turning on "write AR log on verify" made
+                    // CreateDirectory(null) throw and the whole verify failed with
+                    // "Value cannot be null. (Parameter 'path')". No output dir simply means no log file.
+                    && !string.IsNullOrWhiteSpace(OutputDir))
                 {
                     if (!Directory.Exists(OutputDir))
                         Directory.CreateDirectory(OutputDir);
@@ -3349,7 +3354,10 @@ namespace CUETools.Processor
                         CUESheetLogWriter.WriteAccurateRipLog(this, sw);
                     }
                 }
-                if (_config.advanced.CreateTOC)
+                // Same null-output-dir guard as the AR log above: a file-verify has no _outputPath, so
+                // ChangeExtension would hand WriteText a null path. This setting is now reachable from
+                // the Advanced page, so the path is real.
+                if (_config.advanced.CreateTOC && !string.IsNullOrWhiteSpace(OutputDir) && _outputPath != null)
                 {
                     if (!Directory.Exists(OutputDir))
                         Directory.CreateDirectory(OutputDir);
@@ -3741,7 +3749,12 @@ namespace CUETools.Processor
                                 _arVerify.Write(sampleBuffer);
                             if (!discardOutput)
                             {
-                                if (!_config.detectHDCD || !_config.decodeHDCD)
+                                // The plain write is skipped ONLY when an HDCD decoder actually exists to
+                                // write in its place (below). Without the hdcdDecoder == null guard, a
+                                // build with no HDCD plugin deployed wrote NOTHING once both HDCD flags
+                                // were on: audioDest.Close() then failed its sample-count check, the
+                                // partial file was deleted and the encode aborted - after a full read.
+                                if (hdcdDecoder == null || !_config.detectHDCD || !_config.decodeHDCD)
                                     audioDest.Write(sampleBuffer);
                                 if (_config.detectHDCD && hdcdDecoder != null)
                                 {
