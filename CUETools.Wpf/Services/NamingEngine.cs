@@ -163,6 +163,7 @@ public static class NamingEngine
         if (s.HandleArticles && swapArticles) v = SwapArticle(v);
         v = v.Replace("\"", "");
         if (s.StripIllegal) v = StripIllegalChars(v);
+        v = MakeFilesystemSafe(v);                 // non-negotiable, see MakeFilesystemSafe
         v = Regex.Replace(v, @"\s{2,}", " ").Trim();
         if (v.Length > maxLen) v = v.Substring(0, maxLen).Trim();
         v = Regex.Replace(v, @"[.\s]+$", "");      // no trailing dots/spaces (Windows folder rule)
@@ -174,9 +175,30 @@ public static class NamingEngine
     {
         string v = seg;
         if (s.StripIllegal) v = StripIllegalChars(v);
+        v = MakeFilesystemSafe(v);                 // non-negotiable, see MakeFilesystemSafe
         v = Regex.Replace(v, @"\s{2,}", " ").Trim();
         v = Regex.Replace(v, @"[.\s]+$", "");
         return v;
+    }
+
+    // Removes every char in Path.GetInvalidFileNameChars() plus control chars 0x00-0x1F. Unlike
+    // StripIllegalChars (cosmetic, gated on s.StripIllegal), this always runs: with StripIllegal OFF a
+    // rendered field can still contain ':' etc, and a segment like "C:Something" is drive-rooted, so
+    // Path.Combine("D:\Music", "C:Something") returns "C:Something" and output escapes the base folder.
+    // NeutralizeSeparators already handles '/' and '\' - this does not duplicate that, it just also
+    // strips them if they somehow survive (Path.GetInvalidFileNameChars() includes both on Windows).
+    private static string MakeFilesystemSafe(string v)
+    {
+        if (string.IsNullOrEmpty(v)) return v ?? "";
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(v.Length);
+        foreach (char ch in v)
+        {
+            if (ch <= '\u001F') continue;
+            if (Array.IndexOf(invalid, ch) >= 0) continue;
+            sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     private static readonly string[] FeatKeywords =

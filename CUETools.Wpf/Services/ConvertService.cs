@@ -124,12 +124,16 @@ public sealed class ConvertService : IConvertService
                 var split = NamingPaths.Split(rel);
                 outDir = Path.Combine(baseDir, split.commonDir);
                 Directory.CreateDirectory(outDir);
-                foreach (var r in split.remainders)
+                // cap the assembled path length, then guarantee non-empty/unique names - in that order,
+                // so the uniquifier can still disambiguate any collision truncation creates
+                var capped = NamingPaths.CapPathLength(split.remainders, outDir.Length);
+                var finalNames = NamingPaths.EnsureUniqueTrackNames(capped);
+                foreach (var r in finalNames)
                 {
                     string sub = Path.GetDirectoryName(Path.Combine(outDir, r));
                     if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
                 }
-                cue.SetExplicitTrackNames(split.remainders);
+                cue.SetExplicitTrackNames(finalNames);
             }
             else
             {

@@ -31,6 +31,7 @@ namespace CUETools.Processor
         private List<TrackInfo> _tracks;
         internal List<SourceInfo> _sources;
         private List<string> _sourcePaths, _trackFilenames;
+        private List<string> _explicitTrackNamesNoExt;
         private string _htoaFilename, _singleFilename;
         private bool _hasHTOAFilename = false, _hasTrackFilenames = false, _hasSingleFilename = false, _appliedWriteOffset;
         private bool _useExplicitTrackNames = false;
@@ -293,7 +294,16 @@ namespace CUETools.Processor
         /// not consult trackFilenameFormat. Used by the WPF NamingEngine so preview equals output.</summary>
         public void SetExplicitTrackNames(System.Collections.Generic.IList<string> namesNoExt)
         {
+            if (namesNoExt == null || namesNoExt.Count != TrackCount)
+                throw new ArgumentException(string.Format(
+                    "SetExplicitTrackNames: expected {0} names (TrackCount), got {1}",
+                    TrackCount, namesNoExt == null ? 0 : namesNoExt.Count));
+
             _trackFilenames.Clear();
+            // keep a stored copy (without extension) so GenerateFilenames can re-derive TrackFilenames
+            // from the ORIGINAL names on every call instead of appending to whatever is already there -
+            // otherwise a second GenerateFilenames call would yield "...flac.flac".
+            _explicitTrackNamesNoExt = new System.Collections.Generic.List<string>(namesNoExt);
             foreach (var n in namesNoExt) _trackFilenames.Add(n);
             _hasTrackFilenames = true;
             _useExplicitTrackNames = true;
@@ -2291,9 +2301,12 @@ namespace CUETools.Processor
 
                 if (_useExplicitTrackNames && !htoa)
                 {
-                    // external namer already produced the relative name; just append the extension
-                    // verbatim so a title with a dot (e.g. "No. 9") is not truncated by ChangeExtension
-                    TrackFilenames[iTrack] = TrackFilenames[iTrack] + extension;
+                    // external namer already produced the relative name; assign from the STORED copy
+                    // (not whatever is currently in TrackFilenames) and append the extension verbatim so
+                    // a title with a dot (e.g. "No. 9") is not truncated by ChangeExtension. Reading from
+                    // the stored copy - rather than appending to the live list - keeps a second
+                    // GenerateFilenames call idempotent instead of yielding "...flac.flac".
+                    TrackFilenames[iTrack] = _explicitTrackNamesNoExt[iTrack] + extension;
                 }
                 else if (_useExplicitTrackNames && htoa)
                 {
