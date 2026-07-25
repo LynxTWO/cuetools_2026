@@ -100,8 +100,8 @@ public static class NamingEngine
         // article swap (Picard $swapprefix) is an ARTIST-only transform - it makes "The Beatles"
         // sort as "Beatles, The" in folders, but must never touch a title ("A Hard Day's Night"
         // stays put). So only the artist fields pass swapArticles:true.
-        string aa = Normalize(FirstNonEmpty(c.AlbumArtist, c.Artist, "Unknown Artist"), s, 80, swapArticles: true);
-        string ta = Normalize(FirstNonEmpty(c.Artist, c.AlbumArtist, "Unknown Artist"), s, 80, swapArticles: true);
+        string aa = Normalize(FirstNonEmpty(c.AlbumArtist, c.Artist, "Unknown Artist"), s, 80, swapArticles: true, isArtist: true);
+        string ta = Normalize(FirstNonEmpty(c.Artist, c.AlbumArtist, "Unknown Artist"), s, 80, swapArticles: true, isArtist: true);
         string album = Normalize(FirstNonEmpty(c.Album, "Unknown Album"), s, 100, swapArticles: false);
         string title = Normalize(FirstNonEmpty(c.Title, "Untitled"), s, 100, swapArticles: false);
 
@@ -175,10 +175,15 @@ public static class NamingEngine
     private static string NeutralizeSeparators(string v) =>
         (v ?? "").Replace('/', '-').Replace('\\', '-');
 
-    private static string Normalize(string value, NamingScheme s, int maxLen, bool swapArticles)
+    private static string Normalize(string value, NamingScheme s, int maxLen, bool swapArticles, bool isArtist = false)
     {
         string v = NeutralizeSeparators(value);
-        v = StripFeaturing(v);                     // album/track names never carry the feat credit
+        // Remove "feat. X" ONLY from an artist value, and ONLY while the scheme is re-emitting it as
+        // %featsuffix%. Stripping it unconditionally deleted the credit outright with the toggle OFF
+        // (the suffix is empty then), which is strictly less information than leaving it inline; and a
+        // TITLE like "Intro feat. Nas" was being truncated to "Intro" in both positions, since the
+        // suffix is only ever derived from the artist.
+        if (isArtist && s.ExtractFeatured) v = StripFeaturing(v);
         if (s.UnifySeparators) v = UnifySeparators(v);
         if (s.HandleArticles && swapArticles) v = SwapArticle(v);
         v = v.Replace("\"", "");
