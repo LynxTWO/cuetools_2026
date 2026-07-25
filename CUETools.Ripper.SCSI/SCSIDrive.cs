@@ -61,6 +61,12 @@ namespace CUETools.Ripper.SCSI
 		// as recoverable jitter vs dead media by correlating repeated raw reads. Never touches the vote.
 		private bool _slipClassified, _slipVerdictPending;
 		private int _slipStreak, _slipVerdictOff, _slipVerdictPct;
+		// Cache defeat (opt-in): flush this many bytes of an unrelated in-program region into scratch
+		// before a secure re-read, evicting the target from the drive cache so the re-read hits media
+		// (a real second read) instead of the cached first read. 0 = off. Scratch-only, cannot corrupt.
+		private int _cacheDefeatBytes;
+		private byte[] _flushScratch;
+		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		const int CB_AUDIO = 4 * 588 + 2 + 294 + 16;
 		const int NSECTORS = 16;
 		//const int MSECTORS = 5*1024*1024 / (4 * 588);
@@ -793,49 +799,69 @@ namespace CUETools.Ripper.SCSI
                 r.ReReadMs = warmMs;         // cached re-read time
                 r.CachesReReads = flushedMs > 3 && warmMs < flushedMs * 0.5;
 
-                // Flush-SIZE search (gentle cache defeat): if the drive caches, find the SMALLEST flush
-                // that still evicts the target - the minimal, not the 6.5 MB sledgehammer. Warm, flush S
-                // bytes, re-read; the re-read hits media speed (>= threshold) once S reaches the drive
-                // cache size. Doubling search, then refine to 256 KB, plus a safety margin. Flush reads
-                // stay strictly inside the audio program (a past-end read is what can throw INVALID FIELD
-                // IN CDB). Read-only into scratch; any read error abandons the search (leaves 0).
+                // Flush-SIZE search at 3 speeds (gentle cache defeat): the smallest flush that evicts,
+                // measured at the fastest / middle / slowest supported speed and taking the LARGEST -
+                // cache eviction can differ by speed, so one stored size must cover all. Each "does size
+                // S evict?" test repeats 3x and requires all three to read at media speed (unanimity errs
+                // conservative against jitter). Doubling search then refine to 256 KB, +512 KB margin.
+                // Every flush read stays strictly inside the audio program (a past-end read is what throws
+                // INVALID FIELD IN CDB). Read-only into scratch; a read error abandons that speed (0).
                 if (r.CachesReReads)
                 {
-                    double threshold = (warmMs + flushedMs) / 2;
-                    bool bad = false;
-                    // Repeat each size's (warm, flush, re-read) measurement 3x and require ALL three to
-                    // read at media speed. Unanimity errs CONSERVATIVE against timing jitter / erratic
-                    // caching: a single fast (cached) blip makes this size read as "not evicting", so the
-                    // search moves to a LARGER flush, never a smaller one.
-                    bool Evicts(int bytes)
+                    int maxFlush = 0;
+                    var testSpeeds = new System.Collections.Generic.List<int>();
+                    void AddSp(int s) { if (s > 0 && !testSpeeds.Contains(s)) testSpeeds.Add(s); }
+                    if (r.SupportedSpeeds != null && r.SupportedSpeeds.Length > 0)
                     {
-                        for (int rep = 0; rep < 3; rep++)
+                        AddSp(r.SupportedSpeeds[r.SupportedSpeeds.Length - 1]);   // fastest
+                        AddSp(r.SupportedSpeeds[r.SupportedSpeeds.Length / 2]);   // middle
+                        AddSp(r.SupportedSpeeds[0]);                             // slowest
+                    }
+                    else testSpeeds.Add(0);   // unknown ladder -> current speed only
+
+                    foreach (int speed in testSpeeds)
+                    {
+                        if (speed > 0) { try { ushort sv = (ushort)Math.Min(0xFFFE, speed); m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, sv, sv); } catch { } }
+                        bool bad = false;
+                        // per-speed baseline: cached (immediate re-read) vs media (after a 2 MB flush)
+                        if (!ReadOne(target, out _)) continue;
+                        if (!ReadOne(target, out double cachedMs)) continue;
+                        int warmChunks = Math.Max(1, (2 * 1024 * 1024) / (chunk * 2352));
+                        for (int i = 0; i < warmChunks && !bad; i++)
                         {
-                            if (!ReadOne(target, out _)) { bad = true; return false; }   // warm -> cached
-                            int fc = Math.Max(1, bytes / (chunk * 2352));
-                            for (int i = 0; i < fc; i++)
-                            {
-                                uint lba = flushBase + (uint)(i * chunk);
-                                if (lba + (uint)chunk > firstStart + (uint)len) break;   // stay in-program
-                                if (!ReadOne(lba, out _)) { bad = true; return false; }
-                            }
-                            if (!ReadOne(target, out double ms)) { bad = true; return false; }
-                            if (ms < threshold) return false;   // one cached re-read -> not a reliable evict here
+                            uint lba = flushBase + (uint)(i * chunk);
+                            if (lba + (uint)chunk > firstStart + (uint)len) break;
+                            if (!ReadOne(lba, out _)) bad = true;
                         }
-                        return true;   // all 3 hit media -> this size reliably evicts
+                        if (bad) continue;
+                        if (!ReadOne(target, out double mediaMs)) continue;
+                        if (mediaMs <= 3 || cachedMs >= mediaMs * 0.5) continue;   // not clearly caching here
+                        double threshold = (cachedMs + mediaMs) / 2;
+
+                        bool Evicts(int bytes)
+                        {
+                            for (int rep = 0; rep < 3; rep++)
+                            {
+                                if (!ReadOne(target, out _)) { bad = true; return false; }
+                                int fc = Math.Max(1, bytes / (chunk * 2352));
+                                for (int i = 0; i < fc; i++)
+                                {
+                                    uint lba = flushBase + (uint)(i * chunk);
+                                    if (lba + (uint)chunk > firstStart + (uint)len) break;   // stay in-program
+                                    if (!ReadOne(lba, out _)) { bad = true; return false; }
+                                }
+                                if (!ReadOne(target, out double ms)) { bad = true; return false; }
+                                if (ms < threshold) return false;
+                            }
+                            return true;   // all 3 hit media -> reliably evicts
+                        }
+                        int lo = 0, hi = 0;
+                        for (int s = 256 * 1024; s <= 8 * 1024 * 1024 && !bad; s *= 2) { if (Evicts(s)) { hi = s; break; } lo = s; }
+                        while (hi > 0 && !bad && hi - lo > 256 * 1024) { int mid = (lo + hi) / 2; if (Evicts(mid)) hi = mid; else lo = mid; }
+                        if (!bad && hi > 0) maxFlush = Math.Max(maxFlush, Math.Min(8 * 1024 * 1024, hi + 512 * 1024));
                     }
-                    int lo = 0, hi = 0;
-                    for (int s = 256 * 1024; s <= 8 * 1024 * 1024 && !bad; s *= 2)   // first size that evicts
-                    {
-                        if (Evicts(s)) { hi = s; break; }
-                        lo = s;
-                    }
-                    while (hi > 0 && !bad && hi - lo > 256 * 1024)                   // refine to 256 KB
-                    {
-                        int mid = (lo + hi) / 2;
-                        if (Evicts(mid)) hi = mid; else lo = mid;
-                    }
-                    if (!bad && hi > 0) r.FlushEvictBytes = Math.Min(8 * 1024 * 1024, hi + 512 * 1024);
+                    r.FlushEvictBytes = maxFlush;
+                    try { if (r.SupportedSpeeds != null && r.SupportedSpeeds.Length > 0) { ushort sv = (ushort)Math.Min(0xFFFE, r.SupportedSpeeds[r.SupportedSpeeds.Length - 1]); m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, sv, sv); } } catch { }
                 }
 
                 r.Probed = true;
@@ -869,13 +895,15 @@ namespace CUETools.Ripper.SCSI
                             : m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout)) == Device.CommandStatus.Success;
                 }
 
-                foreach (int x in new[] { 8, 4, 2, 1 })   // only genuinely slow rungs
+                // step down 8x..0.25x INCLUDING sub-1x rungs (some drives read below 176 kB/s, an even
+                // lower floor for the hardest damaged sectors). kB/s directly, not multiples of 176.
+                foreach (int kbps in new[] { 1408, 704, 352, 176, 132, 88, 44 })   // 8x,4x,2x,1x,0.75x,0.5x,0.25x
                 {
-                    ushort v = (ushort)(x * 176);
+                    ushort v = (ushort)kbps;
                     if (m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, v, v) != Device.CommandStatus.Success)
                         break;                 // drive refused this speed -> the previous accepted one is the floor
                     if (!ReadOne(target)) break; // could not read at this speed -> stop
-                    floor = v;
+                    floor = kbps;
                 }
             }
             catch { }
@@ -1430,6 +1458,43 @@ namespace CUETools.Ripper.SCSI
 			}
 		}
 
+		// Cache defeat: read _cacheDefeatBytes of an unrelated in-program region into scratch to evict
+		// the current window from the drive cache before a secure re-read, so the re-read hits media (a
+		// genuine second read) instead of the cached first read. Bounded strictly inside the audio
+		// program (a past-end read is what throws INVALID FIELD IN CDB). Best-effort - a failed flush
+		// just means the re-read may still be cached. Scratch-only; never touches rip output.
+		private unsafe void FlushCache()
+		{
+			if (_cacheDefeatBytes <= 0 || _toc == null) return;
+			try
+			{
+				int chunk = Math.Max(1, m_max_sectors);
+				int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
+				int perSector = 4 * 588 + c2Size;
+				if (_flushScratch == null || _flushScratch.Length < chunk * perSector) _flushScratch = new byte[chunk * perSector];
+				uint firstStart = (uint)_toc[_toc.FirstAudio][0].Start;
+				uint len = (uint)_toc.AudioLength;
+				// a region far from the current window (opposite half) so the flush fills the cache with
+				// OTHER data and pushes the current window out
+				uint rel = (uint)_currentStart > len / 2 ? len / 10 : (len * 8) / 10;
+				uint flushBase = firstStart + rel;
+				int fc = Math.Max(1, _cacheDefeatBytes / (chunk * 2352));
+				fixed (byte* p = _flushScratch)
+				{
+					for (int i = 0; i < fc; i++)
+					{
+						uint lba = flushBase + (uint)(i * chunk);
+						if (lba + (uint)chunk > firstStart + len) break;   // stay in-program (no past-end read)
+						var st = _readCDCommand == ReadCDCommand.ReadCdBEh
+							? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+							: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+						if (st != Device.CommandStatus.Success) break;   // best-effort
+					}
+				}
+			}
+			catch { }
+		}
+
 		public unsafe void PrefetchSector(int iSector)
 		{
 			if (iSector >= _currentStart && iSector < _currentEnd)
@@ -1496,6 +1561,9 @@ namespace CUETools.Ripper.SCSI
 			{
 //				dbg_pass = pass;
 				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
+				// cache defeat: on pass >= 1 (a re-read), evict the window first so this read hits media,
+				// not the cached copy of pass 0 (which would make the secure comparison meaningless)
+				if (_cacheDefeatBytes > 0 && pass >= 1) FlushCache();
 				DateTime PassTime = DateTime.Now, LastFetch = DateTime.Now;
 
 				for (int sector = _currentStart; sector < _currentEnd; sector += m_max_sectors)
