@@ -122,7 +122,17 @@ public sealed class ConvertService : IConvertService
                     rel[t] = NamingEngine.Render(
                         NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
                 var split = NamingPaths.Split(rel);
-                outDir = Path.Combine(baseDir, split.commonDir);
+                // A source with no metadata renders the engine's "Unknown Artist - Unknown Album"
+                // fallback, so converting two different untagged files would put both in that one folder
+                // and the second would overwrite the first. Name the folder after the input file instead
+                // - that is distinct per source, and it is what convert did before this routing.
+                string albumRel = split.commonDir;
+                if (string.IsNullOrWhiteSpace(cue.Metadata?.Artist) && string.IsNullOrWhiteSpace(cue.Metadata?.Title))
+                {
+                    string fromFile = Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "");
+                    if (fromFile.Length > 0) albumRel = fromFile;
+                }
+                outDir = Path.Combine(baseDir, albumRel);
                 Directory.CreateDirectory(outDir);
                 // cap the assembled path length, then guarantee non-empty/unique names - in that order,
                 // so the uniquifier can still disambiguate any collision truncation creates
