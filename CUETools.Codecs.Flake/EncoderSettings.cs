@@ -150,7 +150,10 @@ namespace CUETools.Codecs.Flake
         [SRDescription(typeof(Properties.Resources), "MaxPartitionOrderDescription")]
         public int MaxPartitionOrder { get; set; }
 
-        [DefaultValue(false)]
+        // Default ON: decode-while-encode catches an encoder bug before it ships a bad rip. Only the
+        // default changed - a user who explicitly turned Verify off keeps that choice (it is
+        // persisted via [JsonProperty], so Init()'s ResetValue never overwrites a saved false).
+        [DefaultValue(true)]
         [DisplayName("Verify")]
         [SRDescription(typeof(Properties.Resources), "DoVerifyDescription")]
         [JsonProperty]
