@@ -17,20 +17,34 @@ public sealed class SettingsStore
     private const string AppName = "CUETools2026";
     private const string FileName = "settings.txt";
     private readonly IDiagnosticLog _log;
+    private readonly string _appPath;   // null = the real %AppData% profile; set only by tests
 
-    public SettingsStore(IDiagnosticLog log) => _log = log;
+    public SettingsStore(IDiagnosticLog log) : this(log, null) { }
+
+    /// <summary>Test seam. <paramref name="appPath"/> follows the engine's own portable-mode convention
+    /// (see SettingsShared.GetProfileDir): it is a FILE path, and the profile is redirected to
+    /// &lt;that file's directory&gt;\CUETools2026 unless a "user_profiles_enabled" marker sits beside it.
+    /// Null (the DI path) means the real %AppData%\CUETools2026\settings.txt. A round-trip test needs
+    /// this so it never reads or writes the user's own settings file.</summary>
+    public SettingsStore(IDiagnosticLog log, string appPath) { _log = log; _appPath = appPath; }
+
+    /// <summary>The file this store reads and writes. Taken from the reader's OWN resolved profile
+    /// directory rather than recomputed here, so the path Load checks can never disagree with the path
+    /// Save wrote (they did when this was resolved independently: appPath is a file path fed through the
+    /// engine's portable-mode rules, not a directory).</summary>
+    public string SettingsFilePath =>
+        Path.Combine(new SettingsReader(AppName, FileName, _appPath).ProfilePath, FileName);
 
     public void Load(CUEConfig config, AppSettings app)
     {
         try
         {
-            string path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName, FileName);
+            string path = SettingsFilePath;
             // only Load over an existing file: CUEConfig.Load resets absent keys to ENGINE defaults,
             // which would wipe the app's own factory defaults on a first run
             if (!File.Exists(path)) { _log.Info("settings", "no saved settings (first run) - using defaults"); return; }
 
-            var sr = new SettingsReader(AppName, FileName, null);
+            var sr = new SettingsReader(AppName, FileName, _appPath);
             config.Load(sr);
             HealEncoderChoices(config);
             app.PreventSleepDuringRip = sr.LoadBoolean("WpfPreventSleep") ?? app.PreventSleepDuringRip;
@@ -101,7 +115,7 @@ public sealed class SettingsStore
     {
         try
         {
-            var sw = new SettingsWriter(AppName, FileName, null);
+            var sw = new SettingsWriter(AppName, FileName, _appPath);
             config.Save(sw);
             sw.Save("WpfPreventSleep", app.PreventSleepDuringRip);
             sw.Save("WpfLockTray", app.LockTrayDuringRip);
