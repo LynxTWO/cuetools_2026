@@ -52,8 +52,9 @@ public sealed class ConvertService : IConvertService
 {
     private readonly CUEConfig _config;
     private readonly EncoderCatalog _catalog;
+    private readonly AppSettings _settings;
 
-    public ConvertService(CUEConfig config, EncoderCatalog catalog) { _config = config; _catalog = catalog; }
+    public ConvertService(CUEConfig config, EncoderCatalog catalog, AppSettings settings) { _config = config; _catalog = catalog; _settings = settings; }
 
     // The app's rule for a two-faced extension (wma serves both WMA Lossless and WMA Standard):
     // a format with a USABLE lossy encoder is offered as a LOSSY format, once (the dropdown means
@@ -101,17 +102,46 @@ public sealed class ConvertService : IConvertService
             cue.CUEToolsProgress += (s, e) => onProgress(Clamp(e.percent), e.status);
             cue.Open(inputPath);
 
-            string artist = Safe(cue.Metadata?.Artist ?? "");
-            string title = Safe(cue.Metadata?.Title ?? "");
-            string album = (artist.Length == 0 && title.Length == 0)
-                ? Path.GetFileNameWithoutExtension(inputPath)
-                : $"{artist} - {title}";
-
             string baseDir = string.IsNullOrWhiteSpace(outputDir)
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                 : outputDir;
-            string outDir = Path.Combine(baseDir, album);
-            Directory.CreateDirectory(outDir);
+
+            // Naming comes from the ONE naming engine - the same NamingEngine.Render the Naming page
+            // previews with - so what is previewed is what lands on disk. Render each track's relative
+            // path, split off the shared album folder (the .cue/.log/cover go there), create the whole
+            // tree including any "Disc N/" subfolder, then hand the engine the per-track names so it
+            // writes exactly those instead of re-deriving them from trackFilenameFormat (same routing
+            // as RipService's encode branch, so rip and convert output agree).
+            string outDir;
+            int trackCount = Math.Max(0, cue.TrackCount);
+            if (trackCount > 0)
+            {
+                var scheme = _settings.LoadNamingScheme();
+                var rel = new string[trackCount];
+                for (int t = 0; t < trackCount; t++)
+                    rel[t] = NamingEngine.Render(
+                        NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
+                var split = NamingPaths.Split(rel);
+                outDir = Path.Combine(baseDir, split.commonDir);
+                Directory.CreateDirectory(outDir);
+                foreach (var r in split.remainders)
+                {
+                    string sub = Path.GetDirectoryName(Path.Combine(outDir, r));
+                    if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
+                }
+                cue.SetExplicitTrackNames(split.remainders);
+            }
+            else
+            {
+                // no tracks to name (should not happen for a real source) - keep a sane album folder
+                string artist = Safe(cue.Metadata?.Artist ?? "");
+                string title = Safe(cue.Metadata?.Title ?? "");
+                string album = (artist.Length == 0 && title.Length == 0)
+                    ? Path.GetFileNameWithoutExtension(inputPath)
+                    : $"{artist} - {title}";
+                outDir = Path.Combine(baseDir, album);
+                Directory.CreateDirectory(outDir);
+            }
 
             cue.Action = CUEAction.Encode;
             cue.OutputStyle = CUEStyle.GapsAppended;
