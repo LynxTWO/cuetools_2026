@@ -23,6 +23,11 @@ died about 16 s in. The failure is in the CHECKER, not the audio. The encoder's 
 - The 11 FLAC files from an earlier rip of the same disc (encoded with verify OFF) ALL decode cleanly
   under ffmpeg, an independent decoder that validates FLAC frame CRC-8 headers and CRC-16 footers:
   11/11 clean, zero errors.
+- Those files were from an earlier rip, but the evidence still applies to the CURRENT encoder:
+  `git log -- CUETools.Codecs.Flake/AudioEncoder.cs` shows the encoding algorithm has only ever been
+  touched by copyright-year bumps. The single functional change in that project during this work was
+  the `DoVerify` default (d9198f2) and its revert (fc04527). Same encoder code, so the clean decode is
+  not stale evidence.
 
 ## What that means
 
