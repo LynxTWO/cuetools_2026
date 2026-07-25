@@ -148,9 +148,16 @@ public static class NamingEngine
 
     // ---- the distilled Picard rules ----
 
+    // Render() splits its result on '/' to build folders, so a separator arriving inside a FIELD VALUE
+    // (the artist "AC/DC", a title like "and/or") would silently become a directory and scatter tracks
+    // into subfolders. Neutralise both separators on every value before substitution. This is path
+    // structure, not cosmetics, so it is deliberately NOT gated on the StripIllegal toggle.
+    private static string NeutralizeSeparators(string v) =>
+        (v ?? "").Replace('/', '-').Replace('\\', '-');
+
     private static string Normalize(string value, NamingScheme s, int maxLen, bool swapArticles)
     {
-        string v = value ?? "";
+        string v = NeutralizeSeparators(value);
         v = StripFeaturing(v);                     // album/track names never carry the feat credit
         if (s.UnifySeparators) v = UnifySeparators(v);
         if (s.HandleArticles && swapArticles) v = SwapArticle(v);
@@ -195,7 +202,7 @@ public static class NamingEngine
             int i = artist.IndexOf(kw, StringComparison.OrdinalIgnoreCase);
             if (i >= 0)
             {
-                string guests = artist.Substring(i + kw.Length).Trim();
+                string guests = NeutralizeSeparators(artist.Substring(i + kw.Length).Trim());
                 if (s.UnifySeparators) guests = UnifySeparators(guests);
                 guests = StripIllegalChars(guests.Replace("\"", "")).Trim();
                 guests = Regex.Replace(guests, @"\s{2,}", " ");
