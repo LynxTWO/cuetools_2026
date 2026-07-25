@@ -54,6 +54,24 @@ public sealed class VerifyService : IVerifyService
 
     public VerifyService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
+    /// <summary>Root the sheet's output at the verified source so an AccurateRip log written during a
+    /// verify lands next to those files. Best-effort: a verify must never fail because of its log.</summary>
+    private void TrySetVerifyLogTarget(CUESheet cue, string source)
+    {
+        try
+        {
+            string dir = System.IO.Directory.Exists(source)
+                ? source
+                : System.IO.Path.GetDirectoryName(source) ?? "";
+            if (dir.Length == 0) return;
+            string stem = System.IO.Path.GetFileNameWithoutExtension(
+                System.IO.Directory.Exists(source) ? dir : source);
+            if (string.IsNullOrWhiteSpace(stem)) stem = "verify";
+            cue.GenerateFilenames(AudioEncoderType.Lossless, "flac", System.IO.Path.Combine(dir, stem + ".cue"));
+        }
+        catch (Exception ex) { _log.Warn("verify", "could not set the AR-log target: " + ex.GetType().Name); }
+    }
+
     public VerifyFilesResult Verify(string path, Action<double, string> onProgress)
     {
         try
@@ -65,6 +83,12 @@ public sealed class VerifyService : IVerifyService
             cue.UseCUEToolsDB("CUETools 2026", null, true, CTDBMetadataSearch.Fast);
             cue.UseAccurateRip();
             cue.Action = CUEAction.Verify;
+            // Give the sheet an output location rooted at the SOURCE, so "Write AccurateRip log on
+            // verify" has somewhere real to put the .accurip - next to the files that were verified.
+            // Without this the sheet has no output path at all: the setting used to crash the verify
+            // (CreateDirectory(null)) and, once guarded, silently wrote nothing. Action is already
+            // Verify here, so no audio is produced by naming an output path.
+            TrySetVerifyLogTarget(cue, path);
 
             onProgress(0, "Verifying against AccurateRip + CTDB...");
             string status = cue.Go();
