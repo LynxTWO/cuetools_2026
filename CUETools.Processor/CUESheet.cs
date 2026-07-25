@@ -33,6 +33,7 @@ namespace CUETools.Processor
         private List<string> _sourcePaths, _trackFilenames;
         private string _htoaFilename, _singleFilename;
         private bool _hasHTOAFilename = false, _hasTrackFilenames = false, _hasSingleFilename = false, _appliedWriteOffset;
+        private bool _useExplicitTrackNames = false;
         private bool _hasEmbeddedCUESheet;
         private bool _hasEmbeddedArtwork;
         private bool _paddedToFrame, _truncated4608, _usePregapForFirstTrackInSingleFile;
@@ -285,6 +286,17 @@ namespace CUETools.Processor
             {
                 return _trackFilenames;
             }
+        }
+
+        /// <summary>Provide per-track output names (relative to OutputDir, no extension) computed by an
+        /// external namer. GenerateFilenames appends the encoder extension verbatim (dot-safe) and does
+        /// not consult trackFilenameFormat. Used by the WPF NamingEngine so preview equals output.</summary>
+        public void SetExplicitTrackNames(System.Collections.Generic.IList<string> namesNoExt)
+        {
+            _trackFilenames.Clear();
+            foreach (var n in namesNoExt) _trackFilenames.Add(n);
+            _hasTrackFilenames = true;
+            _useExplicitTrackNames = true;
         }
 
         public bool HasSingleFilename
@@ -2277,7 +2289,13 @@ namespace CUETools.Processor
             {
                 bool htoa = (iTrack == -1);
 
-                if (_config.keepOriginalFilenames && htoa && HasHTOAFilename)
+                if (_useExplicitTrackNames && !htoa)
+                {
+                    // external namer already produced the relative name; just append the extension
+                    // verbatim so a title with a dot (e.g. "No. 9") is not truncated by ChangeExtension
+                    TrackFilenames[iTrack] = TrackFilenames[iTrack] + extension;
+                }
+                else if (_config.keepOriginalFilenames && htoa && HasHTOAFilename)
                 {
                     HTOAFilename = Path.ChangeExtension(HTOAFilename, extension);
                 }
