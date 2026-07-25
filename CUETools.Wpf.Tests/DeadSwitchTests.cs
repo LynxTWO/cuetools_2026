@@ -33,8 +33,6 @@ namespace CUETools.Wpf.Tests
             "disableEjectDisc",     // tracked audit finding, awaiting an owner decision - CUEConfig.disableEjectDisc is never consulted where the eject actually happens (only ejectAfterRip is)
             "CTDBSubmit",           // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBSubmit round-trips only through the generic Advanced JSON blob; nothing reads the property
             "CTDBAsk",              // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBAsk round-trips only through the generic Advanced JSON blob; nothing reads the property
-            "coversSize",           // AUDIT: newly detected, needs triage - CUEConfigAdvanced.coversSize is read only by the legacy WinForms CUERipper, not by anything under CUETools.Wpf/CUETools.Processor/CUETools.Ripper.SCSI
-            "CacheMetadata",        // AUDIT: newly detected, needs triage - CUEConfigAdvanced.CacheMetadata is read only by the legacy WinForms CUETools app, not by anything under CUETools.Wpf/CUETools.Processor/CUETools.Ripper.SCSI
         };
 
         [TestMethod]

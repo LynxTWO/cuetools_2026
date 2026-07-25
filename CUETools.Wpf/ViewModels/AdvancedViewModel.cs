@@ -37,9 +37,10 @@ public sealed class AdvancedViewModel : PageViewModel
     // ---- Cover art ----
     public string CoverArtFiles { get => _c.advanced.CoverArtFiles; set { _c.advanced.CoverArtFiles = value; Raise(); } }
     public bool CoverArtSearchSubdirs { get => _c.advanced.CoverArtSearchSubdirs; set { _c.advanced.CoverArtSearchSubdirs = value; Raise(); } }
-    public CUEConfigAdvanced.CTDBCoversSize CoversSize { get => _c.advanced.coversSize; set { _c.advanced.coversSize = value; Raise(); } }
     public CUEConfigAdvanced.CTDBCoversSearch CoversSearch { get => _c.advanced.coversSearch; set { _c.advanced.coversSearch = value; Raise(); } }
-    public Array CoversSizes => Enum.GetValues(typeof(CUEConfigAdvanced.CTDBCoversSize));
+    // "Album art size" (CUEConfigAdvanced.coversSize) is deliberately NOT surfaced: only the legacy
+    // WinForms CUERipper reads it. This app's art pipeline is AlbumArtService plus maxAlbumArtSize, so a
+    // row here would be another switch that does nothing. Detected by DeadSwitchTests.
     public Array CoversSearches => Enum.GetValues(typeof(CUEConfigAdvanced.CTDBCoversSearch));
 
     // ---- Metadata ----
