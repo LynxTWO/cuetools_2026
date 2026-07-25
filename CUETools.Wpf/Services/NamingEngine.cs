@@ -113,7 +113,9 @@ public static class NamingEngine
             ["title"] = title,
             ["year"] = (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : c.Year ?? "",
             ["tracknumber"] = c.TrackNumber.ToString("00"),
-            ["discnumber"] = c.DiscNumber.ToString(),
+            // padded to the set's width for the same sort reason as the %disc% folder (see
+            // DiscNumberPadded); a single-disc release still renders a bare "1"
+            ["discnumber"] = c.TotalDiscs > 1 ? DiscNumberPadded(c) : c.DiscNumber.ToString(),
             ["totaldiscs"] = c.TotalDiscs.ToString(),
             ["discsubtitle"] = Normalize(c.DiscSubtitle ?? "", s, 80, swapArticles: false),
             ["disc"] = DiscFolder(c, s),
@@ -142,9 +144,27 @@ public static class NamingEngine
     private static string DiscFolder(NamingContext c, NamingScheme s)
     {
         if (c.TotalDiscs <= 1) return "";
+        string n = DiscNumberPadded(c);
         string sub = Normalize(c.DiscSubtitle ?? "", s, 80, swapArticles: false);
-        return sub.Length > 0 ? $"Disc {c.DiscNumber} - {sub}/" : $"Disc {c.DiscNumber}/";
+        return sub.Length > 0 ? $"Disc {n} - {sub}/" : $"Disc {n}/";
     }
+
+    /// <summary>The disc number zero-padded to the width of the SET SIZE, so folders sort in disc order
+    /// in any file browser: a 9-disc set gives "Disc 1".."Disc 9", 99 discs "Disc 01".."Disc 99", 999
+    /// discs "Disc 001".."Disc 999", 9999 discs "Disc 0001".."Disc 9999". Without this, plain lexical
+    /// sorting interleaves ("Disc 1", "Disc 10", "Disc 100", "Disc 11", "Disc 2", ...), which is what a
+    /// large box set actually looks like on disk. Padding to the SET's width - not a fixed width - keeps
+    /// ordinary 2-CD releases as "Disc 1"/"Disc 2" exactly as before.</summary>
+    private static string DiscNumberPadded(NamingContext c)
+    {
+        // Never pad narrower than the disc number itself needs: bad metadata can report a disc number
+        // higher than the total (e.g. "disc 12 of 5"), and truncating that would collide two discs.
+        int widest = Math.Max(c.TotalDiscs, c.DiscNumber);
+        int width = Math.Max(1, Abs(widest).ToString().Length);
+        return c.DiscNumber.ToString(new string('0', width));
+    }
+
+    private static int Abs(int v) => v < 0 ? -v : v;
 
     // ---- the distilled Picard rules ----
 
