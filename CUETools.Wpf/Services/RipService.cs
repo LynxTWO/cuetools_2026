@@ -134,11 +134,26 @@ public sealed class RipService : IRipService
     public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history, CUETools.Wpf.Accuracy.DriveCalibrationService calService)
     { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; _calService = calService; }
 
+    /// <summary>Set by Stop(), cleared when a new operation starts. Stop() alone was not enough:
+    /// it only forwards to whatever CUESheet is currently running, and a Test & Copy makes 2-3
+    /// SEPARATE Run calls with the calibration prologue before them - so between reads, and for the
+    /// whole prologue, there was nothing to forward to and the stop was silently dropped. The user
+    /// pressed Stop and the album was written anyway. The latch survives those gaps.</summary>
+    private volatile bool _stopRequested;
+
     public void Stop()
     {
+        _stopRequested = true;
         CUESheet? cue; lock (_stopGate) cue = _current;
         try { cue?.Stop(); _log.Info("rip", "stop requested"); }
         catch (Exception ex) { _log.Warn("rip", "stop request failed: " + ex.GetType().Name); }
+    }
+
+    /// <summary>Throw if a stop was requested. Called at every point where no CUESheet is running and
+    /// Stop() would therefore have nowhere to land.</summary>
+    private void ThrowIfStopRequested()
+    {
+        if (_stopRequested) throw new StopException();
     }
 
     // Keep the machine awake for the duration of a rip. ES_CONTINUOUS persists the request until it
@@ -153,8 +168,8 @@ public sealed class RipService : IRipService
             _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
     }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt, onEncodeStart: onEncodeStart);
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) { _stopRequested = false; return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread); }
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) { _stopRequested = false; return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt, onEncodeStart: onEncodeStart); }
 
     private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
     {
@@ -646,6 +661,7 @@ public sealed class RipService : IRipService
 
     public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
     {
+        _stopRequested = false;   // fresh operation - see the latch on Stop()
         int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -657,6 +673,7 @@ public sealed class RipService : IRipService
 
         try
         {
+            ThrowIfStopRequested();   // Stop pressed during the calibration prologue
             if (!EnsureIndependence(drive, onProgress))
                 return new TestCopyRunResult { Error = "Calibration failed - cannot guarantee two independent reads." };
 
@@ -666,6 +683,7 @@ public sealed class RipService : IRipService
 
             // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
             // against but its checksums still count as an independent read.
+            ThrowIfStopRequested();
             var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), onLevels, onSamples, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
 
@@ -675,6 +693,7 @@ public sealed class RipService : IRipService
             // read above is honored) and carry it forward - fmt then also drives the final commit's
             // file-extension count below, so it stays consistent with what was actually encoded.
             { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
+            ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
             var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
 
@@ -692,6 +711,7 @@ public sealed class RipService : IRipService
                 // The codec is locked by the Copy read's onEncodeStart above by the time we get here,
                 // so this re-poll is just for consistency - it will report the same locked choice.
                 { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
+                ThrowIfStopRequested();
                 var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
 
@@ -711,6 +731,7 @@ public sealed class RipService : IRipService
             // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
             TestCopyRunResult BuildHeld(int[] heldTracks)
             {
+                ThrowIfStopRequested();   // do not commit an album the user cancelled
                 keepStaging = true;
                 var last = reads[reads.Count - 1];
                 var dirs = string.IsNullOrEmpty(stage2) ? new[] { stage1 } : new[] { stage1, stage2 };
@@ -771,6 +792,7 @@ public sealed class RipService : IRipService
                 // I/O left (disk full, an AV or indexer lock, a too-long path), and if it throws, the
                 // finally below would delete both bit-verified staged reads - destroying a rip that was
                 // already proven correct and forcing a full re-rip. Hold them until the commit returns.
+                ThrowIfStopRequested();   // do not commit an album the user cancelled
                 keepStaging = true;
                 var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir);
                 keepStaging = false;   // committed - the staging is now redundant

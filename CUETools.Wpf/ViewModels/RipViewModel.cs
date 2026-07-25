@@ -792,12 +792,11 @@ public sealed class RipViewModel : PageViewModel
     private async Task RunTestCopyAsync()
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
-        if (_heldResult != null)
-        {
-            _rip.DiscardStaging(_heldResult);
-            _heldResult = null;
-            TestCopyHeld = false;
-        }
+        // Keep the previous held staging until the NEW run has produced a result. Discarding it up
+        // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
+        // with nothing to accept - the verified reads they already had were gone.
+        var previousHeld = _heldResult;
+        if (previousHeld != null) { _heldResult = null; TestCopyHeld = false; }
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         IsRipping = true;
@@ -889,6 +888,16 @@ public sealed class RipViewModel : PageViewModel
         // so a codec change made while the Test read is still running is honored.
         var result = await Task.Run(() => _rip.RunTestAndCopy(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover, liveFormat: () => SelectedFormat, onEncodeStart: LockCodec));
 
+        // The re-run has finished, so the PREVIOUS held staging is either superseded (this run produced
+        // a real outcome) or still the best copy the user has (this run failed before producing
+        // anything - calibration refused, no disc, stopped). Only discard it in the first case; the old
+        // code discarded it up front, so a failed re-run left nothing to accept.
+        if (previousHeld != null)
+        {
+            if (result.Ok) _rip.DiscardStaging(previousHeld);
+            else { _heldResult = previousHeld; TestCopyHeld = true; }
+        }
+
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed)
         {
@@ -955,8 +964,14 @@ public sealed class RipViewModel : PageViewModel
         var held = _heldResult; if (held == null) return;
         string dir = _rip.CommitCopyReadAnyway(held, OutputBaseDir);
         bool ok = dir.Length > 0;
-        TestCopyHeld = false; _heldResult = null;
-        TestCopyText = ok ? "Copy read accepted anyway - written and flagged NOT test-verified." : "Could not write the copy read.";
+        // Only let go of the held result once it is safely committed. _heldResult is the ONLY live
+        // handle to the staging, and both Accept anyway and Discard are gated on it being non-null, so
+        // clearing it after a FAILED commit killed the retry buttons and orphaned a full verified album
+        // in %TEMP% with no way to reach it.
+        if (ok) { TestCopyHeld = false; _heldResult = null; }
+        TestCopyText = ok
+            ? "Copy read accepted anyway - written and flagged NOT test-verified."
+            : "Could not write the copy read - the staged reads were kept, so you can try again.";
         StatusText = TestCopyText;
         // A committed copy read IS a finished rip: it needs the same tail as any other, which it never
         // used to get (no eject, and no RipDone so the "Open folder" panel never appeared).
