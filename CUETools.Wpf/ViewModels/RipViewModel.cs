@@ -987,7 +987,9 @@ public sealed class RipViewModel : PageViewModel
         // used to get (no eject, and no RipDone so the "Open folder" panel never appeared).
         if (ok)
         {
-            PublishReport("Test & Copy (accepted, NOT verified)", CorrectionQuality, held.ArConfidence,
+            // held.CorrectionQuality, not the live dropdown: the reads happened earlier, possibly at a
+            // different setting, and the archived report must name the mode they were actually made at
+            PublishReport("Test & Copy (accepted, NOT verified)", held.CorrectionQuality, held.ArConfidence,
                 held.ArTotal, held.CtdbConfidence, held.CtdbTotal, held.Accurate,
                 "accepted without agreement - NOT test-verified", dir, held.FileCount);
             await FinishRipAsync(dir, _selectedDrive);
