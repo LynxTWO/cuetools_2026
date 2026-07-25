@@ -2295,6 +2295,17 @@ namespace CUETools.Processor
                     // verbatim so a title with a dot (e.g. "No. 9") is not truncated by ChangeExtension
                     TrackFilenames[iTrack] = TrackFilenames[iTrack] + extension;
                 }
+                else if (_useExplicitTrackNames && htoa)
+                {
+                    // The hidden track must follow the explicit names, NOT trackFilenameFormat: that
+                    // format is the engine's own vocabulary, so a WPF-style value there would render a
+                    // literal token plus a folder that nobody creates and abort the encode. Place the
+                    // HTOA file in the same directory as track 1 so a "Disc N/" scheme keeps it together.
+                    string firstDir = _trackFilenames.Count > 0
+                        ? Path.GetDirectoryName(_trackFilenames[0]) : "";
+                    HTOAFilename = (string.IsNullOrEmpty(firstDir) ? "" : firstDir + Path.DirectorySeparatorChar)
+                        + "00 - (HTOA)" + extension;
+                }
                 else if (_config.keepOriginalFilenames && htoa && HasHTOAFilename)
                 {
                     HTOAFilename = Path.ChangeExtension(HTOAFilename, extension);

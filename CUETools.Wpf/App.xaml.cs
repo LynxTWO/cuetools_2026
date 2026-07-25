@@ -112,6 +112,22 @@ public partial class App : Application
             log.Info("settings", $"defaults v2 applied: cover max {_config.maxAlbumArtSize}px, AR tags on encode on");
         }
 
+        // Heal a trackFilenameFormat polluted by an older build. The Naming page used to push the WPF
+        // template into this ENGINE setting, but the engine speaks a different vocabulary (no
+        // "%albumartist%") and this value is a per-track NAME, not a path. A stale value leaves a literal
+        // token plus a folder nobody creates in the hidden-track filename, which aborts an encode - and
+        // the Settings page shows the garbage. Rip and convert no longer read it (they pass explicit
+        // names), so reset it whenever it is clearly not an engine per-track format.
+        {
+            string tf = _config.trackFilenameFormat ?? "";
+            if (tf.Contains("%albumartist%") || tf.Contains("%featsuffix%") || tf.Contains("%releasedescriptor%")
+                || tf.Contains("%disc%") || tf.Contains('/') || tf.Contains('\\'))
+            {
+                _config.trackFilenameFormat = "%tracknumber%. %title%";
+                log.Info("settings", "reset a stale WPF-style trackFilenameFormat to the engine default");
+            }
+        }
+
         // apply the saved theme (mutates the palette brushes) before the window shows
         var theme = provider.GetRequiredService<ThemeService>();
         theme.Apply(theme.Current);
