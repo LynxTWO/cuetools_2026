@@ -803,18 +803,26 @@ namespace CUETools.Ripper.SCSI
                 {
                     double threshold = (warmMs + flushedMs) / 2;
                     bool bad = false;
+                    // Repeat each size's (warm, flush, re-read) measurement 3x and require ALL three to
+                    // read at media speed. Unanimity errs CONSERVATIVE against timing jitter / erratic
+                    // caching: a single fast (cached) blip makes this size read as "not evicting", so the
+                    // search moves to a LARGER flush, never a smaller one.
                     bool Evicts(int bytes)
                     {
-                        if (!ReadOne(target, out _)) { bad = true; return false; }
-                        int fc = Math.Max(1, bytes / (chunk * 2352));
-                        for (int i = 0; i < fc; i++)
+                        for (int rep = 0; rep < 3; rep++)
                         {
-                            uint lba = flushBase + (uint)(i * chunk);
-                            if (lba + (uint)chunk > firstStart + (uint)len) break;   // stay in-program
-                            if (!ReadOne(lba, out _)) { bad = true; return false; }
+                            if (!ReadOne(target, out _)) { bad = true; return false; }   // warm -> cached
+                            int fc = Math.Max(1, bytes / (chunk * 2352));
+                            for (int i = 0; i < fc; i++)
+                            {
+                                uint lba = flushBase + (uint)(i * chunk);
+                                if (lba + (uint)chunk > firstStart + (uint)len) break;   // stay in-program
+                                if (!ReadOne(lba, out _)) { bad = true; return false; }
+                            }
+                            if (!ReadOne(target, out double ms)) { bad = true; return false; }
+                            if (ms < threshold) return false;   // one cached re-read -> not a reliable evict here
                         }
-                        if (!ReadOne(target, out double ms)) { bad = true; return false; }
-                        return ms >= threshold;
+                        return true;   // all 3 hit media -> this size reliably evicts
                     }
                     int lo = 0, hi = 0;
                     for (int s = 256 * 1024; s <= 8 * 1024 * 1024 && !bad; s *= 2)   // first size that evicts
