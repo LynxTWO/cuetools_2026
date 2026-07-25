@@ -42,13 +42,16 @@ Phase 3 (MusicBrainz client):
   `._-` alphabet). If they are the same value, the client can reuse it instead of recomputing, and the
   disc-id unit test should assert that equality on this disc. Measure before assuming.
 
-## Naming split observed (Phase 1 fixes this)
+## Naming patterns observed in one folder (historical, not a current bug)
 
-The same folder contained two naming patterns from two different rips:
+The same folder contained two patterns, from rips taken at different times:
 
-- `01 - Calling All Stations.mp3` - the rich WPF scheme (`%tracknumber% - %title%`).
-- `01. Calling All Stations.flac` - the engine's own default (`%tracknumber%. %title%`).
+- `01 - Calling All Stations.mp3` - written by the current build: the rip-path fix derives
+  `%tracknumber% - %title%` from the archival template.
+- `01. Calling All Stations.flac` - the cuetools engine's own default `%tracknumber%. %title%`
+  (CUEConfig.cs:107), i.e. what output looked like before that fix, when nothing overrode the default.
 
-That is the two-vocabulary split: output written before/after the stopgap differs. Phase 1 routes all
-output through NamingEngine, after which one scheme applies to every format. A user whose folder
-already holds both will keep both until they re-rip; nothing migrates old files.
+So this is pre-fix vs post-fix output in one folder, NOT two schemes racing on the current build:
+inferred from the two format defaults, pending confirmation by a fresh FLAC rip (expected
+`01 - Calling All Stations.flac`). Phase 1 makes NamingEngine the single authority so the scheme comes
+from the user's template for every format. Nothing migrates already-written files.
