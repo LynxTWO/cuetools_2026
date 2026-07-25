@@ -146,6 +146,13 @@ public sealed class NamingViewModel : PageViewModel
                     Year = year,
                     TrackNumber = t.Number,
                     TotalTracks = vm.Tracks.Count,
+                    // Match what the REAL output does: NamingContextMapper leaves release type and
+                    // status empty (they arrive with the MusicBrainz client in a later phase), so the
+                    // NamingContext defaults of "album"/"official" would make this preview claim a
+                    // "%releasetype%" folder the rip will not actually write.
+                    PrimaryType = "",
+                    ReleaseStatus = "",
+                    SecondaryTypes = System.Array.Empty<string>(),
                 };
                 g.Lines.Add(NamingEngine.Render(ctx, _scheme));
             }
