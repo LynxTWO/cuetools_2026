@@ -60,6 +60,12 @@ The cost is honest: two full reads on a clean disc, three on a mismatch. Test & 
 Any pair among three reads includes at least one staged read (the pairs are Test+Copy, Test+Read3,
 Copy+Read3), so a resolved track always has audio to commit.
 
+All reads share the same metadata, so each staged read writes identical filenames; assembly maps the
+resolver's per-track verdict to files by track index. Auxiliary output files (the `.cue`, any
+playlist, embedded cover art) are metadata-derived and identical across reads, so assembly takes them
+from staging 1. In the 2-read happy path the whole of staging 1 is committed as-is; only the 3-read
+path assembles file-by-file.
+
 ## The match rule
 
 Two reads agree on a track when:
@@ -68,6 +74,12 @@ Two reads agree on a track when:
   byte-identical decoded audio), AND
 - when the disc is present in AccurateRip, their AR verdicts are consistent (both reads produced the
   same AR outcome). With no AR data, bit-identical agreement alone is the proof.
+
+The equality test is the per-track CRC32 (the audio checksum). For two reads at the same drive
+offset, identical CRC32, identical AR v1, and identical AR v2 all follow from byte-identical audio, so
+the choice is immaterial; the shared comparison checks the CRC record with CRC32 as the primary field.
+The AR-consistency clause is therefore auto-satisfied whenever CRC32 matches - it is corroboration and
+reporting, not a second gate that could fail a bit-agreed track.
 
 The AR status is reported separately in the verdict and log, never used to fail a bit-agreed track:
 
@@ -82,8 +94,10 @@ Two reads only prove something if the second is not served from the drive's cach
 guarantees independence before it starts:
 
 - Non-caching drive (calibrated "Media re-reads") -> reads are naturally independent. Proceed.
-- Caching drive, calibrated (`Flush:N`) -> cache defeat is forced ON for the whole operation (both
-  the Copy and the third read flush before each secure re-read). Proceed.
+- Caching drive, calibrated (`Flush:N`) -> cache defeat is forced ON for EVERY read in the operation
+  (the Test read, the Copy read, and the third read each flush before their own secure re-reads), so
+  each read's per-track CRC reflects the platter and not its own cache or a prior read's cache. This
+  is forced regardless of the Deep recovery toggle - independence is not optional here. Proceed.
 - Caching drive, NOT yet calibrated, or drive never calibrated -> run calibration first,
   automatically, behind a modal "Calibrating drive..." dialog. When calibration finishes, proceed
   under the branch that now applies. The user does not have to know to calibrate first; the mode does
@@ -116,7 +130,8 @@ raised to Secure for the operation; Paranoid is honoured if selected.
 
 - Per-track files in the output folder (v1).
 - A readable Test & Copy log written into the output folder: disc id, drive, read offset, per-track
-  CRC32 for each read, which reads agreed, AR and CTDB status per track, and the overall verdict
+  CRC32 for each read, which reads agreed, per-track AR status, the disc-level CTDB status, and the
+  overall verdict
   ("Test & Copy PASSED - every track verified by >=2 independent reads", with the read count). This
   is the local, shareable proof.
 - The existing `.verify` sidecar (verify-history record) for the committed read.
@@ -144,6 +159,11 @@ raised to Secure for the operation; Paranoid is honoured if selected.
   independence).
 - "Accept the Copy read anyway" writes the Copy read's files but marks them and the log
   "not test-verified".
+- Unrecoverable read errors: if a read reports sectors it could not recover on a track (the existing
+  bad-sector tracking), that is surfaced in the verdict and log even when the two reads agree on that
+  track - two identical reads over a damaged region is consistency, not proof the region is pristine.
+  AccurateRip, when present, is the tie-breaker; without it the log flags the track "agreed, but had
+  unrecoverable sectors".
 
 ## Testing
 
