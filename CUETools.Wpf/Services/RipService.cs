@@ -322,6 +322,8 @@ public sealed class RipService : IRipService
                     // metadata so every rip keeps its own directory.
                     outRelDir = string.IsNullOrWhiteSpace(split.commonDir)
                         ? AlbumFolderFallback(cue.Metadata) : split.commonDir;
+                    // never write over an existing rip - see NonClobberingAlbumDir
+                    outRelDir = OutputGuard.NonClobberingAlbumDir(baseDir, outRelDir, format, m => _log.Info("rip", m));
                     outDir = Path.Combine(baseDir, outRelDir);
                     Directory.CreateDirectory(outDir);
                     // cap the assembled path length, then guarantee non-empty/unique names - in that
@@ -339,7 +341,8 @@ public sealed class RipService : IRipService
                 {
                     // no tracks to name (should not happen for a real disc) - keep a sane album folder
                     string album = AlbumFolderFallback(cue.Metadata);
-                    outRelDir = album;
+                    outRelDir = OutputGuard.NonClobberingAlbumDir(baseDir, album, format, m => _log.Info("rip", m));
+                    album = outRelDir;
                     outDir = Path.Combine(baseDir, album);
                     Directory.CreateDirectory(outDir);
                 }
@@ -593,6 +596,7 @@ public sealed class RipService : IRipService
 
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
 
+
     /// <summary>"Artist - Album" (or "Unknown Album") for use as the album directory when the naming
     /// scheme does not produce one. Every rip needs its own folder: without it the .cue, rip log, cover
     /// and rip.verify collide in the output base, and a Test &amp; Copy commit has no name to re-home to.</summary>
@@ -728,7 +732,13 @@ public sealed class RipService : IRipService
                     return BuildHeld(mismatches.ToArray());
                 }
 
+                // Protect the staging ACROSS the commit. The copy into the library is the one unguarded
+                // I/O left (disk full, an AV or indexer lock, a too-long path), and if it throws, the
+                // finally below would delete both bit-verified staged reads - destroying a rip that was
+                // already proven correct and forcing a full re-rip. Hold them until the commit returns.
+                keepStaging = true;
                 var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir);
+                keepStaging = false;   // committed - the staging is now redundant
                 var last = reads[reads.Count - 1];
                 _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
                 _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=passed");
@@ -763,13 +773,26 @@ public sealed class RipService : IRipService
         catch (Exception ex)
         {
             _log.Error("rip", $"test&copy failed after {sw.Elapsed.TotalSeconds:0}s", ex);
+            // A throw with keepStaging set means the failure happened DURING the commit, so the
+            // verified reads are still on disk. Say where: the audio is proven and re-rippable only at
+            // the cost of another 2-3 full reads.
+            if (keepStaging && !string.IsNullOrEmpty(stage1))
+            {
+                _log.Warn("rip", "test&copy commit failed - the verified staged reads were KEPT");
+                return new TestCopyRunResult
+                {
+                    Error = ex.Message + "  The verified reads were kept at: " + stage1
+                        + (string.IsNullOrEmpty(stage2) ? "" : " and " + stage2),
+                };
+            }
             return new TestCopyRunResult { Error = ex.Message };
         }
         finally
         {
-            // Only the final assemble/commit above touches outputBaseDir; a stop/error/2-or-3-read
-            // Passed all reach here with keepStaging still false, so staging is always cleaned up
-            // except on a genuine HELD result (which the VM later resolves via Accept/Discard).
+            // A stop, an error before the commit, or a completed commit all reach here with keepStaging
+            // false, so staging is cleaned up. It is held for a genuine HELD result (the VM resolves it
+            // via Accept/Discard) and for a commit that threw part-way, so a proven rip is never thrown
+            // away because of a transient disk error.
             if (!keepStaging)
             {
                 DeleteStagingDir(stage1);
@@ -819,6 +842,8 @@ public sealed class RipService : IRipService
         string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
             : outputBaseDir;
+        // a Test & Copy commit is still a rip - do not let it land on top of an earlier one
+        albumName = OutputGuard.NonClobberingAlbumDir(realBase, albumName, format, m => _log.Info("rip", m));
         string outDir = Path.Combine(realBase, albumName);
 
         // Wholesale commit only: the chosen read's own staged folder is copied as-is, so its files
@@ -887,6 +912,7 @@ public sealed class RipService : IRipService
             string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                 : outputBaseDir;
+            albumName = OutputGuard.NonClobberingAlbumDir(realBase, albumName, held.Format ?? "", m => _log.Info("rip", m));
             string outDir = Path.Combine(realBase, albumName);
             CopyDirectoryRecursive(held.CopyStagingDir, outDir);
 
