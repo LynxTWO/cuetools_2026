@@ -54,13 +54,25 @@ public sealed class DriveViewModel : PageViewModel
     public ICommand DetectCommand { get; }
     public ICommand CalibrateCommand { get; }
 
+    /// <summary>The drive this page acts on: the one the user selected on the Rip page, falling back to
+    /// the first drive when nothing has been selected yet. Both Detect and Calibrate used to hardcode
+    /// GetDrives()[0], so on a two-drive machine you could calibrate drive 1 while ripping drive 2 - the
+    /// rip's lookup by drive signature then found nothing, cache defeat was silently skipped, and this
+    /// page showed drive 1's numbers under text that says "this drive".</summary>
+    private char TargetDrive(System.Collections.Generic.IReadOnlyList<char> drives)
+    {
+        char sel = _drives.SelectedDrive;
+        foreach (var c in drives) if (c == sel) return sel;
+        return drives[0];
+    }
+
     private async Task DetectAsync()
     {
         var d = _drives.GetDrives();
         if (d.Count == 0) { Status = "No optical drive found."; return; }
         _busy = true;
         Status = "Reading the drive over SCSI...";
-        char drive = d[0];
+        char drive = TargetDrive(d);
         DriveLetter = drive + ":";
         var det = await Task.Run(() => _drives.GetDriveDetails(drive));
         Details = det;
@@ -84,7 +96,7 @@ public sealed class DriveViewModel : PageViewModel
     {
         var d = _drives.GetDrives();
         if (d.Count == 0) return;
-        char drive = d[0];
+        char drive = TargetDrive(d);
         _busy = true;
         Status = "Calibrating " + drive + ": (probing cache and speed - needs a disc)...";
         var cal = await Task.Run(() => _calibration.Calibrate(drive));

@@ -181,6 +181,12 @@ public sealed class RipService : IRipService
             // here; the reader applies them at the next fresh-window boundary on its own read
             // thread (a mid-window SET CD SPEED crashed the read - see PrefetchSector). The audio
             // is identical at any speed, so accuracy is unaffected either way.
+            // Fetch this drive's saved calibration BEFORE the speed controller is built: its probed max
+            // speed is the adaptive ceiling (the Drive & Read page says so), and the controller has
+            // always accepted a ceiling argument that nobody passed - so the calibrated value was read
+            // only into a display string and the tooltip's claim was simply untrue.
+            var cal = _calStore.Get((reader.ARName ?? "").Trim());
+
             AdaptiveSpeedController speedCtl = null;
             int lastRequested = 0;
             if (_settings.AdaptiveReadSpeed)
@@ -188,10 +194,13 @@ public sealed class RipService : IRipService
                 int[] speeds = reader.GetSupportedSpeeds();
                 if (speeds.Length > 1)
                 {
-                    speedCtl = new AdaptiveSpeedController(speeds);
+                    int? ceiling = (cal != null && cal.MaxSpeedKbps > 0) ? cal.MaxSpeedKbps : (int?)null;
+                    speedCtl = new AdaptiveSpeedController(speeds, ceiling);
                     lastRequested = speedCtl.CurrentSpeed;
                     reader.RequestReadSpeed(lastRequested);
-                    _log.Info("rip", $"adaptive speed on: {speeds.Length} steps {speeds[0]}-{speeds[speeds.Length - 1]} kB/s, start {lastRequested} ({lastRequested / 176}x)");
+                    _log.Info("rip", $"adaptive speed on: {speeds.Length} steps {speeds[0]}-{speeds[speeds.Length - 1]} kB/s, " +
+                        $"start {lastRequested} ({lastRequested / 176}x)" +
+                        (ceiling.HasValue ? $", calibrated ceiling {ceiling.Value} kB/s" : ", no calibrated ceiling"));
                 }
                 else _log.Info("rip", "adaptive speed: drive reports no speed list - using drive default");
             }
@@ -206,7 +215,6 @@ public sealed class RipService : IRipService
             // Deep recovery: a window that stays stuck drops to the drive's floor (probed min speed, or
             // the lowest supported) - slow reads track marginal/scratched sectors better. Requested only
             // at window boundaries via the same path as adaptive speed; the audio is unchanged.
-            var cal = (_settings.DeepRecovery || forceCacheDefeat) ? _calStore.Get((reader.ARName ?? "").Trim()) : null;
             int deepFloor = 0;
             if (_settings.DeepRecovery)
             {

@@ -29,6 +29,9 @@ public sealed class DriveService : IDriveService
 
     public DriveService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
+    /// <summary>Session-shared drive selection - see IDriveService.SelectedDrive.</summary>
+    public char SelectedDrive { get; set; }
+
     public IReadOnlyList<char> GetDrives()
     {
         try { return CDDrivesList.DrivesAvailable(); }

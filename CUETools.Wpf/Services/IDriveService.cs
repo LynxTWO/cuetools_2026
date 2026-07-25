@@ -10,6 +10,14 @@ public interface IDriveService
 {
     IReadOnlyList<char> GetDrives();
 
+    /// <summary>The drive the user is working with, shared across pages for this session (not persisted).
+    /// '\0' until a page sets it. The Rip page sets it from its own picker; the Drive &amp; Read page
+    /// detects and CALIBRATES this drive. Both used to act on GetDrives()[0] independently, so on a
+    /// two-drive machine you could calibrate drive 1 while ripping drive 2 - the rip's lookup by drive
+    /// signature then found nothing and cache defeat was silently skipped, quietly weakening the
+    /// "secure re-read" guarantee. One shared value makes that mismatch impossible.</summary>
+    char SelectedDrive { get; set; }
+
     /// <summary>Open the drive and read its table of contents, or null if there is no
     /// readable audio disc (empty tray, data disc, or drive not ready). <paramref name="onStatus"/>
     /// reports the metadata-lookup step live ("Looking up album via CTDB...", "...via Freedb...").</summary>
