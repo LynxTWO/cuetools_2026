@@ -40,6 +40,26 @@ public sealed class VerifyResult
     public int HistoryDiffTracks { get; init; }
 }
 
+/// <summary>Outcome of a Test & Copy run: either a committed output (Passed) or a held result with
+/// the staging retained for the user's Accept anyway / Discard / Re-run decision.</summary>
+public sealed class TestCopyRunResult
+{
+    public bool Ok { get; init; }
+    public string Error { get; init; } = "";
+    public CUETools.Wpf.Accuracy.TestCopyOutcome Outcome { get; init; }
+    public int ReadsUsed { get; init; }
+    public int[] HeldTracks { get; init; } = System.Array.Empty<int>();
+    public string OutputDir { get; init; } = "";
+    public int FileCount { get; init; }
+    public int ArConfidence { get; init; }
+    public int ArTotal { get; init; }
+    public int CtdbConfidence { get; init; }
+    public int CtdbTotal { get; init; }
+    public bool Accurate { get; init; }
+    public string CopyStagingDir { get; init; } = "";
+    public string[] StagingDirs { get; init; } = System.Array.Empty<string>();
+}
+
 public interface IRipService
 {
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
@@ -59,6 +79,18 @@ public interface IRipService
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
+
+    /// <summary>Test & Copy: read the disc twice (a third time on a mismatch), commit only tracks two
+    /// independent reads agree on bit-for-bit, hold the rest. Forces at least Secure and forces cache
+    /// defeat (auto-calibrating first when needed) so the reads are genuinely independent.</summary>
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null);
+
+    /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
+    /// test-verified, and discard the staging. Returns success.</summary>
+    bool CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir);
+
+    /// <summary>Delete the staging folders a held Test & Copy retained.</summary>
+    void DiscardStaging(TestCopyRunResult held);
 }
 
 public sealed class RipService : IRipService
@@ -72,9 +104,10 @@ public sealed class RipService : IRipService
 
     private readonly CUETools.Wpf.Accuracy.DriveCalibrationStore _calStore;
     private readonly CUETools.Wpf.Accuracy.VerifyHistoryStore _history;
+    private readonly CUETools.Wpf.Accuracy.DriveCalibrationService _calService;
 
-    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history)
-    { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; }
+    public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history, CUETools.Wpf.Accuracy.DriveCalibrationService calService)
+    { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; _calService = calService; }
 
     public void Stop()
     {
@@ -464,4 +497,326 @@ public sealed class RipService : IRipService
     }
 
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
+
+    // ---- Test & Copy ---------------------------------------------------------------------
+
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null)
+    {
+        int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
+        string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        string stage1 = "", stage2 = "";
+        bool keepStaging = false;   // set true only when we return a HELD result the VM must clean up
+
+        Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
+
+        try
+        {
+            if (!EnsureIndependence(drive, onProgress))
+                return new TestCopyRunResult { Error = "Calibration failed - cannot guarantee two independent reads." };
+
+            string stem = Path.Combine(Path.GetTempPath(), "cuetc", Guid.NewGuid().ToString("N"));
+            stage1 = stem + "-copy";
+            stage2 = stem + "-third";
+
+            // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
+            // against but its checksums still count as an independent read.
+            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), onLevels, onSamples, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
+            if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
+
+            // Read 2 (Copy, index 1): staged encode - this is the file set that gets committed on a
+            // 2-read pass, or is the preferred source per track on a 3-read pass.
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true);
+            if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
+
+            var reads = new System.Collections.Generic.List<VerifyRecord> { testResult.Record, copyResult.Record };
+            var staged = new System.Collections.Generic.List<bool> { false, true };
+            var stagingAlbumDirs = new System.Collections.Generic.List<string> { "", copyResult.OutputDir };
+            int failedWindows = Math.Max(testResult.FailedWindows, copyResult.FailedWindows);
+
+            var resolve = TestAndCopyResolver.Resolve(reads, staged);
+
+            if (resolve.Outcome == TestCopyOutcome.Held)
+            {
+                // Read 3 (third, index 2): staged encode, only run when the first two disagree
+                // somewhere. Re-resolve with all three reads staged (Test is still index 0/unstaged).
+                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true);
+                if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
+
+                reads.Add(thirdResult.Record);
+                staged.Add(true);
+                stagingAlbumDirs.Add(thirdResult.OutputDir);
+                failedWindows = Math.Max(failedWindows, thirdResult.FailedWindows);
+
+                resolve = TestAndCopyResolver.Resolve(reads, staged);
+            }
+
+            string discId = copyResult.Record?.DiscId ?? testResult.Record?.DiscId ?? "";
+            string driveSig = copyResult.Record?.Drive ?? "";
+            int offset = copyResult.Record?.ReadOffset ?? 0;
+
+            if (resolve.Outcome == TestCopyOutcome.Passed)
+            {
+                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs, outputBaseDir, discId, driveSig, offset, failedWindows, fmt);
+                var last = reads[reads.Count - 1];
+                _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
+                _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=passed");
+                return new TestCopyRunResult
+                {
+                    Ok = true,
+                    Outcome = TestCopyOutcome.Passed,
+                    ReadsUsed = resolve.ReadsUsed,
+                    OutputDir = outDir,
+                    FileCount = fileCount,
+                    ArConfidence = last?.ArConfidence ?? 0,
+                    ArTotal = last?.ArTotal ?? 0,
+                    CtdbConfidence = last?.CtdbConfidence ?? 0,
+                    CtdbTotal = last?.CtdbTotal ?? 0,
+                    Accurate = (last?.ArConfidence ?? 0) > 0,
+                };
+            }
+            else
+            {
+                // Held: write nothing to outputBaseDir. Retain staging for the VM's Accept anyway /
+                // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
+                keepStaging = true;
+                var last = reads[reads.Count - 1];
+                var dirs = string.IsNullOrEmpty(stage2)
+                    ? new[] { stage1 }
+                    : new[] { stage1, stage2 };
+                _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=0 heldTracks={resolve.HeldTracks.Length}");
+                _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=held");
+                return new TestCopyRunResult
+                {
+                    Ok = true,
+                    Outcome = TestCopyOutcome.Held,
+                    ReadsUsed = resolve.ReadsUsed,
+                    HeldTracks = resolve.HeldTracks,
+                    CopyStagingDir = copyResult.OutputDir,
+                    StagingDirs = dirs,
+                    ArConfidence = last?.ArConfidence ?? 0,
+                    ArTotal = last?.ArTotal ?? 0,
+                    CtdbConfidence = last?.CtdbConfidence ?? 0,
+                    CtdbTotal = last?.CtdbTotal ?? 0,
+                    Accurate = (last?.ArConfidence ?? 0) > 0,
+                };
+            }
+        }
+        catch (StopException)
+        {
+            _log.Info("rip", $"test&copy stopped by user after {sw.Elapsed.TotalSeconds:0}s");
+            return new TestCopyRunResult { Error = "Stopped." };
+        }
+        catch (Exception ex)
+        {
+            _log.Error("rip", $"test&copy failed after {sw.Elapsed.TotalSeconds:0}s", ex);
+            return new TestCopyRunResult { Error = ex.Message };
+        }
+        finally
+        {
+            // Only the final assemble/commit above touches outputBaseDir; a stop/error/2-or-3-read
+            // Passed all reach here with keepStaging still false, so staging is always cleaned up
+            // except on a genuine HELD result (which the VM later resolves via Accept/Discard).
+            if (!keepStaging)
+            {
+                DeleteStagingDir(stage1);
+                DeleteStagingDir(stage2);
+            }
+        }
+    }
+
+    /// <summary>Make sure the next reads on this drive are genuinely independent: a caching drive
+    /// must have a sized cache-defeat flush before Test &amp; Copy can trust two "different" reads
+    /// are not just the same cached bytes served twice. Calibrates once, then the result is reused
+    /// (persisted) on every later Test &amp; Copy for the same drive.</summary>
+    private bool EnsureIndependence(char drive, Action<double, string> onProgress)
+    {
+        string sig = "";
+        var reader = new CDDriveReader();
+        try
+        {
+            bool opened;
+            lock (DriveService.ScsiGate) opened = reader.Open(drive);
+            if (opened) sig = (reader.ARName ?? "").Trim();
+        }
+        catch (Exception ex) { _log.Warn("rip", "test&copy drive signature read failed: " + ex.GetType().Name); }
+        finally { try { reader.Close(); } catch { } }
+
+        var cal = _calStore.Get(sig);
+        bool sized = cal != null && ((cal.CacheDefeat ?? "").StartsWith("Flush:") || cal.CacheDefeat == "Media re-reads (no cache)");
+        if (sized) return true;
+
+        onProgress(0, "Calibrating drive...");
+        var newCal = _calService.Calibrate(drive);
+        return newCal != null;
+    }
+
+    /// <summary>Assemble the committed album folder and write the Test &amp; Copy proof. A 2-read pass
+    /// commits the whole Copy staging folder (it is the only staged read, so every track necessarily
+    /// sourced from it); a 3-read pass copies each track's audio file from whichever staged read the
+    /// resolver picked, then the shared auxiliary files from staging 1 (Copy).</summary>
+    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, System.Collections.Generic.List<VerifyRecord> reads, System.Collections.Generic.List<string> stagingAlbumDirs, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format)
+    {
+        string stage1Album = stagingAlbumDirs[1];   // Copy read's staged album folder - always present
+        string albumName = Path.GetFileName(stage1Album);
+        string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
+            : outputBaseDir;
+        string outDir = Path.Combine(realBase, albumName);
+
+        if (stagingAlbumDirs.Count < 3)
+        {
+            // 2-read pass: read index 1 (Copy) is the only staged read, so every agreed track
+            // necessarily sourced from it - commit the whole staged folder as-is.
+            CopyDirectoryRecursive(stage1Album, outDir);
+        }
+        else
+        {
+            // 3-read pass: tracks may have sourced from either staged read - assemble per track.
+            Directory.CreateDirectory(outDir);
+            string stage2Album = stagingAlbumDirs[2];
+            var files1 = SortedAudioFiles(stage1Album, format);
+            var files2 = SortedAudioFiles(stage2Album, format);
+            foreach (var v in resolve.Tracks)
+            {
+                var src = v.SourceReadIndex == 2 ? files2 : files1;
+                if (v.TrackIndex < 0 || v.TrackIndex >= src.Length) continue;
+                string s = src[v.TrackIndex];
+                try { File.Copy(s, Path.Combine(outDir, Path.GetFileName(s)), true); }
+                catch (Exception ex) { _log.Warn("rip", $"testcopy assemble: track file copy failed: {ex.GetType().Name}"); }
+            }
+            CopyAuxFiles(stage1Album, outDir);
+        }
+
+        // Build the committed record: per track, the checksums of whichever read actually supplied
+        // the committed audio (equal to the other member of its agreeing pair, by construction).
+        var newest = reads[reads.Count - 1];
+        var committedTracks = new TrackCrc[resolve.Tracks.Length];
+        for (int t = 0; t < resolve.Tracks.Length; t++)
+        {
+            var v = resolve.Tracks[t];
+            var src = (v.SourceReadIndex >= 0 && v.SourceReadIndex < reads.Count) ? reads[v.SourceReadIndex] : null;
+            committedTracks[t] = (src?.Tracks != null && t < src.Tracks.Length) ? src.Tracks[t] : new TrackCrc();
+        }
+        var committedRecord = new VerifyRecord
+        {
+            DiscId = discId,
+            Tracks = committedTracks,
+            ArConfidence = newest?.ArConfidence ?? 0,
+            ArTotal = newest?.ArTotal ?? 0,
+            CtdbConfidence = newest?.CtdbConfidence ?? 0,
+            CtdbTotal = newest?.CtdbTotal ?? 0,
+            Drive = drive,
+            ReadOffset = offset,
+            CorrectionQuality = newest?.CorrectionQuality ?? 0,
+            DeepRecovery = newest?.DeepRecovery ?? false,
+            Title = newest?.Title ?? "",
+            Artist = newest?.Artist ?? "",
+            Utc = DateTime.UtcNow,
+            RipperVersion = "2026.1.0",
+        };
+
+        try
+        {
+            string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
+            File.WriteAllText(Path.Combine(outDir, "Test & Copy.log"), logText);
+        }
+        catch (Exception ex) { _log.Warn("rip", "Test & Copy log write failed: " + ex.GetType().Name); }
+
+        try
+        {
+            var vh = _history.CompareAndUpsert(committedRecord);
+            _log.Info("verify.history", $"disc={committedRecord.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
+        }
+        catch (Exception ex) { _log.Warn("verify.history", "test&copy upsert failed: " + ex.GetType().Name); }
+
+        try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), VerifyHistoryStore.ToJson(committedRecord)); }
+        catch (Exception ex) { _log.Warn("verify.history", "test&copy sidecar write failed: " + ex.GetType().Name); }
+
+        int fileCount = 0;
+        try { fileCount = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
+        return (outDir, fileCount);
+    }
+
+    /// <summary>Accept a held Test &amp; Copy's Copy read into the output folder anyway, flagged not
+    /// test-verified, and discard the staging. Never writes to outputBaseDir on failure.</summary>
+    public bool CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir)
+    {
+        if (held == null || string.IsNullOrEmpty(held.CopyStagingDir) || !Directory.Exists(held.CopyStagingDir))
+        {
+            _log.Warn("rip", "test&copy accept-anyway: no staged copy read available");
+            return false;
+        }
+        try
+        {
+            string albumName = Path.GetFileName(held.CopyStagingDir);
+            string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
+                : outputBaseDir;
+            string outDir = Path.Combine(realBase, albumName);
+            CopyDirectoryRecursive(held.CopyStagingDir, outDir);
+
+            string heldList = string.Join(", ", System.Array.ConvertAll(held.HeldTracks, x => (x + 1).ToString()));
+            string log = "Test & Copy log\n\n" +
+                "NOT test-verified - accepted by user without agreement.\n" +
+                $"Reads used: {held.ReadsUsed}\n" +
+                $"Held track(s) (no agreement): {heldList}\n";
+            File.WriteAllText(Path.Combine(outDir, "Test & Copy.log"), log);
+
+            _log.Info("rip", $"testcopy accept-anyway reads={held.ReadsUsed} heldTracks={held.HeldTracks.Length}");
+            DiscardStaging(held);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("rip", "test&copy accept-anyway failed: " + ex.GetType().Name);
+            return false;
+        }
+    }
+
+    /// <summary>Delete the staging folders a held Test &amp; Copy retained. Best-effort.</summary>
+    public void DiscardStaging(TestCopyRunResult held)
+    {
+        if (held?.StagingDirs == null) return;
+        foreach (var dir in held.StagingDirs) DeleteStagingDir(dir);
+    }
+
+    private void DeleteStagingDir(string dir)
+    {
+        if (string.IsNullOrEmpty(dir)) return;
+        try { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+        catch (Exception ex) { _log.Warn("rip", "test&copy staging cleanup failed: " + ex.GetType().Name); }
+    }
+
+    private static void CopyDirectoryRecursive(string srcDir, string dstDir)
+    {
+        Directory.CreateDirectory(dstDir);
+        foreach (var dir in Directory.GetDirectories(srcDir, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(dstDir, Path.GetRelativePath(srcDir, dir)));
+        foreach (var file in Directory.GetFiles(srcDir, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(dstDir, Path.GetRelativePath(srcDir, file)), true);
+    }
+
+    private static string[] SortedAudioFiles(string albumDir, string format)
+    {
+        if (string.IsNullOrEmpty(albumDir) || !Directory.Exists(albumDir)) return System.Array.Empty<string>();
+        var files = Directory.GetFiles(albumDir, "*." + format);
+        System.Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+        return files;
+    }
+
+    private static void CopyAuxFiles(string srcDir, string dstDir)
+    {
+        string[] patterns = { "*.cue", "*.m3u", "*.log", "*.jpg", "*.png", "rip.verify" };
+        foreach (var pat in patterns)
+        {
+            string[] found;
+            try { found = Directory.GetFiles(srcDir, pat); } catch { continue; }
+            foreach (var f in found)
+            {
+                try { File.Copy(f, Path.Combine(dstDir, Path.GetFileName(f)), true); } catch { }
+            }
+        }
+    }
 }
