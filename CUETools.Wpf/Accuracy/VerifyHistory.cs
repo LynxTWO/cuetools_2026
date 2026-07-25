@@ -92,11 +92,17 @@ namespace CUETools.Wpf.Accuracy
         }
 
         // A track matches on the AccurateRip CRC: prefer v2, fall back to v1 when either side lacks v2.
-        private static bool SameTrack(TrackCrc a, TrackCrc b)
+        // Offset-corrected, so it holds across drives (verify-history's cross-drive case) and, for the
+        // same-drive same-offset reads Test & Copy performs, equals CRC32 bit-identity. Do not switch
+        // this to raw CRC32 - that would break cross-drive matching. Null-tolerant for corrupt history.
+        public static bool SameAudio(TrackCrc a, TrackCrc b)
         {
+            if (a == null || b == null) return false;
             if (a.ArV2 != 0 && b.ArV2 != 0) return a.ArV2 == b.ArV2;
             return a.ArV1 == b.ArV1;
         }
+
+        private static bool SameTrack(TrackCrc a, TrackCrc b) => SameAudio(a, b);
 
         public static string ToJson(VerifyRecord r) =>
             JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true });
