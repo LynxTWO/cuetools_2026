@@ -61,7 +61,7 @@ public sealed class DriveService : IDriveService
             try
             {
                 onStatus?.Invoke("Looking up disc in the databases...");
-                var releases = cue.LookupAlbumInfo(false, false, true, CTDBMetadataSearch.Extensive);
+                var releases = cue.LookupAlbumInfo(_config.advanced.CacheMetadata, false, true, CTDBMetadataSearch.Extensive);
                 int idx = 0;
                 foreach (var r in releases)
                     if (r is CUEMetadataEntry e) matches.Add(BuildMatch(e, idx++, (int)toc.AudioTracks));
