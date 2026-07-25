@@ -64,10 +64,18 @@ public sealed class DriveCalibrationService
             }
             else if (probe.CachesReReads)
             {
-                // the drive served the re-read from cache: a secure re-read must flush it. Sizing the
-                // flush is a follow-up (CacheDefeatSearch); for now record the conservative fallback.
-                cal.CacheDefeat = "Caches re-reads - flush needed";
-                cal.CacheConfidence = CalConfidence.Estimated;
+                // the drive served the re-read from cache: a secure re-read must flush it. The probe now
+                // sizes the minimal evicting flush - record it when found, else the conservative fallback.
+                if (probe.FlushEvictBytes > 0)
+                {
+                    cal.CacheDefeat = $"Flush:{probe.FlushEvictBytes}";
+                    cal.CacheConfidence = CalConfidence.Confirmed;
+                }
+                else
+                {
+                    cal.CacheDefeat = "Caches re-reads - flush size unknown";
+                    cal.CacheConfidence = CalConfidence.Estimated;
+                }
             }
             else
             {
@@ -79,7 +87,7 @@ public sealed class DriveCalibrationService
 
             _store.Save(cal);
             _log.Info("calibrate", $"drive {drive}: cache={cal.CacheDefeat} ({cal.CacheConfidence}) " +
-                $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
+                $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps flushEvict={probe.FlushEvictBytes}B read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
             return cal;
         }
         catch (Exception ex)

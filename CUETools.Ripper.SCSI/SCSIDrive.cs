@@ -734,6 +734,7 @@ namespace CUETools.Ripper.SCSI
             public double FirstReadMs;       // time to read the target region from media
             public double ReReadMs;          // time to read the SAME region again
             public bool CachesReReads;       // re-read much faster => the drive cached it
+            public int FlushEvictBytes;      // smallest flush (bytes) that evicts the cache (0 = not caching / not found / flush not tolerated)
         }
 
         /// <summary>Read-only cache-behaviour probe. Read a mid-disc audio region to warm any cache,
@@ -791,6 +792,44 @@ namespace CUETools.Ripper.SCSI
                 r.FirstReadMs = flushedMs;   // honest media-read time
                 r.ReReadMs = warmMs;         // cached re-read time
                 r.CachesReReads = flushedMs > 3 && warmMs < flushedMs * 0.5;
+
+                // Flush-SIZE search (gentle cache defeat): if the drive caches, find the SMALLEST flush
+                // that still evicts the target - the minimal, not the 6.5 MB sledgehammer. Warm, flush S
+                // bytes, re-read; the re-read hits media speed (>= threshold) once S reaches the drive
+                // cache size. Doubling search, then refine to 256 KB, plus a safety margin. Flush reads
+                // stay strictly inside the audio program (a past-end read is what can throw INVALID FIELD
+                // IN CDB). Read-only into scratch; any read error abandons the search (leaves 0).
+                if (r.CachesReReads)
+                {
+                    double threshold = (warmMs + flushedMs) / 2;
+                    bool bad = false;
+                    bool Evicts(int bytes)
+                    {
+                        if (!ReadOne(target, out _)) { bad = true; return false; }
+                        int fc = Math.Max(1, bytes / (chunk * 2352));
+                        for (int i = 0; i < fc; i++)
+                        {
+                            uint lba = flushBase + (uint)(i * chunk);
+                            if (lba + (uint)chunk > firstStart + (uint)len) break;   // stay in-program
+                            if (!ReadOne(lba, out _)) { bad = true; return false; }
+                        }
+                        if (!ReadOne(target, out double ms)) { bad = true; return false; }
+                        return ms >= threshold;
+                    }
+                    int lo = 0, hi = 0;
+                    for (int s = 256 * 1024; s <= 8 * 1024 * 1024 && !bad; s *= 2)   // first size that evicts
+                    {
+                        if (Evicts(s)) { hi = s; break; }
+                        lo = s;
+                    }
+                    while (hi > 0 && !bad && hi - lo > 256 * 1024)                   // refine to 256 KB
+                    {
+                        int mid = (lo + hi) / 2;
+                        if (Evicts(mid)) hi = mid; else lo = mid;
+                    }
+                    if (!bad && hi > 0) r.FlushEvictBytes = Math.Min(8 * 1024 * 1024, hi + 512 * 1024);
+                }
+
                 r.Probed = true;
             }
             catch { }
