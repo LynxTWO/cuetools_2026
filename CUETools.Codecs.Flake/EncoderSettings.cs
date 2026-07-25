@@ -150,12 +150,12 @@ namespace CUETools.Codecs.Flake
         [SRDescription(typeof(Properties.Resources), "MaxPartitionOrderDescription")]
         public int MaxPartitionOrder { get; set; }
 
-        // Kept OFF by default: this encoder's verify path (AudioEncoder.output_frame -> the verify
-        // AudioDecoder) crashes an otherwise-good FLAC encode with
-        // "BitReader.read_rice_block: read past end of buffer" - the verify DECODER fails, not the
-        // encoded audio. Defaulting it ON broke every FLAC rip (2026-07-25). Fix the verify path
-        // first, then this can default to true. See docs/review/flac-verify-on-encode-finding.md.
-        [DefaultValue(false)]
+        // Default ON: decode-while-encode proves each frame round-trips, so a bad encode cannot ship
+        // silently. The verify path used to abort valid encodes ("read past end of buffer"); that was a
+        // missing-lookahead-slack bug in how the frame was handed to the verify decoder, fixed in
+        // AudioEncoder (VerifyLookaheadPad) and gated by FlacVerifyOnEncodeTests. Only the default
+        // changed - a user who turned Verify off keeps that choice, since [JsonProperty] persists it.
+        [DefaultValue(true)]
         [DisplayName("Verify")]
         [SRDescription(typeof(Properties.Resources), "DoVerifyDescription")]
         [JsonProperty]
