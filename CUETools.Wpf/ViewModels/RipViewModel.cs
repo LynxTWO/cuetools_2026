@@ -894,6 +894,13 @@ public sealed class RipViewModel : PageViewModel
             RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified by {result.ReadsUsed} reads";
             RipDone = true;
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
+            if (_config.ejectAfterRip)
+            {
+                // "Eject after rip" applies to a completed Test & Copy too - it is a finished rip. Only
+                // on PASSED: a HELD result may still be re-run, which needs the disc in the drive.
+                await Task.Run(() => { try { _drives.OpenTray(drive); } catch { } });
+                TrayState = DriveTrayState.Open;
+            }
         }
         else if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Held)
         {
