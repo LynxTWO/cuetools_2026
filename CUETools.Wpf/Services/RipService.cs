@@ -149,13 +149,6 @@ public sealed class RipService : IRipService
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        // The Naming page pushes the WPF naming template into the engine's trackFilenameFormat, but the
-        // engine's tokens differ (its album-artist token is "%album artist%" with a space, not
-        // "%albumartist%") and it writes tracks relative to OutputDir. So "%albumartist%" stays literal
-        // and the template's leading "Artist - Album/" duplicates the album folder Run already makes,
-        // yielding a bogus uncreated subfolder (DirectoryNotFoundException on encode). Override to an
-        // engine-safe per-track filename for the duration of this rip; restore it in the finally.
-        string savedTrackFormat = _config.trackFilenameFormat;
         try
         {
             // open under the app-wide device gate so a rip start cannot collide with an in-flight
@@ -269,18 +262,47 @@ public sealed class RipService : IRipService
             if (encode)
             {
                 cue.Action = CUEAction.Encode;
-                string artist = Safe(cue.Metadata.Artist), title = Safe(cue.Metadata.Title);
-                string album = (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title)) ? "Unknown Album" : $"{artist} - {title}";
                 string baseDir = string.IsNullOrWhiteSpace(outputBaseDir)
                     ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                     : outputBaseDir;
-                outDir = Path.Combine(baseDir, album);
-                Directory.CreateDirectory(outDir);
+
+                // Naming comes from the ONE naming engine - the same NamingEngine.Render the Naming page
+                // previews with - so what is previewed is what lands on disk. Render each track's relative
+                // path, split off the shared album folder (the .cue/.log/cover live there), create the
+                // whole tree including any "Disc N/" subfolder, then hand the engine the per-track names
+                // so it writes exactly those instead of re-deriving them from trackFilenameFormat (whose
+                // token vocabulary differs from the WPF one - that mismatch was the encode-path bug).
+                int trackCount = Math.Max(0, cue.TrackCount);
+                if (trackCount > 0)
+                {
+                    var scheme = _settings.LoadNamingScheme();
+                    var rel = new string[trackCount];
+                    for (int t = 0; t < trackCount; t++)
+                        rel[t] = CUETools.Wpf.Services.NamingEngine.Render(
+                            NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
+                    var split = NamingPaths.Split(rel);
+                    outDir = Path.Combine(baseDir, split.commonDir);
+                    Directory.CreateDirectory(outDir);
+                    foreach (var r in split.remainders)
+                    {
+                        string sub = Path.GetDirectoryName(Path.Combine(outDir, r));
+                        if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
+                    }
+                    cue.SetExplicitTrackNames(split.remainders);
+                }
+                else
+                {
+                    // no tracks to name (should not happen for a real disc) - keep a sane album folder
+                    string artist = Safe(cue.Metadata.Artist), title = Safe(cue.Metadata.Title);
+                    string album = (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title))
+                        ? "Unknown Album" : $"{artist} - {title}";
+                    outDir = Path.Combine(baseDir, album);
+                    Directory.CreateDirectory(outDir);
+                }
                 // pick the encoder type from the format via the catalog's single rule: a format
                 // with a USABLE lossy encoder encodes lossy (mp3 bundled, wma OS runtime, mpc when
                 // its exe has been imported)
                 bool lossy = _config.formats.TryGetValue(format, out var fmtInfo) && _catalog.IsLossyFormat(fmtInfo);
-                _config.trackFilenameFormat = EngineTrackFilenameFormat(savedTrackFormat);
                 cue.GenerateFilenames(lossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
                 onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {outDir}");
             }
@@ -515,7 +537,6 @@ public sealed class RipService : IRipService
         }
         finally
         {
-            _config.trackFilenameFormat = savedTrackFormat;   // undo the per-rip engine-safe override
             lock (_stopGate) _current = null;
             // always re-allow eject; if this fails the eject button stays dead until the handle closes
             try { if (_settings.LockTrayDuringRip) reader.DisableEjectDisc(false); }
@@ -526,22 +547,6 @@ public sealed class RipService : IRipService
     }
 
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
-
-    // Translate the WPF naming template into an engine-safe per-track filename: drop the folder part
-    // (Run owns the album folder), map "%albumartist%" (WPF token) to "%artist%" (engine token), and
-    // strip WPF-only tokens the engine leaves literal (%featsuffix%, %releasedescriptor%, %disc%) plus
-    // their optional [...] groups. Falls back to "%tracknumber% - %title%" if no track number remains.
-    public static string EngineTrackFilenameFormat(string template)
-    {
-        string t = template ?? "";
-        int slash = t.LastIndexOfAny(new[] { '/', '\\' });
-        if (slash >= 0) t = t.Substring(slash + 1);
-        t = t.Replace("%albumartist%", "%artist%");
-        t = System.Text.RegularExpressions.Regex.Replace(t, @"\[[^\[\]]*%(featsuffix|releasedescriptor|disc)%[^\[\]]*\]", "");
-        t = t.Replace("%featsuffix%", "").Replace("%releasedescriptor%", "").Replace("%disc%", "").Trim();
-        if (t.Length == 0 || !t.Contains("%tracknumber%")) t = "%tracknumber% - %title%";
-        return t;
-    }
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
