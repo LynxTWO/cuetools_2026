@@ -142,6 +142,9 @@ public sealed class ConvertService : IConvertService
                         ? (Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "") is { Length: > 0 } f ? f : "Unknown Album")
                         : $"{a} - {t}".Trim(' ', '-');
                 }
+                // never overwrite an earlier convert of the same album - see
+                // RipService.NonClobberingAlbumDir for why the engine cannot save the sidecars
+                albumRel = OutputGuard.NonClobberingAlbumDir(baseDir, albumRel, format);
                 outDir = Path.Combine(baseDir, albumRel);
                 Directory.CreateDirectory(outDir);
                 // cap the assembled path length, then guarantee non-empty/unique names - in that order,
