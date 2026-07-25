@@ -172,7 +172,14 @@ public sealed class RipViewModel : PageViewModel
     public double RipProgress { get => _ripProgress; private set => Set(ref _ripProgress, value); }
 
     private bool _isRipping;
-    public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) CommandManager.InvalidateRequerySuggested(); } }
+    public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) { OnPropertyChanged(nameof(ControlsUnlocked)); CommandManager.InvalidateRequerySuggested(); } } }
+
+    /// <summary>False while a rip/verify runs. Bound to the IsEnabled of the controls whose value is
+    /// SNAPSHOTTED when the job starts - the drive picker, accuracy mode and deep recovery. Letting them
+    /// move mid-run produced a job that half-obeyed the change: the disc was read one way while the saved
+    /// report claimed another, and switching drive mid-rip filed the results against a different album.
+    /// The honest fix is to snapshot the value AND stop offering the change.</summary>
+    public bool ControlsUnlocked => !IsRipping;
 
     // The codec dropdown stays editable through a Test read (a change there is honored - see
     // RunTestCopyAsync's liveFormat), but locks the instant the first track actually starts
@@ -421,7 +428,11 @@ public sealed class RipViewModel : PageViewModel
 
     private async Task ReadDiscAsync()
     {
-        if (_selectedDrive == '\0' || _isBusy) return;
+        // Never re-read the disc while a rip runs: it clears Tracks/Releases/_chosenMetadata, so
+        // per-track progress and AccurateRip results would land in a DIFFERENT album's rows and the
+        // report be filed against them - and it issues INQUIRY/TOC/CD-Text traffic on the very
+        // device the ripper holds open.
+        if (_selectedDrive == '\0' || _isBusy || IsRipping) return;
         IsBusy = true;
         _status.Report(AppActivity.ReadingDisc);
         // the finally guarantees the page can never be left stuck "busy" (Rip/Verify/Eject disabled,
