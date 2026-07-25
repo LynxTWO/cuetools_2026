@@ -132,6 +132,16 @@ public sealed class ConvertService : IConvertService
                     string fromFile = Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "");
                     if (fromFile.Length > 0) albumRel = fromFile;
                 }
+                if (string.IsNullOrWhiteSpace(albumRel))
+                {
+                    // Always keep an album folder: a template with no folder part, or one whose leading
+                    // segment differs per track, otherwise dumps album.cue / the log / the cover into the
+                    // output base where the next convert overwrites them.
+                    string a = Safe(cue.Metadata?.Artist ?? ""), t = Safe(cue.Metadata?.Title ?? "");
+                    albumRel = (a.Length == 0 && t.Length == 0)
+                        ? (Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "") is { Length: > 0 } f ? f : "Unknown Album")
+                        : $"{a} - {t}".Trim(' ', '-');
+                }
                 outDir = Path.Combine(baseDir, albumRel);
                 Directory.CreateDirectory(outDir);
                 // cap the assembled path length, then guarantee non-empty/unique names - in that order,

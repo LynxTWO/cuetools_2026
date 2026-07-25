@@ -293,8 +293,16 @@ public sealed class RipService : IRipService
                         rel[t] = CUETools.Wpf.Services.NamingEngine.Render(
                             NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
                     var split = NamingPaths.Split(rel);
-                    outRelDir = split.commonDir;
-                    outDir = Path.Combine(baseDir, split.commonDir);
+                    // There must ALWAYS be an album folder. A template with no folder part, or one whose
+                    // first segment differs per track (the "Simple" preset on a various-artists disc,
+                    // where %artist% is the leading segment), yields no shared leading directory - and
+                    // then album.cue, the rip log, the cover and rip.verify would be written straight
+                    // into the output base and overwritten by the next such rip, while Test & Copy would
+                    // commit under its temp staging name. Fall back to an album folder derived from the
+                    // metadata so every rip keeps its own directory.
+                    outRelDir = string.IsNullOrWhiteSpace(split.commonDir)
+                        ? AlbumFolderFallback(cue.Metadata) : split.commonDir;
+                    outDir = Path.Combine(baseDir, outRelDir);
                     Directory.CreateDirectory(outDir);
                     // cap the assembled path length, then guarantee non-empty/unique names - in that
                     // order, so the uniquifier can still disambiguate any collision truncation creates
@@ -310,9 +318,7 @@ public sealed class RipService : IRipService
                 else
                 {
                     // no tracks to name (should not happen for a real disc) - keep a sane album folder
-                    string artist = Safe(cue.Metadata.Artist), title = Safe(cue.Metadata.Title);
-                    string album = (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title))
-                        ? "Unknown Album" : $"{artist} - {title}";
+                    string album = AlbumFolderFallback(cue.Metadata);
                     outRelDir = album;
                     outDir = Path.Combine(baseDir, album);
                     Directory.CreateDirectory(outDir);
@@ -566,6 +572,16 @@ public sealed class RipService : IRipService
     }
 
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
+
+    /// <summary>"Artist - Album" (or "Unknown Album") for use as the album directory when the naming
+    /// scheme does not produce one. Every rip needs its own folder: without it the .cue, rip log, cover
+    /// and rip.verify collide in the output base, and a Test &amp; Copy commit has no name to re-home to.</summary>
+    private string AlbumFolderFallback(CUEMetadata meta)
+    {
+        string artist = Safe(meta?.Artist ?? ""), title = Safe(meta?.Title ?? "");
+        return (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title))
+            ? "Unknown Album" : $"{artist} - {title}".Trim(' ', '-');
+    }
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
