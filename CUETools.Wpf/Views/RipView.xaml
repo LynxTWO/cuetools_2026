@@ -13,7 +13,7 @@
       <DockPanel LastChildFill="False">
         <TextBlock DockPanel.Dock="Left" Text="Drive" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <ComboBox DockPanel.Dock="Left" Width="80" VerticalAlignment="Center"
-                  ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}"/>
+                  ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"/>
         <!-- real drive model, read from INQUIRY (no disc needed) -->
         <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
                    Text="{Binding DriveModel}" Foreground="{DynamicResource Ink}" FontSize="12" FontWeight="SemiBold"/>
@@ -279,14 +279,14 @@
                     ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
                     IsEnabled="{Binding CodecUnlocked}"
                     ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
-          <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" VerticalAlignment="Center"
+          <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
                     ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
             <ComboBoxItem>Burst</ComboBoxItem>
             <ComboBoxItem>Secure</ComboBoxItem>
             <ComboBoxItem>Paranoid</ComboBoxItem>
           </ComboBox>
           <CheckBox DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center"
-                    Content="Deep recovery" IsChecked="{Binding DeepRecovery, Mode=TwoWay}"
+                    Content="Deep recovery" IsChecked="{Binding DeepRecovery, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"
                     ToolTip="On by default. On damaged discs / caching drives: re-read while still improving, slow the drive on stuck spots, and flush the drive cache before each secure re-read so the check is genuine. Slower, recovers more. It engages only when needed, so a clean disc pays nothing. The audio is always agreement-checked, so it can only recover - never corrupt."/>
           <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
             <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="440"/>

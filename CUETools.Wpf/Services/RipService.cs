@@ -160,6 +160,14 @@ public sealed class RipService : IRipService
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        // Snapshot the toggles this job runs under, BEFORE the try - the finally releases
+        // keep-awake and the tray lock on these locals. Re-reading the live settings there
+        // stranded the keep-awake request when the user turned it off mid-rip, so the machine
+        // would not sleep again until the app closed. Deep recovery had the mirror problem:
+        // one consumer re-read it live, so a mid-run toggle produced a half-deep run.
+        bool deepRecovery = _settings.DeepRecovery;
+        bool keepAwakeTaken = _settings.PreventSleepDuringRip;
+        bool trayLockTaken = _settings.LockTrayDuringRip;
         try
         {
             // open under the app-wide device gate so a rip start cannot collide with an in-flight
@@ -173,7 +181,11 @@ public sealed class RipService : IRipService
             catch (Exception ex) { _log.Warn("rip", "read-offset lookup failed - ripping with offset 0: " + ex.GetType().Name); }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
-            reader.DeepRecovery = _settings.DeepRecovery;
+            // Snapshot the toggles this job runs under. They are all live-bindable from other
+            // pages, and re-reading them later produced jobs that half-obeyed a mid-run change:
+            // deep recovery kept its unbounded re-read cap but stopped slowing to the floor, and the
+            // verify record reported whichever value happened to be current at the end.
+            reader.DeepRecovery = deepRecovery;
             if (reader.DeepRecovery) _log.Info("rip", "deep recovery ON: progress-aware cap + slow-to-floor + slip probe");
 
             // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive
@@ -216,7 +228,7 @@ public sealed class RipService : IRipService
             // the lowest supported) - slow reads track marginal/scratched sectors better. Requested only
             // at window boundaries via the same path as adaptive speed; the audio is unchanged.
             int deepFloor = 0;
-            if (_settings.DeepRecovery)
+            if (deepRecovery)
             {
                 var sp = reader.GetSupportedSpeeds();
                 int ladderLow = sp.Length > 0 ? sp[0] : 0;
@@ -229,7 +241,7 @@ public sealed class RipService : IRipService
             // the rip (AccurateRip still catches it at the end, but not on a non-AR disc). When the drive
             // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
             // hits media. Scratch-only - it can recover error detection but can never corrupt the audio.
-            if ((_settings.DeepRecovery || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
+            if ((deepRecovery || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
                 && int.TryParse(cal.CacheDefeat.Substring(6), out int flushBytes) && flushBytes > 0)
             {
                 reader.SetCacheDefeat(flushBytes);
@@ -239,11 +251,11 @@ public sealed class RipService : IRipService
 
             // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
             // be ejected mid-read (which would fail the read and can crash the drive layer).
-            if (_settings.PreventSleepDuringRip) KeepAwake(true);
-            if (_settings.LockTrayDuringRip) { try { reader.DisableEjectDisc(true); } catch (Exception ex) { _log.Warn("rip", "tray lock failed: " + ex.GetType().Name); } }
+            if (keepAwakeTaken) KeepAwake(true);
+            if (trayLockTaken) { try { reader.DisableEjectDisc(true); } catch (Exception ex) { _log.Warn("rip", "tray lock failed: " + ex.GetType().Name); } }
 
             _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' " +
-                $"chosen_release={(metadata != null)} preventSleep={_settings.PreventSleepDuringRip} lockTray={_settings.LockTrayDuringRip}");
+                $"chosen_release={(metadata != null)} preventSleep={keepAwakeTaken} lockTray={trayLockTaken}");
 
             // Tap real audio for the VU meter (levels) and the codec scope (a window of real
             // samples); everything else delegates to the drive unchanged.
@@ -392,7 +404,7 @@ public sealed class RipService : IRipService
                     // deep recovery: only a GENUINELY persistent window (8+ re-reads deep) drops to the
                     // drive floor - not every minor stuck spot. Slow reads recover marginal sectors best,
                     // but 4x on a window that would clear fast just wastes time.
-                    if (_settings.DeepRecovery && deepFloor > 0 && reReads >= 8 && lastRequested != deepFloor)
+                    if (deepRecovery && deepFloor > 0 && reReads >= 8 && lastRequested != deepFloor)
                     {
                         lastRequested = deepFloor;
                         reader.RequestReadSpeed(deepFloor);
@@ -517,7 +529,7 @@ public sealed class RipService : IRipService
                     Drive = (reader.ARName ?? "").Trim(),
                     ReadOffset = offset,
                     CorrectionQuality = cq,
-                    DeepRecovery = _settings.DeepRecovery,
+                    DeepRecovery = deepRecovery,
                     Title = cue.Metadata?.Title ?? "",
                     Artist = cue.Metadata?.Artist ?? "",
                     Utc = DateTime.UtcNow,
@@ -572,9 +584,9 @@ public sealed class RipService : IRipService
         {
             lock (_stopGate) _current = null;
             // always re-allow eject; if this fails the eject button stays dead until the handle closes
-            try { if (_settings.LockTrayDuringRip) reader.DisableEjectDisc(false); }
+            try { if (trayLockTaken) reader.DisableEjectDisc(false); }
             catch (Exception ex) { _log.Warn("rip", "tray unlock failed: " + ex.GetType().Name); }
-            if (_settings.PreventSleepDuringRip) KeepAwake(false);
+            if (keepAwakeTaken) KeepAwake(false);
             try { reader.Close(); } catch { }
         }
     }
