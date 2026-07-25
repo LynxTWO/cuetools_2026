@@ -243,6 +243,16 @@ public sealed class RipViewModel : PageViewModel
     private bool _historyIsWarning;
     public bool HistoryIsWarning { get => _historyIsWarning; private set => Set(ref _historyIsWarning, value); }
 
+    // Test & Copy: HELD state (two/three independent reads disagreed on some track) and the
+    // held run's staging, kept until the user picks Re-run / Accept anyway / Discard.
+    private bool _testCopyHeld;
+    public bool TestCopyHeld { get => _testCopyHeld; private set => Set(ref _testCopyHeld, value); }
+    private string _testCopyText = "";
+    public string TestCopyText { get => _testCopyText; private set => Set(ref _testCopyText, value); }
+    private bool _testCopyIsWarning;
+    public bool TestCopyIsWarning { get => _testCopyIsWarning; private set => Set(ref _testCopyIsWarning, value); }
+    private TestCopyRunResult? _heldResult;
+
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
     /// <summary>Opt-in deep recovery for damaged discs (progress-aware cap + slow-to-floor + slip
@@ -275,6 +285,9 @@ public sealed class RipViewModel : PageViewModel
     public ICommand BrowseOutputCommand { get; }
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
+    public ICommand TestCopyCommand { get; }
+    public ICommand AcceptCopyAnywayCommand { get; }
+    public ICommand DiscardHeldCommand { get; }
 
     public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog, AppStatusService status)
     {
@@ -323,6 +336,9 @@ public sealed class RipViewModel : PageViewModel
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
         DismissDoneCommand = new RelayCommand(_ => { RipDone = false; _status.Report(AppActivity.Idle); });
+        TestCopyCommand = new RelayCommand(_ => { _ = RunTestCopyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        AcceptCopyAnywayCommand = new RelayCommand(_ => AcceptCopyAnyway(), _ => _heldResult != null);
+        DiscardHeldCommand = new RelayCommand(_ => DiscardHeld(), _ => _heldResult != null);
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         LoadRecent();
@@ -741,6 +757,155 @@ public sealed class RipViewModel : PageViewModel
         IsRipping = false;
         _baseActivity = AppActivity.Idle;
         _status.Report(result.Ok && encode ? AppActivity.Done : AppActivity.Idle);   // green badge until dismissed
+    }
+
+    // Test & Copy: read the disc twice (a third time on a mismatch) and write only tracks two
+    // independent reads agree on bit-for-bit. Mirrors RunJobAsync's progress/level/re-read wiring
+    // and IsRipping lifecycle so the same live visuals work across the 2-3 reads; the result
+    // surfacing differs (Passed / Held / failed) instead of a plain rip-or-verify outcome.
+    private async Task RunTestCopyAsync()
+    {
+        if (!IsDiscPresent || IsRipping || IsBusy) return;
+        char drive = _selectedDrive;
+        int cq = CorrectionQuality;
+        IsRipping = true;
+        RipDone = false;
+        TestCopyHeld = false;
+        RipProgress = 0;
+        _baseActivity = AppActivity.Ripping;
+        _status.Report(_baseActivity, 0);
+        StatusText = "Starting Test & Copy...";
+        _discSeconds = _lastDisc?.TotalLength.TotalSeconds ?? 0;
+        _lastSpeedFrac = 0;
+        _lastSpeedTick = DateTime.UtcNow;
+        SpeedLevel = 0;
+        SpeedText = "";
+
+        // per-track progress boundaries as fractions of the whole disc (by track length)
+        double totalSec = 0;
+        foreach (var t in Tracks) totalSec += t.Length.TotalSeconds;
+        _trackEndFrac = new double[Tracks.Count];
+        double cum = 0;
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            cum += Tracks[i].Length.TotalSeconds;
+            _trackEndFrac[i] = totalSec > 0 ? cum / totalSec : 0;
+            Tracks[i].Progress = 0;
+            Tracks[i].Active = false;
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
+        void Report(double frac, string status)
+            => dispatcher?.BeginInvoke(new Action(() =>
+            {
+                RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac);
+                // feed the taskbar progress; keep a re-read/unreadable state's badge while it lasts
+                var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
+                _status.Report(act, frac);
+            }));
+        void Levels(double l, double r)
+            => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
+        void Samples(float[] win)
+            => dispatcher?.BeginInvoke(new Action(() => SampleWindow = win));
+        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
+        // n == 0 means the window cleared; the linger timer then hides the box.
+        void Reread(int n, int max, int errs, double frac)
+            => dispatcher?.BeginInvoke(new Action(() =>
+            {
+                if (n > 0)
+                {
+                    _lastRereadUtc = DateTime.UtcNow;
+                    RereadVisible = true;
+                    RereadCount = n;
+                    RereadMax = Math.Max(1, max);
+                    RereadErrors = errs;
+                    RereadFrac = frac;
+                    RereadText = $"{(int)(frac * 100)}% in";
+
+                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
+                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
+                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
+                    bool failed = n >= RereadMax && errs > 0;
+                    RereadActive = !failed;
+                    Unreadable = failed;
+                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
+                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
+                    {
+                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
+                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
+                        Task.Run(() => { try { _rip.Stop(); } catch { } });
+                    }
+                }
+                else
+                {
+                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
+                    RereadErrors = 0;
+                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
+                }
+            }));
+
+        StartRereadTimer();
+
+        string fmt = SelectedFormat;
+        var meta = _chosenMetadata;
+        string outBase = OutputBaseDir;
+        byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
+        var result = await Task.Run(() => _rip.RunTestAndCopy(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover));
+
+        RipProgress = result.Ok ? 1 : RipProgress;
+        if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed)
+        {
+            LastOutputDir = result.OutputDir;
+            TestCopyHeld = false; _heldResult = null;
+            TestCopyText = $"Test & Copy verified by {result.ReadsUsed} independent reads."
+                + (result.Accurate ? $"  Also AccurateRip-accurate (confidence {result.ArConfidence})." : "  Not in AccurateRip - proven by the two reads.");
+            TestCopyIsWarning = false;
+            ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
+            CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+            Accurate = result.Accurate;
+            RipSummary = $"Test & Copy: {result.FileCount} {fmt} files, verified by {result.ReadsUsed} reads";
+            RipDone = true;
+            StatusText = $"Test & Copy verified -> {result.OutputDir}";
+        }
+        else if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Held)
+        {
+            _heldResult = result;
+            TestCopyHeld = true;
+            TestCopyIsWarning = true;
+            TestCopyText = $"Held - the reads disagree on track(s) {string.Join(", ", System.Array.ConvertAll(result.HeldTracks, x => (x + 1).ToString()))}. Nothing was written. Re-run for another read, accept the copy anyway, or discard.";
+            StatusText = "Test & Copy held - tracks disagree.";
+        }
+        else
+        {
+            StatusText = result.Error == "Stopped." ? "Test & Copy stopped." : "Test & Copy failed: " + result.Error;
+        }
+        LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
+        StopRereadTimer();
+        foreach (var t in Tracks) { t.Active = false; if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed) t.Progress = 1; }
+        IsRipping = false;
+        _baseActivity = AppActivity.Idle;
+        _status.Report(AppActivity.Idle);
+    }
+
+    private void AcceptCopyAnyway()
+    {
+        var held = _heldResult; if (held == null) return;
+        bool ok = _rip.CommitCopyReadAnyway(held, OutputBaseDir);
+        LastOutputDir = ok ? System.IO.Path.Combine(OutputBaseDir, "") : LastOutputDir;
+        TestCopyHeld = false; _heldResult = null;
+        TestCopyText = ok ? "Copy read accepted anyway - written and flagged NOT test-verified." : "Could not write the copy read.";
+        StatusText = TestCopyText;
+    }
+
+    private void DiscardHeld()
+    {
+        var held = _heldResult; if (held == null) return;
+        _rip.DiscardStaging(held);
+        TestCopyHeld = false; _heldResult = null;
+        TestCopyText = "Discarded - nothing was written.";
+        StatusText = TestCopyText;
     }
 
     // Convert progress deltas into read speed as a multiple of realtime (1x = 75 sectors/s).
