@@ -27,8 +27,8 @@ public sealed class DriveViewModel : PageViewModel
         _calibration = calibration;
         var d = drives.GetDrives();
         DriveLetter = d.Count > 0 ? d[0] + ":" : "no optical drive";
-        DetectCommand = new RelayCommand(_ => { _ = DetectAsync(); }, _ => !_busy);
-        CalibrateCommand = new RelayCommand(_ => { _ = CalibrateAsync(); }, _ => !_busy && HasDetails);
+        DetectCommand = new RelayCommand(_ => { _ = DetectAsync(); }, _ => !_busy && !drives.RipInProgress);
+        CalibrateCommand = new RelayCommand(_ => { _ = CalibrateAsync(); }, _ => !_busy && HasDetails && !drives.RipInProgress);
         if (d.Count > 0) _ = DetectAsync();   // populate on open so the page is never empty
     }
 
@@ -96,6 +96,10 @@ public sealed class DriveViewModel : PageViewModel
     {
         var d = _drives.GetDrives();
         if (d.Count == 0) return;
+        // Belt and braces with the CanExecute above: never probe a drive a rip holds open. The
+        // failure would otherwise be reported as a missing disc, and following that advice means
+        // ejecting mid-rip.
+        if (_drives.RipInProgress) { Status = "A rip is running on this drive - calibration has to wait."; return; }
         char drive = TargetDrive(d);
         _busy = true;
         Status = "Calibrating " + drive + ": (probing cache and speed - needs a disc)...";

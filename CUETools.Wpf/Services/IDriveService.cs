@@ -18,6 +18,13 @@ public interface IDriveService
     /// "secure re-read" guarantee. One shared value makes that mismatch impossible.</summary>
     char SelectedDrive { get; set; }
 
+    /// <summary>True while a rip, verify or Test &amp; Copy holds the drive open. The Drive &amp; Read page
+    /// must not Detect or Calibrate then: the ripper's handle is opened with FILE_SHARE_READ only, so the
+    /// probe fails on a sharing violation and the page reported it as "needs a disc" - advice that invites
+    /// the user to open the tray DURING a rip, which the rip code itself warns can crash the drive layer.
+    /// The mirror case is just as bad: starting a rip during a calibration makes the rip throw.</summary>
+    bool RipInProgress { get; }
+
     /// <summary>Open the drive and read its table of contents, or null if there is no
     /// readable audio disc (empty tray, data disc, or drive not ready). <paramref name="onStatus"/>
     /// reports the metadata-lookup step live ("Looking up album via CTDB...", "...via Freedb...").</summary>

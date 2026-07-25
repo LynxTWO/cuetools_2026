@@ -183,6 +183,10 @@ public sealed class RipService : IRipService
         bool deepRecovery = _settings.DeepRecovery;
         bool keepAwakeTaken = _settings.PreventSleepDuringRip;
         bool trayLockTaken = _settings.LockTrayDuringRip;
+        // Tell the rest of the app this drive is in use, so the Drive & Read page cannot Detect or
+        // Calibrate against a handle the ripper holds (it would fail on a sharing violation and be
+        // reported as a missing disc - advice that invites a mid-rip eject).
+        using var ripScope = DriveService.EnterRip();
         try
         {
             // open under the app-wide device gate so a rip start cannot collide with an in-flight

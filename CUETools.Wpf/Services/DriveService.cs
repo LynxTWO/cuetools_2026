@@ -32,6 +32,21 @@ public sealed class DriveService : IDriveService
     /// <summary>Session-shared drive selection - see IDriveService.SelectedDrive.</summary>
     public char SelectedDrive { get; set; }
 
+    /// <summary>See IDriveService.RipInProgress. Ref-counted because one user-visible operation can
+    /// open the drive several times - a Test &amp; Copy is a calibration probe plus 2-3 reads.</summary>
+    public bool RipInProgress => System.Threading.Volatile.Read(ref _ripDepth) > 0;
+
+    private static int _ripDepth;
+
+    /// <summary>Marks the drive as in use by a rip for as long as the returned token is undisposed.</summary>
+    internal static IDisposable EnterRip() => new RipScope();
+
+    private sealed class RipScope : IDisposable
+    {
+        public RipScope() { System.Threading.Interlocked.Increment(ref _ripDepth); }
+        public void Dispose() { System.Threading.Interlocked.Decrement(ref _ripDepth); }
+    }
+
     public IReadOnlyList<char> GetDrives()
     {
         try { return CDDrivesList.DrivesAvailable(); }
