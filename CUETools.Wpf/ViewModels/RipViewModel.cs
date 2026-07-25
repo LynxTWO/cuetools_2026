@@ -742,17 +742,10 @@ public sealed class RipViewModel : PageViewModel
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
             if (encode)
             {
-                LastOutputDir = result.OutputDir;
                 RipSummary = $"Ripped {result.FileCount} {fmt} files"
                     + (result.Accurate ? $"  .  AccurateRip verified (confidence {result.ArConfidence})" : "  .  not found in AccurateRip")
                     + (result.CtdbConfidence > 0 ? $"  .  CTDB confidence {result.CtdbConfidence}" : "");
-                RipDone = true;
-                if (_config.ejectAfterRip)
-                {
-                    // honor the "Eject after rip" setting (blocking IOCTL - off the UI thread)
-                    await Task.Run(() => { try { _drives.OpenTray(drive); } catch { } });
-                    TrayState = DriveTrayState.Open;
-                }
+                await FinishRipAsync(result.OutputDir, drive);   // shared tail: RipDone + eject
             }
             ApplyPerTrack(result);
             PublishReport(encode, result);
@@ -892,15 +885,10 @@ public sealed class RipViewModel : PageViewModel
             // this summary name the wrong format
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
             RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified by {result.ReadsUsed} reads";
-            RipDone = true;
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
-            if (_config.ejectAfterRip)
-            {
-                // "Eject after rip" applies to a completed Test & Copy too - it is a finished rip. Only
-                // on PASSED: a HELD result may still be re-run, which needs the disc in the drive.
-                await Task.Run(() => { try { _drives.OpenTray(drive); } catch { } });
-                TrayState = DriveTrayState.Open;
-            }
+            // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
+            // be re-run, and that needs the disc in the drive.
+            await FinishRipAsync(result.OutputDir, drive);
         }
         else if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Held)
         {
@@ -923,15 +911,36 @@ public sealed class RipViewModel : PageViewModel
         _status.Report(AppActivity.Idle);
     }
 
-    private void AcceptCopyAnyway()
+    /// <summary>The ONE tail every finished rip goes through, whichever button started it: the Rip
+    /// button, a passed Test &amp; Copy, or accepting a held copy read. There used to be three copies of
+    /// this, and each had to remember every post-rip setting independently - which is exactly how
+    /// "Eject after rip" ended up working for Rip and doing nothing for Test &amp; Copy, and how accepting
+    /// a held read left no "Open folder" panel. Anything that must happen when a rip ends belongs HERE,
+    /// not in a caller.</summary>
+    private async System.Threading.Tasks.Task FinishRipAsync(string outputDir, char drive)
+    {
+        if (!string.IsNullOrEmpty(outputDir)) LastOutputDir = outputDir;
+        RipDone = true;
+        // "Never eject from software" overrides "Eject after rip" - and DriveService.OpenTray enforces
+        // that too, so this is belt and braces rather than the only guard.
+        if (_config.ejectAfterRip && !_config.disableEjectDisc)
+        {
+            await System.Threading.Tasks.Task.Run(() => { try { _drives.OpenTray(drive); } catch { } });
+            TrayState = DriveTrayState.Open;
+        }
+    }
+
+    private async void AcceptCopyAnyway()
     {
         var held = _heldResult; if (held == null) return;
         string dir = _rip.CommitCopyReadAnyway(held, OutputBaseDir);
         bool ok = dir.Length > 0;
-        if (ok) LastOutputDir = dir;
         TestCopyHeld = false; _heldResult = null;
         TestCopyText = ok ? "Copy read accepted anyway - written and flagged NOT test-verified." : "Could not write the copy read.";
         StatusText = TestCopyText;
+        // A committed copy read IS a finished rip: it needs the same tail as any other, which it never
+        // used to get (no eject, and no RipDone so the "Open folder" panel never appeared).
+        if (ok) await FinishRipAsync(dir, _selectedDrive);
     }
 
     private void DiscardHeld()
@@ -994,6 +1003,13 @@ public sealed class RipViewModel : PageViewModel
         }
         else
         {
+            // Do not fake the tray state when software eject is disabled: the IOCTL is suppressed, so
+            // claiming "Open" and clearing the disc view would be a lie the user has to undo.
+            if (_config.disableEjectDisc)
+            {
+                StatusText = "\"Never eject from software\" is on - use the drive's own eject button.";
+                return;
+            }
             StatusText = $"Ejecting drive {d}:...";
             TrayState = DriveTrayState.Open;
             ClearDiscView(DriveTrayState.Open);

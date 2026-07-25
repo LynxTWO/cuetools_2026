@@ -259,7 +259,21 @@ public sealed class DriveService : IDriveService
 
     // Tray control via the storage IOCTLs (the proven path): eject opens the tray with or without
     // a disc; load pulls it back in. Both are no-ops if the mechanism is already in that state.
-    public void OpenTray(char drive) => TrayIoctl(drive, 0x2D4808 /*IOCTL_STORAGE_EJECT_MEDIA*/, "open");
+    /// <summary>Open the tray - unless "Never eject from software" is on. That setting exists for drives
+    /// behind a door or in a slot mount, where an automatic eject jams the mechanism, and its promise is
+    /// absolute ("Never open the drive tray from software, even when a rip finishes. Overrides Eject after
+    /// rip."). Gating the single funnel is what makes that true for every caller - the rip tail, the
+    /// Test &amp; Copy tail and the manual Eject button alike. Closing the tray is never a hazard, so
+    /// CloseTray is not gated.</summary>
+    public void OpenTray(char drive)
+    {
+        if (_config.disableEjectDisc)
+        {
+            _log.Info("drive", $"tray open suppressed for {drive}: 'Never eject from software' is on");
+            return;
+        }
+        TrayIoctl(drive, 0x2D4808 /*IOCTL_STORAGE_EJECT_MEDIA*/, "open");
+    }
     public void CloseTray(char drive) => TrayIoctl(drive, 0x2D480C /*IOCTL_STORAGE_LOAD_MEDIA*/, "close");
 
     private void TrayIoctl(char drive, uint code, string what)
