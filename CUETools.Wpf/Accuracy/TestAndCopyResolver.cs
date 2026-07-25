@@ -82,5 +82,33 @@ namespace CUETools.Wpf.Accuracy
             var arr = r?.Tracks;
             return (arr != null && t >= 0 && t < arr.Length) ? arr[t] : null;
         }
+
+        /// <summary>The smallest staged read index that agrees (SameAudio) with some other read on
+        /// EVERY track, or -1 if no single read is clean throughout. Used to commit one read's files
+        /// wholesale (never misaligns) instead of assembling per track.</summary>
+        public static int FullyVerifiedReadIndex(IReadOnlyList<VerifyRecord> reads, IReadOnlyList<bool> staged)
+        {
+            if (reads == null || staged == null || staged.Count != reads.Count) return -1;
+            int trackCount = 0;
+            foreach (var r in reads) trackCount = Math.Max(trackCount, r?.Tracks?.Length ?? 0);
+            for (int i = 0; i < reads.Count; i++)
+            {
+                if (!staged[i]) continue;
+                bool coversAll = true;
+                for (int t = 0; t < trackCount && coversAll; t++)
+                {
+                    var ti = Track(reads[i], t);
+                    bool agrees = false;
+                    for (int j = 0; j < reads.Count && !agrees; j++)
+                    {
+                        if (j == i) continue;
+                        if (VerifyHistoryStore.SameAudio(ti, Track(reads[j], t))) agrees = true;
+                    }
+                    if (!agrees) coversAll = false;
+                }
+                if (coversAll && trackCount > 0) return i;
+            }
+            return -1;
+        }
     }
 }
