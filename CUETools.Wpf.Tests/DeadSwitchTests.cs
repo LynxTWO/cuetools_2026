@@ -30,7 +30,6 @@ namespace CUETools.Wpf.Tests
         {
             "noUnverifiedOutput",   // tracked audit finding, awaiting an owner decision - CUEConfig.noUnverifiedOutput has no reader beyond declaration/defaults/copy-ctor/Save/Load
             "fixOffset",            // tracked audit finding, awaiting an owner decision - CUEConfig.fixOffset has no reader beyond declaration/defaults/copy-ctor/Save/Load
-            "disableEjectDisc",     // tracked audit finding, awaiting an owner decision - CUEConfig.disableEjectDisc is never consulted where the eject actually happens (only ejectAfterRip is)
             "CTDBSubmit",           // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBSubmit round-trips only through the generic Advanced JSON blob; nothing reads the property
             "CTDBAsk",              // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBAsk round-trips only through the generic Advanced JSON blob; nothing reads the property
         };
