@@ -99,7 +99,8 @@ namespace CUETools.Wpf.Accuracy
         {
             if (a == null || b == null) return false;
             if (a.ArV2 != 0 && b.ArV2 != 0) return a.ArV2 == b.ArV2;
-            return a.ArV1 == b.ArV1;
+            if (a.ArV1 != 0 && b.ArV1 != 0) return a.ArV1 == b.ArV1;
+            return false;
         }
 
         private static bool SameTrack(TrackCrc a, TrackCrc b) => SameAudio(a, b);
