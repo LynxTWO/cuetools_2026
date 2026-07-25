@@ -90,6 +90,22 @@
                          Foreground="{Binding HistoryIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
             </StackPanel>
           </Border>
+          <!-- Test & Copy HELD: two reads disagreed on one or more tracks. Nothing is written to the
+               output folder until the user re-runs, accepts the copy read anyway (flagged not test-
+               verified), or discards the staged reads. -->
+          <Border Visibility="{Binding TestCopyHeld, Converter={StaticResource BoolVis}}"
+                  Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13" Margin="0,0,0,11">
+            <StackPanel>
+              <TextBlock Text="TEST &amp; COPY" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,7"/>
+              <TextBlock Text="{Binding TestCopyText}" FontSize="12" TextWrapping="Wrap"
+                         Foreground="{Binding TestCopyIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button Content="Re-run" Command="{Binding TestCopyCommand}" Padding="12,6" Margin="0,0,8,0"/>
+                <Button Content="Accept anyway" Command="{Binding AcceptCopyAnywayCommand}" Padding="12,6" Margin="0,0,8,0"/>
+                <Button Content="Discard" Command="{Binding DiscardHeldCommand}" Padding="12,6"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
           <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13">
             <StackPanel>
               <TextBlock Text="OPTIONS" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,8"/>
@@ -253,6 +269,9 @@
                   Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
           <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"
                   Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+          <Button DockPanel.Dock="Right" Content="Test &amp; Copy" Command="{Binding TestCopyCommand}" Padding="18,9" Margin="0,0,10,0"
+                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"
+                  ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. Slower (2-3x reads). Best for discs not in AccurateRip."/>
           <Button DockPanel.Dock="Right" Content="tune" FontFamily="{StaticResource Mono}" FontSize="11" Padding="9,6" Margin="0,0,10,0" VerticalAlignment="Center"
                   Click="EncoderSettings_Click"
                   ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
