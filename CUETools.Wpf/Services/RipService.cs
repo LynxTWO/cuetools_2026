@@ -152,6 +152,18 @@ public sealed class RipService : IRipService
                 if (deepFloor > 0) _log.Info("rip", $"deep recovery floor {deepFloor} kB/s ({deepFloor / 176}x)");
             }
 
+            // Cache defeat (opt-in under Deep recovery for the proving phase): on a caching drive the
+            // secure re-read returns the cached FIRST read, so Secure cannot catch a read error during
+            // the rip (AccurateRip still catches it at the end, but not on a non-AR disc). When the drive
+            // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
+            // hits media. Scratch-only - it can recover error detection but can never corrupt the audio.
+            if (_settings.DeepRecovery && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
+                && int.TryParse(cal.CacheDefeat.Substring(6), out int flushBytes) && flushBytes > 0)
+            {
+                reader.SetCacheDefeat(flushBytes);
+                _log.Info("rip", $"cache defeat on: flush {flushBytes}B before each secure re-read (drive caches, calibrated)");
+            }
+
             // keep the machine awake for the whole read; optionally lock the tray so the disc cannot
             // be ejected mid-read (which would fail the read and can crash the drive layer).
             if (_settings.PreventSleepDuringRip) KeepAwake(true);
