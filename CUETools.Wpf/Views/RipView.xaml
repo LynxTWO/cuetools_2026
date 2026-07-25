@@ -277,7 +277,8 @@
                   ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
           <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,6,0" VerticalAlignment="Center"
                     ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
-                    ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders)."/>
+                    IsEnabled="{Binding CodecUnlocked}"
+                    ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
           <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" VerticalAlignment="Center"
                     ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
             <ComboBoxItem>Burst</ComboBoxItem>

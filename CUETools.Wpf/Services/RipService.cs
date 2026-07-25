@@ -75,16 +75,23 @@ public interface IRipService
     /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
     /// the codec scope. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).
     /// <paramref name="coverArt"/>, when given, is the hi-res cover to embed (already resized); the
-    /// engine's database cover is used when it is null.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null);
+    /// engine's database cover is used when it is null. <paramref name="onEncodeStart"/>, when
+    /// given, fires once right before the actual encode begins (never on a verify-only pass) - the
+    /// caller uses it to lock the codec choice at that moment.</summary>
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
 
     /// <summary>Test & Copy: read the disc twice (a third time on a mismatch), commit only tracks two
     /// independent reads agree on bit-for-bit, hold the rest. Forces at least Secure and forces cache
-    /// defeat (auto-calibrating first when needed) so the reads are genuinely independent.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null);
+    /// defeat (auto-calibrating first when needed) so the reads are genuinely independent.
+    /// <paramref name="liveFormat"/>, when given, is polled just before each encode read (Copy, and
+    /// the third read on a mismatch) so a codec change made during the Test read is honored -
+    /// <paramref name="format"/> is otherwise used as-is. <paramref name="onEncodeStart"/> fires once
+    /// before each of those encode reads (never before the Test read) so the caller can lock the
+    /// codec choice once encoding actually starts.</summary>
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -131,9 +138,9 @@ public sealed class RipService : IRipService
     }
 
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) => Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread);
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt);
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) => Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt, onEncodeStart: onEncodeStart);
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
     {
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -396,6 +403,10 @@ public sealed class RipService : IRipService
             }
 
             onProgress(0, encode ? "Ripping + verifying..." : "Verifying against AccurateRip + CTDB...");
+            // Fire exactly once, right before the encode actually starts, and only for a real encode -
+            // a verify-only pass never touches the codec, so it never locks it. This is the moment the
+            // caller uses to lock the codec dropdown (the format string above is already final by now).
+            if (encode) onEncodeStart?.Invoke();
             string status = cue.Go();
             onProgress(1, status);
             RcFlushWindow();   // emit the summary for the last stuck window (it never advances past)
@@ -529,7 +540,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
     {
         int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
@@ -555,8 +566,12 @@ public sealed class RipService : IRipService
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
 
             // Read 2 (Copy, index 1): staged encode - this is the file set that gets committed on a
-            // 2-read pass, or is the preferred source per track on a 3-read pass.
-            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true);
+            // 2-read pass, or is the preferred source per track on a 3-read pass. This is the first
+            // actual encode read, so re-poll the live codec choice now (a change made during the Test
+            // read above is honored) and carry it forward - fmt then also drives the final commit's
+            // file-extension count below, so it stays consistent with what was actually encoded.
+            fmt = liveFormat?.Invoke() ?? fmt;
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
 
             var reads = new System.Collections.Generic.List<VerifyRecord> { testResult.Record, copyResult.Record };
@@ -570,7 +585,10 @@ public sealed class RipService : IRipService
             {
                 // Read 3 (third, index 2): staged encode, only run when the first two disagree
                 // somewhere. Re-resolve with all three reads staged (Test is still index 0/unstaged).
-                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true);
+                // The codec is locked by the Copy read's onEncodeStart above by the time we get here,
+                // so this re-poll is just for consistency - it will report the same locked choice.
+                fmt = liveFormat?.Invoke() ?? fmt;
+                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
 
                 reads.Add(thirdResult.Record);
