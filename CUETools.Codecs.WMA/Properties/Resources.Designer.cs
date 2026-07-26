@@ -70,7 +70,7 @@ namespace CUETools.Codecs.WMA.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Decode each frame and compare with original.
+        ///   Looks up a localized string similar to Decode the completed output and compare its PCM with the original.
         /// </summary>
         internal static string DoVerifyDescription {
             get {

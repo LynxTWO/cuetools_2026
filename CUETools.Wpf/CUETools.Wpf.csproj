@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,30 +52,78 @@
     <ProjectReference Include="..\CUETools.Codecs.ALAC\CUETools.Codecs.ALAC.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.libmp3lame\CUETools.Codecs.libmp3lame.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.WMA\CUETools.Codecs.WMA.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.HDCD\CUETools.Codecs.HDCD.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libwavpack\CUETools.Codecs.libwavpack.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.MACLib\CUETools.Codecs.MACLib.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.MPEG\CUETools.Codecs.MPEG.csproj" />
     <ProjectReference Include="..\Freedb\Freedb.csproj" />
+  </ItemGroup>
+
+  <!-- This is the exact packaged managed-plugin allowlist. Copy and manifest generation consume
+       the same item set so a new plugin cannot be shipped without being hash-bound at runtime. -->
+  <ItemGroup>
+    <ManagedCodecPlugin Include="CUETools.Codecs.Flake.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.ALAC.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.libmp3lame.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.WMA.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.HDCD.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.libFLAC.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.libwavpack.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.MACLib.dll" />
+    <ManagedCodecPlugin Include="CUETools.Codecs.MPEG.dll" />
+
+    <!-- hdcd.dll and libmp3lame.dll are tracked legacy x64 runtimes. The other three DLLs are
+         reproducible build outputs from pinned, patched source inputs, not checked-in binaries.
+         CI and release builds must provide every dependency before this project runs; a missing
+         dependency is a hard build failure, never a conditionally omitted codec. -->
+    <NativeCodecPlugin Include="..\ThirdParty\x64\hdcd.dll" />
+    <NativeCodecPlugin Include="..\ThirdParty\x64\libFLAC_dynamic.dll" />
+    <NativeCodecPlugin Include="..\ThirdParty\x64\libmp3lame.dll" />
+    <NativeCodecPlugin Include="..\ThirdParty\x64\wavpackdll.dll" />
+    <NativeCodecPlugin Include="..\ThirdParty\x64\MACLibDll.dll" />
   </ItemGroup>
 
   <!-- The engine discovers codec plugins from a "plugins" subdir; put the managed codecs there
        so ripping/converting use them (no external exe needed). Loaded via Assembly.LoadFrom
-       (R16 fix), so third-party codec DLLs dropped in plugins\ work too. Flake = FLAC, ALAC = m4a.
+       after the generated hash allowlist approves the exact bytes. Unmanifested plugins are
+       available only through the explicit local-development environment switch documented by
+       PluginTrustManifest. Flake = FLAC, ALAC = m4a.
        NOTE: publish must stay folder-based (no single-file): the engine locates plugins\ from
        Assembly.Location, which is empty under single-file extraction. -->
   <Target Name="CopyManagedPlugins" AfterTargets="Build">
-    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.Flake.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.ALAC.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.libmp3lame.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(TargetDir)CUETools.Codecs.WMA.dll" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
-    <!-- the vendored LAME 3.100 native encoder (x64, matching PlatformTarget) - bundled so MP3
-         works out of the box with no external exe or download. WMA needs no DLL at all: it uses
-         the OS's Windows Media runtime. -->
-    <Copy SourceFiles="..\ThirdParty\x64\libmp3lame.dll" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <_BuiltManagedPlugin Include="@(ManagedCodecPlugin->'$(TargetDir)%(Filename)%(Extension)')" />
+      <_ExistingBuiltPlugin Include="$(TargetDir)plugins\*.dll" />
+      <_ExistingBuiltPlugin Include="$(TargetDir)plugins\mono\*.dll" />
+      <_ExistingBuiltPlugin Include="$(TargetDir)plugins\win32\*.dll" />
+      <_ExistingBuiltPlugin Include="$(TargetDir)plugins\x64\*.dll" />
+    </ItemGroup>
+    <Error
+      Condition="!Exists('%(NativeCodecPlugin.FullPath)')"
+      Text="Required x64 codec dependency is missing: %(NativeCodecPlugin.Identity). Reproduce the pinned native codec outputs before building CUETools.Wpf." />
+    <Delete Files="@(_ExistingBuiltPlugin)" />
+    <Delete Files="$(TargetDir)libmp3lame.dll" />
+    <Copy SourceFiles="@(_BuiltManagedPlugin)" DestinationFolder="$(TargetDir)plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(NativeCodecPlugin)" DestinationFolder="$(TargetDir)plugins\x64" SkipUnchangedFiles="true" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\Write-PluginManifest.ps1&quot; -PluginDirectory &quot;$(TargetDir)plugins&quot;" />
   </Target>
   <Target Name="PublishManagedPlugins" AfterTargets="Publish">
-    <Copy SourceFiles="$(PublishDir)CUETools.Codecs.Flake.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(PublishDir)CUETools.Codecs.ALAC.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(PublishDir)CUETools.Codecs.libmp3lame.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(PublishDir)CUETools.Codecs.WMA.dll" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="..\ThirdParty\x64\libmp3lame.dll" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <_PublishedManagedPlugin Include="@(ManagedCodecPlugin->'$(PublishDir)%(Filename)%(Extension)')" />
+      <_ExistingPublishedPlugin Include="$(PublishDir)plugins\*.dll" />
+      <_ExistingPublishedPlugin Include="$(PublishDir)plugins\mono\*.dll" />
+      <_ExistingPublishedPlugin Include="$(PublishDir)plugins\win32\*.dll" />
+      <_ExistingPublishedPlugin Include="$(PublishDir)plugins\x64\*.dll" />
+    </ItemGroup>
+    <Error
+      Condition="!Exists('%(NativeCodecPlugin.FullPath)')"
+      Text="Required x64 codec dependency is missing: %(NativeCodecPlugin.Identity). Reproduce the pinned native codec outputs before publishing CUETools.Wpf." />
+    <Delete Files="@(_ExistingPublishedPlugin)" />
+    <Delete Files="$(PublishDir)libmp3lame.dll" />
+    <Copy SourceFiles="@(_PublishedManagedPlugin)" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(NativeCodecPlugin)" DestinationFolder="$(PublishDir)plugins\x64" SkipUnchangedFiles="true" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\Write-PluginManifest.ps1&quot; -PluginDirectory &quot;$(PublishDir)plugins&quot;" />
   </Target>
 
 </Project>

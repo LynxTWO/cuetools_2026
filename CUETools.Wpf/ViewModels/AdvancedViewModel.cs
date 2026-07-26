@@ -2,6 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using CUETools.Processor;
 using CUETools.Wpf.Mvvm;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.ViewModels;
 
@@ -14,13 +15,15 @@ namespace CUETools.Wpf.ViewModels;
 public sealed class AdvancedViewModel : PageViewModel
 {
     private readonly CUEConfig _c;
+    private readonly IDiagnosticLog _log;
 
-    public AdvancedViewModel(CUEConfig config)
+    public AdvancedViewModel(CUEConfig config, IDiagnosticLog log)
     {
         Title = "Advanced";
         Group = "Setup";
         Subtitle = "Engine options carried over from the classic property grid. Most people never need these.";
         _c = config;
+        _log = log;
     }
 
     private void Raise([CallerMemberName] string? n = null) => OnPropertyChanged(n);
@@ -54,7 +57,28 @@ public sealed class AdvancedViewModel : PageViewModel
     public string ProxyServer { get => _c.advanced.ProxyServer; set { _c.advanced.ProxyServer = value; Raise(); } }
     public int ProxyPort { get => _c.advanced.ProxyPort; set { _c.advanced.ProxyPort = value; Raise(); } }
     public string ProxyUser { get => _c.advanced.ProxyUser; set { _c.advanced.ProxyUser = value; Raise(); } }
-    public string ProxyPassword { get => _c.advanced.ProxyPassword; set { _c.advanced.ProxyPassword = value; Raise(); } }
+    public bool HasProxyPassword => !string.IsNullOrEmpty(_c.advanced.ProxyPassword);
+    public string ProxyPasswordStatus => HasProxyPassword ? "Credential set" : "No credential";
+
+    public bool SetProxyPassword(string password)
+    {
+        if (string.IsNullOrEmpty(password))
+            return false;
+
+        _c.advanced.ProxyPassword = password;
+        _log.Redact(password);
+        Raise(nameof(HasProxyPassword));
+        Raise(nameof(ProxyPasswordStatus));
+        return true;
+    }
+
+    public void ClearProxyPassword()
+    {
+        _c.advanced.ProxyPassword = "";
+        Raise(nameof(HasProxyPassword));
+        Raise(nameof(ProxyPasswordStatus));
+    }
+
     public string FreedbUser { get => _c.advanced.FreedbUser; set { _c.advanced.FreedbUser = value; Raise(); } }
     public string FreedbDomain { get => _c.advanced.FreedbDomain; set { _c.advanced.FreedbDomain = value; Raise(); } }
     public string FreedbSiteAddress { get => _c.advanced.FreedbSiteAddress; set { _c.advanced.FreedbSiteAddress = value; Raise(); } }

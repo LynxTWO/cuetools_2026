@@ -6,6 +6,13 @@ Use this reference when the repo is too large, too mixed, too old, or too messy 
 
 For confidence levels, status vocabulary, classification labels, the unknowns entry shape, and default deliverable paths, see `00-conventions.md`.
 
+## Contents
+
+- Goal, triggers, and deliverables
+- Repo snapshot, classification, risk, slices, and exclusions
+- Slice, ledger, and unknowns artifact shapes
+- Rules and acceptance
+
 ## Goal
 
 Build a coverage plan that lets later passes reach all applicable critical paths without guessing, hand-waving, or pretending that the whole repo was reviewed.
@@ -44,6 +51,7 @@ Capture:
 - generated, vendored, mirrored, minified, serialized, or binary areas
 - highest-risk domains
 - main ownership signals (`CODEOWNERS`, service catalogs, team docs)
+- submodule gitlinks plus internal tracked, untracked, ignored-build, and nested-submodule state
 - likely non-obvious entrypoints (scripts, admin tools, notebooks, editor tools, import flows, bootstrap steps, CI or CD jobs, release tooling, migration runners, support tools)
 - language and rendered-text surfaces when copy, locale, transcreation, templates, prompts, or generated prose can affect behavior or user understanding
 
@@ -139,6 +147,7 @@ Record anything that blocks honest coverage. Use the unknowns entry shape from `
 
 - No application code changes.
 - Do not claim full coverage without ledger support.
+- Record candidate-file and finding counts for negative searches; zero candidates means unscanned.
 - Do not cap coverage at a small fixed number of paths.
 - Use risk-ranked slices for order.
 - Keep the long-term target clear: all applicable critical paths.

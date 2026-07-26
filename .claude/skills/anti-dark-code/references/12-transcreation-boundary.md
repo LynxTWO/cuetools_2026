@@ -6,6 +6,13 @@ Use this reference when language, locale, UI copy, authored content, saved text,
 
 For confidence levels, the unknowns entry shape, and the canonical approval-gated areas list, see `00-conventions.md`.
 
+## Contents
+
+- Goal, triggers, and repo evidence
+- Language surfaces and boundary rules
+- Comment placement and approval gates
+- Documentation, unknowns, and acceptance
+
 ## Goal
 
 Keep rendered language downstream of structured truth.

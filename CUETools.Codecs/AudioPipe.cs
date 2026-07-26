@@ -239,7 +239,7 @@ namespace CUETools.Codecs
                     while (!_haveData && _ex == null)
                         Monitor.Wait(this);
                     if (_ex != null)
-                        throw _ex;
+                        ExceptionRelay.Throw(_ex);
                     if (_bufferPos == 0 && (maxLength < 0 || _readBuffer.Length <= maxLength))
                     {
                         buff.Swap(_readBuffer);

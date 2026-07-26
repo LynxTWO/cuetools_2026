@@ -1,5 +1,12 @@
 # Safe-Fix Plan
 
+**Current authority, 2026-07-26:** the wave below has been executed through its
+locally available gates. Individual batch notes preserve intermediate counts and
+plans, but the final status/counts are in `2026-07-26-autonomous-audit.md` and
+`remediation-backlog.md`: 388 discovered, 381 passed, 7 expected skipped. Hosted
+classic, hardware, and external-service checks remain pending; no intermediate
+"ready" label should be read as the current state.
+
 Bounded remediation batches under pass 11 Step 2. One section per batch. Update statuses as batches land.
 
 ## Batch 1: test modernization and CI gating (2026-07-02)

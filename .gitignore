@@ -3,6 +3,10 @@ obj/
 bin/
 lib/
 Release/
+!/eng/release/
+!/eng/release/**
+/eng/release/**/bin/
+/eng/release/**/obj/
 Debug/
 *.vcxproj.filters
 *.vcxproj.user
@@ -13,6 +17,8 @@ Debug/
 a32/
 launchSettings.json
 /CUETools/TestResults
+/TestResults/
+/evidence/
 /ThirdParty/*/libFLAC_dynamic.*
 /ThirdParty/*/MACLib.*
 /ThirdParty/*/MACLibDll.*

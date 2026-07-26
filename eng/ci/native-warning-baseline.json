@@ -1,0 +1,25 @@
+{
+    "schemaVersion":  1,
+    "lane":  "native-x64",
+    "builds":  [
+                   "ThirdParty/flac/src/libFLAC/libFLAC_dynamic.vcxproj",
+                   "ThirdParty/WavPack/wavpackdll/wavpackdll.vcxproj",
+                   "ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj"
+               ],
+    "fingerprints":  [
+                         "ThirdParty/MAC_SDK/Source/MACLib/MD5.h|C4514|\u0027APE::CMD5Helper::AddData\u0027: unreferenced inline function has been removed",
+                         "ThirdParty/MAC_SDK/Source/Shared/SmartPtr.h|C4710|\u0027void * __ptr64 __cdecl APE::CAPEDecompressCore::`vector deleting destructor\u0027(unsigned int) __ptr64\u0027: function not inlined",
+                         "ThirdParty/MAC_SDK/Source/Shared/SmartPtr.h|C4710|\u0027void * __ptr64 __cdecl APE::RangeOverflowTable::`vector deleting destructor\u0027(unsigned int) __ptr64\u0027: function not inlined",
+                         "ThirdParty/flac/src/libFLAC/bitwriter.c|C4334|\u0027\u003c\u003c\u0027: result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
+                         "ThirdParty/flac/src/libFLAC/fixed.c|C4244|\u0027=\u0027: conversion from \u0027const FLAC__int64\u0027 to \u0027FLAC__int32\u0027, possible loss of data",
+                         "ThirdParty/flac/src/libFLAC/format.c|C4334|\u0027\u003c\u003c\u0027: result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
+                         "ThirdParty/flac/src/libFLAC/lpc.c|C4244|\u0027=\u0027: conversion from \u0027FLAC__int64\u0027 to \u0027FLAC__int32\u0027, possible loss of data",
+                         "ThirdParty/flac/src/libFLAC/metadata_object.c|C4334|\u0027\u003c\u003c\u0027: result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
+                         "ThirdParty/flac/src/libFLAC/stream_decoder.c|C4244|\u0027=\u0027: conversion from \u0027FLAC__int64\u0027 to \u0027FLAC__int32\u0027, possible loss of data",
+                         "ThirdParty/flac/src/libFLAC/stream_decoder.c|C4244|\u0027initializing\u0027: conversion from \u0027FLAC__uint64\u0027 to \u0027uint32_t\u0027, possible loss of data",
+                         "ThirdParty/flac/src/libFLAC/stream_encoder.c|C4244|\u0027initializing\u0027: conversion from \u0027double\u0027 to \u0027FLAC__real\u0027, possible loss of data"
+                     ],
+    "limitations":  [
+                        "This checked baseline covers the three x64 native DLLs imported by CUETools.Wpf. The complete classic solution\u0027s Any CPU and Win32 warning surface remains a hosted Visual Studio lane."
+                    ]
+}

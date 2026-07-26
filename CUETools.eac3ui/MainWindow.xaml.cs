@@ -309,11 +309,11 @@ namespace BluTools
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     writer.Delete();
                     try { File.Delete(outputCuePath); } catch (Exception) { }
-                    throw ex;
+                    throw;
                 }
                 writer.Close();
             }

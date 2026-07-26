@@ -2045,7 +2045,7 @@ new int[] { // 30
 								throw new Exception(Properties.Resources.ExceptionValidationFailed);
 					}
 				}
-				catch (Exception ex)
+				catch (Exception)
 				{
 					//if (channels == 2)
 					//{
@@ -2058,7 +2058,7 @@ new int[] { // 30
 					//    sw.Write(ab);
 					//    sw.Close();
 					//} else
-					throw ex;
+					throw;
 				}
 
             if (bs < m_blockSize)

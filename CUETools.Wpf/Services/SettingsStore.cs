@@ -16,17 +16,28 @@ public sealed class SettingsStore
 {
     private const string AppName = "CUETools2026";
     private const string FileName = "settings.txt";
+    private const string ProtectedProxyPasswordKey = "WpfProxyPasswordProtected";
     private readonly IDiagnosticLog _log;
-    private readonly string _appPath;   // null = the real %AppData% profile; set only by tests
+    private readonly string? _appPath;   // null = the real %AppData% profile; set only by tests
+    private readonly ISecretProtector _secretProtector;
 
-    public SettingsStore(IDiagnosticLog log) : this(log, null) { }
+    public SettingsStore(IDiagnosticLog log)
+        : this(log, null, new WindowsDpapiSecretProtector()) { }
 
     /// <summary>Test seam. <paramref name="appPath"/> follows the engine's own portable-mode convention
     /// (see SettingsShared.GetProfileDir): it is a FILE path, and the profile is redirected to
     /// &lt;that file's directory&gt;\CUETools2026 unless a "user_profiles_enabled" marker sits beside it.
     /// Null (the DI path) means the real %AppData%\CUETools2026\settings.txt. A round-trip test needs
     /// this so it never reads or writes the user's own settings file.</summary>
-    public SettingsStore(IDiagnosticLog log, string appPath) { _log = log; _appPath = appPath; }
+    public SettingsStore(IDiagnosticLog log, string? appPath)
+        : this(log, appPath, new WindowsDpapiSecretProtector()) { }
+
+    internal SettingsStore(IDiagnosticLog log, string? appPath, ISecretProtector secretProtector)
+    {
+        _log = log;
+        _appPath = appPath;
+        _secretProtector = secretProtector ?? throw new ArgumentNullException(nameof(secretProtector));
+    }
 
     /// <summary>The file this store reads and writes. Taken from the reader's OWN resolved profile
     /// directory rather than recomputed here, so the path Load checks can never disagree with the path
@@ -46,6 +57,9 @@ public sealed class SettingsStore
 
             var sr = new SettingsReader(AppName, FileName, _appPath);
             config.Load(sr);
+            if (config.AdvancedSettingsRejected)
+                _log.Warn("settings", "advanced settings were rejected; previous/default values retained");
+            LoadProxyCredential(sr, config);
             HealEncoderChoices(config);
             app.PreventSleepDuringRip = sr.LoadBoolean("WpfPreventSleep") ?? app.PreventSleepDuringRip;
             app.LockTrayDuringRip = sr.LoadBoolean("WpfLockTray") ?? app.LockTrayDuringRip;
@@ -56,6 +70,7 @@ public sealed class SettingsStore
             app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
             app.DefaultsV2Applied = sr.LoadBoolean("WpfDefaultsV2Applied") ?? false;
             app.FormatTypeOverrides = sr.Load("WpfFormatTypeOverrides") ?? "";
+            app.ExternalEncoderApprovals = sr.Load("WpfExternalEncoderApprovals") ?? "";
             app.AdaptiveReadSpeed = sr.LoadBoolean("WpfAdaptiveReadSpeed") ?? true;
             // Deep recovery defaults ON (proven bit-exact, engages only on stuck windows / caching
             // drives). A profile with no saved value gets the new default; once the user toggles it,
@@ -73,6 +88,37 @@ public sealed class SettingsStore
         {
             // a corrupt file must not stop the app from launching; defaults stand
             _log.Warn("settings", "settings load failed - using defaults: " + ex.GetType().Name);
+        }
+    }
+
+    private void LoadProxyCredential(SettingsReader reader, CUEConfig config)
+    {
+        string legacyPlaintext = config.advanced.ProxyPassword ?? "";
+        string protectedValue = reader.Load(ProtectedProxyPasswordKey);
+
+        if (!string.IsNullOrEmpty(protectedValue))
+        {
+            try
+            {
+                string secret = _secretProtector.Unprotect(protectedValue);
+                config.advanced.ProxyPassword = secret;
+                _log.Redact(secret);
+            }
+            catch (Exception ex)
+            {
+                // Never fall back to a stale plaintext copy when a protected value exists. A
+                // corrupt or wrong-user value is treated as no credential until the user sets it.
+                config.advanced.ProxyPassword = "";
+                _log.Warn("settings", "protected proxy credential unavailable; clear and set it again (" +
+                    ex.GetType().Name + ")");
+            }
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(legacyPlaintext))
+        {
+            _log.Redact(legacyPlaintext);
+            _log.Info("settings", "legacy proxy credential loaded; it will be protected on next save");
         }
     }
 
@@ -115,8 +161,26 @@ public sealed class SettingsStore
     {
         try
         {
-            var sw = new SettingsWriter(AppName, FileName, _appPath);
-            config.Save(sw);
+            string proxyPassword = config.advanced.ProxyPassword ?? "";
+            _log.Redact(proxyPassword);
+            string protectedProxyPassword = string.IsNullOrEmpty(proxyPassword)
+                ? ""
+                : _secretProtector.Protect(proxyPassword);
+
+            using var sw = new SettingsWriter(AppName, FileName, _appPath);
+            // CUEConfig owns the legacy JSON shape, so clear only while it serializes. The live
+            // in-memory credential remains available to the proxy after the save completes.
+            config.advanced.ProxyPassword = "";
+            try
+            {
+                config.Save(sw);
+            }
+            finally
+            {
+                config.advanced.ProxyPassword = proxyPassword;
+            }
+            if (!string.IsNullOrEmpty(protectedProxyPassword))
+                sw.Save(ProtectedProxyPasswordKey, protectedProxyPassword);
             sw.Save("WpfPreventSleep", app.PreventSleepDuringRip);
             sw.Save("WpfLockTray", app.LockTrayDuringRip);
             sw.Save("WpfStopOnUnrecoverable", app.StopOnUnrecoverable);
@@ -126,6 +190,7 @@ public sealed class SettingsStore
             sw.Save("WpfArchivalDefaultsApplied", app.ArchivalDefaultsApplied);
             sw.Save("WpfDefaultsV2Applied", app.DefaultsV2Applied);
             sw.Save("WpfFormatTypeOverrides", app.FormatTypeOverrides);
+            sw.Save("WpfExternalEncoderApprovals", app.ExternalEncoderApprovals);
             sw.Save("WpfAdaptiveReadSpeed", app.AdaptiveReadSpeed);
             sw.Save("WpfDeepRecovery", app.DeepRecovery);
             sw.Save("WpfNamingTemplate", app.NamingTemplate);

@@ -40,7 +40,7 @@ namespace CUEPlayer
 				}
 				catch (Exception ex)
 				{
-					Trace.WriteLine(ex.Message);
+					Trace.WriteLine("Playlist row skipped (" + ex.GetType().Name + ").");
 				}
 			}
 		}
@@ -128,7 +128,8 @@ namespace CUEPlayer
 					}
 					catch (Exception ex)
 					{
-						Trace.WriteLine(ex.Message);
+						Trace.WriteLine("Playlist CUE probe failed (" +
+							ex.GetType().Name + ").");
 					}
 
 					FileInfo fi = new FileInfo(path);

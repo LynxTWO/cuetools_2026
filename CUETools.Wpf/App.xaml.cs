@@ -134,30 +134,17 @@ public partial class App : Application
             }
         }
 
-        // Sweep orphaned Test & Copy staging. A held result keeps its staged reads on purpose so the
-        // user can accept or re-run, but closing the app on that state left a FULL album sitting in
-        // %TEMP% forever - nothing ever swept it. Only touch folders older than a day, so a staging
-        // belonging to a run in progress is never pulled out from under it.
+        // Sweep orphaned Test & Copy staging. Cleanup requires the exact owned marker and directory
+        // shape, a reparse-free tree, age over one day, and acquisition of the process-held lease.
+        // A lookalike name or forged old timestamp is never enough to authorize recursive deletion.
         try
         {
-            string stagingRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "cuetc");
-            if (System.IO.Directory.Exists(stagingRoot))
-            {
-                long freed = 0; int swept = 0;
-                foreach (var dir in System.IO.Directory.GetDirectories(stagingRoot))
-                {
-                    try
-                    {
-                        if (System.IO.Directory.GetLastWriteTimeUtc(dir) > DateTime.UtcNow.AddHours(-24)) continue;
-                        foreach (var f in System.IO.Directory.GetFiles(dir, "*", System.IO.SearchOption.AllDirectories))
-                            try { freed += new System.IO.FileInfo(f).Length; } catch { }
-                        System.IO.Directory.Delete(dir, true);
-                        swept++;
-                    }
-                    catch { }
-                }
-                if (swept > 0) log.Info("rip", $"swept {swept} orphaned Test & Copy staging folder(s), {freed / (1024 * 1024)} MB reclaimed");
-            }
+            var sweep = TestCopyStagingWorkspace.SweepOrphans(
+                rootDirectory: null, TimeSpan.FromHours(24));
+            if (sweep.Directories > 0)
+                log.Info("rip",
+                    $"swept {sweep.Directories} orphaned Test & Copy staging folder(s), " +
+                    $"{sweep.Bytes / (1024 * 1024)} MB reclaimed");
         }
         catch (Exception ex) { log.Warn("rip", "staging sweep failed: " + ex.GetType().Name); }
 

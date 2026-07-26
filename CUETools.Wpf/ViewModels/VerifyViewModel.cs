@@ -10,10 +10,9 @@ using CUETools.Wpf.Services;
 namespace CUETools.Wpf.ViewModels;
 
 /// <summary>
-/// Verify &amp; Repair page. Point at an existing rip (a .cue, an album folder, or a file with
-/// an embedded cue) and check it against AccurateRip + CTDB - the file-based twin of the disc
-/// rip, proven on net8. When CTDB has enough parity to recover the errors, Repair rewrites the
-/// affected sectors; that is guarded behind a confirmation because it rewrites audio in place.
+/// Verify &amp; Repair page. Point at an existing rip (.cue, .m3u, or supported lossless file)
+/// and check it against AccurateRip + CTDB. When CTDB has enough parity to recover errors, Repair
+/// builds and independently verifies a new sibling copy; the selected source remains unchanged.
 /// </summary>
 public sealed class VerifyViewModel : PageViewModel
 {
@@ -29,7 +28,6 @@ public sealed class VerifyViewModel : PageViewModel
         _reports = reports;
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile());
-        BrowseFolderCommand = new RelayCommand(_ => BrowseFolder());
         VerifyCommand = new RelayCommand(_ => { _ = RunAsync(repair: false); }, _ => HasSource && !IsBusy);
         RepairCommand = new RelayCommand(_ => { _ = RunAsync(repair: true); }, _ => CanRepair && !IsBusy);
     }
@@ -48,7 +46,7 @@ public sealed class VerifyViewModel : PageViewModel
     private double _progress;
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
 
-    private string _statusText = "Choose a .cue, an album folder, or a file with an embedded cue.";
+    private string _statusText = "Choose a .cue, .m3u, or supported lossless file.";
     public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
 
     private bool _hasResult;
@@ -76,9 +74,9 @@ public sealed class VerifyViewModel : PageViewModel
     // damage; every field below is the true CDRepairFix data, not a mock.
     private bool _showRepair;
     public bool ShowRepair { get => _showRepair; private set => Set(ref _showRepair, value); }
-    private bool _repairActive;      // the repair write is running -> sweep animates against Progress
+    private bool _repairActive;      // the staged repair write is running -> sweep animates against Progress
     public bool RepairActive { get => _repairActive; private set => Set(ref _repairActive, value); }
-    private bool _repairApplied;     // the repair pass rewrote the audio
+    private bool _repairApplied;     // a repaired copy was verified and published
     public bool RepairApplied { get => _repairApplied; private set => Set(ref _repairApplied, value); }
     private bool _repairRecoverable; // parity is sufficient to reconstruct the damage
     public bool RepairRecoverable { get => _repairRecoverable; private set => Set(ref _repairRecoverable, value); }
@@ -89,7 +87,6 @@ public sealed class VerifyViewModel : PageViewModel
     private string _repairRanges = ""; public string RepairRanges { get => _repairRanges; private set => Set(ref _repairRanges, value); }
 
     public ICommand BrowseFileCommand { get; }
-    public ICommand BrowseFolderCommand { get; }
     public ICommand VerifyCommand { get; }
     public ICommand RepairCommand { get; }
 
@@ -98,15 +95,9 @@ public sealed class VerifyViewModel : PageViewModel
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
             Title = "Choose a rip to verify",
-            Filter = "Rip sets (*.cue, *.m3u)|*.cue;*.m3u|Audio with embedded cue|*.flac;*.wv;*.ape;*.tak;*.m4a|All files|*.*"
+            Filter = "Rip sets (*.cue, *.m3u)|*.cue;*.m3u|Supported lossless audio|*.flac;*.wv;*.ape;*.tak;*.m4a|All files|*.*"
         };
         if (dlg.ShowDialog() == true) SetSource(dlg.FileName);
-    }
-
-    private void BrowseFolder()
-    {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose an album folder to verify" };
-        if (dlg.ShowDialog() == true) SetSource(dlg.FolderName);
     }
 
     private void SetSource(string path)
@@ -178,10 +169,11 @@ public sealed class VerifyViewModel : PageViewModel
     private bool ConfirmRepair()
     {
         return MessageBox.Show(
-            "Repair rewrites the affected audio using CTDB parity, replacing the source files. " +
-            "Back up the rip first if you want to keep the original.\n\nProceed with repair?",
-            "Repair from CTDB parity",
-            MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+            "Repair will build a new sibling folder, independently verify the repaired audio, " +
+            "and publish it only if verification succeeds. The selected source files will not be changed.\n\n" +
+            "Proceed with repair?",
+            "Create repaired copy from CTDB parity",
+            MessageBoxButton.OKCancel, MessageBoxImage.Question) == MessageBoxResult.OK;
     }
 
     private void PublishReport(bool repair, string path, VerifyFilesResult result)

@@ -120,9 +120,6 @@
   <data name="DoMD5Description" xml:space="preserve">
     <value>MD5-Prüfsumme für Audiodaten berechnen</value>
   </data>
-  <data name="DoVerifyDescription" xml:space="preserve">
-    <value>Jeden Frame dekodieren und mit dem Original vergleichen</value>
-  </data>
   <data name="ExceptionSampleCount" xml:space="preserve">
     <value>Die geschriebenen Samples unterscheiden sich von der erwarteten Anzahl</value>
   </data>

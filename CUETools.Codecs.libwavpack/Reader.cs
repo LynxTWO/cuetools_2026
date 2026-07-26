@@ -52,39 +52,60 @@ namespace CUETools.Codecs.libwavpack
             m_get_length = LengthCallback;
             m_can_seek = CanSeekCallback;
             
-            m_ioReader  = (WavpackStreamReader64*)Marshal.AllocHGlobal(sizeof(WavpackStreamReader64)).ToPointer();
-            m_ioReader->read_bytes = Marshal.GetFunctionPointerForDelegate(m_read_bytes);
-            m_ioReader->write_bytes = IntPtr.Zero;
-            m_ioReader->get_pos = Marshal.GetFunctionPointerForDelegate(m_get_pos);
-			m_ioReader->set_pos_abs = Marshal.GetFunctionPointerForDelegate(m_set_pos_abs);
-			m_ioReader->set_pos_rel = Marshal.GetFunctionPointerForDelegate(m_set_pos_rel);
-			m_ioReader->push_back_byte = Marshal.GetFunctionPointerForDelegate(m_push_back_byte);
-			m_ioReader->get_length = Marshal.GetFunctionPointerForDelegate(m_get_length);
-			m_ioReader->can_seek = Marshal.GetFunctionPointerForDelegate(m_can_seek);
-            m_ioReader->truncate_here = IntPtr.Zero;
-            m_ioReader->close = IntPtr.Zero;
+            try
+            {
+                m_ioReader = (WavpackStreamReader64*)Marshal.AllocHGlobal(
+                    sizeof(WavpackStreamReader64)).ToPointer();
+                if (m_ioReader == null)
+                    throw new OutOfMemoryException("Unable to allocate the WavPack stream reader.");
+                m_ioReader->read_bytes = Marshal.GetFunctionPointerForDelegate(m_read_bytes);
+                m_ioReader->write_bytes = IntPtr.Zero;
+                m_ioReader->get_pos = Marshal.GetFunctionPointerForDelegate(m_get_pos);
+			    m_ioReader->set_pos_abs = Marshal.GetFunctionPointerForDelegate(m_set_pos_abs);
+			    m_ioReader->set_pos_rel = Marshal.GetFunctionPointerForDelegate(m_set_pos_rel);
+			    m_ioReader->push_back_byte = Marshal.GetFunctionPointerForDelegate(m_push_back_byte);
+			    m_ioReader->get_length = Marshal.GetFunctionPointerForDelegate(m_get_length);
+			    m_ioReader->can_seek = Marshal.GetFunctionPointerForDelegate(m_can_seek);
+                m_ioReader->truncate_here = IntPtr.Zero;
+                m_ioReader->close = IntPtr.Zero;
 
-            _IO_ungetc = _IO_WVC_ungetc = -1;
+                _IO_ungetc = _IO_WVC_ungetc = -1;
 
-			_path = path;
+			    _path = path;
 
-			_IO = (IO != null) ? IO : new FileStream (path, FileMode.Open, FileAccess.Read, FileShare.Read);
-			_IO_WVC = (IO != null) ? IO_WVC : File.Exists (path+"c") ? new FileStream (path+"c", FileMode.Open, FileAccess.Read, FileShare.Read) : null;
+			    _IO = (IO != null)
+                    ? IO
+                    : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+			    _IO_WVC = (IO != null)
+                    ? IO_WVC
+                    : File.Exists(path + "c")
+                        ? new FileStream(path + "c", FileMode.Open, FileAccess.Read, FileShare.Read)
+                        : null;
 
-            string errorMessage;
-            
-            _wpc = wavpackdll.WavpackOpenFileInputEx64(m_ioReader, IO_ID_WV, IO_ID_WVC, out errorMessage, OpenFlags.OPEN_WVC, 0);
-			if (_wpc == null) {
-				throw new Exception("Unable to initialize the decoder: " + errorMessage);
-			}
+                string errorMessage;
+                _wpc = wavpackdll.WavpackOpenFileInputEx64(
+                    m_ioReader,
+                    IO_ID_WV,
+                    IO_ID_WVC,
+                    out errorMessage,
+                    OpenFlags.OPEN_WVC,
+                    0);
+			    if (_wpc == null)
+				    throw new Exception("Unable to initialize the decoder: " + errorMessage);
 
-			pcm = new AudioPCMConfig(
-                wavpackdll.WavpackGetBitsPerSample(_wpc),
-                wavpackdll.WavpackGetNumChannels(_wpc), 
-			    (int)wavpackdll.WavpackGetSampleRate(_wpc),
-				(AudioPCMConfig.SpeakerConfig)wavpackdll.WavpackGetChannelMask(_wpc));
-			_sampleCount = wavpackdll.WavpackGetNumSamples64(_wpc);
-			_sampleOffset = 0;
+			    pcm = new AudioPCMConfig(
+                    wavpackdll.WavpackGetBitsPerSample(_wpc),
+                    wavpackdll.WavpackGetNumChannels(_wpc),
+			        (int)wavpackdll.WavpackGetSampleRate(_wpc),
+				    (AudioPCMConfig.SpeakerConfig)wavpackdll.WavpackGetChannelMask(_wpc));
+			    _sampleCount = wavpackdll.WavpackGetNumSamples64(_wpc);
+			    _sampleOffset = 0;
+            }
+            catch
+            {
+                RollBackConstructorNoThrow();
+                throw;
+            }
         }
 
         public AudioDecoder(DecoderSettings settings, string path, Stream IO = null)
@@ -120,19 +141,76 @@ namespace CUETools.Codecs.libwavpack
         public void Close()
         {
 			if (_wpc != null)
-				_wpc = wavpackdll.WavpackCloseFile(_wpc);
+            {
+                WavpackContext* context = _wpc;
+                _wpc = null;
+				wavpackdll.WavpackCloseFile(context);
+            }
 			if (_IO != null) 
 			{
-				_IO.Close ();
+                Stream stream = _IO;
 				_IO = null;
+				stream.Close();
 			}
 			if (_IO_WVC != null) 
 			{
-				_IO_WVC.Close ();
+                Stream stream = _IO_WVC;
 				_IO_WVC = null;
+				stream.Close();
 			}
-            Marshal.FreeHGlobal((IntPtr)m_ioReader);
-            m_ioReader = null;
+            if (m_ioReader != null)
+            {
+                WavpackStreamReader64* reader = m_ioReader;
+                m_ioReader = null;
+                Marshal.FreeHGlobal((IntPtr)reader);
+            }
+        }
+
+        private void RollBackConstructorNoThrow()
+        {
+            if (_wpc != null)
+            {
+                WavpackContext* context = _wpc;
+                _wpc = null;
+                try
+                {
+                    wavpackdll.WavpackCloseFile(context);
+                }
+                catch
+                {
+                }
+            }
+
+            CloseStreamNoThrow(ref _IO);
+            CloseStreamNoThrow(ref _IO_WVC);
+
+            if (m_ioReader != null)
+            {
+                WavpackStreamReader64* reader = m_ioReader;
+                m_ioReader = null;
+                try
+                {
+                    Marshal.FreeHGlobal((IntPtr)reader);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static void CloseStreamNoThrow(ref Stream stream)
+        {
+            Stream ownedStream = stream;
+            stream = null;
+            if (ownedStream == null)
+                return;
+            try
+            {
+                ownedStream.Close();
+            }
+            catch
+            {
+            }
         }
 
         public int Read(AudioBuffer buff, int maxLength)

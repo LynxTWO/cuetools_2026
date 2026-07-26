@@ -120,13 +120,22 @@ namespace CUETools.Codecs.MACLib
                         int res = MACLibDll.c_APEDecompress_GetData(pAPEDecompress, pSampleBuffer, 16384, out nBlocksRetrieved);
                         if (res != 0)
                             throw new Exception("An error occurred while decoding: " + res.ToString());
+                        if (nBlocksRetrieved <= 0)
+                            throw new EndOfStreamException("Monkey's Audio decoder reached the end of the stream before the advertised sample count.");
                     }
                     _bufferOffset = 0;
                     _bufferLength = nBlocksRetrieved;
                     _sampleOffset += nBlocksRetrieved;
                 }
                 long copyCount = Math.Min(samplesNeeded, SamplesInBuffer);
-                AudioBuffer.BytesToFLACSamples_16(_samplesBuffer, (int)(_bufferOffset * pcm.BlockAlign), buff.Samples, (int)buffOffset, (int)copyCount, (int)_channelCount);
+                AudioBuffer.BytesToFLACSamples(
+                    _samplesBuffer,
+                    (int)(_bufferOffset * pcm.BlockAlign),
+                    buff.Samples,
+                    (int)buffOffset,
+                    (int)copyCount,
+                    (int)_channelCount,
+                    pcm.BitsPerSample);
                 samplesNeeded -= copyCount;
                 buffOffset += copyCount;
                 _bufferOffset += copyCount;

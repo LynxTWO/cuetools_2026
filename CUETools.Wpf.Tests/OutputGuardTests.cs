@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -67,6 +68,7 @@ namespace CUETools.Wpf.Tests
         [DataRow("folder.jpg")]
         [DataRow("rip.verify")]
         [DataRow("Test & Copy.log")]
+        [DataRow(".cuetools-complete")]
         public void AnyFixedNameArtifact_CountsAsARip(string artifact)
         {
             // these cannot protect themselves: the engine's %unique% loop never applies to them
@@ -129,6 +131,30 @@ namespace CUETools.Wpf.Tests
             OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac");
             Assert.IsTrue(File.Exists(Path.Combine(dir, "01 - One.flac")));
             Assert.IsTrue(File.Exists(Path.Combine(dir, "album.cue")));
+        }
+
+        [TestMethod]
+        public void FileOccupyingAlbumPathForcesANewFolder()
+        {
+            File.WriteAllText(Path.Combine(_root, "Artist - Album"), "foreign");
+
+            Assert.AreEqual("Artist - Album (2)",
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, "Artist - Album", "flac"));
+        }
+
+        [TestMethod]
+        public void TraversalAndProbeFailuresFailClosed()
+        {
+            Assert.ThrowsException<ArgumentException>(() =>
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, "", "flac"));
+            Assert.ThrowsException<IOException>(() =>
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, Path.Combine("..", "escape"), "flac"));
+            Assert.ThrowsException<IOException>(() =>
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, "invalid\0album", "flac"));
         }
     }
 }

@@ -240,7 +240,8 @@ namespace Freedb
 			
 			catch (Exception ex)
 			{
-				Debug.WriteLine("Error retrieving Sites." + ex.Message);
+				Debug.WriteLine(
+					"Freedb site retrieval failed (" + ex.GetType().Name + ").");
 				Exception newEx = new Exception("FreedbHelper.GetSites: Error retrieving Sites.",ex);
 				throw newEx;
 			}
@@ -538,9 +539,9 @@ namespace Freedb
 				reader = new StreamReader(response.GetResponseStream(), System.Text.Encoding.UTF8);
 				result = reader.ReadToEnd();
 			}
-			catch (Exception ex)
+			catch (Exception)
 			{
-				throw ex;
+				throw;
 			}
 			finally
 			{
@@ -678,9 +679,9 @@ namespace Freedb
 				}
 			}
 			
-			catch (Exception ex)
+			catch (Exception)
 			{
-				throw ex;
+				throw;
 			}
 
 			finally

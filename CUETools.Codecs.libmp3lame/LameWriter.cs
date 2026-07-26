@@ -92,33 +92,32 @@ namespace CUETools.Codecs.libmp3lame
 
         public void Close()
         {
-            if (!this.m_closed)
+            if (this.m_closed)
+                return;
+            this.m_closed = true;
+
+            try
             {
                 if (this.m_initialized)
-                {
-                    try
-                    {
-                        try
-                        {
-                            this.FinalizeEncoding();
-                        }
-                        finally
-                        {
-                            libmp3lamedll.lame_close(m_handle);
-                        }
-                    }
-                    finally
-                    {
-                        m_handle = IntPtr.Zero;
-                        if (this.m_outputPath != null)
-                        {
-                            this.m_outputStream.Close();
-                        }
-                    }
-                }
-
-                this.m_closed = true;
+                    this.FinalizeEncoding();
             }
+            catch
+            {
+                CloseHandleNoThrow();
+                CloseOutputStreamNoThrow();
+                throw;
+            }
+
+            try
+            {
+                CloseHandle();
+            }
+            catch
+            {
+                CloseOutputStreamNoThrow();
+                throw;
+            }
+            CloseOutputStream();
         }
 
         private int GetLametagFrame()
@@ -150,42 +149,56 @@ namespace CUETools.Codecs.libmp3lame
         {
             if (!this.m_initialized)
             {
-                m_handle = libmp3lamedll.lame_init();
-
-                libmp3lamedll.lame_set_bWriteVbrTag(m_handle, 1);
-                libmp3lamedll.lame_set_write_id3tag_automatic(m_handle, 0);
-
-                libmp3lamedll.lame_set_num_channels(m_handle, this.Settings.PCM.ChannelCount);
-                libmp3lamedll.lame_set_in_samplerate(m_handle, this.Settings.PCM.SampleRate);
-
-                if (this.m_finalSampleCount != 0)
+                try
                 {
-                    libmp3lamedll.lame_set_num_samples(m_handle, this.m_finalSampleCount);
+                    m_handle = libmp3lamedll.lame_init();
+                    if (m_handle == IntPtr.Zero)
+                        throw new LameException("lame_init failed");
+
+                    libmp3lamedll.lame_set_bWriteVbrTag(m_handle, 1);
+                    libmp3lamedll.lame_set_write_id3tag_automatic(m_handle, 0);
+
+                    libmp3lamedll.lame_set_num_channels(m_handle, this.Settings.PCM.ChannelCount);
+                    libmp3lamedll.lame_set_in_samplerate(m_handle, this.Settings.PCM.SampleRate);
+
+                    if (this.m_finalSampleCount != 0)
+                    {
+                        libmp3lamedll.lame_set_num_samples(m_handle, this.m_finalSampleCount);
+                    }
+
+                    m_settings.Apply(m_handle);
+
+                    if (libmp3lamedll.lame_init_params(m_handle) != 0)
+                    {
+                        throw new LameException("lame_init_params failed");
+                    }
+
+                    byte[] id3v2 = { 0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+                    int padding = m_settings.Padding;
+                    int id3v2sz = padding;
+                    int i = 9;
+                    do
+                    {
+                        id3v2[i--] = (byte)(id3v2sz & 0x7f);
+                        id3v2sz >>= 7;
+                    } while (id3v2sz != 0);
+                    m_outputStream.Write(id3v2, 0, id3v2.Length);
+                    m_bytesWritten += id3v2.Length;
+                    m_outputStream.Write(new byte[padding], 0, padding);
+                    m_bytesWritten += padding;
+                    m_streamStart = this.m_outputStream.Position;
+
+                    this.m_initialized = true;
                 }
-
-                m_settings.Apply(m_handle);
-
-                if (libmp3lamedll.lame_init_params(m_handle) != 0)
+                catch
                 {
-                    throw new LameException("lame_init_params failed");
+                    // A partially-configured lame_t cannot be reused. Make the writer terminal,
+                    // release both native and managed resources, and preserve the init exception.
+                    this.m_closed = true;
+                    CloseHandleNoThrow();
+                    CloseOutputStreamNoThrow();
+                    throw;
                 }
-
-                byte[] id3v2 = { 0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-                int padding = m_settings.Padding;
-                int id3v2sz = padding;
-                int i = 9;
-                do
-                {
-                    id3v2[i--] = (byte)(id3v2sz & 0x7f);
-                    id3v2sz >>= 7;
-                } while (id3v2sz != 0);
-                m_outputStream.Write(id3v2, 0, id3v2.Length);
-                m_bytesWritten += id3v2.Length;
-                m_outputStream.Write(new byte[padding], 0, padding);
-                m_bytesWritten += padding;
-                m_streamStart = this.m_outputStream.Position;
-
-                this.m_initialized = true;
             }
         }
 
@@ -197,9 +210,52 @@ namespace CUETools.Codecs.libmp3lame
             }
 
             if (!m_closed)
-            {
                 this.Close();
-                File.Delete(this.m_outputPath);
+            File.Delete(this.m_outputPath);
+        }
+
+        private void CloseHandle()
+        {
+            if (m_handle == IntPtr.Zero)
+            {
+                m_initialized = false;
+                return;
+            }
+
+            IntPtr handle = m_handle;
+            m_handle = IntPtr.Zero;
+            m_initialized = false;
+            libmp3lamedll.lame_close(handle);
+        }
+
+        private void CloseHandleNoThrow()
+        {
+            try
+            {
+                CloseHandle();
+            }
+            catch
+            {
+            }
+        }
+
+        private void CloseOutputStream()
+        {
+            if (m_outputStream == null)
+                return;
+            Stream output = m_outputStream;
+            m_outputStream = null;
+            output.Close();
+        }
+
+        private void CloseOutputStreamNoThrow()
+        {
+            try
+            {
+                CloseOutputStream();
+            }
+            catch
+            {
             }
         }
 

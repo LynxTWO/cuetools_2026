@@ -1,8 +1,10 @@
 # cuetools_2026 project instructions
 
-Fork of cuetools.net being reviewed and modernized. The anti-dark-code review artifacts live
-in `docs/review/` (system map, coverage ledger, remediation backlog, findings). Read
-`docs/review/decisions-needed.md` before starting work that needs owner approval.
+Fork of cuetools.net being reviewed and modernized. Anti-dark-code artifacts are split by type:
+maps and ledgers live in `docs/architecture/`, logging and telemetry reviews in `docs/security/`,
+unresolved evidence in `docs/unknowns/`, and findings, decisions, plans, and remediation history
+in `docs/review/`. Read `docs/review/decisions-needed.md` before starting work that needs owner
+approval.
 
 The LAME v4 encoder work lives in its own repository (LynxTWO/lame_v4); only plan and
 progress documents for it belong here, under `docs/review/`.

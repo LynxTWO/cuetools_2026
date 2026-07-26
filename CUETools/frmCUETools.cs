@@ -32,6 +32,7 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
@@ -390,27 +391,7 @@ namespace JDP
                 Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.Idle;
 
             motdImage = null;
-            if (File.Exists(MOTDImagePath))
-                using (FileStream imageStream = new FileStream(MOTDImagePath, FileMode.Open, FileAccess.Read))
-                    try { motdImage = Image.FromStream(imageStream); }
-                    catch { }
-
-            if (File.Exists(MOTDTextPath))
-                try
-                {
-                    using (StreamReader sr = new StreamReader(MOTDTextPath, Encoding.UTF8))
-                    {
-                        string version = sr.ReadLine();
-                        if (string.Compare(version, MOTDVersion) > 0)
-                        {
-                            string motd = sr.ReadToEnd();
-                            _batchReport = new StringBuilder();
-                            _batchReport.Append(motd);
-                            ReportState = true;
-                        }
-                    }
-                }
-                catch { }
+            DeleteLegacyMotdCache();
 
             SetupControls(false);
             UpdateOutputPath();
@@ -602,19 +583,45 @@ namespace JDP
             _batchReport.Append("\r\n");
         }
 
-        string MOTDImagePath
+        private void DeleteLegacyMotdCache()
         {
-            get
+            // These files were populated over unauthenticated HTTP by older releases. Never hand
+            // a legacy remote image to GDI+, or trust cached text with unknown transport origin.
+            string[] paths =
             {
-                return System.IO.Path.Combine(profilePath, "motd.jpg");
+                System.IO.Path.Combine(profilePath, "motd.jpg"),
+                System.IO.Path.Combine(profilePath, "motd.txt")
+            };
+            foreach (string path in paths)
+            {
+                try { if (File.Exists(path)) File.Delete(path); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
         }
 
-        string MOTDTextPath
+        private static string ReadBoundedUtf8(Stream source, int maximumBytes)
         {
-            get
+            using (MemoryStream buffer = new MemoryStream())
             {
-                return System.IO.Path.Combine(profilePath, "motd.txt");
+                byte[] chunk = new byte[8192];
+                int total = 0;
+                while (true)
+                {
+                    int count = source.Read(chunk, 0, chunk.Length);
+                    if (count == 0)
+                        break;
+                    total = checked(total + count);
+                    if (total > maximumBytes)
+                        throw new InvalidDataException("The update message is too large.");
+                    buffer.Write(chunk, 0, count);
+                }
+
+                byte[] bytes = buffer.ToArray();
+                int offset = bytes.Length >= 3 &&
+                    bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? 3 : 0;
+                return new UTF8Encoding(false, true).GetString(
+                    bytes, offset, bytes.Length - offset);
             }
         }
 
@@ -647,102 +654,45 @@ namespace JDP
 
             try
             {
-                // Message-of-the-day: fetches a JPEG and text from cuetools.net over plain
-                // HTTP (once/day, only when checkForUpdates is on) and renders the image
-                // in-process via Image.FromStream below. Trust boundary: the bytes are
-                // remote-controlled and unauthenticated, and GDI+ image decoding has a
-                // history of parser vulnerabilities, so this hands attacker-influenceable
-                // input to a native decoder. Kept behind the config flag; a hardening pass
-                // should move it to HTTPS and consider dropping the remote image entirely.
+                // The legacy MOTD downloaded a JPEG over HTTP and decoded it in-process with
+                // GDI+. The hardened path accepts only bounded UTF-8 text over authenticated
+                // HTTPS; certificate or payload failures are fail-closed and never use a cache.
                 if (_profile._config.checkForUpdates && DateTime.UtcNow - lastMOTD > TimeSpan.FromDays(1) && _batchReport.Length == 0)
                 {
                     this.Invoke((MethodInvoker)(() => toolStripStatusLabel1.Text = "Checking for updates..."));
                     IWebProxy proxy = _profile._config.GetProxy();
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://cuetools.net/motd/motd.jpg");
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create("https://cue.tools/motd/motd.txt");
                     req.Proxy = proxy;
                     req.Method = "GET";
-                    try
-                    {
-                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                            if (resp.StatusCode == HttpStatusCode.OK)
-                            {
-                                using (Stream respStream = resp.GetResponseStream())
-                                using (FileStream motd = new FileStream(MOTDImagePath, FileMode.Create, FileAccess.Write))
-                                {
-                                    byte[] buff = new byte[0x8000];
-                                    do
-                                    {
-                                        int count = respStream.Read(buff, 0, buff.Length);
-                                        if (count == 0) break;
-                                        motd.Write(buff, 0, count);
-                                    } while (true);
-                                }
-                            }
-                            else
-                            {
-                                File.Delete(MOTDImagePath);
-                            }
-                        lastMOTD = DateTime.UtcNow;
-                    }
-                    catch (WebException ex)
-                    {
-                        if (ex.Status == WebExceptionStatus.ProtocolError && ex.Response != null && ex.Response is HttpWebResponse)
-                        {
-                            HttpWebResponse resp = (HttpWebResponse)ex.Response;
-                            if (resp.StatusCode == HttpStatusCode.NotFound)
-                            {
-                                File.Delete(MOTDImagePath);
-                                lastMOTD = DateTime.UtcNow;
-                            }
-                        }
-                    }
-
-                    motdImage = null;
-                    if (File.Exists(MOTDImagePath))
-                        using (FileStream imageStream = new FileStream(MOTDImagePath, FileMode.Open, FileAccess.Read))
-                            try { motdImage = Image.FromStream(imageStream); }
-                            catch { }
-
-                    req = (HttpWebRequest)WebRequest.Create("http://cuetools.net/motd/motd.txt");
-                    req.Proxy = proxy;
-                    req.Method = "GET";
+                    req.Timeout = 10000;
+                    req.ReadWriteTimeout = 10000;
                     try
                     {
                         using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                         {
-                            if (resp.StatusCode == HttpStatusCode.OK)
-                            {
-                                using (Stream respStream = resp.GetResponseStream())
-                                using (FileStream motd = new FileStream(MOTDTextPath, FileMode.Create, FileAccess.Write))
-                                using (StreamReader sr = new StreamReader(respStream, Encoding.UTF8))
-                                using (StreamWriter sw = new StreamWriter(motd, Encoding.UTF8))
-                                {
-                                    string motdText = sr.ReadToEnd();
-                                    sw.Write(motdText);
-                                }
-                            }
-                            else
-                            {
-                                File.Delete(MOTDTextPath);
-                            }
-                        }
-                        lastMOTD = DateTime.UtcNow;
-                    }
-                    catch { }
-                    if (File.Exists(MOTDTextPath))
-                        try
-                        {
-                            using (StreamReader sr = new StreamReader(MOTDTextPath, Encoding.UTF8))
+                            if (resp.StatusCode != HttpStatusCode.OK)
+                                throw new WebException("The update service returned a non-success status.");
+                            if (resp.ContentLength > 262144)
+                                throw new InvalidDataException("The update message is too large.");
+
+                            using (Stream respStream = resp.GetResponseStream())
+                            using (StringReader sr = new StringReader(
+                                ReadBoundedUtf8(respStream, 262144)))
                             {
                                 string version = sr.ReadLine();
-                                if (string.Compare(version, MOTDVersion) > 0)
-                                {
-                                    string motd = sr.ReadToEnd();
-                                    _batchReport.Append(motd);
-                                }
+                                if (string.CompareOrdinal(version, MOTDVersion) > 0)
+                                    _batchReport.Append(sr.ReadToEnd());
                             }
                         }
-                        catch { }
+                    }
+                    catch (WebException)
+                    {
+                        // Certificate, proxy, timeout, and service failures leave no trusted data.
+                    }
+                    catch (InvalidDataException) { }
+                    catch (DecoderFallbackException) { }
+                    catch (OverflowException) { }
+                    finally { lastMOTD = DateTime.UtcNow; }
                 }
                 if (action == CUEAction.CreateDummyCUE)
                 {
@@ -1401,18 +1351,20 @@ namespace JDP
             ActivateProfile();
         }
 
-        private void DeactivateProfile()
+        private bool DeactivateProfile()
         {
-            SaveProfile();
+            if (!TrySaveProfile())
+                return false;
 
             if (_profile != _defaultProfile)
             {
                 _profile = _defaultProfile;
                 ActivateProfile();
             }
+            return true;
         }
 
-        private void SaveProfile()
+        private bool TrySaveProfile()
         {
             _profile._outputAudioType = SelectedOutputAudioType;
             _profile._outputAudioFormat = SelectedOutputAudioFormat;
@@ -1433,10 +1385,43 @@ namespace JDP
 
             if (_profile != _defaultProfile)
             {
-                SettingsWriter sw = new SettingsWriter("CUE Tools", string.Format("profile-{0}.txt", _profile._name), Application.ExecutablePath);
-                _profile.Save(sw);
-                sw.Close();
+                try
+                {
+                    using (SettingsWriter sw = new SettingsWriter(
+                        "CUE Tools",
+                        string.Format("profile-{0}.txt", _profile._name),
+                        Application.ExecutablePath))
+                    {
+                        _profile.Save(sw);
+                        sw.Close();
+                    }
+                }
+                catch (PlatformNotSupportedException ex)
+                {
+                    ShowCredentialSaveFailure(ex);
+                    return false;
+                }
+                catch (CryptographicException ex)
+                {
+                    ShowCredentialSaveFailure(ex);
+                    return false;
+                }
             }
+            return true;
+        }
+
+        private static void ShowCredentialSaveFailure(Exception exception)
+        {
+            Trace.WriteLine(
+                "Settings save rejected by credential protection: " +
+                exception.GetType().Name);
+            MessageBox.Show(
+                "Settings were not saved because the proxy password could not be protected " +
+                "for the current Windows user. Clear the proxy password or save the settings " +
+                "on Windows, then try again.",
+                "CUETools settings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private void LoadSettings()
@@ -1497,51 +1482,66 @@ namespace JDP
 
         private void SaveSettings()
         {
-            SaveProfile();
+            if (!TrySaveProfile())
+                return;
 
-            SettingsWriter sw = new SettingsWriter("CUE Tools", "settings.txt", Application.ExecutablePath);
-            SaveScripts(SelectedAction);
-            sw.Save("LastMOTD", lastMOTD);
-            sw.Save("ChoiceWidth", _choiceWidth);
-            sw.Save("ChoiceHeight", _choiceHeight);
-            sw.Save("ChoiceMaxed", _choiceMaxed);
-            sw.Save("InputPath", InputPath);
-            sw.Save("DefaultLosslessFormat", _defaultLosslessFormat);
-            sw.Save("DefaultLossyFormat", _defaultLossyFormat);
-            sw.Save("DefaultNoAudioFormat", _defaultNoAudioFormat);
-            sw.Save("DontGenerate", !_outputPathUseTemplate);
-            sw.Save("OutputPathUseTemplates", comboBoxOutputFormat.Items.Count - OutputPathUseTemplates.Length);
-            for (int iFormat = comboBoxOutputFormat.Items.Count - 1; iFormat >= OutputPathUseTemplates.Length; iFormat--)
-                sw.Save(string.Format("OutputPathUseTemplate{0}", iFormat - OutputPathUseTemplates.Length), comboBoxOutputFormat.Items[iFormat].ToString());
-
-            sw.Save("UsePregapForFirstTrackInSingleFile", _usePregapForFirstTrackInSingleFile);
-            sw.Save("ReducePriority", _reducePriority);
-            sw.Save("FileBrowserState", (int)FileBrowserState);
-            sw.Save("ReportState", ReportState);
-            sw.Save("CorrectorLookup", (int)CorrectorMode);
-            sw.Save("CorrectorOverwrite", toolStripButtonCorrectorOverwrite.Checked);
-            sw.Save("CorrectorFormat", toolStripDropDownButtonCorrectorFormat.Text);
-            sw.Save("WidthIncrement", FileBrowserState == FileBrowserStateEnum.Hidden ? SizeIncrement.Width : Width - OpenMinimumSize.Width);
-            sw.Save("HeightIncrement", !ReportState ? SizeIncrement.Height : Height - OpenMinimumSize.Height);
-            sw.Save("Top", Top);
-            sw.Save("Left", Left);
-
-            StringBuilder profiles = new StringBuilder();
-            foreach (ToolStripItem item in toolStripDropDownButtonProfile.DropDownItems)
-                if (item != toolStripTextBoxAddProfile
-                    && item != toolStripMenuItemDeleteProfile
-                    && item != defaultToolStripMenuItem
-                    && item != toolStripSeparator5
-                    )
+            try
+            {
+                using (SettingsWriter sw = new SettingsWriter(
+                    "CUE Tools", "settings.txt", Application.ExecutablePath))
                 {
-                    if (profiles.Length > 0)
-                        profiles.Append(' ');
-                    profiles.Append(item.Text);
-                }
-            sw.Save("Profiles", profiles.ToString());
+                    SaveScripts(SelectedAction);
+                    sw.Save("LastMOTD", lastMOTD);
+                    sw.Save("ChoiceWidth", _choiceWidth);
+                    sw.Save("ChoiceHeight", _choiceHeight);
+                    sw.Save("ChoiceMaxed", _choiceMaxed);
+                    sw.Save("InputPath", InputPath);
+                    sw.Save("DefaultLosslessFormat", _defaultLosslessFormat);
+                    sw.Save("DefaultLossyFormat", _defaultLossyFormat);
+                    sw.Save("DefaultNoAudioFormat", _defaultNoAudioFormat);
+                    sw.Save("DontGenerate", !_outputPathUseTemplate);
+                    sw.Save("OutputPathUseTemplates", comboBoxOutputFormat.Items.Count - OutputPathUseTemplates.Length);
+                    for (int iFormat = comboBoxOutputFormat.Items.Count - 1; iFormat >= OutputPathUseTemplates.Length; iFormat--)
+                        sw.Save(string.Format("OutputPathUseTemplate{0}", iFormat - OutputPathUseTemplates.Length), comboBoxOutputFormat.Items[iFormat].ToString());
 
-            _defaultProfile.Save(sw);
-            sw.Close();
+                    sw.Save("UsePregapForFirstTrackInSingleFile", _usePregapForFirstTrackInSingleFile);
+                    sw.Save("ReducePriority", _reducePriority);
+                    sw.Save("FileBrowserState", (int)FileBrowserState);
+                    sw.Save("ReportState", ReportState);
+                    sw.Save("CorrectorLookup", (int)CorrectorMode);
+                    sw.Save("CorrectorOverwrite", toolStripButtonCorrectorOverwrite.Checked);
+                    sw.Save("CorrectorFormat", toolStripDropDownButtonCorrectorFormat.Text);
+                    sw.Save("WidthIncrement", FileBrowserState == FileBrowserStateEnum.Hidden ? SizeIncrement.Width : Width - OpenMinimumSize.Width);
+                    sw.Save("HeightIncrement", !ReportState ? SizeIncrement.Height : Height - OpenMinimumSize.Height);
+                    sw.Save("Top", Top);
+                    sw.Save("Left", Left);
+
+                    StringBuilder profiles = new StringBuilder();
+                    foreach (ToolStripItem item in toolStripDropDownButtonProfile.DropDownItems)
+                        if (item != toolStripTextBoxAddProfile
+                            && item != toolStripMenuItemDeleteProfile
+                            && item != defaultToolStripMenuItem
+                            && item != toolStripSeparator5
+                            )
+                        {
+                            if (profiles.Length > 0)
+                                profiles.Append(' ');
+                            profiles.Append(item.Text);
+                        }
+                    sw.Save("Profiles", profiles.ToString());
+
+                    _defaultProfile.Save(sw);
+                    sw.Close();
+                }
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                ShowCredentialSaveFailure(ex);
+            }
+            catch (CryptographicException ex)
+            {
+                ShowCredentialSaveFailure(ex);
+            }
         }
 
         private CUEStyle SelectedCUEStyle
@@ -2563,7 +2563,8 @@ namespace JDP
             string profileName = e.ClickedItem.Text;
             if (profileName == _profile._name)
                 return;
-            DeactivateProfile();
+            if (!DeactivateProfile())
+                return;
             ActivateProfile(profileName);
         }
 
@@ -2583,7 +2584,11 @@ namespace JDP
             e.SuppressKeyPress = true;
 
             string profileName = item.Text;
-            SaveProfile();
+            if (!TrySaveProfile())
+            {
+                toolStripDropDownButtonProfile.DropDownItems.Remove(item);
+                return;
+            }
             //DeactivateProfile();
             _profile = _profile.Clone(profileName);
             ActivateProfile();

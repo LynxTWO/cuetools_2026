@@ -42,4 +42,14 @@ xcopy /Y /D %base_dir%\ThirdParty\x64\Unrar.dll %debug_dir%\plugins\x64\
 xcopy /Y /D %base_dir%\ThirdPartyDebug\x64\wavpackdll.dll %debug_dir%\plugins\x64\
 xcopy /Y /D %base_dir%\ThirdPartyDebug\x64\wavpackdll.pdb %debug_dir%\plugins\x64\
 
+REM Keep the debug tree on the same plugin trust contract as release packaging. A developer who
+REM deliberately wants loose plugin discovery can instead set
+REM CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS=1 and omit this collection step.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%base_dir%\tools\Write-PluginManifest.ps1" -PluginDirectory "%debug_dir%\plugins"
+if errorlevel 1 (
+    echo Failed to generate the debug plugin trust manifest.
+    popd
+    exit /b 1
+)
+
 popd

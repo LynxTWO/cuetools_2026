@@ -83,26 +83,48 @@ namespace CUETools.Codecs.Flake
 			_IO = IO != null ? IO : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 0x10000);
 
 			crc8 = new Crc8();
-			
+			try
+			{
+				InitializeFromStream();
+			}
+			catch
+			{
+				_IO.Close();
+				_IO = null;
+				throw;
+			}
+		}
+
+		private void InitializeFromStream()
+		{
 			_framesBuffer = new byte[0x20000];
 			decode_metadata();
 
 			frame = new FlacFrame(PCM.ChannelCount);
 			framereader = new BitReader();
 
-			//max_frame_size = 16 + ((Flake.MAX_BLOCKSIZE * PCM.BitsPerSample * PCM.ChannelCount + 1) + 7) >> 3);
-			if (((int)max_frame_size * PCM.BitsPerSample * PCM.ChannelCount * 2 >> 3) > _framesBuffer.Length)
+			if (PCM.BitsPerSample != 16 && PCM.BitsPerSample != 24)
+				throw new InvalidDataException("unsupported FLAC bits per sample");
+
+			// Keep enough space for one maximum frame while fill_frames_buffer maintains its
+			// half-buffer refill threshold. Use 64-bit arithmetic: a hostile 24-bit frame-size
+			// declaration previously overflowed the int multiplication and could select an invalid
+			// or enormous allocation.
+			long oneFrameBytes = max_frame_size > 0
+				? (long)max_frame_size
+				: (long)max_block_size * PCM.BlockAlign + 64;
+			long requiredBufferBytes = checked(oneFrameBytes * 2 + 16);
+			if (requiredBufferBytes > Int32.MaxValue)
+				throw new InvalidDataException("FLAC frame-size declaration is too large");
+			if (requiredBufferBytes > _framesBuffer.Length)
 			{
 				byte[] temp = _framesBuffer;
-				_framesBuffer = new byte[((int)max_frame_size * PCM.BitsPerSample * PCM.ChannelCount * 2 >> 3)];
+				_framesBuffer = new byte[(int)requiredBufferBytes];
 				if (_framesBufferLength > 0)
 					Array.Copy(temp, _framesBufferOffset, _framesBuffer, 0, _framesBufferLength);
 				_framesBufferOffset = 0;
 			}
 			_samplesInBuffer = 0;
-
-			if (PCM.BitsPerSample != 16 && PCM.BitsPerSample != 24)
-				throw new Exception("invalid flac file");
 
 			samplesBuffer = new int[FlakeConstants.MAX_BLOCKSIZE * PCM.ChannelCount];
 			residualBuffer = new int[FlakeConstants.MAX_BLOCKSIZE * PCM.ChannelCount];
@@ -643,6 +665,30 @@ namespace CUETools.Codecs.Flake
 			return true;
 		}
 
+		void consume_metadata_block(int bytes)
+		{
+			if (bytes < 0)
+				throw new InvalidDataException("invalid FLAC metadata block length");
+
+			if (_framesBufferLength >= bytes)
+			{
+				_framesBufferLength -= bytes;
+				_framesBufferOffset += bytes;
+				return;
+			}
+
+			int remaining = bytes - _framesBufferLength;
+			_framesBufferLength = 0;
+			_framesBufferOffset = 0;
+			while (remaining > 0)
+			{
+				int read = _IO.Read(_framesBuffer, 0, Math.Min(remaining, _framesBuffer.Length));
+				if (read == 0)
+					throw new InvalidDataException("truncated FLAC metadata block");
+				remaining -= read;
+			}
+		}
+
 		unsafe void decode_metadata()
 		{
 			byte x;
@@ -703,18 +749,53 @@ namespace CUETools.Codecs.Flake
 				throw new Exception("FLAC stream not found");
 			}
 
+			bool sawStreamInfo = false;
+			int metadataIndex = 0;
 			do
 			{
 				fill_frames_buffer();
+				if (_framesBufferLength < 4)
+					throw new InvalidDataException("truncated FLAC metadata header");
+
+				bool is_last;
+				MetadataType type;
+				int len;
 				fixed (byte* buf = _framesBuffer)
 				{
-					BitReader bitreader = new BitReader(buf, _framesBufferOffset, _framesBufferLength - _framesBufferOffset);
-					bool is_last = bitreader.readbit() != 0;
-					MetadataType type = (MetadataType)bitreader.readbits(7);
-					int len = (int)bitreader.readbits(24);
+					BitReader headerReader = new BitReader(buf, _framesBufferOffset, 4);
+					is_last = headerReader.readbit() != 0;
+					type = (MetadataType)headerReader.readbits(7);
+					len = (int)headerReader.readbits(24);
+				}
 
-					if (type == MetadataType.StreamInfo)
+				int blockBytes;
+				try
+				{
+					blockBytes = checked(4 + len);
+				}
+				catch (OverflowException ex)
+				{
+					throw new InvalidDataException("invalid FLAC metadata block length", ex);
+				}
+
+				if (metadataIndex == 0 && type != MetadataType.StreamInfo)
+					throw new InvalidDataException("FLAC STREAMINFO must be the first metadata block");
+
+				if (type == MetadataType.StreamInfo)
+				{
+					if (sawStreamInfo)
+						throw new InvalidDataException("duplicate FLAC STREAMINFO block");
+					if (len != 34)
+						throw new InvalidDataException("invalid FLAC STREAMINFO block length");
+					if (_framesBufferLength < blockBytes)
+						throw new InvalidDataException("truncated FLAC STREAMINFO block");
+
+					fixed (byte* buf = _framesBuffer)
 					{
+						BitReader bitreader = new BitReader(
+							buf,
+							_framesBufferOffset + 4,
+							len);
 						const int FLAC__STREAM_METADATA_STREAMINFO_MIN_BLOCK_SIZE_LEN = 16; /* bits */
 						const int FLAC__STREAM_METADATA_STREAMINFO_MAX_BLOCK_SIZE_LEN = 16; /* bits */
 						const int FLAC__STREAM_METADATA_STREAMINFO_MIN_FRAME_SIZE_LEN = 24; /* bits */
@@ -732,36 +813,56 @@ namespace CUETools.Codecs.Flake
 						int sample_rate = (int)bitreader.readbits(FLAC__STREAM_METADATA_STREAMINFO_SAMPLE_RATE_LEN);
 						int channels = 1 + (int)bitreader.readbits(FLAC__STREAM_METADATA_STREAMINFO_CHANNELS_LEN);
 						int bits_per_sample = 1 + (int)bitreader.readbits(FLAC__STREAM_METADATA_STREAMINFO_BITS_PER_SAMPLE_LEN);
+						if (min_block_size < 16 ||
+							max_block_size < min_block_size ||
+							sample_rate <= 0 ||
+							sample_rate > 655350 ||
+							bits_per_sample < 4)
+							throw new InvalidDataException("invalid FLAC STREAMINFO values");
 						pcm = new AudioPCMConfig(bits_per_sample, channels, sample_rate);
 						_sampleCount = (long)bitreader.readbits64(FLAC__STREAM_METADATA_STREAMINFO_TOTAL_SAMPLES_LEN);
 						bitreader.skipbits(FLAC__STREAM_METADATA_STREAMINFO_MD5SUM_LEN);
 					}
-					else if (type == MetadataType.Seektable)
-					{
-						int num_entries = len / 18;
-						seek_table = new SeekPoint[num_entries];
-                        for (int e = 0; e < num_entries; e++)
-                        {
-                            seek_table[e].number = bitreader.read_long();
-                            seek_table[e].offset = bitreader.read_long();
-                            seek_table[e].framesize = (int)bitreader.read_ushort();
-                        }
-					}
-					if (_framesBufferLength < 4 + len)
-					{
-						_IO.Position += 4 + len - _framesBufferLength;
-						_framesBufferLength = 0;
-					}
-					else
-					{
-						_framesBufferLength -= 4 + len;
-						_framesBufferOffset += 4 + len;
-					}
-					if (is_last)
-						break;
+					sawStreamInfo = true;
 				}
+				else if (type == MetadataType.Seektable)
+				{
+					if ((len % 18) != 0)
+						throw new InvalidDataException("invalid FLAC seek table length");
+
+					// A legal metadata block can be larger than the fixed frame buffer. Preserve
+					// bounded decoding by skipping an oversized seek table instead of parsing a
+					// partial buffer as zero-filled seek points.
+					if (_framesBufferLength >= blockBytes)
+					{
+						fixed (byte* buf = _framesBuffer)
+						{
+							BitReader bitreader = new BitReader(
+								buf,
+								_framesBufferOffset + 4,
+								len);
+							int num_entries = len / 18;
+							seek_table = new SeekPoint[num_entries];
+							for (int e = 0; e < num_entries; e++)
+							{
+								seek_table[e].number = bitreader.read_long();
+								seek_table[e].offset = bitreader.read_long();
+								seek_table[e].framesize = (int)bitreader.read_ushort();
+							}
+						}
+					}
+				}
+
+				consume_metadata_block(blockBytes);
+				metadataIndex++;
+				if (is_last)
+					break;
 			} while (true);
-			first_frame_offset = _IO.Position - _framesBufferLength;
+			if (!sawStreamInfo)
+				throw new InvalidDataException("FLAC STREAMINFO block is missing");
+			first_frame_offset = _IO.CanSeek
+				? _IO.Position - _framesBufferLength
+				: 0;
 		}
 	}
 }

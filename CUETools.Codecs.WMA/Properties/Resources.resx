@@ -121,7 +121,7 @@
     <value>Calculate MD5 hash for audio stream</value>
   </data>
   <data name="DoVerifyDescription" xml:space="preserve">
-    <value>Decode each frame and compare with original</value>
+    <value>Decode the completed output and compare its PCM with the original</value>
   </data>
   <data name="ExceptionSampleCount" xml:space="preserve">
     <value>Samples written differs from the expected sample count</value>

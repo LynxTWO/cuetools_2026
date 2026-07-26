@@ -4,47 +4,75 @@ Use this reference whenever another pass tells you to record an unknown, label e
 
 **Mode:** definitional. No code changes. No deliverables produced from this file alone.
 
+## Contents
+
+- Confidence and negative-search evidence
+- Risk, status, classification, and diagnostic labels
+- Unknowns and sensitive-data shapes
+- Approval gates and default paths
+- Writing rules
+
 ## Confidence levels
 
 Use exactly these three labels. Do not invent intermediates.
 
-- `verified` — direct repo evidence supports the claim. Cite the file, line, command, or doc that proves it.
-- `inferred` — repo evidence is consistent with the claim but does not prove it. Name the gap that prevents `verified`.
-- `unknown` — repo evidence is missing, contradictory, or only available outside the repo (vendor console, sibling repo, runtime telemetry).
+- `verified` - direct repo evidence supports the claim. Cite the file, line, command, or doc that proves it.
+- `inferred` - repo evidence is consistent with the claim but does not prove it. Name the gap that prevents `verified`.
+- `unknown` - repo evidence is missing, contradictory, or only available outside the repo (vendor console, sibling repo, runtime telemetry).
 
 Downgrade rather than flatten. If a check would force `inferred`, do not write `verified`.
+
+### Negative-search evidence
+
+Every negative search records:
+
+- the exact scope and query
+- the candidate-file count
+- the finding count
+- excluded file types or trees that could hold the same behavior
+
+Unless a pass says otherwise, `finding count` means the number of matching output lines after the
+stated exclusions. Also report matching-file count when repeated hits in one file could mislead,
+and occurrence count when multiple matches on one line matter. Name the unit beside the number;
+never compare unlike units across passes.
+
+Zero candidate files means the surface was not examined. Record it as `unknown` or `unscanned`; never translate it into "clean," "absent," "pure managed," or another negative claim. A nonzero candidate count with zero findings proves only that the searched pattern was absent from those candidates.
+
+Verify that the search command actually opens the candidate files. In particular, do not pipe the output of `rg --files` into `rg PATTERN` and treat the result as a content scan: the second command searches the incoming filename text, not the files those names identify. Search the scoped tree directly with matching globs, or pass the enumerated paths as file arguments using a delimiter-safe mechanism. Spot-check at least one known-positive fixture or sentinel before trusting a whole-repo zero.
 
 ## Risk levels
 
 Use exactly these four labels. Pick the one that matches the worst plausible blast radius if the issue is real.
 
-- `low` — annoyance or local cleanup; recoverable in minutes
-- `medium` — meaningful regression, slow recovery, scoped blast radius
-- `high` — user-visible incident, data corruption risk, security exposure within one trust zone
-- `critical` — money movement, account takeover, data loss, privacy breach, irreversible state change, multi-tenant or cross-trust-zone exposure
+- `low` - annoyance or local cleanup; recoverable in minutes
+- `medium` - meaningful regression, slow recovery, scoped blast radius
+- `high` - user-visible incident, data corruption risk, security exposure within one trust zone
+- `critical` - money movement, account takeover, data loss, privacy breach, irreversible state change, multi-tenant or cross-trust-zone exposure
 
 ## Status vocabulary
 
 ### Coverage ledger status
 
-- `unscanned` — not yet touched by any pass
-- `mapped` — architecture inventory complete for the area
-- `commented` — critical-path comments added
-- `audited` — logging or telemetry audit complete
-- `reviewed` — adversarial or scenario pass ran
-- `deferred` — skipped on purpose; reason recorded
-- `excluded` — will not get code-level passes (generated, vendored, mirrored, binary, engine-owned serialized)
-- `approval-gated` — needs explicit human approval before any further edit
-- `blocked` — cannot progress; reason and next check recorded
+- `unscanned` - not yet touched by any pass
+- `mapped` - architecture inventory complete for the area
+- `commented` - critical-path comments added
+- `audited` - logging or telemetry audit complete
+- `reviewed` - adversarial or scenario pass ran
+- `tested` - bounded automated or runtime evidence was executed; put the exact
+  scope, counts, skips, and untested boundary in the evidence columns
+- `deferred` - skipped on purpose; reason recorded
+- `excluded` - will not get code-level passes (generated, vendored, mirrored, binary, engine-owned serialized)
+- `approval-gated` - needs explicit human approval before any further edit
+- `blocked` - cannot progress; reason and next check recorded
 
 ### Item status (backlog, unknowns, slices)
 
-- `open` — recorded, not yet started
-- `ready` — evidence and approval state are sufficient to act
-- `in progress` — actively being worked
-- `blocked` — cannot progress; reason and next check recorded
-- `deferred` — intentionally postponed; reason recorded
-- `resolved` / `fixed` / `done` — closed; pick the verb that fits the artifact (unknowns close as `resolved`, backlog items close as `fixed`, slices close as `done`)
+- `open` - recorded, not yet started
+- `ready` - evidence and approval state are sufficient to act
+- `in progress` - actively being worked
+- `blocked` - cannot progress; reason and next check recorded
+- `deferred` - intentionally postponed; reason recorded
+- `resolved` / `fixed` / `done` - closed; pick the verb that fits the artifact (unknowns close as `resolved`, backlog items close as `fixed`, slices close as `done`)
 
 ## Classification labels (areas and slices)
 
@@ -60,6 +88,19 @@ Use alongside status. A single area can carry more than one label.
 - `external-control-plane`
 - `cross-repo-boundary`
 - `approval-gated`
+
+## Diagnostic outcome labels
+
+Keep validation blockers separate from source findings:
+
+- `source defect`: the supported target reached the relevant source or behavior and produced a reproducible source-level failure
+- `unexercised path`: the check did not discover, enable, invoke, or observe the target behavior
+- `toolchain blocker`: a required SDK, compiler, workload, reference assembly, or build tool was unavailable
+- `native dependency blocker`: a required native library, SDK, driver, executable, or architecture-specific artifact was unavailable
+- `capability unavailable`: the environment does not expose the optional runtime, service, hardware, permission, or format needed for the check
+- `external-state blocker`: proof depends on a vendor console, sibling repo, credential, network service, or other state outside the checked repo
+
+Record the command, target tuple, observed failure, and next best check. A missing prerequisite is not evidence that the source is defective, and an unexercised path is not a passing path.
 
 ## Unknowns entry shape
 
@@ -114,6 +155,11 @@ Edits to these areas require explicit human approval before any change. Document
 
 Use the repo's existing convention first. Fall back to these only when the repo has none.
 
+An explicit repo steering path overrides this table. If steering names one directory but current
+artifacts are deliberately split by type, do not duplicate or move them silently. Record the
+conflict, keep using the established artifact paths for the current pass, and refresh steering in
+pass `01`.
+
 | Artifact | Default path |
 |---|---|
 | Steering | `AGENTS.md` and tool-specific siblings at repo root |
@@ -131,6 +177,8 @@ Use the repo's existing convention first. Fall back to these only when the repo 
 | Evidence-gap check | `docs/review/evidence-gap-check.md` |
 | Approval packets | `docs/review/approval-packets.md` |
 | Maintenance harness | `docs/review/maintenance-harness.md` |
+| Artifact-GC ledger | `docs/maintenance/artifact-gc-ledger-<date>.md` |
+| Artifact-GC manifest | `docs/maintenance/manifests/<group>-manifest.json` |
 | Unknowns | `docs/unknowns/<pass-name>.md` |
 
 ## Writing rules (cross-pass)

@@ -114,6 +114,9 @@ namespace CUETools.Codecs.libFLAC
         internal static extern FLAC__StreamMetadata* FLAC__metadata_object_new(FLAC__MetadataType type);
 
         [DllImport(DllName, CallingConvention = libFLACCallingConvention)]
+        internal static extern void FLAC__metadata_object_delete(FLAC__StreamMetadata* metadata);
+
+        [DllImport(DllName, CallingConvention = libFLACCallingConvention)]
         internal static extern int FLAC__metadata_object_seektable_template_append_spaced_points_by_samples(FLAC__StreamMetadata* metadata, int samples, long total_samples);
 
         [DllImport(DllName, CallingConvention = libFLACCallingConvention)]
@@ -163,13 +166,7 @@ namespace CUETools.Codecs.libFLAC
             var myFolder = System.IO.Path.GetDirectoryName(myPath);
             var is64 = IntPtr.Size == 8;
             var subfolder = is64 ? "x64" : "win32";
-#if NET47
-            IntPtr Dll = LoadLibrary(System.IO.Path.Combine(myFolder, subfolder, DllName + ".dll"));
-#else
             IntPtr Dll = LoadLibrary(System.IO.Path.Combine(System.IO.Path.Combine(myFolder, subfolder), DllName + ".dll"));
-#endif
-            if (Dll == IntPtr.Zero)
-                Dll = LoadLibrary(DllName + ".dll");
             if (Dll == IntPtr.Zero)
                 throw new DllNotFoundException();
             IntPtr addr = GetProcAddress(Dll, "FLAC__VERSION_STRING");

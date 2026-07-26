@@ -60,7 +60,7 @@ namespace CUETools.Codecs.libFLAC
             this.Init();
         }
 
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         [DisplayName("Verify")]
         [Description("Decode each frame and compare with original")]
         [JsonProperty]
@@ -83,7 +83,9 @@ namespace CUETools.Codecs.libFLAC
         {
             m_path = path;
             m_stream = output;
+            m_outputTransaction = output == null ? new LosslessFileOutputTransaction(path) : null;
             m_settings = settings;
+            m_verify = settings.Verify;
             m_streamGiven = output != null;
             m_initialized = false;
             m_finalSampleCount = -1;
@@ -100,10 +102,20 @@ namespace CUETools.Codecs.libFLAC
                 throw new Exception("bits per sample must be 16..24");
 
             m_encoder = FLACDLL.FLAC__stream_encoder_new();
+            if (m_encoder == IntPtr.Zero)
+                throw new Exception("unable to create the encoder");
 
-            FLACDLL.FLAC__stream_encoder_set_bits_per_sample(m_encoder, (uint)m_settings.PCM.BitsPerSample);
-            FLACDLL.FLAC__stream_encoder_set_channels(m_encoder, (uint)m_settings.PCM.ChannelCount);
-            FLACDLL.FLAC__stream_encoder_set_sample_rate(m_encoder, (uint)m_settings.PCM.SampleRate);
+            try
+            {
+                FLACDLL.FLAC__stream_encoder_set_bits_per_sample(m_encoder, (uint)m_settings.PCM.BitsPerSample);
+                FLACDLL.FLAC__stream_encoder_set_channels(m_encoder, (uint)m_settings.PCM.ChannelCount);
+                FLACDLL.FLAC__stream_encoder_set_sample_rate(m_encoder, (uint)m_settings.PCM.SampleRate);
+            }
+            catch
+            {
+                ReleaseEncoderAndMetadataNoThrow();
+                throw;
+            }
         }
 
         public IAudioEncoderSettings Settings => m_settings;
@@ -123,6 +135,17 @@ namespace CUETools.Codecs.libFLAC
 
         public void Close()
         {
+            if (m_closed)
+                return;
+            m_closed = true;
+            if (m_outputTransaction != null)
+                m_outputTransaction.Complete(FinalizeEncoder);
+            else
+                FinalizeEncoder();
+        }
+
+        private void FinalizeEncoder()
+        {
             // finish() is where libFLAC reports a verify mismatch in the FINAL block, and where it
             // flushes the last frames and rewrites STREAMINFO. Discarding its result meant a failed
             // encode - including a caught verify mismatch - closed silently and looked successful.
@@ -130,46 +153,58 @@ namespace CUETools.Codecs.libFLAC
             // the stream always closed first: throwing early would leak the native encoder and leave a
             // half-written file locked.
             string failure = null;
-            if (m_initialized)
+            try
             {
-                if (0 == FLACDLL.FLAC__stream_encoder_finish(m_encoder))
-                    failure = EncoderStateDetail();
-                FLACDLL.FLAC__stream_encoder_delete(m_encoder);
-                m_encoder = IntPtr.Zero;
-                m_initialized = false;
+                if (m_initialized)
+                {
+                    if (0 == FLACDLL.FLAC__stream_encoder_finish(m_encoder))
+                        failure = EncoderStateDetail();
+                }
             }
-            if (m_stream != null)
+            catch
             {
-                m_stream.Close();
-                m_stream = null;
+                ReleaseEncoderAndMetadataNoThrow();
+                CloseStreamNoThrow();
+                throw;
             }
+
             if (failure != null)
+            {
+                ReleaseEncoderAndMetadataNoThrow();
+                CloseStreamNoThrow();
                 throw new Exception("an error occurred while finishing the encode: " + failure);
+            }
+
+            try
+            {
+                ReleaseEncoderAndMetadata();
+            }
+            catch
+            {
+                CloseStreamNoThrow();
+                throw;
+            }
+            CloseStream();
             if ((m_finalSampleCount > 0) && (m_samplesWritten != m_finalSampleCount))
                 throw new Exception("samples written differs from the expected sample count");
         }
 
         public void Delete()
         {
-            try
+            m_closed = true;
+            ReleaseEncoderAndMetadataNoThrow();
+            CloseStreamNoThrow();
+            if (m_outputTransaction != null)
             {
-                if (m_initialized)
-                {
-                    FLACDLL.FLAC__stream_encoder_delete(m_encoder);
-                    m_encoder = IntPtr.Zero;
-                    m_initialized = false;
-                }
-                if (m_stream != null)
-                {
-                    m_stream.Close();
-                    m_stream = null;
-                }
+                if (m_outputTransaction.Published)
+                    File.Delete(m_outputTransaction.RequestedPath);
+                else
+                    m_outputTransaction.CleanupWork();
             }
-            catch (Exception)
+            else if (!m_streamGiven && m_path != "")
             {
-            }
-            if (m_path != "")
                 File.Delete(m_path);
+            }
         }
 
         /// <summary>The encoder's failure state, with libFLAC's verify-mismatch detail when it has any.
@@ -194,6 +229,8 @@ namespace CUETools.Codecs.libFLAC
 
         public void Write(AudioBuffer sampleBuffer)
         {
+            if (m_closed)
+                throw new InvalidOperationException("The encoder is already closed.");
             if (!m_initialized) Initialize();
 
             sampleBuffer.Prepare(this);
@@ -256,55 +293,172 @@ namespace CUETools.Codecs.libFLAC
 
         void Initialize()
         {
+            try
+            {
+                if (m_encoder == IntPtr.Zero)
+                    throw new InvalidOperationException("The encoder is unavailable after a failed initialization.");
+                if (m_stream == null)
+                    m_stream = new FileStream(m_outputTransaction.WorkPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 0x10000);
+
+                var metadata = stackalloc FLAC__StreamMetadata*[4];
+                int metadataCount = 0;
+
+                if (m_finalSampleCount > 0)
+                {
+                    m_seekTableMetadata = CreateMetadata(
+                        FLAC__MetadataType.FLAC__METADATA_TYPE_SEEKTABLE);
+                    FLACDLL.FLAC__metadata_object_seektable_template_append_spaced_points_by_samples(
+                        m_seekTableMetadata, m_settings.PCM.SampleRate * 10, m_finalSampleCount);
+                    FLACDLL.FLAC__metadata_object_seektable_template_sort(m_seekTableMetadata, 1);
+                    metadata[metadataCount++] = m_seekTableMetadata;
+                }
+
+                m_vorbisCommentMetadata = CreateMetadata(
+                    FLAC__MetadataType.FLAC__METADATA_TYPE_VORBIS_COMMENT);
+                metadata[metadataCount++] = m_vorbisCommentMetadata;
+
+                if (m_settings.Padding != 0)
+                {
+                    m_paddingMetadata = CreateMetadata(
+                        FLAC__MetadataType.FLAC__METADATA_TYPE_PADDING);
+                    m_paddingMetadata->length = (uint)m_settings.Padding;
+                    metadata[metadataCount++] = m_paddingMetadata;
+                }
+
+                // libFLAC borrows these metadata pointers rather than copying them. The fields
+                // above retain ownership until finish completes; ReleaseEncoderAndMetadata then
+                // deletes every object after the encoder can no longer reference it.
+                FLACDLL.FLAC__stream_encoder_set_metadata(m_encoder, metadata, metadataCount);
+                FLACDLL.FLAC__stream_encoder_set_verify(m_encoder, m_verify ? 1 : 0);
+                FLACDLL.FLAC__stream_encoder_set_do_md5(m_encoder, m_settings.MD5Sum ? 1 : 0);
+                FLACDLL.FLAC__stream_encoder_set_compression_level(m_encoder, m_settings.GetEncoderModeIndex());
+                if (m_finalSampleCount > 0)
+                    FLACDLL.FLAC__stream_encoder_set_total_samples_estimate(m_encoder, m_finalSampleCount);
+                if (m_settings.BlockSize > 0)
+                    FLACDLL.FLAC__stream_encoder_set_blocksize(m_encoder, m_settings.BlockSize);
+
+                FLAC__StreamEncoderInitStatus st = FLACDLL.FLAC__stream_encoder_init_stream(
+                    m_encoder, m_write_callback, m_stream.CanSeek ? m_seek_callback : null,
+                    m_stream.CanSeek ? m_tell_callback : null, null, null);
+                if (st != FLAC__StreamEncoderInitStatus.FLAC__STREAM_ENCODER_INIT_STATUS_OK)
+                    throw new Exception(string.Format("unable to initialize the encoder: {0}", st));
+
+                m_initialized = true;
+            }
+            catch
+            {
+                // A failed init makes this native encoder unusable. Release it immediately,
+                // including any partially-created metadata, but preserve the original failure.
+                ReleaseEncoderAndMetadataNoThrow();
+                CloseStreamNoThrow();
+                throw;
+            }
+        }
+
+        private FLAC__StreamMetadata* CreateMetadata(FLAC__MetadataType type)
+        {
+            FLAC__StreamMetadata* metadata = FLACDLL.FLAC__metadata_object_new(type);
+            if (metadata == null)
+                throw new OutOfMemoryException("Unable to allocate libFLAC metadata.");
+            return metadata;
+        }
+
+        private void ReleaseEncoderAndMetadata()
+        {
+            try
+            {
+                if (m_encoder != IntPtr.Zero)
+                    FLACDLL.FLAC__stream_encoder_delete(m_encoder);
+            }
+            finally
+            {
+                m_encoder = IntPtr.Zero;
+                m_initialized = false;
+                DeleteMetadataObjects();
+            }
+        }
+
+        private void ReleaseEncoderAndMetadataNoThrow()
+        {
+            try
+            {
+                if (m_encoder != IntPtr.Zero)
+                    FLACDLL.FLAC__stream_encoder_delete(m_encoder);
+            }
+            catch
+            {
+            }
+            m_encoder = IntPtr.Zero;
+            m_initialized = false;
+
+            DeleteMetadataObjectNoThrow(ref m_seekTableMetadata);
+            DeleteMetadataObjectNoThrow(ref m_vorbisCommentMetadata);
+            DeleteMetadataObjectNoThrow(ref m_paddingMetadata);
+        }
+
+        private void DeleteMetadataObjects()
+        {
+            DeleteMetadataObject(ref m_seekTableMetadata);
+            DeleteMetadataObject(ref m_vorbisCommentMetadata);
+            DeleteMetadataObject(ref m_paddingMetadata);
+        }
+
+        private static void DeleteMetadataObject(ref FLAC__StreamMetadata* metadata)
+        {
+            if (metadata == null)
+                return;
+            try
+            {
+                FLACDLL.FLAC__metadata_object_delete(metadata);
+            }
+            finally
+            {
+                metadata = null;
+            }
+        }
+
+        private static void DeleteMetadataObjectNoThrow(ref FLAC__StreamMetadata* metadata)
+        {
+            try
+            {
+                DeleteMetadataObject(ref metadata);
+            }
+            catch
+            {
+            }
+        }
+
+        private void CloseStream()
+        {
             if (m_stream == null)
-                m_stream = new FileStream(m_path, FileMode.Create, FileAccess.Write, FileShare.Read, 0x10000);
+                return;
+            Stream stream = m_stream;
+            m_stream = null;
+            stream.Close();
+        }
 
-            var metadata = stackalloc FLAC__StreamMetadata*[4];
-            int metadataCount = 0;
-            FLAC__StreamMetadata* padding, seektable, vorbiscomment;
-
-            if (m_finalSampleCount > 0)
+        private void CloseStreamNoThrow()
+        {
+            try
             {
-                seektable = FLACDLL.FLAC__metadata_object_new(FLAC__MetadataType.FLAC__METADATA_TYPE_SEEKTABLE);
-                FLACDLL.FLAC__metadata_object_seektable_template_append_spaced_points_by_samples(
-                    seektable, m_settings.PCM.SampleRate * 10, m_finalSampleCount);
-                FLACDLL.FLAC__metadata_object_seektable_template_sort(seektable, 1);
-                metadata[metadataCount++] = seektable;
+                CloseStream();
             }
-
-            vorbiscomment = FLACDLL.FLAC__metadata_object_new(FLAC__MetadataType.FLAC__METADATA_TYPE_VORBIS_COMMENT);
-            metadata[metadataCount++] = vorbiscomment;
-
-            if (m_settings.Padding != 0)
+            catch
             {
-                padding = FLACDLL.FLAC__metadata_object_new(FLAC__MetadataType.FLAC__METADATA_TYPE_PADDING);
-                padding->length = (uint)m_settings.Padding;
-                metadata[metadataCount++] = padding;
             }
-
-            FLACDLL.FLAC__stream_encoder_set_metadata(m_encoder, metadata, metadataCount);
-            FLACDLL.FLAC__stream_encoder_set_verify(m_encoder, m_settings.Verify ? 1 : 0);
-            FLACDLL.FLAC__stream_encoder_set_do_md5(m_encoder, m_settings.MD5Sum ? 1 : 0);
-            FLACDLL.FLAC__stream_encoder_set_compression_level(m_encoder, m_settings.GetEncoderModeIndex());
-            if (m_finalSampleCount > 0)
-                FLACDLL.FLAC__stream_encoder_set_total_samples_estimate(m_encoder, m_finalSampleCount);
-            if (m_settings.BlockSize > 0)
-                FLACDLL.FLAC__stream_encoder_set_blocksize(m_encoder, m_settings.BlockSize);
-
-            FLAC__StreamEncoderInitStatus st = FLACDLL.FLAC__stream_encoder_init_stream(
-                m_encoder, m_write_callback, m_stream.CanSeek ? m_seek_callback : null,
-                m_stream.CanSeek ? m_tell_callback : null, null, null);
-            if (st != FLAC__StreamEncoderInitStatus.FLAC__STREAM_ENCODER_INIT_STATUS_OK)
-                throw new Exception(string.Format("unable to initialize the encoder: {0}", st));
-
-            m_initialized = true;
         }
 
         EncoderSettings m_settings;
         Stream m_stream;
         bool m_streamGiven;
+        bool m_verify;
+        LosslessFileOutputTransaction m_outputTransaction;
         IntPtr m_encoder;
+        FLAC__StreamMetadata* m_seekTableMetadata;
+        FLAC__StreamMetadata* m_vorbisCommentMetadata;
+        FLAC__StreamMetadata* m_paddingMetadata;
         bool m_initialized;
+        bool m_closed;
         string m_path;
         Int64 m_finalSampleCount, m_samplesWritten;
         FLACDLL.FLAC__StreamEncoderWriteCallback m_write_callback;

@@ -942,7 +942,9 @@ namespace CUETools.Processor
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Trace.WriteLine("FreedbHelper.SetDefaultSiteAddress: " + ex.Message);
+                    System.Diagnostics.Trace.WriteLine(
+                        "Freedb site configuration failed (" +
+                        ex.GetType().Name + ").");
                 }
 
                 QueryResult queryResult;
@@ -987,7 +989,7 @@ namespace CUETools.Processor
                 catch (Exception ex)
                 {
                     if (ex is StopException)
-                        throw ex;
+                        throw;
                 }
             }
 
@@ -3164,7 +3166,9 @@ namespace CUETools.Processor
 
             if (_hasEmbeddedArtwork) return;
 
+#if NET47 || NET20
             bool isValidName = true;
+#endif
             if ((_config.extractAlbumArt || _config.embedAlbumArt) && !_isCD)
             {
                 List<string> files = new List<string>();
@@ -3196,7 +3200,9 @@ namespace CUETools.Processor
                     if (files.Count == 0)
                     {
                         files = allfiles;
+#if NET47 || NET20
                         isValidName = false;
+#endif
                     }
 
                     // if (files.Count > maxChoice) return;
@@ -3797,7 +3803,7 @@ namespace CUETools.Processor
                     audioDest.Close();
                 audioDest = null;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 if (hdcdDecoder != null)
                     (hdcdDecoder as IAudioFilter).AudioDest = null;
@@ -3810,7 +3816,7 @@ namespace CUETools.Processor
                     try { audioDest.Delete(); }   // remove the in-progress (truncated) track file
                     catch { }
                 audioDest = null;
-                throw ex;
+                throw;
             }
         }
 
@@ -3905,11 +3911,11 @@ namespace CUETools.Processor
                 } while (sourcesActive > 0);
             }
 #if !DEBUG
-            catch (Exception ex)
+            catch (Exception)
             {
                 tasks.ForEach(t => t.TryClose());
                 tasks.Clear();
-                throw ex;
+                throw;
             }
 #endif
             hdcdDecoder = tasks[0].hdcd;
@@ -3930,7 +3936,7 @@ namespace CUETools.Processor
                 catch (Exception ex)
                 {
                     if (ex is StopException)
-                        throw ex;
+                        throw;
                 }
             }
 
@@ -4278,10 +4284,10 @@ namespace CUETools.Processor
                 {
                     audioSource.Position = sourceInfo.Offset;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     audioSource.Close();
-                    throw ex;
+                    throw;
                 }
             }
 

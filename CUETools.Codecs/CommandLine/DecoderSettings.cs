@@ -40,8 +40,8 @@ namespace CUETools.Codecs.CommandLine
             string extension,
             string path,
             string parameters)
-            : base()
         {
+            this.Init();
             Name = name;
             Extension = extension;
             Path = path;
@@ -59,6 +59,16 @@ namespace CUETools.Codecs.CommandLine
         [DefaultValue("")]
         [JsonProperty]
         public string Parameters
+        {
+            get;
+            set;
+        }
+
+        [DefaultValue(600000)]
+        [DisplayName("Process timeout (ms)")]
+        [Description("Maximum time an external decoder may make no output or exit progress. The decoder process is terminated when this limit is reached.")]
+        [JsonProperty]
+        public int ProcessTimeoutMilliseconds
         {
             get;
             set;

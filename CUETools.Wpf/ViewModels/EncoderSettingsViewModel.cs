@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using CUETools.Codecs;
 using CUETools.Processor;
@@ -31,11 +32,36 @@ public sealed class EncoderSettingRow : ViewModelBase
     public bool IsEnum => _prop.PropertyType.IsEnum;
     public bool IsText => !IsBool && !IsEnum;
     public string[] EnumValues { get; } = Array.Empty<string>();
+    public string ValidationError { get; private set; } = "";
+    public bool HasValidationError => ValidationError.Length != 0;
+
+    internal static bool Supports(PropertyDescriptor property)
+    {
+        Type type = property.PropertyType;
+        return type == typeof(bool) || type == typeof(string) || type.IsEnum ||
+               type == typeof(byte) || type == typeof(sbyte) ||
+               type == typeof(short) || type == typeof(ushort) ||
+               type == typeof(int) || type == typeof(uint) ||
+               type == typeof(long) || type == typeof(ulong) ||
+               type == typeof(float) || type == typeof(double) || type == typeof(decimal);
+    }
 
     public bool BoolValue
     {
         get => _target != null && _prop.PropertyType == typeof(bool) && (bool)(_prop.GetValue(_target) ?? false);
-        set { try { _prop.SetValue(_target, value); OnPropertyChanged(); } catch { } }
+        set
+        {
+            try
+            {
+                _prop.SetValue(_target, value);
+                SetValidationError("");
+            }
+            catch
+            {
+                SetValidationError("This encoder rejected the value.");
+            }
+            OnPropertyChanged();
+        }
     }
 
     public string TextValue
@@ -43,16 +69,79 @@ public sealed class EncoderSettingRow : ViewModelBase
         get { try { return Convert.ToString(_prop.GetValue(_target), System.Globalization.CultureInfo.InvariantCulture) ?? ""; } catch { return ""; } }
         set
         {
+            object? converted;
+            if (!TryConvert(value, _prop.PropertyType, out converted))
+            {
+                SetValidationError("Enter a valid " + FriendlyTypeName(_prop.PropertyType) + " value.");
+                OnPropertyChanged();
+                return;
+            }
+
             try
             {
-                object v = _prop.PropertyType.IsEnum
-                    ? Enum.Parse(_prop.PropertyType, value)
-                    : Convert.ChangeType(value, _prop.PropertyType, System.Globalization.CultureInfo.InvariantCulture);
-                _prop.SetValue(_target, v);
+                _prop.SetValue(_target, converted);
+                SetValidationError("");
             }
-            catch { /* invalid input: keep the old value; the getter re-shows it */ }
+            catch
+            {
+                SetValidationError("This encoder rejected the value.");
+            }
             OnPropertyChanged();
         }
+    }
+
+    private void SetValidationError(string message)
+    {
+        if (ValidationError == message)
+            return;
+        ValidationError = message;
+        OnPropertyChanged(nameof(ValidationError));
+        OnPropertyChanged(nameof(HasValidationError));
+    }
+
+    private static bool TryConvert(string value, Type type, out object? converted)
+    {
+        converted = null;
+        if (type == typeof(string)) { converted = value; return true; }
+        if (type.IsEnum)
+        {
+            object? parsed;
+            if (!Enum.TryParse(type, value, false, out parsed) || parsed == null || !Enum.IsDefined(type, parsed))
+                return false;
+            converted = parsed;
+            return true;
+        }
+
+        NumberStyles integer = NumberStyles.Integer;
+        NumberStyles floating = NumberStyles.Float;
+        CultureInfo invariant = CultureInfo.InvariantCulture;
+        byte byteValue; if (type == typeof(byte) && byte.TryParse(value, integer, invariant, out byteValue)) { converted = byteValue; return true; }
+        sbyte sbyteValue; if (type == typeof(sbyte) && sbyte.TryParse(value, integer, invariant, out sbyteValue)) { converted = sbyteValue; return true; }
+        short shortValue; if (type == typeof(short) && short.TryParse(value, integer, invariant, out shortValue)) { converted = shortValue; return true; }
+        ushort ushortValue; if (type == typeof(ushort) && ushort.TryParse(value, integer, invariant, out ushortValue)) { converted = ushortValue; return true; }
+        int intValue; if (type == typeof(int) && int.TryParse(value, integer, invariant, out intValue)) { converted = intValue; return true; }
+        uint uintValue; if (type == typeof(uint) && uint.TryParse(value, integer, invariant, out uintValue)) { converted = uintValue; return true; }
+        long longValue; if (type == typeof(long) && long.TryParse(value, integer, invariant, out longValue)) { converted = longValue; return true; }
+        ulong ulongValue; if (type == typeof(ulong) && ulong.TryParse(value, integer, invariant, out ulongValue)) { converted = ulongValue; return true; }
+        float floatValue;
+        if (type == typeof(float) && float.TryParse(value, floating, invariant, out floatValue) &&
+            !float.IsNaN(floatValue) && !float.IsInfinity(floatValue)) { converted = floatValue; return true; }
+        double doubleValue;
+        if (type == typeof(double) && double.TryParse(value, floating, invariant, out doubleValue) &&
+            !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue)) { converted = doubleValue; return true; }
+        decimal decimalValue; if (type == typeof(decimal) && decimal.TryParse(value, floating, invariant, out decimalValue)) { converted = decimalValue; return true; }
+        return false;
+    }
+
+    private static string FriendlyTypeName(Type type)
+    {
+        if (type.IsEnum)
+            return "listed";
+        if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
+            return "number";
+        if (type == typeof(string))
+            return "text";
+        return "whole-number";
     }
 }
 
@@ -120,7 +209,7 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
         var skip = new HashSet<string> { "EncoderMode", "PCM", "BlockSize", "Padding" };
         foreach (PropertyDescriptor p in TypeDescriptor.GetProperties(s))
         {
-            if (!p.IsBrowsable || p.IsReadOnly || skip.Contains(p.Name)) continue;
+            if (!p.IsBrowsable || p.IsReadOnly || skip.Contains(p.Name) || !EncoderSettingRow.Supports(p)) continue;
             string tip = !string.IsNullOrWhiteSpace(p.Description) ? p.Description : CuratedTip(p.Name);
             Advanced.Add(new EncoderSettingRow(s, p, tip));
         }

@@ -1,5 +1,12 @@
 # LAME v4 - Baseline, Benchmark, and Proposal
 
+> Superseded naming premise, 2026-07-26: upstream has now released official
+> LAME 4.0. The 3.100 measurements and experiment design below are historical
+> evidence for the local downstream workspace, not a proposal to publish another
+> product as "LAME v4." Integration now starts by diffing official 4.0, checking
+> which findings it already fixes, and rerunning the same quality/compatibility
+> gates under a distinct downstream version if local work remains valuable.
+
 Requested by the user 2026-07-02: improve the LAME MP3 encoder enough to justify a version 4 release (LAME has been at 3.100 since 2017). Source: `C:\Users\usaft\Downloads\lame-3.100`. This doc is the first deliverable: a measured baseline, an honest survey of where the 20-year-old encoder is behind, and a prioritized v4 feature set with a verification plan. Implementation is a multi-stage effort to start after the user picks the direction.
 
 ## Baseline - built and measured

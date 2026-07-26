@@ -27,8 +27,12 @@
     <ProjectReference Include="..\..\CUETools.CDImage\CUETools.CDImage.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs.ALAC\CUETools.Codecs.ALAC.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj" />
+    <ProjectReference Include="..\..\CUETools.Codecs.HDCD\CUETools.Codecs.HDCD.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />
+    <ProjectReference Include="..\..\CUETools.Codecs.libmp3lame\CUETools.Codecs.libmp3lame.csproj" />
+    <ProjectReference Include="..\..\CUETools.Codecs.libwavpack\CUETools.Codecs.libwavpack.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs.LossyWAV\CUETools.Codecs.LossyWAV.csproj" />
+    <ProjectReference Include="..\..\CUETools.Codecs.WMA\CUETools.Codecs.WMA.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs\CUETools.Codecs.csproj" />
     <ProjectReference Include="..\..\CUETools.Compression\CUETools.Compression.csproj" />
     <ProjectReference Include="..\..\CUETools.DSP.Resampler\CUETools.DSP.Resampler.csproj" />
@@ -41,7 +45,10 @@
     <!-- Tests open these by bare filename with the working directory at the test assembly, so flatten Data\ into the output root. -->
     <None Include="Data\**" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
     <!-- Native FLAC decoder under test. Produced at ThirdParty\x64 by the solution's Release|x64 build (libFLAC_dynamic.vcxproj OutDir is SolutionDir-relative). -->
-    <None Include="..\..\ThirdParty\x64\libFLAC_dynamic.dll" Condition="Exists('..\..\ThirdParty\x64\libFLAC_dynamic.dll')" CopyToOutputDirectory="PreserveNewest" Link="libFLAC_dynamic.dll" />
+    <None Include="..\..\ThirdParty\x64\libFLAC_dynamic.dll" Condition="Exists('..\..\ThirdParty\x64\libFLAC_dynamic.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\libFLAC_dynamic.dll" />
+    <None Include="..\..\ThirdParty\x64\hdcd.dll" Condition="Exists('..\..\ThirdParty\x64\hdcd.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\hdcd.dll" />
+    <None Include="..\..\ThirdParty\x64\libmp3lame.dll" Condition="Exists('..\..\ThirdParty\x64\libmp3lame.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\libmp3lame.dll" />
+    <None Include="..\..\ThirdParty\x64\wavpackdll.dll" Condition="Exists('..\..\ThirdParty\x64\wavpackdll.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\wavpackdll.dll" />
   </ItemGroup>
 
 </Project>

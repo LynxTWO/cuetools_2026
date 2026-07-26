@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "scope": "Native and mixed-mode DLLs produced or copied by the Windows release workflows.",
+  "pinnedFiles": [
+    {
+      "path": "ThirdParty/MAC_SDK/MAC_1086_SDK.zip",
+      "sha256": "6dc0ffa5c6014229551ee89ad927d00b4dece158f81aabb9d8df6fd29dc29dce"
+    },
+    {
+      "path": "ThirdParty/Win32/hdcd.dll",
+      "sha256": "51e1277d9229050435c8abf2eb41fd4676e3fc2ec03d394711dbb66829f6a191"
+    },
+    {
+      "path": "ThirdParty/x64/hdcd.dll",
+      "sha256": "c14eee927f60ce8e05b83c66d61e32deefaba06c044b5e4aa533c44f631598ea"
+    },
+    {
+      "path": "ThirdParty/Win32/libmp3lame.dll",
+      "sha256": "91d3c0cc833265066c51408d940faaf76c5b8fc5bda854540a9cc6c88b1d1f20"
+    },
+    {
+      "path": "ThirdParty/x64/libmp3lame.dll",
+      "sha256": "71dba147b6c16d8d0f012b8e657d52e12cb8796a659e1151200d0a6c8b04bce3"
+    },
+    {
+      "path": "ThirdParty/Win32/unrar.dll",
+      "sha256": "a647aec65edb9736ad9bbc60a99779d18438b783b3a7045533de97ba4134f4fe"
+    },
+    {
+      "path": "ThirdParty/x64/Unrar.dll",
+      "sha256": "d98d274733eabc6a7e425c6549c6b28fc61e850a0ac5f3c103b2d3efdb99b019"
+    }
+  ],
+  "pinnedSubmodules": [
+    {
+      "path": "ThirdParty/flac",
+      "commit": "1507800de4b70e21be71f38caa0d9079d0bc6e45"
+    },
+    {
+      "path": "ThirdParty/WavPack",
+      "commit": "4827b9889665b937b6ed71b9c6c0123152cd7a02"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "libflac-dynamic",
+      "packagePaths": [
+        "plugins/win32/libFLAC_dynamic.dll",
+        "plugins/x64/libFLAC_dynamic.dll"
+      ],
+      "version": "1.5.0",
+      "sourceStatus": "source-built",
+      "upstream": "https://github.com/xiph/flac",
+      "sourceInputs": [
+        "ThirdParty/flac (pinned git submodule)",
+        "ThirdParty/submodule_flac_CUETools.patch"
+      ],
+      "buildRecipe": [
+        "eng/ci/Build-NativeDependencies.ps1 rebuilds Release|x64",
+        "CUETools.sln Release|Win32 builds the classic Win32 output"
+      ],
+      "verification": "Release scripts require the output, check the x64 PE machine, enforce a warning baseline, hash the packaged bytes, and exercise libFLAC from the published WPF layout."
+    },
+    {
+      "id": "wavpack",
+      "packagePaths": [
+        "plugins/win32/wavpackdll.dll",
+        "plugins/x64/wavpackdll.dll"
+      ],
+      "version": "5.8.1",
+      "sourceStatus": "source-built",
+      "upstream": "https://github.com/dbry/WavPack",
+      "sourceInputs": [
+        "ThirdParty/WavPack (pinned git submodule)",
+        "ThirdParty/submodule_WavPack_CUETools.patch"
+      ],
+      "buildRecipe": [
+        "eng/ci/Build-NativeDependencies.ps1 rebuilds Release|x64",
+        "CUETools.sln Release|Win32 builds the classic Win32 output"
+      ],
+      "verification": "Release scripts require the output, check the x64 PE machine, enforce a warning baseline, hash the packaged bytes, and exercise WavPack from the published WPF layout."
+    },
+    {
+      "id": "monkeys-audio",
+      "packagePaths": [
+        "plugins/win32/MACLibDll.dll",
+        "plugins/x64/MACLibDll.dll"
+      ],
+      "version": "10.86",
+      "sourceStatus": "source-built",
+      "upstream": "https://www.monkeysaudio.com/developers.html",
+      "sourceInputs": [
+        "ThirdParty/MAC_SDK/MAC_1086_SDK.zip (SHA-256 pinned above)",
+        "ThirdParty/ThirdParty_MAC_SDK_CUETools.patch"
+      ],
+      "buildRecipe": [
+        "eng/ci/Build-NativeDependencies.ps1 safely expands the SDK when absent, applies the patch, and rebuilds Release|x64",
+        "CUETools.sln Release|Win32 builds the classic Win32 output"
+      ],
+      "verification": "Release scripts require the output, check the x64 PE machine, enforce a warning baseline, hash the packaged bytes, and exercise MACLib from the published WPF layout."
+    },
+    {
+      "id": "tta-cpp-cli",
+      "packagePaths": [
+        "plugins/win32/CUETools.Codecs.TTA.dll",
+        "plugins/x64/CUETools.Codecs.TTA.dll"
+      ],
+      "version": "ttalib 1.1",
+      "sourceStatus": "source-built-mixed-mode",
+      "upstream": "Vendored source; original upstream locator is not recorded.",
+      "sourceInputs": [
+        "CUETools.Codecs.TTA/CUETools.Codecs.TTA.vcxproj",
+        "CUETools.Codecs.TTA/CUETools.Codecs.TTA.cpp",
+        "ttalib-1.1"
+      ],
+      "buildRecipe": [
+        "CUETools.sln Release|Win32 builds the x86 C++/CLI wrapper",
+        "CUETools.sln Release|x64 builds the x64 C++/CLI wrapper"
+      ],
+      "verification": "The classic artifact contract requires both architecture outputs and binds both hashes in the runtime manifest.",
+      "limitations": "The vendored ttalib source has no recorded immutable upstream URL or import commit."
+    },
+    {
+      "id": "hdcd",
+      "packagePaths": [
+        "plugins/win32/hdcd.dll",
+        "plugins/x64/hdcd.dll"
+      ],
+      "version": "No file version",
+      "sourceStatus": "vendored-binary",
+      "upstream": "Unknown",
+      "sourceInputs": [
+        "ThirdParty/Win32/hdcd.dll (SHA-256 pinned above)",
+        "ThirdParty/x64/hdcd.dll (SHA-256 pinned above)"
+      ],
+      "buildRecipe": [],
+      "verification": "Packaged bytes are hash-bound; the WPF release probe initializes and closes the x64 decoder.",
+      "limitations": "Original source, upstream revision, compiler, and build recipe are not recorded."
+    },
+    {
+      "id": "libmp3lame",
+      "packagePaths": [
+        "plugins/win32/libmp3lame.dll",
+        "plugins/x64/libmp3lame.dll"
+      ],
+      "version": "3.100",
+      "sourceStatus": "vendored-binary",
+      "upstream": "https://lame.sourceforge.io/",
+      "sourceInputs": [
+        "ThirdParty/Win32/libmp3lame.dll (SHA-256 pinned above)",
+        "ThirdParty/x64/libmp3lame.dll (SHA-256 pinned above)"
+      ],
+      "buildRecipe": [],
+      "verification": "Packaged bytes are hash-bound; the WPF release probe calls the x64 library version export through the registered encoder.",
+      "limitations": "The upstream release is known, but the compiler, flags, source archive hash, and original DLL build recipe are not recorded."
+    },
+    {
+      "id": "unrar",
+      "packagePaths": [
+        "plugins/win32/unrar.dll",
+        "plugins/x64/Unrar.dll"
+      ],
+      "version": "6.11.0",
+      "sourceStatus": "vendored-binary",
+      "upstream": "https://www.rarlab.com/rar_add.htm",
+      "sourceInputs": [
+        "ThirdParty/Win32/unrar.dll (SHA-256 pinned above)",
+        "ThirdParty/x64/Unrar.dll (SHA-256 pinned above)"
+      ],
+      "buildRecipe": [],
+      "verification": "Classic packaged bytes are hash-bound.",
+      "limitations": "Original source archive, compiler, flags, and build recipe are not recorded; the approved upgrade remains tracked separately as remediation R5."
+    },
+    {
+      "id": "ffmpeg-on-demand",
+      "packagePaths": [
+        "standalone ffmpeg_7.1.1_dlls_win32 workflow artifact",
+        "standalone ffmpeg_7.1.1_dlls_x64 workflow artifact"
+      ],
+      "version": "7.1.1",
+      "sourceStatus": "source-built-standalone",
+      "upstream": "https://ffmpeg.org/",
+      "sourceInputs": [
+        "vcpkg commit ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0",
+        "x86-windows and x64-windows ffmpeg ports"
+      ],
+      "buildRecipe": [
+        ".github/workflows/build_ffmpeg_dlls.yml"
+      ],
+      "verification": "The workflow pins checkout, run-vcpkg, and upload actions to immutable commits.",
+      "limitations": "These DLLs are emitted by a separate manual workflow and are not included by the current classic or WPF release collection."
+    }
+  ]
+}

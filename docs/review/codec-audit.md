@@ -1,80 +1,227 @@
-# Codec Audit - CUETools 2026
+# Codec Audit - Current State
 
-Full audit of every audio codec CUETools currently supports: format, lossy/lossless, encode/decode, engine type, whether it is up to date, whether it works, better options to add, and formats not yet supported. Requested by the user 2026-07-02. Ground rule from the user: **do not remove old options that work** - additions and upgrades only.
+Current-state refresh: 2026-07-26. This supersedes the 2026-07-02 snapshot in this
+file. The earlier snapshot treated solution membership, packaging, and runtime
+reachability as one graph. They are different here.
 
-"Current version" is verified from repo evidence (submodule pins, vendored binary metadata, upstream commit messages on this history). "Latest" is best-known as of Jan 2026 and should be re-confirmed at implementation time (`inferred`). "Works" is `verified` where TestCodecs exercises it, otherwise `inferred` (ships in upstream releases).
+This audit covers the two primary Windows products, their optional external encoder
+paths, and codec projects that remain in the solution but are not in either primary
+package. It does not treat a project as shipped merely because it builds in the
+solution.
 
-## Summary matrix
+## Evidence and status vocabulary
 
-| Format | Loss | Enc | Dec | Engine (project) | Current | Up to date? | Works |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| WAV / PCM | lossless | Y | Y | managed (`CUETools.Codecs` WAV) | in-tree | n/a | verified (TestCodecs) |
-| AIFF | lossless | - | Y | ffmpeg (`.ffmpeg` AiffDecoderSettings) | AutoGen 7.1.1 | current | inferred |
-| FLAC | lossless | Yx3 | Yx2 | native libFLAC (`.libFLAC`), managed Flake (`.Flake`), OpenCL GPU (`.FLACCL`); decode libFLAC + Flake | libFLAC 1.5.0 | current | verified (TestCodecs) |
-| FLAC (CUDA) | lossless | Y | - | CUDA GPU (`.FlaCuda`) - ORPHANED | CUDA.NET 2.3.7 (2010) | dead | n/a (not in sln) |
-| ALAC | lossless | Y | Y | managed (`.ALAC`) | in-tree (Apple ref-derived) | stable | verified (TestCodecs) |
-| Monkey's Audio (APE) | lossless | Y | Y | native MAC SDK (`.MACLib`) | MAC 10.86 (2024-12) | slightly behind | inferred |
-| WavPack | lossless/hybrid | Y | Y | native (`.libwavpack`) | WavPack 5.8.1 (2025-02) | current | inferred |
-| TTA (True Audio) | lossless | Y | Y | C++/CLI (`.TTA` + `ttalib-1.1`) | TTA1 SDK 1.1 | current (upstream dormant) | inferred |
-| Shorten (SHN) | lossless | - | Y | ffmpeg (`.ffmpeg` ShnDecoderSettings) | AutoGen 7.1.1 | current | inferred |
-| LossyWAV | lossy (hybrid) | Y | - | managed (`.LossyWAV`) | in-tree | stable | inferred |
-| HDCD | lossless decode filter | - | filter | native (`.HDCD`) | vendored hdcd.dll (2010) | old but stable | inferred |
-| MP3 | lossy | Y | Y | native LAME (`.libmp3lame`); decode via ffmpeg | LAME 3.100 (2017) | latest release (see R14) | inferred |
-| WMA | lossy | Y | Y | native WM Format SDK (`.WMA` + `WindowsMediaLib`) | WM Format SDK | stable (legacy) | inferred |
-| MLP / TrueHD | lossless | - | Y | ffmpeg (`.ffmpeg` MLPDecoderSettings) | AutoGen 7.1.1 | current | inferred |
-| DVD/Blu-ray audio (LPCM/MPLS/ATSI) | mixed | - | Y | managed (`.MPEG` BDLPCM/MPLS/ATSI) | in-tree | stable | inferred |
-| MpegTS / MPEG audio | lossy | - | Y | ffmpeg (`.ffmpeg`) | AutoGen 7.1.1 | current | inferred |
-| Icecast stream out | lossy (MP3) | Y (stream) | - | LAME via `.Icecast` | LAME 3.100 | works, fragile (reflection) | inferred |
-| WASAPI playback | n/a (output) | - | - | `.CoreAudio` (NAudio WASAPI) | in-tree | stable | inferred |
+The main evidence anchors are:
 
-Notes: "Enc Yx3" for FLAC = three independent encoder implementations (native reference, CUETools' own managed Flake, and the OpenCL GPU FLACCL). `CoreAudio` is **audio output/playback (WASAPI)**, not an AAC encoder - CUETools has **no AAC encoder**. ffmpeg is decode-only in this app.
+- [WPF project and codec copy allowlist](../../CUETools.Wpf/CUETools.Wpf.csproj)
+- [WPF release contract](../../eng/release/wpf-win-x64.manifest.json)
+- [classic collection script](../../collect_files.bat)
+- [classic release contract](../../eng/release/classic-win.manifest.json)
+- [plugin discovery and trust gate](../../CUETools.Processor/CUEProcessorPlugins.cs)
+- [base format and command-line configuration](../../CUETools.Codecs/CUEToolsCodecsConfig.cs)
+- [WPF external encoder catalog](../../CUETools.Wpf/Services/EncoderCatalog.cs)
+- [native dependency ledger](../../eng/release/native-dependencies.json)
+- [test-suite contract](../../eng/ci/test-suites.json)
 
-## Engine-type breakdown
+Status terms:
 
-- **Native P/Invoke:** libFLAC, MAC (APE), WavPack, LAME (MP3), HDCD, ffmpeg (FFmpeg.AutoGen).
-- **C++/CLI:** TTA (`ttalib-1.1` compiled in-tree).
-- **Managed C#:** WAV, Flake (FLAC), ALAC, LossyWAV, MPEG/BDLPCM/MPLS/ATSI containers.
-- **GPU:** FLACCL (OpenCL, live), FlaCuda (CUDA, orphaned/dead).
-- **OS framework:** WMA (Windows Media Format SDK), CoreAudio (WASAPI output).
+- `reachable-observed`: the named build or test loaded and exercised the path.
+- `configured-not-observed`: source, build, package, and loader edges exist, but this
+  audit did not observe the final runtime behavior.
+- `blocked`: a required dependency or toolchain was unavailable.
+- `not shipped`: the project may remain buildable, but neither primary release copies it.
 
-## Up-to-date findings
+## Product boundaries
 
-- **Current:** libFLAC 1.5.0, WavPack 5.8.1, ffmpeg (AutoGen 7.1.1), LAME 3.100 (last release - the reason for the R14 v4 effort).
-- **Slightly behind:** Monkey's Audio SDK 10.86 (verify latest; MAC releases are frequent). taglib-sharp (tagging, not a codec) is behind (~2.1-era vs 2.3.x).
-- **Old but stable / dormant upstream:** TTA1 SDK, HDCD dll (2010), WMA SDK.
-- **Dead:** FlaCuda (CUDA.NET 2.3.7, 2010) - orphaned, superseded by FLACCL. Retire under D5 (does not count as removing a *working* shipped option; it isn't built).
+### WPF / .NET 8 x64
 
-## "Does it work?" - test coverage gap
+The WPF product has a curated in-process plugin set. Its project copies exactly nine
+managed codec plugins and five x64 native codec libraries. The release contract requires
+34 paths, hash-binds 14 runtime files, expects nine plugin files to register 19 types, and
+runs five native probes. The 19 registrations are nine encoders, nine decoders, and the
+HDCD filter. WAV contributes one encoder and one decoder from the base codec assembly and
+is not part of that plugin count.
 
-Automated coverage (TestCodecs, 34/34 green) exercises **WAV, FLAC (libFLAC + Flake), ALAC, and the SOX resampler** only. WavPack, APE, TTA, MP3, WMA, HDCD, LossyWAV, and the ffmpeg decoders are **not** in the automated suite - they are `inferred` working because they ship in upstream releases. **Recommendation:** build the golden-corpus round-trip suite (modernization idea 3 / R10) covering every encoder/decoder pair with bit-exact checks before any version bumps, so "works" becomes `verified` for all of them.
+The nine managed plugins are ALAC, Flake, HDCD, libFLAC, libmp3lame, libwavpack, MACLib,
+MPEG, and WMA. The five native files are `hdcd.dll`, `libFLAC_dynamic.dll`,
+`libmp3lame.dll`, `wavpackdll.dll`, and `MACLibDll.dll`, all under the architecture
+directory inside `plugins`.
 
-## Better options to add (keep the existing working ones)
+The package is fail-closed by default. `CUEProcessorPlugins` reads the generated hash
+manifest, filters entries for the current architecture, rehashes and preloads each
+required native dependency by approved full path, verifies the returned module path,
+and then loads only approved managed plugins. Native handles remain loaded and wrapper
+loaders have no bare-name fallback. Loose discovery requires the explicit
+local-development environment switch.
 
-Per the user's rule, nothing working is removed. Additive improvements:
+Observed on 2026-07-26:
 
-1. **AAC encoder (new capability).** CUETools can *decode* AAC via ffmpeg but cannot *encode* it. Add AAC encoding via ffmpeg's `libfdk_aac` (best quality, licensing caveat) or the native `aac` encoder, or Apple CoreAudio AAC where available. Fills the most common missing lossy target.
-2. **Route more formats through the existing ffmpeg path** rather than new native libs where a native encoder is not required (decode is already ffmpeg-backed).
-3. **Managed SIMD FLAC (idea 14).** Add an AVX2 path to Flake so the managed encoder rivals FLACCL/libFLAC on the 5950X-class CPU without a GPU; a candidate to eventually supersede FlaCuda's role entirely. Additive (keep libFLAC + FLACCL).
-4. **Keep three FLAC encoders but document when to use which** (libFLAC = reference/compat, Flake = pure-managed/portable, FLACCL = GPU throughput).
+- native codec integration tests: 16 passed, 0 skipped;
+- focused native-wrapper lifetime tests: 10 passed, 0 skipped;
+- focused manifest/load-time trust tests: 13 passed, 0 skipped;
+- libFLAC, WavPack, and Monkey's Audio round trips ran through the net8 wrappers;
+- the net47 lifetime gate added real libFLAC/WavPack/LAME encodes plus HDCD valid
+  and rejected construction paths;
+- HDCD processing and synthetic Blu-ray LPCM decode ran;
+- plugin trust tests rejected malformed, reordered, wrong-path, and wrong-identity inputs.
 
-## Formats not yet supported (candidates to add)
+### Classic / .NET Framework 4.7
 
-Pending the user's confirmation of which to build, and whether encode/decode/both:
+Classic is broader. `collect_files.bat` and the classic release contract include the WPF
+codec families plus FLACCL/OpenCL and architecture-specific TTA. The contract requires 63
+paths. Its trust manifest contains 34 entries, of which 26 are applicable to an x64
+runtime. The remaining entries include the Win32 TTA/RAR/native variants used by the x86
+build.
 
-- **Opus** - modern lossy standard; no support today. Decode + encode via libopus (or ffmpeg). High value.
-- **Ogg Vorbis** - lossy; no support today. Decode + encode via libvorbis/ffmpeg.
-- **Native AAC encode** - see item 1 above.
-- **DSD (DSF / DFF)** - SACD lossless 1-bit; growing demand among archivists. Decode at least; transcode-to-PCM path.
-- **Musepack (MPC)** - niche lossy; low priority.
-- **OptimFROG / LA / TAK** - niche lossless; TAK especially is popular but closed-source (decode-only SDK).
+Classic TTA is not C#. It is a C++/CLI `.vcxproj` over vendored `ttalib-1.1`, built
+separately for Win32 and x64. See the
+[TTA wrapper project](../../CUETools.Codecs.TTA/CUETools.Codecs.TTA.vcxproj).
 
-## Recommended sequence
+The classic package graph is `configured-not-observed` in this local audit. The full
+AnyCPU/x64/Win32 release matrix requires the hosted Visual Studio toolchain. The net47
+codec test assembly did run locally, but that does not exercise every classic packaged
+plugin.
 
-1. Build the golden-corpus round-trip test suite first (makes "works" verified across the board and guards every later bump).
-2. Retire FlaCuda (D5).
-3. Version bumps where behind: MAC SDK, taglib-sharp (verify latest, re-apply patches, round-trip test each).
-4. Additions per the user's chosen list - Opus and AAC-encode are the highest-value gaps.
+## Primary codec matrix
 
-## Status
+| Format or function | WPF x64 | Classic | Engine and current status |
+| --- | --- | --- | --- |
+| WAV / PCM | base encode + decode registered | same | Managed base codec; its net47 codec tests passed. This audit did not run a WPF-specific WAV codec probe. |
+| FLAC | Flake + libFLAC encode/decode registered | Flake + libFLAC plus FLACCL/OpenCL | The libFLAC round trip ran on net8; managed Flake ran in the net47 suite. libFLAC uses source-built 1.5.0. FLACCL is classic-only and has the residual defect below. |
+| ALAC / M4A | managed encode/decode registered | same | Its net47 codec tests passed. Verify defaults on. Path output is staged and published after finalization; this audit did not run a WPF-specific ALAC round trip. |
+| WavPack | native wrapper encode/decode, observed on net8 | packaged | Source-built WavPack 5.8.1; finalized output is independently decoded and compared when verify is on. Upstream 5.9.0 is pending compatibility work. |
+| Monkey's Audio / APE | native wrapper encode/decode, observed on net8 | packaged | Source-built MAC 10.86; finalized output is independently decoded and compared when verify is on. Upstream 13.20 is pending wrapper/corpus work. |
+| WMA | lossless/lossy encode + decode registered | same | Uses the Windows Media runtime. The lossless verification harness passed; the real round trip was skipped because this host lacks the lossless codec capability. |
+| MP3 | LAME VBR/CBR encode registered | same | Vendored LAME 3.100 x64/x86 DLLs; a real current-wrapper encode passed. Upstream released 4.0 in July 2026. Neither primary package registers an MP3 decoder, and 4.0 ABI/quality/decode compatibility remains unobserved, so the major bump is not safe to infer. |
+| TTA | not shipped | encode + decode configured | C++/CLI wrapper over `ttalib-1.1`; configured for Win32/x64, not observed in this audit. |
+| DVD-A / Blu-ray LPCM | ATSI, BDLPCM, MPLS decoders registered | same | Managed MPEG plugin. Synthetic BDLPCM decode passed on net8. |
+| HDCD | native decode filter registered and observed | packaged | Managed wrapper plus vendored native `hdcd.dll`; original source/build provenance remains unknown. |
+| TAK | optional external executable | optional external executable | `takc.exe` encode/decode contract. Lossless output cannot be used without its self-decoder verification contract. |
+| Ogg Vorbis / Opus | optional external encode | optional external encode | `oggenc.exe` and `opusenc.exe`; no in-process implementation or primary-package decoder. |
+| Musepack | optional WPF import | user-configurable external path | WPF registers `mpcenc.exe` output only when usable; no bundled executable or decoder. |
+| AAC / M4A | optional external lossy encode | optional external lossy encode | WPF curates `qaac.exe`; base config also retains qaac/Nero command entries. ALAC remains the in-process M4A lossless path. |
 
-Audit complete. Additions and the "which formats" choice are the user's call (Opus / Vorbis / AAC-encode / DSD / other). FlaCuda retirement folds into D5. Version bumps (MAC, taglib-sharp) queued behind the golden-corpus suite.
+Availability in the table means the named package or explicit external-executable path.
+It does not mean every format key in `CUEToolsCodecsConfig` has a usable encoder and
+decoder. The UI must still apply `EncoderCatalog.IsUsable`.
+
+## Projects outside the primary package graph
+
+| Project or capability | Current disposition |
+| --- | --- |
+| `CUETools.Codecs.ffmpeg` | Still in the solution and references FFmpeg.AutoGen 7.1.1, but `CUETools.Codecs.ffmpegdll.dll`, `FFmpeg.AutoGen.dll`, and the FFmpeg native DLL family are no longer copied by classic or WPF. It is `not shipped`. |
+| FFmpeg native DLL workflow | The manual workflow still produces standalone x86/x64 FFmpeg 7.1.1 artifacts while upstream stable is 8.1.2. Those artifacts are not inputs to either primary release. |
+| `ffmpeg.exe` command encoder | Separate from the managed wrapper. The built-in external ALAC command path remains supported and its real self-verification test passed when `ffmpeg.exe` was present. |
+| LossyWAV | The classic collection script copies the standalone DLL and CLI. It is not a dynamically registered `IAudioEncoderSettings` plugin, so this audit does not present `lossy.flac` as a proven integrated GUI codec pipeline. |
+| CoreAudio, DirectSound, Icecast | Solution components used by the separate player/output tools. They are not WPF or classic CUETools release codec plugins. |
+| FlaCuda | Deleted. There is no current source directory, solution entry, copy rule, or release-manifest entry. FLACCL remains the only GPU FLAC encoder. |
+
+The managed FFmpeg wrapper must not be described as a primary-package decoder for AIFF,
+Shorten, MLP, MPEG audio, or any other format. Those settings remain in its source, but
+the wrapper and required native DLLs do not ship.
+
+## Verification and publication tiers
+
+Verification is an assurance contract, not one Boolean shared by all lossless formats.
+
+| Tier | Codecs | What is actually checked |
+| --- | --- | --- |
+| A: finalized-file independent decode | WavPack, Monkey's Audio, WMA Lossless, lossless command encoders | Finalize the staged output, reopen or independently decode it, compare PCM format, exact sample count, and SHA-256 of the accepted PCM, then publish. Command encoders also require a successful verifier process and final output drain. |
+| B: encoder-integrated stream verification | libFLAC | libFLAC verifies encoded audio internally; `finish()` is checked so a final-block mismatch cannot close as success. The work file publishes only after finish succeeds. This is not an independent reopen of the final container. |
+| C: per-frame decode and compare | Flake, ALAC | Each encoded frame is decoded and every sample is compared. Verify defaults on. This catches frame corruption but does not independently reopen and validate the complete container. ALAC now stages path output before publication; Flake still writes its requested file directly. |
+| D: no current whole-output oracle | WAV, TTA, FLACCL | WAV and TTA have no independent post-output PCM proof. FLACCL has an optional per-frame verifier, but it defaults off and has the exact-length defect below. |
+
+Lossy formats are not bit-exact contracts. Their gates should check process/finalization
+success, output existence, decodability, duration, and format rather than PCM equality.
+
+Relevant implementation evidence:
+
+- [shared finalized-output verification](../../CUETools.Codecs/LosslessPcmVerification.cs)
+- [external lossless verification](../../CUETools.Codecs/CommandLine/LosslessOutputVerifier.cs)
+- [WMA lossless verification](../../CUETools.Codecs.WMA/WmaLosslessVerification.cs)
+- [libFLAC writer](../../CUETools.Codecs.libFLAC/Writer.cs)
+- [WavPack writer](../../CUETools.Codecs.libwavpack/Writer.cs)
+- [Monkey's Audio writer](../../CUETools.Codecs.MACLib/AudioEncoder.cs)
+- [Flake writer](../../CUETools.Codecs.Flake/AudioEncoder.cs)
+- [ALAC writer](../../CUETools.Codecs.ALAC/ALACWriter.cs)
+
+## Test evidence
+
+The net47 codec suite was run on 2026-07-26:
+
+```text
+Total: 99
+Passed: 97
+Skipped: 2
+Failed: 0
+```
+
+The two skips are expected and bounded by `eng/ci/test-suites.json`:
+
+- `AccurateRipVerifyTest.asdaTest` is explicitly ignored and contains a hard-coded
+  developer LocalDB scratch path.
+- `RealLosslessRoundTripVerifiesWhenWindowsCodecIsAvailable` reports inconclusive when
+  the host does not expose Windows Media Lossless.
+
+The suite now covers WAV primitives, managed FLAC and ALAC behavior, libFLAC,
+finalization and publication failures, external-process watchdogs, real FFmpeg ALAC
+self-verification when available, WMA verification logic, and output race handling. It
+does not turn TTA, FLACCL, MP3, or every external executable into
+`reachable-observed`.
+
+Focused WPF codec/trust tests also passed 16/16 on net8, while the focused
+manifest trust selection passed 13/13. The source is in:
+
+- [codec import integration tests](../../CUETools.Wpf.Tests/CodecImportIntegrationTests.cs)
+- [runtime trust tests](../../CUETools.Wpf.Tests/RuntimeTrustTests.cs)
+- [command encoder tests](../../CUETools/CUETools.TestCodecs/CommandLineEncoderTest.cs)
+- [WMA verification tests](../../CUETools/CUETools.TestCodecs/WmaLosslessVerificationTest.cs)
+
+## Open codec risks
+
+### FLACCL exact-length verification defect
+
+FLACCL is reachable only through the classic net47/OpenCL package. Its verify setting is
+`[DefaultValue(false)]`. When enabled, it passes the exact encoded frame length to the
+managed FLAC decoder:
+
+```csharp
+task.verify.DecodeFrame(task.frame.writer.Buffer, task.frame.writer_offset, fs)
+```
+
+It did not receive Flake's bounded verify lookahead or the decoder end bound that fixed
+the managed FLAC exact-length failure. The shared GPU task buffer can have very little
+trailing slack on a one-compute-unit device, so this must be fixed and run on an OpenCL
+host rather than patched by analogy. Until then, do not enable FLACCL verification by
+default or claim its verify path is safe. Evidence:
+[FLACCL settings and writer](../../CUETools.Codecs.FLACCL/FLACCLWriter.cs).
+
+### Remaining evidence gaps
+
+- Run the full classic Release AnyCPU, x64, and Win32 artifact gates on hosted Visual
+  Studio, including TTA selection and invocation.
+- Run FLACCL exact-length and final-frame tests on real OpenCL hardware before changing
+  its default.
+- Add real MP3 encode/decode-duration coverage. The primary packages currently encode
+  MP3 but do not register an MP3 decoder.
+- Run the WMA Lossless real round trip on a Windows image that exposes that codec.
+- Decide whether WAV and TTA need finalized-file independent verification or a narrower
+  UI claim.
+- Treat the standalone FFmpeg workflow as a separate optional distribution unless a
+  primary release deliberately imports and validates the complete native family.
+
+## Historical corrections
+
+The 2026-07-02 audit remains useful as a record of the questions asked, but these claims
+are superseded:
+
+- `34/34` is no longer the codec-suite result; the current result is 97 passed and 2
+  expected skips out of 99.
+- TTA is C++/CLI, not managed C#.
+- FlaCuda is deleted, not merely orphaned.
+- WPF and classic do not have the same codec set.
+- The managed FFmpeg wrapper is not shipped by either primary product.
+- Ogg, Opus, Musepack, TAK, and AAC output are optional external-executable capabilities,
+  not bundled in-process codecs.
+- Frame verification and finalized-file independent verification are different assurance
+  tiers.

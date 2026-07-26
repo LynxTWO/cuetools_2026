@@ -19,6 +19,22 @@ Use the repo's real names for systems, modules, and runtime units. Do not invent
 |---|---|---|---|---|---|---|
 | <name> | <one-sentence summary> | <path> | <trigger> | <deps> | <who or what calls it> | <data read/written> |
 
+## 2a. Dependency and shipping reachability
+
+Use one row per plugin, optional module, generated binary, or other unit whose reachability depends on more than a static source reference.
+
+| Unit or capability | Source | Target / config / architecture | Copy or package rule | Discovery or registration | Runtime dependencies | Enablement | Invocation path | Observed test | Confidence |
+|---|---|---|---|---|---|---|---|---|---|
+| <name> | <path and language/native boundary> | <supported tuple> | <rule and output path> | <loader/registry/manifest> | <native DLL/process/SDK/etc.> | <default and selection> | <real entrypoint> | <command, tuple, counts/result> | <verified/inferred/unknown> |
+
+Stop at the first unproven edge. Do not call the unit reachable or dead from one graph alone.
+
+## 2b. Submodule and vendored-worktree state
+
+| Path | Superproject gitlink / expected commit | Initialized / checked-out commit | Gitlink drift | Tracked changes | Untracked files | Ignored build artifacts | Nested submodules | Expected outputs and consumers |
+|---|---|---|---|---|---|---|---|---|
+| <path> | <commit> | <state / commit> | <yes/no> | <count or summary> | <count or summary> | <count or class> | <state> | <outputs and who packages/loads them> |
+
 ## 3. Interface surface
 
 | Method or trigger | Path / topic / command | What it does | Auth required? | Data read/written | Downstream |
@@ -59,7 +75,7 @@ Call out remote config, feature-flag vendors, CMS-backed behavior, app-store or 
 
 | Boundary | What crosses it | Validation / auth at the edge | Assumptions the code makes | What goes wrong if the boundary is loose |
 |---|---|---|---|---|
-| <e.g., browser → API> | <user requests> | <session cookie, CSRF> | <session is valid if not expired> | <session fixation, CSRF> |
+| <e.g., browser -> API> | <user requests> | <session cookie, CSRF> | <session is valid if not expired> | <session fixation, CSRF> |
 
 ## 8. Critical data flows
 

@@ -8,6 +8,13 @@ For confidence levels and the unknowns entry shape, see `00-conventions.md`.
 
 This reference may need many passes to cover all applicable critical paths.
 
+## Contents
+
+- Goal, repo adaptation, and task
+- Comment targets, placement, and examples
+- Comment-only rules and unknown handling
+- Writing hygiene, deliverables, and acceptance
+
 ## Goal
 
 Add high-value explanatory comments to the most important systems in the repo without changing behavior. Make critical code explainable to the next engineer. Comments should explain why the code exists, what must remain true, and what breaks if it changes carelessly.
@@ -138,7 +145,7 @@ Good comment:
 ```ts
 // Idempotency: Stripe retries within seconds of a transient 500. The early
 // bail on a known event_id prevents a double-charge replay. Move this check
-// only if processed_events grows a TTL — without it, the duplicate will leak
+// only if processed_events grows a TTL - without it, the duplicate will leak
 // past the gate after rows expire.
 const seen = await processedEvents.has(req.body.event_id);
 if (seen) return res.status(200).end();

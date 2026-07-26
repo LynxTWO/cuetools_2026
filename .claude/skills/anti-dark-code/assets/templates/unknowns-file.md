@@ -2,7 +2,7 @@
 
 This file records things that could not be confidently explained during the <pass or area name> work. Do not guess. Update as evidence lands.
 
-The entry shape, confidence levels, risk levels, and status values below all come from `references/00-conventions.md`. Do not add or rename fields. If you find yourself wanting an extra field, the question is whether `00-conventions.md` should change — not this file.
+The entry shape, confidence levels, risk levels, and status values below all come from `references/00-conventions.md`. Do not add or rename fields. If you find yourself wanting an extra field, the question is whether `00-conventions.md` should change - not this file.
 
 ## Entries
 
@@ -27,4 +27,4 @@ The entry shape, confidence levels, risk levels, and status values below all com
 
 Move resolved unknowns here with a one-line note explaining how they were resolved and where the evidence lives. Do not delete them; the history is useful.
 
-- **<title>** — resolved <date>. See <link or path>.
+- **<title>** - resolved <date>. See <link or path>.

@@ -118,7 +118,7 @@ namespace CUETools.Codecs
                 while (FreeSpace == 0 && _ex == null)
                     Monitor.Wait(this);
                 if (_ex != null)
-                    throw _ex;
+                    ExceptionRelay.Throw(_ex);
                 pos = _end % _size;
                 chunk = Math.Min(FreeSpace, _size - pos);
             }
@@ -143,7 +143,7 @@ namespace CUETools.Codecs
                     while (FreeSpace == 0 && _ex == null)
                         Monitor.Wait(this);
                     if (_ex != null)
-                        throw _ex;
+                        ExceptionRelay.Throw(_ex);
                     pos = _end % _size;
                     chunk = Math.Min(FreeSpace, _size - pos);
                     chunk = Math.Min(chunk, count);

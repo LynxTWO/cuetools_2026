@@ -1,6 +1,6 @@
 ---
 name: anti-dark-code
-description: Use when working in an unfamiliar or messy codebase and the user asks to map a repo, explain what runs where, identify trust boundaries or sensitive-data paths, comment critical logic without changing behavior, audit logs or telemetry for leaks, build coverage ledgers for large repos, challenge architecture understanding with adversarial or scenario reviews, preserve localization or transcreation boundaries, turn findings into a remediation backlog, or install steering files and maintenance guardrails. Trigger keywords - dark code, legacy code review, critical paths, approval gates, unknowns files, anti-dark-code, hidden control flow, transcreation, localization, i18n, "we do not understand this repo".
+description: Staged workflow for mapping, auditing, and hardening unfamiliar or messy codebases from evidence. Use for a thorough codebase audit or readiness review, requests to determine what remains to be done, tested, or improved, autonomous remediation of an existing audit, architecture and trust-boundary mapping, critical-path comments, logging or telemetry leak reviews, large-repo coverage ledgers, adversarial or scenario reviews, localization or transcreation boundaries, remediation backlogs, steering files, and maintenance guardrails. Trigger phrases include dark code, legacy code review, critical paths, approval gates, unknowns files, anti-dark-code, hidden control flow, thorough audit, readiness, what remains, what still needs done, and autonomous remediation.
 ---
 
 # Anti-Dark-Code
@@ -37,6 +37,8 @@ Turn an unfamiliar repo into a mapped, documented, evidence-backed codebase. Run
   Use to challenge coverage claims, trust-boundary assumptions, and hidden control planes.
 - `08` Scenario stress-test: read `references/08-scenario-stress-test.md`
   Use to test whether the current map survives realistic failure or abuse scenarios.
+- `09` Artifact garbage collection: read `references/09-artifact-gc.md`
+  Use when generated artifacts (logs, snapshots, scratch scripts, exports, stale baselines) have accumulated, when the user asks to clean up or reclaim space, or before a maintenance handoff. Distills claims and regeneration recipes first, then tiers artifacts for staged, approval-gated cleanup.
 - `10` Maintenance harness: read `references/10-maintenance-harness.md`
   Use to add PR templates, drift checks, and review guardrails.
 - `11` Remediation loop: read `references/11-remediation-loop.md`
@@ -44,7 +46,7 @@ Turn an unfamiliar repo into a mapped, documented, evidence-backed codebase. Run
 - `12` Transcreation boundary: read `references/12-transcreation-boundary.md`
   Use to map language, locale, UI copy, authored content, and saved-text boundaries without letting source-locale prose become hidden runtime truth.
 
-There is no pass `09`. The numbering jumps from `08` to `10` to leave room for future passes between the review family and the maintenance family without renumbering existing references. This is intentional, not a missing file.
+Pass `09` occupies the slot that was reserved between the review family and the maintenance family. It consumes review outputs and prepares the ground for `10`, which is why it lives at this position.
 
 ## Load Rules
 
@@ -57,6 +59,7 @@ There is no pass `09`. The numbering jumps from `08` to `10` to leave room for f
 ### Runnable loops vs reference examples
 
 - `references/combined-03-06-loop.md` is a **runnable loop**, not a numbered pass. Use it when the user wants repeated comment-plus-hygiene passes on one slice at a time.
+- `references/orchestration-mode.md` is a **runnable mode**, not a numbered pass. Open it when the harness can spawn subagents or journaled multi-agent workflows and the active pass would benefit from fan-out. It changes execution shape only, never pass order, approval gates, or evidence rules. Its **Gate truth** section also applies whenever a later pass executes repo gates inline; without a subagent facility, skip the fan-out sections and run the numbered pass inline.
 - `references/example-stress-test-report.md` is a **reference example**, not a runnable pass. Open it only when pass `08` needs an output example.
 
 ### Templates
@@ -73,19 +76,20 @@ There is no pass `09`. The numbering jumps from `08` to `10` to leave room for f
 6. Run `06` after each writing-heavy pass, or use the combined `03` + `06` loop.
 7. Run `04` after a map exists.
 8. Run `07` or `08` to challenge the current understanding.
-9. Run `10` after initial outputs exist.
-10. Run `12` when language, locale, copy ownership, saved prose, or future transcreation pressure matters.
-11. Run `11` to convert findings into bounded remediation work.
+9. Run `09` when generated artifacts have piled up, and again before handing off to `10`.
+10. Run `10` after initial outputs exist.
+11. Run `12` when language, locale, copy ownership, saved prose, or future transcreation pressure matters.
+12. Run `11` to convert findings into bounded remediation work.
 
 ## Mini-Mode
 
 For small, single-runtime, or new repos, the full pass order is overkill. Mini-mode runs an abridged flow:
 
-`00` → `01` → `02` → `03` + `06` (combined loop) → `04` → `11`
+`00` -> `01` -> `02` -> `03` + `06` (combined loop) -> `04` -> `11`
 
 Use mini-mode only when **all** of the mini-mode trigger checks in `00-preflight.md` pass. If any trigger fails, fall back to full mode.
 
-Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and `08` (less surface area to overclaim), `10` (a plain PR template is enough), and `12` (defer until copy ownership becomes a real concern).
+Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and `08` (less surface area to overclaim), `09` (until artifacts actually accumulate), `10` (a plain PR template is enough), and `12` (defer until copy ownership becomes a real concern).
 
 ## Cross-Pass Rules
 
@@ -94,6 +98,11 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
 - Do not guess.
 - Mark claims as `verified`, `inferred`, or `unknown` per `00-conventions.md`.
 - Record unknowns using the canonical entry shape in `00-conventions.md`.
+- For every negative search, report both the candidate-file count and finding count. Zero candidate files means the surface was not examined; it never proves "clean," "absent," or "pure managed."
+- Prove negative scans read file contents: do not pipe a filename listing into a content search, and require a known-positive sentinel or fixture before trusting a whole-repo zero.
+- Use the end-to-end reachability proof in `02-architecture-map.md` before calling a plugin, project, binary, or feature reachable or dead.
+- Use the assurance oracle and transaction checklist in `11-remediation-loop.md` before accepting claims such as verified, bit-exact, atomic, or repaired.
+- Distinguish a source defect from an unexercised path, missing toolchain, unavailable capability, or missing native dependency.
 - Name out-of-repo boundaries when they affect live behavior.
 - Do not claim whole-repo coverage from one clean path.
 
@@ -129,9 +138,11 @@ See `00-conventions.md` for the writing rules. Run `06-writing-hygiene.md` after
 - Keep generated, vendored, minified, mirrored, serialized, or binary artifacts out of inline comment churn. Explain them in docs instead.
 - Preserve repo-type specificity. Do not rewrite mobile, native, AI, infra, library, or mixed-stack systems as if they were generic web apps.
 
-### Tooling Notes (Claude Code specific)
+### Tooling Notes
 
-- Prefer `Read` for files, `Grep` for symbol or text searches, and `Edit` for in-place changes. Reserve `Bash` for shell-only operations like `find`, `git`, builds, or test runs.
+- Translate tool names to the active host. In Claude Code, prefer `Read`, `Grep`, and `Edit`; in
+  Codex-style hosts, prefer direct file reads, `rg`, and the structured patch tool. Reserve a
+  shell for discovery, git, builds, tests, and operations the structured tools do not cover.
 - Use parallel tool calls for independent reads. A pass that opens 5 files for inventory should issue one batched call, not five sequential ones.
 - Do not skip pre-commit hooks. Never use `--no-verify`, `--no-gpg-sign`, or equivalent unless the user explicitly asks.
 - Avoid `cat`, `head`, `tail`, `sed`, `awk`, or `echo` in `Bash`. Use `Read`, `Edit`, or `Write` instead.
@@ -150,14 +161,17 @@ Run one numbered pass at a time. Do not interleave passes within a single slice.
 
 ### Abort on contradiction
 
-Stop the active pass and surface the contradiction when:
+Stop work that depends on the contradicted claim and surface it when:
 
 - a finding contradicts a load-bearing claim in a steering file, system map, or coverage ledger
 - evidence inside one slice contradicts evidence inside another that the current pass relies on
 - a protected-area edit appears to have already happened without an approval note
 - the active pass would force a `verified` claim where only `inferred` evidence exists
 
-Document the contradiction, propose the next check, and wait for human review before continuing.
+Document the contradiction and propose the next check. If the user explicitly requested an audit
+refresh and the contradiction is only a stale dated artifact, mark it stale and continue with the
+bounded refresh pass. Wait for human review only when the contradiction changes authorized scope,
+touches a protected area without approval, or cannot be resolved from repository evidence.
 
 ## Default Deliverables
 
@@ -174,7 +188,11 @@ Templates live under `assets/templates/`:
 
 ## Report Back After Each Pass
 
-Return:
+Record a checkpoint after each pass. In an interactive session, use a concise progress update. In
+a single-result or API engagement, keep the checkpoint in the work journal and include all pass
+results in the final response; do not manufacture a blocking round trip merely to report progress.
+
+Each checkpoint includes:
 
 - which pass ran and on what slice
 - which files were created or updated

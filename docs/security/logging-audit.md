@@ -1,50 +1,106 @@
 # Logging, Telemetry, and Sensitive-Data Audit
 
-Pass 04, 2026-07-02. Scope: first-party code. Vendored/submodule trees (ThirdParty/*, taglib-sharp, WindowsMediaLib tests) are excluded and noted. Vocabulary and sensitive-data classes: `.claude/skills/anti-dark-code/references/00-conventions.md`.
+Current-state refresh: 2026-07-26. Scope is first-party logging, local
+diagnostics, credential persistence, and credential-bearing network paths.
+Vendored/submodule implementations are outside the code-level audit. Evidence is
+labeled `verified`, `inferred`, or `unknown`.
 
-## 1. Scope and method
+## 1. Current telemetry model
 
-Searched the repo for logging/telemetry sinks (`Trace.*`, `Console.*`, `Debug.*`, `*.WriteLine`, the `Bwg.Logging` framework) and for sensitive tokens (`password`, `token`, `secret`, auth headers, UUID). Read the credential-handling call sites. This is a Windows desktop app: there is **no analytics SDK, no crash reporter, no tracing/telemetry vendor**, so the telemetry surface is small and local. The only outbound network paths are the verification/metadata services (audited as slice S1) and the MOTD fetch (S9); none of them transmit user secrets.
+No external analytics, crash-reporting, tracing, or telemetry SDK was found in
+the first-party projects. Classic applications use `Trace`, `Console`, and the
+opt-in `Bwg.Logging` framework. CUETools 2026 adds an intentional local
+diagnostic log and global exception handlers.
 
-Confidence is high for the managed first-party sinks; `Bwg.Scsi\Device.cs` (89 log calls) was sampled, not read line by line.
+`CUETools.Wpf/Services/DiagnosticLog.cs` creates one file per run at:
+
+`%AppData%\CUETools2026\logs\cuetools-<timestamp>.log`
+
+It records phases, counts, timing, drive/rip structure, and exception details.
+Writes are thread-safe and failures are swallowed so logging cannot break a rip.
+No automatic upload path was found. Retention/purge behavior is not claimed.
 
 ## 2. Findings
 
-| # | Area / file | Sink | What it emits | Sensitive? | Risk |
-| --- | --- | --- | --- | --- | --- |
-| F1 | `CUETools.Processor\CUEConfigAdvanced.cs:76` (`ProxyPassword`) | profile settings file (SettingsWriter), at rest | proxy auth password as a plain serialized string | yes — stored credential | medium |
-| F2 | `CUETools.Codecs.Icecast\IcecastWriter.cs:59` | network (HTTP Basic header) | Icecast source password base64 over plain HTTP | yes — credential in transit | medium (commented S11) |
-| F3 | `CUETools.Processor\CUEProcessorPlugins.cs` | `Trace.WriteLine` | plugin load exception messages | no (paths/errors), but silent-swallow | low (commented S3) |
-| F4 | `Bwg.Scsi\Device.cs` (~89 calls) | `Bwg.Logging` sink (opt-in) | SCSI CDBs, sense data, sector counts | no personal data; verbose device I/O | low |
-| F5 | CLI tools (`*/Program.cs`), `SCSIDrive.cs` | `Console.Error` | rip progress, drive/read-command detection, offsets | no | low |
-| F6 | `CUETools\frmCUETools.cs` MOTD | disk write + GDI+ render | remote JPEG/text cached under profile dir | remote-controlled input, not a leak | medium (commented S9) |
+| # | Area | Current behavior | Sensitive-data assessment | State |
+| --- | --- | --- | --- | --- |
+| F1 | Classic proxy settings | `CUEConfig.Save` removes `advanced.ProxyPassword` from serialized Advanced JSON and stores a DPAPI CurrentUser `ProxyPasswordProtected` value; corrupt/wrong-user/unsupported blobs are rejected | verified: the prior plaintext-at-rest finding is closed; no plaintext fallback | fixed |
+| F2 | CUETools 2026 proxy settings | `SettingsStore` uses `SecretProtector` and `WpfProxyPasswordProtected`, migrates legacy plaintext, registers the in-memory secret with the diagnostic redactor, and atomically publishes settings | verified: credential read rejection fails closed; save failure is logged/caught, but UI visibility is not established | fixed with UI-observability limit |
+| F3 | CUEPlayer Icecast settings | `IcecastCredentialStore` implements a bounded DPAPI CurrentUser blob; source ordering attempts protected persistence before clearing legacy plaintext, and UI set/clear semantics do not redisplay the stored secret | verified source invariant; real `ApplicationSettingsBase.Save()` persistence, failure, and migration behavior remain unobserved | implemented, integration gap |
+| F4 | Icecast network auth | endpoint policy defaults source and metadata requests to HTTPS; HTTP needs explicit persisted opt-in and a UI warning; trace failures record exception type, not credential value | verified control; live TLS/auth interoperability remains unknown | bounded external gap |
+| F5 | CUETools 2026 diagnostic log | registers username, profile/music roots, proxy password, album metadata, user-selected input/output roots, and owned staging paths before work; error records include exception type, message, stack, and inner exceptions | verified: case-insensitive longest-match redaction scrubs direct messages, nested exception messages, and stack text without reprocessing the replacement token | fixed |
+| F6 | Plugin discovery traces | records manifest/development-mode/load failures and exception details through `Trace` | paths and error details, not credential values in inspected calls | low |
+| F7 | `Bwg.Scsi/Device.cs` and `Bwg.Logging` | emits SCSI command, sense, drive, and sector diagnostics when enabled | sampled only; no credential data found, but raw-buffer verbosity is not exhaustively ruled out | open low-risk audit |
+| F8 | CLI and classic GUI traces | progress, drive selection, offsets, file/playlist errors, and exception types | paths and device information may be user-identifying in shared logs; no secret values found in inspected call sites | local disclosure boundary |
+| F9 | Classic MOTD | bounded HTTPS text is held in memory for display; former remote JPEG/text cache is gone | remote input, not telemetry; prior disk-cache/render finding is closed | fixed |
 
-No sink was found that writes password, token, session, or raw-personal-data **values** into logs, traces, or console output. F1 is data-at-rest, not a log leak.
+## 3. CUETools 2026 diagnostic content
 
-## 3. Approval status
+Verified structural categories include:
 
-No protected-area edits attempted in this pass (audit is read-only). F1 (credential at rest) touches the config/secrets area, which is approval-gated; any change to how `ProxyPassword` is stored (DPAPI, Windows Credential Manager, or at minimum documenting the exposure) is queued as a remediation item, not applied here.
+- process/runtime and font initialization;
+- drive model, firmware, capabilities, speeds, cache behavior, and tray actions;
+- rip mode, offset, read windows, C2/error counts, recovery passes, timings, and
+  completion state;
+- disc/verification identifiers, match counts, and history state;
+- settings, encoder catalog, history, transaction, verification, and repair
+  outcomes;
+- exception type, message, stack trace, and inner-exception chain for error
+  calls.
 
-## 4. Fixes applied
+The logger always registers the Windows user name, UserProfile, and MyMusic
+paths. Rip, Test & Copy, verify, repair, accept-anyway, and staging cleanup
+entrypoints now register user-selected and generated path roots before work that
+can log an exception. The focused real-file test covers direct log text, nested
+exception messages, case changes, overlapping secrets, and stack text. Future
+entrypoints still have to follow the same `IDiagnosticLog.Redact` rule. Drive and
+disc identifiers are deliberately structural, but may still be identifying when
+a user shares a log. The UI should therefore treat the log as user-approved
+diagnostic material, not anonymous telemetry.
 
-None. This pass is read-only; no redaction was needed because no secret is being logged.
+## 4. Credential and trust boundaries
 
-## 5. Safe logging rules for this repo
+- DPAPI CurrentUser protects local proxy and Icecast secrets against casual file
+  disclosure. It does not protect against code already running as that Windows
+  user, and protected blobs are intentionally not portable between users.
+- Unsupported DPAPI platforms do not receive a plaintext fallback.
+- Classic CUETools and CUERipper catch protection/publication failures and state
+  that settings were not saved.
+- CUEPlayer source ordering requests protected persistence before clearing legacy
+  plaintext. Real `ApplicationSettingsBase.Save()` success/failure and
+  migration persistence have not been exercised.
+- Icecast Basic authentication is acceptable only inside the default TLS
+  transport. Explicit HTTP opt-in is a conscious disclosure tradeoff.
+- No log call should receive a raw password, authorization header, token, or
+  protected DPAPI blob.
 
-- Never log `ProxyPassword`, `IcecastSettingsData.Password`, RAR `Password`, or the raw `Authorization` header value.
-- Keep the CTDB submitter id hashed (it already is; `CUEToolsDB.GetUUID`); never log the raw machine identifiers it is derived from.
-- SCSI/`Bwg.Logging` output is for device debugging; keep it opt-in and do not add audio sample data or disc-identifying personal metadata to it.
-- CLI/console output may include file paths and drive info; do not add credentials or full request/response bodies.
-- If a crash reporter or analytics is ever added (modernization), exclude the config object (it carries `ProxyPassword`) from any automatic capture.
+## 5. Safe logging rules
 
-## 6. High-risk domain data
+- Call `IDiagnosticLog.Redact` for every user-selected input/output root and for
+  album, artist, track, proxy, or external-encoder value before a code path can
+  log exceptions containing it.
+- Prefer exception type and a bounded operational message. Use full exception
+  text only in the local diagnostic logger, where redaction is applied.
+- Never log `ProxyPassword`, Icecast source passwords, RAR passwords, raw
+  `Authorization` values, DPAPI blobs, or full request/response bodies.
+- Keep SCSI diagnostics opt-in; do not add raw audio-sector dumps.
+- Treat file paths, drive model/serial-like data, disc IDs, and music metadata as
+  user-identifying even when they are not authentication secrets.
+- Any future remote diagnostics must add explicit consent, destination,
+  retention, and schema review. The current audit does not authorize upload.
 
-None. CUETools handles audio files, disc TOCs, and music metadata. No health/financial/biometric/child data. The only stored credential is the optional proxy password (F1); the only in-transit credential is the optional Icecast source password (F2).
+## 6. Coverage and limits
 
-## 7. Unknowns and follow-up
+Verified: first-party credential save/load paths; classic `Trace` call sites
+around credentials and plugin loading; CUETools 2026 diagnostic implementation,
+job-boundary registration, and nested-exception redaction test; current MOTD and
+Icecast policy.
 
-Recorded in `docs/unknowns/logging-audit.md`.
+Sampled, not exhaustive: all 89-style `Bwg.Scsi/Device.cs` log calls and every
+possible exception message from native/external components.
 
-## 8. Coverage note
+External/unknown: live Icecast TLS/auth behavior, hosted runner logs, and any
+logging performed internally by vendored native/managed dependencies.
 
-Covered: managed first-party logging sinks, credential handling, outbound network paths, MOTD. Sampled (not exhaustively read): `Bwg.Scsi\Device.cs`. Excluded: ThirdParty submodules and vendored binaries (they have their own logging; out of scope for first-party audit). No mobile/game/worker telemetry exists in this repo.
+Open questions and closed historical findings are maintained in
+`docs/unknowns/logging-audit.md`.

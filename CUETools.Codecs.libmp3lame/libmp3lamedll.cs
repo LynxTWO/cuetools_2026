@@ -16,6 +16,8 @@ namespace CUETools.Codecs.libmp3lame
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern IntPtr lame_init();
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
+        internal static extern IntPtr get_lame_version();
+        [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern int lame_close(IntPtr handle);
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern int lame_set_num_channels(IntPtr handle, int channels);
@@ -52,13 +54,7 @@ namespace CUETools.Codecs.libmp3lame
             var myFolder = System.IO.Path.GetDirectoryName(myPath);
             var is64 = IntPtr.Size == 8;
             var subfolder = is64 ? "x64" : "win32";
-#if NET47
-            IntPtr Dll = LoadLibrary(System.IO.Path.Combine(myFolder, subfolder, DllName + ".dll"));
-#else
             IntPtr Dll = LoadLibrary(System.IO.Path.Combine(System.IO.Path.Combine(myFolder, subfolder), DllName + ".dll"));
-#endif
-            if (Dll == IntPtr.Zero)
-                Dll = LoadLibrary(DllName + ".dll");
             if (Dll == IntPtr.Zero)
                 throw new DllNotFoundException();
         }

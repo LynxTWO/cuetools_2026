@@ -126,7 +126,8 @@ namespace CUEPlayer
 			}
 			catch (Exception ex)
 			{
-				System.Diagnostics.Trace.WriteLine(ex.Message);
+				System.Diagnostics.Trace.WriteLine(
+					"Playlist save failed (" + ex.GetType().Name + ").");
 			}
 		}
 

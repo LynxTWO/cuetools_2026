@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using CUETools.AccurateRip;
 using CUETools.CTDB;
 using CUETools.Processor;
@@ -69,6 +70,7 @@ public sealed class TestCopyRunResult
     public bool Accurate { get; init; }
     public string CopyStagingDir { get; init; } = "";
     public string[] StagingDirs { get; init; } = System.Array.Empty<string>();
+    internal TestCopyStagingWorkspace? StagingWorkspace { get; init; }
 
     /// <summary>The format actually encoded, polled at encode start - not the one selected when the
     /// button was pressed. The caller must report THIS in the completion summary, or a mid-verify
@@ -179,10 +181,38 @@ public sealed class RipService : IRipService
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) { _stopRequested = false; return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread); }
     public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) { _stopRequested = false; return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt, onEncodeStart: onEncodeStart); }
 
+    private void RedactOutputRoot(string? outputBaseDir)
+    {
+        // Register the caller's spelling first: even Path.GetFullPath can fail and its exception can
+        // quote the value. Register the effective absolute root as well so later I/O errors cannot
+        // disclose a custom library location.
+        try { _log.Redact(outputBaseDir); } catch { }
+        try
+        {
+            string effective = string.IsNullOrWhiteSpace(outputBaseDir)
+                ? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+                    "CUETools")
+                : Path.GetFullPath(outputBaseDir);
+            _log.Redact(effective);
+        }
+        catch { }
+    }
+
+    private void RedactStagingRoot(string? stagingDirectory)
+    {
+        try { _log.Redact(stagingDirectory); } catch { }
+        if (string.IsNullOrWhiteSpace(stagingDirectory)) return;
+        try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
+    }
+
     private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
     {
+        if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        AlbumOutputTransaction? publication = null;
+        int expectedAudioFiles = 0;
         // Snapshot the toggles this job runs under, BEFORE the try - the finally releases
         // keep-awake and the tray lock on these locals. Re-reading the live settings there
         // stranded the keep-awake request when the user turned it off mid-rip, so the machine
@@ -352,8 +382,21 @@ public sealed class RipService : IRipService
 
                 // One shared layout step for rip AND convert - see OutputLayout. Keeping this sequence
                 // in two places is what produced the album-folder-collapse and staging-name bugs.
-                var layout = OutputLayout.PrepareAndApply(cue, baseDir, format, _settings.LoadNamingScheme(),
-                    () => OutputLayout.AlbumFolderFallback(cue.Metadata, Safe), m => _log.Info("rip", m));
+                OutputLayout.Plan layout;
+                if (stageOnly)
+                {
+                    layout = OutputLayout.PrepareAndApply(cue, baseDir, format,
+                        _settings.LoadNamingScheme(),
+                        () => OutputLayout.AlbumFolderFallback(cue.Metadata, Safe),
+                        m => _log.Info("rip", m));
+                }
+                else
+                {
+                    layout = OutputLayout.PrepareAndApplyTransactional(cue, baseDir,
+                        _settings.LoadNamingScheme(),
+                        () => OutputLayout.AlbumFolderFallback(cue.Metadata, Safe),
+                        out publication, m => _log.Info("rip", m));
+                }
                 outDir = layout.OutputDir;
                 outRelDir = layout.RelativeDir;
                 // pick the encoder type from the format via the catalog's single rule: a format
@@ -361,7 +404,10 @@ public sealed class RipService : IRipService
                 // its exe has been imported)
                 bool lossy = _config.formats.TryGetValue(format, out var fmtInfo) && _catalog.IsLossyFormat(fmtInfo);
                 cue.GenerateFilenames(lossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
-                onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {outDir}");
+                // DestPaths includes a preserved HTOA file when one is emitted; TrackCount does not.
+                expectedAudioFiles = cue.DestPaths?.Length ?? 0;
+                string displayDir = publication?.DestinationDirectory ?? outDir;
+                onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {displayDir}");
             }
             else
             {
@@ -395,7 +441,11 @@ public sealed class RipService : IRipService
                 if (frac - lastFrac >= 0.004 || frac >= 1.0)
                 {
                     lastFrac = frac;
-                    onProgress(Math.Min(1.0, Math.Max(0.0, frac)), (encode ? "Ripping" : "Verifying") + $"... {(int)(frac * 100)}%");
+                    // Reserve the final two percent for output validation and atomic publication.
+                    // Reaching 100% before the destination exists made a late finalize failure look
+                    // like a completed rip that subsequently disappeared.
+                    onProgress(Math.Min(0.98, Math.Max(0.0, frac)),
+                        (encode ? "Ripping" : "Verifying") + $"... {(int)(frac * 100)}%");
                 }
 
                 // Report a re-read only while one is actually happening (pass > cqc), plus one final
@@ -492,19 +542,26 @@ public sealed class RipService : IRipService
             // caller uses to lock the codec dropdown (the format string above is already final by now).
             if (encode) onEncodeStart?.Invoke();
             string status = cue.Go();
-            onProgress(1, status);
+            try { onProgress(0.99, status + " Finalizing output..."); }
+            catch (Exception ex)
+            {
+                // The expensive read has completed. A UI notification failure must not prevent
+                // validation and publication of the already-produced album.
+                try { _log.Warn("rip", "finalizing callback failed: " + ex.GetType().Name); }
+                catch { }
+            }
             RcFlushWindow();   // emit the summary for the last stuck window (it never advances past)
 
             int arConf = 0, arTotal = 0, ctConf = cue.CTDB.Confidence, ctTotal = cue.CTDB.Total;
             // a throw here would otherwise read as "not found in AccurateRip" - a different fact
             try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
             catch (Exception ex) { _log.Warn("rip", "AccurateRip result read failed (reported as not found): " + ex.GetType().Name); }
-            // Recursive: track names can carry their own subdirectory. See OutputLayout.CountAudioFiles.
-            int files = encode ? OutputLayout.CountAudioFiles(outDir, format) : 0;
-
-            _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
-                $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
-                $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
+            int files = 0;
+            if (encode)
+            {
+                ValidateEncodedOutputs(cue.DestPaths, outDir);
+                files = expectedAudioFiles;
+            }
 
             int n = Math.Max(0, cue.TrackCount);
             var arpt = new int[n];
@@ -520,18 +577,20 @@ public sealed class RipService : IRipService
             // AccurateRip-independent bit-exactness check.
             var vh = new CUETools.Wpf.Accuracy.VerifyOutcome();
             CUETools.Wpf.Accuracy.VerifyRecord? built = null;
+            Exception? recordFailure = null;
             try
             {
                 var tracks = new CUETools.Wpf.Accuracy.TrackCrc[n];
                 for (int t = 0; t < n; t++)
                 {
-                    uint v1 = 0, v2 = 0, c32 = 0;
-                    try { v1 = cue.ArVerify.CRC(t); } catch { }
-                    try { v2 = cue.ArVerify.CRCV2(t); } catch { }
                     // CRC32 is 1-indexed unlike CRC/CRCV2: CRC32(0) is the whole-disc row, CRC32(N) is
                     // track N, so track t needs CRC32(t + 1).
-                    try { c32 = cue.ArVerify.CRC32(t + 1); } catch { }
-                    tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc { ArV1 = v1, ArV2 = v2, Crc32 = c32 };
+                    tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc
+                    {
+                        ArV1 = cue.ArVerify.CRC(t),
+                        ArV2 = cue.ArVerify.CRCV2(t),
+                        Crc32 = cue.ArVerify.CRC32(t + 1),
+                    };
                 }
                 built = new CUETools.Wpf.Accuracy.VerifyRecord
                 {
@@ -548,18 +607,65 @@ public sealed class RipService : IRipService
                     Utc = DateTime.UtcNow,
                     RipperVersion = "2026.1.0",
                 };
-                if (!stageOnly)
+            }
+            catch (Exception ex)
+            {
+                recordFailure = ex;
+                _log.Warn("verify.history", "record build failed: " + ex.GetType().Name);
+            }
+
+            if (encode && built == null)
+                throw new InvalidDataException(
+                    "Could not build the required verification record.", recordFailure);
+
+            if (encode && !stageOnly)
+            {
+                if (publication == null)
+                    throw new InvalidOperationException("The album output was not reserved.");
+
+                // The sidecar and every engine artifact are written inside the owned stage. A
+                // disk-full or denied write therefore leaves the final album path untouched.
+                File.WriteAllText(Path.Combine(outDir, "rip.verify"),
+                    CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(built!));
+                ThrowIfStopRequested();
+                outDir = publication.Publish();
+                // Directory.Move does not change the staged contents; the exact count was checked
+                // immediately before publication. Keep that proven count instead of a best-effort
+                // cosmetic recount that intentionally maps access errors to zero.
+                files = expectedAudioFiles;
+            }
+
+            // The shared history is updated only after publication. A failed output transaction must
+            // not create a history entry that looks like a successfully retained rip.
+            if (!stageOnly && built != null)
+            {
+                try
                 {
                     vh = _history.CompareAndUpsert(built);
                     _log.Info("verify.history", $"disc={built.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
-                    if (encode && Directory.Exists(outDir))
-                    {
-                        try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(built)); }
-                        catch (Exception ex) { _log.Warn("verify.history", "sidecar write failed: " + ex.GetType().Name); }
-                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("verify.history", "history upsert failed: " + ex.GetType().Name);
                 }
             }
-            catch (Exception ex) { _log.Warn("verify.history", "record build failed: " + ex.GetType().Name); }
+
+            try
+            {
+                _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
+                    $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
+                    $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
+            }
+            catch
+            {
+                // A diagnostic sink cannot turn an already-published album into a reported failure.
+            }
+            try { onProgress(1, status); }
+            catch (Exception ex)
+            {
+                try { _log.Warn("rip", "completion callback failed: " + ex.GetType().Name); }
+                catch { }
+            }
 
             return new VerifyResult
             {
@@ -586,16 +692,37 @@ public sealed class RipService : IRipService
         }
         catch (StopException)
         {
-            _log.Info("rip", $"stopped by user after {sw.Elapsed.TotalSeconds:0}s");
+            try { _log.Info("rip", $"stopped by user after {sw.Elapsed.TotalSeconds:0}s"); }
+            catch { }
             return new VerifyResult { Error = "Stopped." };
         }
         catch (Exception ex)
         {
-            _log.Error("rip", $"failed after {sw.Elapsed.TotalSeconds:0}s", ex);
-            return new VerifyResult { Error = ex.Message };
+            try { _log.Error("rip", $"failed after {sw.Elapsed.TotalSeconds:0}s", ex); }
+            catch { }
+            string incomplete = "";
+            if (publication != null && !publication.IsPublished)
+            {
+                try { incomplete = publication.PreserveIncomplete(); }
+                catch (Exception preserveEx)
+                {
+                    try
+                    {
+                        _log.Warn("rip", "incomplete-stage quarantine failed: " +
+                            preserveEx.GetType().Name);
+                    }
+                    catch { }
+                }
+            }
+            return new VerifyResult
+            {
+                Error = ex.Message + (string.IsNullOrEmpty(incomplete)
+                    ? "" : " Incomplete output was retained at: " + incomplete),
+            };
         }
         finally
         {
+            publication?.Dispose();
             lock (_stopGate) _current = null;
             // always re-allow eject; if this fails the eject button stays dead until the handle closes
             try { if (trayLockTaken) reader.DisableEjectDisc(false); }
@@ -625,12 +752,16 @@ public sealed class RipService : IRipService
 
     public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
     {
+        // Calibration and drive setup can fail before the first staged Run call, so protect the
+        // final user-selected destination at this outer entry point too.
+        RedactOutputRoot(outputBaseDir);
         _stopRequested = false;   // fresh operation - see the latch on Stop()
         int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         string stage1 = "", stage2 = "";
+        TestCopyStagingWorkspace? stagingWorkspace = null;
         bool keepStaging = false;   // set true only when we return a HELD result the VM must clean up
 
         Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
@@ -641,9 +772,12 @@ public sealed class RipService : IRipService
             if (!EnsureIndependence(drive, onProgress))
                 return new TestCopyRunResult { Error = "Calibration failed - cannot guarantee two independent reads." };
 
-            string stem = Path.Combine(Path.GetTempPath(), "cuetc", Guid.NewGuid().ToString("N"));
-            stage1 = stem + "-copy";
-            stage2 = stem + "-third";
+            stagingWorkspace = TestCopyStagingWorkspace.Create();
+            stage1 = stagingWorkspace.CopyBaseDirectory;
+            stage2 = stagingWorkspace.ThirdBaseDirectory;
+            RedactStagingRoot(stagingWorkspace.WorkspaceDirectory);
+            RedactStagingRoot(stage1);
+            RedactStagingRoot(stage2);
 
             // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
             // against but its checksums still count as an independent read.
@@ -698,7 +832,6 @@ public sealed class RipService : IRipService
                 ThrowIfStopRequested();   // do not commit an album the user cancelled
                 keepStaging = true;
                 var last = reads[reads.Count - 1];
-                var dirs = string.IsNullOrEmpty(stage2) ? new[] { stage1 } : new[] { stage1, stage2 };
                 return new TestCopyRunResult
                 {
                     Ok = true,
@@ -712,7 +845,8 @@ public sealed class RipService : IRipService
                     FileCount = OutputLayout.CountAudioFiles(copyResult.OutputDir, fmt),
                     HeldTracks = heldTracks,
                     CopyStagingDir = copyResult.OutputDir,
-                    StagingDirs = dirs,
+                    StagingDirs = new[] { stagingWorkspace.WorkspaceDirectory },
+                    StagingWorkspace = stagingWorkspace,
                     ArConfidence = last?.ArConfidence ?? 0,
                     ArTotal = last?.ArTotal ?? 0,
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
@@ -804,6 +938,9 @@ public sealed class RipService : IRipService
             // the cost of another 2-3 full reads.
             if (keepStaging && !string.IsNullOrEmpty(stage1))
             {
+                // Release the live lease so this recovery copy does not remain permanently immune
+                // to the age-gated startup sweep. Its marker still proves cleanup ownership.
+                stagingWorkspace?.PreserveForRecovery();
                 _log.Warn("rip", "test&copy commit failed - the verified staged reads were KEPT");
                 return new TestCopyRunResult
                 {
@@ -820,10 +957,7 @@ public sealed class RipService : IRipService
             // via Accept/Discard) and for a commit that threw part-way, so a proven rip is never thrown
             // away because of a transient disk error.
             if (!keepStaging)
-            {
-                DeleteStagingDir(stage1);
-                DeleteStagingDir(stage2);
-            }
+                stagingWorkspace?.Dispose();
         }
     }
 
@@ -868,13 +1002,17 @@ public sealed class RipService : IRipService
         string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
             : outputBaseDir;
-        // a Test & Copy commit is still a rip - do not let it land on top of an earlier one
-        albumName = OutputGuard.NonClobberingAlbumDir(realBase, albumName, format, m => _log.Info("rip", m));
-        string outDir = Path.Combine(realBase, albumName);
+        int sourceFileCount = CountAudioFilesRequired(sourceStagingAlbumDir, format);
+        if (sourceFileCount <= 0)
+            throw new InvalidDataException("The verified staged read contains no audio files.");
 
-        // Wholesale commit only: the chosen read's own staged folder is copied as-is, so its files
-        // can never misalign with its own track order.
-        CopyDirectoryRecursive(sourceStagingAlbumDir, outDir);
+        // Reserve the final name across processes, then copy onto the destination volume. The final
+        // path remains absent until the complete folder is renamed into place.
+        using var publication = AlbumOutputTransaction.Reserve(realBase, albumName,
+            m => _log.Info("rip", m));
+        CopyDirectoryRecursiveVerified(sourceStagingAlbumDir, publication.StagingDirectory);
+        if (CountAudioFilesRequired(publication.StagingDirectory, format) != sourceFileCount)
+            throw new InvalidDataException("The Test & Copy staging transfer is incomplete.");
 
         // Build the committed record from the single committed read's own checksums (never a
         // per-track mix of different reads).
@@ -898,13 +1036,14 @@ public sealed class RipService : IRipService
             RipperVersion = "2026.1.0",
         };
 
-        try
-        {
-            string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
-            File.WriteAllText(Path.Combine(outDir, "Test & Copy.log"), logText);
-        }
-        catch (Exception ex) { _log.Warn("rip", "Test & Copy log write failed: " + ex.GetType().Name); }
+        string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
+        File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), logText);
+        File.WriteAllText(Path.Combine(publication.StagingDirectory, "rip.verify"),
+            VerifyHistoryStore.ToJson(committedRecord));
+        ThrowIfStopRequested();
+        string outDir = publication.Publish();
 
+        // History follows publication so a failed copy cannot masquerade as a retained verified rip.
         try
         {
             var vh = _history.CompareAndUpsert(committedRecord);
@@ -912,11 +1051,7 @@ public sealed class RipService : IRipService
         }
         catch (Exception ex) { _log.Warn("verify.history", "test&copy upsert failed: " + ex.GetType().Name); }
 
-        try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), VerifyHistoryStore.ToJson(committedRecord)); }
-        catch (Exception ex) { _log.Warn("verify.history", "test&copy sidecar write failed: " + ex.GetType().Name); }
-
-        int fileCount = OutputLayout.CountAudioFiles(outDir, format);
-        return (outDir, fileCount);
+        return (outDir, sourceFileCount);
     }
 
     /// <summary>Accept a held Test &amp; Copy's Copy read into the output folder anyway, flagged not
@@ -924,6 +1059,10 @@ public sealed class RipService : IRipService
     /// committed output directory, or "" on failure.</summary>
     public string CommitCopyReadAnyway(TestCopyRunResult held, string outputBaseDir)
     {
+        // Acceptance performs filesystem validation before its try/catch. Protect both sides of the
+        // copy before that validation can produce a diagnostic.
+        RedactOutputRoot(outputBaseDir);
+        RedactStagingRoot(held?.CopyStagingDir);
         if (held == null || string.IsNullOrEmpty(held.CopyStagingDir) || !Directory.Exists(held.CopyStagingDir))
         {
             _log.Warn("rip", "test&copy accept-anyway: no staged copy read available");
@@ -937,19 +1076,31 @@ public sealed class RipService : IRipService
             string realBase = string.IsNullOrWhiteSpace(outputBaseDir)
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                 : outputBaseDir;
-            albumName = OutputGuard.NonClobberingAlbumDir(realBase, albumName, held.Format ?? "", m => _log.Info("rip", m));
-            string outDir = Path.Combine(realBase, albumName);
-            CopyDirectoryRecursive(held.CopyStagingDir, outDir);
+            string format = held.Format ?? "";
+            int sourceFileCount = CountAudioFilesRequired(held.CopyStagingDir, format);
+            if (sourceFileCount <= 0)
+                throw new InvalidDataException("The held Copy read contains no audio files.");
+            using var publication = AlbumOutputTransaction.Reserve(realBase, albumName,
+                m => _log.Info("rip", m));
+            CopyDirectoryRecursiveVerified(held.CopyStagingDir, publication.StagingDirectory);
+            if (CountAudioFilesRequired(publication.StagingDirectory, format) != sourceFileCount)
+                throw new InvalidDataException("The held Copy staging transfer is incomplete.");
 
             string heldList = string.Join(", ", System.Array.ConvertAll(held.HeldTracks, x => (x + 1).ToString()));
             string log = "Test & Copy log\n\n" +
                 "NOT test-verified - accepted by user without agreement.\n" +
                 $"Reads used: {held.ReadsUsed}\n" +
                 $"Held track(s) (no agreement): {heldList}\n";
-            File.WriteAllText(Path.Combine(outDir, "Test & Copy.log"), log);
+            File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), log);
+            string outDir = publication.Publish();
 
-            _log.Info("rip", $"testcopy accept-anyway reads={held.ReadsUsed} heldTracks={held.HeldTracks.Length}");
-            DiscardStaging(held);
+            try
+            {
+                _log.Info("rip", $"testcopy accept-anyway reads={held.ReadsUsed} heldTracks={held.HeldTracks.Length}");
+            }
+            catch { }
+            try { DiscardStaging(held); }
+            catch { }
             return outDir;
         }
         catch (Exception ex)
@@ -962,24 +1113,183 @@ public sealed class RipService : IRipService
     /// <summary>Delete the staging folders a held Test &amp; Copy retained. Best-effort.</summary>
     public void DiscardStaging(TestCopyRunResult held)
     {
-        if (held?.StagingDirs == null) return;
+        if (held == null) return;
+        RedactStagingRoot(held.CopyStagingDir);
+        if (held.StagingDirs != null)
+            foreach (string dir in held.StagingDirs) RedactStagingRoot(dir);
+        held.StagingWorkspace?.DeleteOwned();
+        if (held.StagingDirs == null) return;
         foreach (var dir in held.StagingDirs) DeleteStagingDir(dir);
     }
 
     private void DeleteStagingDir(string dir)
     {
         if (string.IsNullOrEmpty(dir)) return;
-        try { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+        try
+        {
+            if (Directory.Exists(dir) &&
+                !TestCopyStagingWorkspace.TryDeleteOwnedWorkspace(dir))
+                _log.Warn("rip",
+                    "test&copy staging cleanup skipped: ownership could not be proven");
+        }
         catch (Exception ex) { _log.Warn("rip", "test&copy staging cleanup failed: " + ex.GetType().Name); }
     }
 
-    private static void CopyDirectoryRecursive(string srcDir, string dstDir)
+    internal static void CopyDirectoryRecursiveVerified(string srcDir, string dstDir)
     {
-        Directory.CreateDirectory(dstDir);
-        foreach (var dir in Directory.GetDirectories(srcDir, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(dstDir, Path.GetRelativePath(srcDir, dir)));
-        foreach (var file in Directory.GetFiles(srcDir, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(dstDir, Path.GetRelativePath(srcDir, file)), true);
+        string sourceRoot = Path.GetFullPath(srcDir);
+        string destinationRoot = Path.GetFullPath(dstDir);
+        if (!Directory.Exists(sourceRoot))
+            throw new DirectoryNotFoundException("The source staging directory is missing.");
+        Directory.CreateDirectory(destinationRoot);
+        if ((File.GetAttributes(sourceRoot) & FileAttributes.ReparsePoint) != 0 ||
+            (File.GetAttributes(destinationRoot) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("A staging root cannot be a reparse point.");
+
+        var pending = new Stack<string>();
+        pending.Push(sourceRoot);
+        while (pending.Count != 0)
+        {
+            string current = pending.Pop();
+            foreach (string source in Directory.EnumerateFileSystemEntries(current, "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                FileAttributes attributes = File.GetAttributes(source);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("A staging payload cannot contain a reparse point.");
+                string relative = Path.GetRelativePath(sourceRoot, source);
+                string destination = ResolveCopyDestination(destinationRoot, relative);
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    Directory.CreateDirectory(destination);
+                    pending.Push(source);
+                    continue;
+                }
+
+                File.Copy(source, destination, false);
+                VerifyCopiedFile(source, destination);
+            }
+        }
+    }
+
+    private static string ResolveCopyDestination(string destinationRoot, string relative)
+    {
+        string destination = Path.GetFullPath(Path.Combine(destinationRoot, relative));
+        string prefix = destinationRoot.TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("A staged file escapes the destination transaction.");
+        return destination;
+    }
+
+    private static void VerifyCopiedFile(string source, string destination)
+    {
+        var sourceInfo = new FileInfo(source);
+        var destinationInfo = new FileInfo(destination);
+        if (sourceInfo.Length != destinationInfo.Length)
+            throw new InvalidDataException("A staged file copy has the wrong length.");
+
+        using SHA256 algorithm = SHA256.Create();
+        byte[] sourceHash;
+        byte[] destinationHash;
+        using (FileStream stream = File.OpenRead(source))
+            sourceHash = algorithm.ComputeHash(stream);
+        algorithm.Initialize();
+        using (FileStream stream = File.OpenRead(destination))
+            destinationHash = algorithm.ComputeHash(stream);
+        if (!CryptographicOperations.FixedTimeEquals(sourceHash, destinationHash))
+            throw new InvalidDataException("A staged file copy failed read-back verification.");
+    }
+
+    private static int CountAudioFilesRequired(string dir, string format)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            throw new DirectoryNotFoundException("The staged album directory is missing.");
+        if (string.IsNullOrWhiteSpace(format))
+            throw new InvalidDataException("The staged album format is missing.");
+
+        string root = Path.GetFullPath(dir);
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("The staged album root cannot be a reparse point.");
+        int count = 0;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count != 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(current, "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                FileAttributes attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("The staged album cannot contain a reparse point.");
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    pending.Push(entry);
+                    continue;
+                }
+                if (string.Equals(Path.GetExtension(entry), "." + format,
+                    StringComparison.OrdinalIgnoreCase))
+                    count++;
+            }
+        }
+        return count;
+    }
+
+    internal static void ValidateEncodedOutputs(string[]? paths, string stagingDirectory)
+    {
+        if (paths == null || paths.Length == 0)
+            throw new InvalidDataException("The encoder reported no expected audio outputs.");
+
+        string root = Path.GetFullPath(stagingDirectory);
+        string prefix = root.TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!Directory.Exists(root) ||
+            (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("The encoder staging directory is not a regular directory.");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new InvalidDataException("An expected encoded audio file is missing.");
+            string full = Path.GetFullPath(path);
+            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "An expected encoded audio path escaped the output transaction.");
+            if (!seen.Add(full))
+                throw new InvalidDataException(
+                    "The encoder reported a duplicate audio output path.");
+            RequireNoReparsePointAncestry(root,
+                Path.GetDirectoryName(full) ??
+                    throw new InvalidDataException(
+                        "An expected encoded audio path has no parent directory."));
+            if (!File.Exists(full))
+                throw new InvalidDataException("An expected encoded audio file is missing.");
+            FileAttributes attributes = File.GetAttributes(full);
+            if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                throw new InvalidDataException(
+                    "An expected encoded audio output is not a regular file.");
+            if (new FileInfo(full).Length <= 0)
+                throw new InvalidDataException("An encoded audio file is empty.");
+        }
+    }
+
+    private static void RequireNoReparsePointAncestry(string root, string targetDirectory)
+    {
+        string relative = Path.GetRelativePath(root, targetDirectory);
+        string current = root;
+        foreach (string part in relative.Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+            FileAttributes attributes = File.GetAttributes(current);
+            if ((attributes & FileAttributes.Directory) == 0 ||
+                (attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException(
+                    "An expected encoded audio path crosses a link or reparse point.");
+        }
     }
 
 }

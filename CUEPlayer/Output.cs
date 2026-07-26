@@ -84,7 +84,8 @@ namespace CUEPlayer
 				catch (Exception ex)
 				{
 					_player = null;
-					Trace.WriteLine(ex.Message);
+					Trace.WriteLine("Audio output initialization failed (" +
+						ex.GetType().Name + ").");
 				}
 			}
 			parent.Mixer.AudioRead += new EventHandler<AudioReadEventArgs>(Mixer_AudioRead);
@@ -135,7 +136,8 @@ namespace CUEPlayer
 			}
 			catch (Exception ex)
 			{
-				Trace.WriteLine(ex.Message);
+				Trace.WriteLine("Audio endpoint volume update failed (" +
+					ex.GetType().Name + ").");
 			}
 		}
 

@@ -32,9 +32,10 @@ namespace CUEPlayer
 		{
 			if (Properties.Settings.Default.IcecastSettings == null)
 				Properties.Settings.Default.IcecastSettings = new IcecastSettingsData();
+			IcecastCredentialStore.Load();
 			_icecastSettings = Properties.Settings.Default.IcecastSettings;
 		}
-		
+
 		public void Init(frmCUEPlayer parent)
 		{
 			MdiParent = parent;
@@ -76,8 +77,20 @@ namespace CUEPlayer
 				}
 				if (_icecastWriter != null && close)
 				{
-					_icecastWriter.Delete();
-					_icecastWriter = null;
+					try
+					{
+						_icecastWriter.Delete();
+					}
+					catch (Exception cleanupException)
+					{
+						Trace.WriteLine(
+							"Icecast streaming cleanup failed: " +
+							cleanupException.GetType().Name);
+					}
+					finally
+					{
+						_icecastWriter = null;
+					}
 				}
 			}
 		}
@@ -104,30 +117,55 @@ namespace CUEPlayer
 			this.toolTip1.SetToolTip(this.checkBoxTransmit, "");
 			if (!close && _icecastWriter == null)
 			{
-				IcecastWriter icecastWriter = new IcecastWriter(_mixer.PCM, _icecastSettings);
+				IcecastWriter icecastWriter = null;
 				try
 				{
+					icecastWriter = new IcecastWriter(
+						_mixer.PCM, _icecastSettings);
 					icecastWriter.Connect();
 					if (icecastWriter.Response.StatusCode == HttpStatusCode.OK)
 						_icecastWriter = icecastWriter;
 					else
 					{
+						HttpStatusCode statusCode = icecastWriter.Response.StatusCode;
+						string statusDescription = icecastWriter.Response.StatusDescription;
+						try
+						{
+							icecastWriter.Delete();
+						}
+						catch (Exception cleanupException)
+						{
+							Trace.WriteLine(
+								"Icecast rejected-connection cleanup failed: " +
+								cleanupException.GetType().Name);
+						}
 						toolTip1.ToolTipIcon = ToolTipIcon.Error;
-						toolTip1.ToolTipTitle = icecastWriter.Response.StatusCode.ToString();
+						toolTip1.ToolTipTitle = statusCode.ToString();
 						toolTip1.IsBalloon = true;
 						//toolTip1.Show(resp.StatusDescription, checkBoxTransmit, 0, 0, 2000);
-						toolTip1.SetToolTip(checkBoxTransmit, icecastWriter.Response.StatusDescription);
+						toolTip1.SetToolTip(checkBoxTransmit, statusDescription);
 					}
 				}
 				catch (Exception ex)
 				{
-					Trace.WriteLine(ex.Message);
-					icecastWriter.Close();
+					Trace.WriteLine("Icecast connection failed: " + ex.GetType().Name);
+					if (icecastWriter != null)
+					{
+						try
+						{
+							icecastWriter.Close();
+						}
+						catch (Exception cleanupException)
+						{
+							Trace.WriteLine(
+								"Icecast connection cleanup failed: " +
+								cleanupException.GetType().Name);
+						}
+					}
 					toolTip1.ToolTipIcon = ToolTipIcon.Error;
 					toolTip1.ToolTipTitle = "Exception";
 					toolTip1.IsBalloon = true;
-					//toolTip1.Show(ex.Message, checkBoxTransmit, 0, 0, 2000);
-					toolTip1.SetToolTip(checkBoxTransmit, ex.Message);
+					toolTip1.SetToolTip(checkBoxTransmit, "Connection failed. Check the server and credential settings.");
 				}
 			}
 		}
@@ -136,7 +174,19 @@ namespace CUEPlayer
 		{
 			IcecastSettings frm = new IcecastSettings(_icecastSettings);
 			if (frm.ShowDialog(this) == DialogResult.OK)
-				Properties.Settings.Default.Save();
+			{
+				try
+				{
+					IcecastCredentialStore.Save();
+				}
+				catch (Exception ex)
+				{
+					Trace.WriteLine("Icecast settings save failed: " + ex.GetType().Name);
+					MessageBox.Show(this,
+						"The Icecast credential could not be protected for this Windows user. Settings were not saved.",
+						"Icecast settings", MessageBoxButtons.OK, MessageBoxIcon.Error);
+				}
+			}
 		}
 	}
 }

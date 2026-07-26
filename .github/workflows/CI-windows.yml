@@ -25,18 +25,20 @@ jobs:
       MSBUILD_PATH: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe
       SLN_PATH: CUETools.sln
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - name: Apply patches
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply managed dependency patches
         # yamllint disable-line rule:line-length
         run: |
-          git apply --directory=ThirdParty/flac ThirdParty/submodule_flac_CUETools.patch --verbose --whitespace=nowarn
-          powershell -c "Expand-Archive ThirdParty/MAC_SDK/MAC_1086_SDK.zip -DestinationPath ThirdParty/MAC_SDK/"
-          git apply --directory=ThirdParty/MAC_SDK ThirdParty/ThirdParty_MAC_SDK_CUETools.patch --verbose
           git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose
-          git apply --directory=ThirdParty/WavPack ThirdParty/submodule_WavPack_CUETools.patch --verbose
           git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose
+      - name: Rebuild required x64 native codec DLLs with checked warning budget
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Build-NativeDependencies.ps1 -Configuration Release
       - name: MSBuild NuGet restore
         run: |
           "%MSBUILD_PATH%" "%SLN_PATH%" -t:restore -p:Configuration=Release
@@ -49,10 +51,8 @@ jobs:
       - name: Build Release|Win32
         run: |
           "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|Win32"
-      # Release|x64 above produced ThirdParty\x64\libFLAC_dynamic.dll, which the codec tests copy into their output.
-      - name: Run parity tests
+      # Release|x64 above produced ThirdParty\x64\libFLAC_dynamic.dll, which the codec tests copy
+      # into their output. The manifest gate also rejects zero-test discovery and excess skips.
+      - name: Run legacy test discovery gate
         run: |
-          dotnet test CUETools\CUETools.TestParity\CUETools.TestParity.csproj -c Release --nologo
-      - name: Run codec tests
-        run: |
-          dotnet test CUETools\CUETools.TestCodecs\CUETools.TestCodecs.csproj -c Release --nologo
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Invoke-TestSuites.ps1 -Lane legacy -Configuration Release -NoRestore -ResultsDirectory "%RUNNER_TEMP%\cuetools-legacy-tests"

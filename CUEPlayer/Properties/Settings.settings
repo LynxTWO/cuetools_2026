@@ -16,5 +16,8 @@
     <Setting Name="AppSettings" Type="CUEPlayer.CUEPlayerSettings" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="IcecastCredentialsProtected" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
   </Settings>
 </SettingsFile>

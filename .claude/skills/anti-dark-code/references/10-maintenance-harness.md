@@ -6,6 +6,13 @@ Use this reference after the first anti-dark-code rollout when you want the repo
 
 For confidence levels, the unknowns entry shape, and the canonical approval-gated areas list, see `00-conventions.md`.
 
+## Contents
+
+- Goal, triggers, and deliverables
+- Evidence, change records, unknowns, approval, logging, and coverage
+- Protected comments, hard gates, and shipped artifacts
+- Harness records, repo-fit branches, rules, and acceptance
+
 ## Goal
 
 Install or update a lightweight maintenance harness that keeps future work aligned with the repo steering files, system map, coverage ledger, unknowns files, approval gates, and protected rationale comments.
@@ -180,6 +187,22 @@ Reviewer guidance:
 
 Do not label a human review habit as an automated guarantee.
 
+### 9a. Prove gate work and shipped artifact shape
+
+A checked CI box or zero exit code is not enough. Where the repo has tests, multi-target builds, plugins, native dependencies, generated outputs, or release packaging, make the gate prove the expected work occurred:
+
+- assert a versioned minimum or exact discovered-test count per intended suite, and fail on zero discovery
+- maintain a versioned test-selection manifest that maps every discovered test project or target to a CI lane, or records a reviewed reason for exclusion
+- publish structured test results and list skipped or inconclusive tests
+- assert the intended projects, frameworks, configurations, and architectures were built
+- build and package from a clean checkout, initialized dependency state, and empty output directory so stale local artifacts cannot satisfy the gate
+- validate release or publish output against a versioned manifest of required files, architectures, runtime-load expectations, sizes, and hashes generated from the just-built artifact
+- bind the artifact manifest to a build receipt containing the source commit, dependency state, toolchain versions, target tuple, and build commands
+- smoke dynamic plugin or native dependency loading when packaging can succeed without a required runtime file
+- classify source defects, unexercised paths, toolchain blockers, native-dependency blockers, unavailable capabilities, and external-state blockers separately in the build receipt
+
+Keep these assertions scoped. A manifest proves the declared artifact shape, not that every feature works. A known-dead or expected-failure allowlist is tracked debt, not evidence that the behavior is healthy.
+
 ### 10. Add repo-fit comment continuity checks
 
 When the repo has a fit place for automation, add the lightest useful validator for protected comment continuity.
@@ -206,7 +229,7 @@ git diff --unified=0 "$BASE..$HEAD" -- '*.ts' '*.tsx' '*.js' '*.py' '*.go' '*.rs
 
 Limits to name in the harness doc:
 
-- The check sees deletions only. A protected comment that was rewritten into a vague restatement still passes — only human review catches that.
+- The check sees deletions only. A protected comment that was rewritten into a vague restatement still passes - only human review catches that.
 - It depends on contributors using the agreed sentinel. New protected comments without the sentinel are invisible to this check.
 - It does not understand "moved to a nearby line." A delete plus an add of an equivalent comment three lines down still flags as a delete; reviewer judgment closes that.
 - File globs need to match the repo's languages. Tune them; do not ship generic globs as truth.

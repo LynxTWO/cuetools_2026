@@ -116,10 +116,10 @@ namespace CUETools.Codecs.WMA
                         {
                             pWriter.SetProfile(pProfile);
                         }
-                        catch (Exception ex)
+                        catch
                         {
                             Marshal.ReleaseComObject(pWriter);
-                            throw ex;
+                            throw;
                         }
                         return pWriter;
                     }
@@ -269,6 +269,12 @@ namespace CUETools.Codecs.WMA
         {
             this.m_subType = MediaSubType.WMAudio_Lossless;
         }
+
+        [DefaultValue(true)]
+        [DisplayName("Verify")]
+        [SRDescription(typeof(Properties.Resources), "DoVerifyDescription")]
+        [JsonProperty]
+        public bool DoVerify { get; set; }
     }
 
     public class LossyEncoderSettings : EncoderSettings

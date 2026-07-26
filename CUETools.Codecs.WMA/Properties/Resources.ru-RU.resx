@@ -120,9 +120,6 @@
   <data name="DoMD5Description" xml:space="preserve">
     <value>Вычислять MD5-хеш аудиопотока</value>
   </data>
-  <data name="DoVerifyDescription" xml:space="preserve">
-    <value>Декодировать каждый кадр и сравнивать с оригиналом</value>
-  </data>
   <data name="ExceptionSampleCount" xml:space="preserve">
     <value>Количество записанных сэмплов отличается от ожидаемого</value>
   </data>

@@ -83,11 +83,11 @@ xcopy /Y /D %base_dir%\bin\Release\net47\plugins\CUETools.Codecs.MACLib.dll %rel
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\CUETools.Codecs.WMA.dll %release_dir%\plugins\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\CUETools.Compression.Zip.dll %release_dir%\plugins\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\CUETools.Ripper.SCSI.dll %release_dir%\plugins\
-xcopy /Y /D %base_dir%\bin\Release\net47\plugins\FFmpeg.AutoGen.dll %release_dir%\plugins\
+REM The managed ffmpeg wrapper is not a usable plugin without matching av*/sw* native DLLs.
+REM Keep it out of the primary artifact until the pinned native workflow is bound to this release.
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\flac.cl %release_dir%\plugins\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\OpenCLNet.dll %release_dir%\plugins\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\WindowsMediaLib.dll %release_dir%\plugins\
-xcopy /Y /D %base_dir%\bin\Release\net47\plugins\CUETools.Codecs.ffmpegdll.dll %release_dir%\plugins\
 
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\win32\CUETools.Codecs.TTA.dll %release_dir%\plugins\win32\
 xcopy /Y /D %base_dir%\bin\Release\net47\plugins\win32\CUETools.Compression.Rar.dll %release_dir%\plugins\win32\
@@ -137,5 +137,15 @@ xcopy /Y /D %base_dir%\bin\Release\net47\plugins\Newtonsoft.Json.dll %release_di
 REM CUETools.LossyWAV.exe was not in 2.1.7 release, added
 xcopy /Y /D %base_dir%\bin\Release\net47\CUETools.Codecs.LossyWAV.dll %release_dir%
 xcopy /Y /D %base_dir%\bin\Release\net47\CUETools.LossyWAV.exe %release_dir%
+
+REM Bind every loadable managed plugin (top-level plus both architecture directories) to one
+REM deterministic runtime allowlist. Packaging must fail rather than ship plugins the runtime
+REM will silently refuse.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%base_dir%\tools\Write-PluginManifest.ps1" -PluginDirectory "%release_dir%\plugins"
+if errorlevel 1 (
+    echo Failed to generate the packaged plugin trust manifest.
+    popd
+    exit /b 1
+)
 
 popd

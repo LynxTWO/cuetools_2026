@@ -44,133 +44,148 @@ namespace CUETools.Codecs.WMA
 
         public AudioDecoder(DecoderSettings settings, string path, Stream IO)
         {
+            if (settings == null)
+                throw new ArgumentNullException("settings");
+            if (IO == null && String.IsNullOrEmpty(path))
+                throw new ArgumentException("A WMA file path or input stream is required.", "path");
+
             m_settings = settings;
             m_path = path;
-            isValid(path);
-            bool pfIsProtected;
-            WMUtils.WMIsContentProtected(path, out pfIsProtected);
-            if (pfIsProtected)
-                throw new Exception("DRM present");
-            WMUtils.WMCreateSyncReader(IntPtr.Zero, Rights.None, out m_syncReader);
-
-            if (path == null)
-            {
-                m_IO = IO != null ? IO : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 0x10000);
-                m_streamWrapper = new StreamWrapper(m_IO);
-                m_syncReader.OpenStream(m_streamWrapper);
-            }
-            else
-            {
-                m_syncReader.Open(path);
-            }
-            var pProfile = (m_syncReader as IWMProfile);
-            int dwStreamCount;
-            pProfile.GetStreamCount(out dwStreamCount);
-            for (int dwIndex = 0; dwIndex < dwStreamCount; dwIndex++)
-            {
-                IWMStreamConfig pConfig = null;
-                pProfile.GetStream(dwIndex, out pConfig);
-                try
-                {
-                    Guid guid;
-                    pConfig.GetStreamType(out guid);
-                    if (MediaType.Audio != guid)
-                        continue;
-                    short wStreamNum;
-                    pConfig.GetStreamNumber(out wStreamNum);
-                    int dwBitrate = -1;
-                    pConfig.GetBitrate(out dwBitrate);
-                    var pIWMMediaProps = pConfig as IWMMediaProps;
-                    int cbType = 0;
-                    pIWMMediaProps.GetMediaType(null, ref cbType);
-                    var pMediaType = new AMMediaType();
-                    pMediaType.formatSize = cbType;
-                    pIWMMediaProps.GetMediaType(pMediaType, ref cbType);
-                    if (pMediaType.formatType != FormatType.WaveEx)
-                        continue;
-                    if (pMediaType.subType != MediaSubType.WMAudio_Lossless)
-                        continue;
-                    m_wStreamNum = wStreamNum;
-                    pcm = WaveFormatExtensible.FromMediaType(pMediaType).GetConfig();
-                    break;
-                }
-                finally
-                {
-                    Marshal.ReleaseComObject(pConfig);
-                }
-            }
-            if (m_wStreamNum == -1)
-                throw new Exception("No WMA lossless streams found");
-
-            m_syncReader.SetReadStreamSamples(m_wStreamNum, false);
-            bool pfCompressed;
-            m_syncReader.GetReadStreamSamples(m_wStreamNum, out pfCompressed);
-            if (pfCompressed)
-                throw new Exception("doesn't decompress");
-            m_syncReader.GetOutputNumberForStream(m_wStreamNum, out m_dwAudioOutputNum);
-            IWMOutputMediaProps pProps;
-            m_syncReader.GetOutputProps(m_dwAudioOutputNum, out pProps);
-
+            if (IO == null)
+                isValid(path);
             try
             {
-                StringBuilder sName = null;
-                AMMediaType pMediaType = null;
-                int cbType = 0;
-
-                cbType = 0;
-                pMediaType = null;
-                pProps.GetMediaType(pMediaType, ref cbType);
-
-                // Get the name of the output we'll be using
-                sName = null;
-                short iName = 0;
-                pProps.GetConnectionName(sName, ref iName);
-
-                sName = new StringBuilder(iName);
-                pProps.GetConnectionName(sName, ref iName);
-
-                if (pcm.ChannelCount > 2)
+                if (IO == null)
                 {
-                    m_syncReader.SetOutputSetting(m_dwAudioOutputNum, Constants.g_wszEnableDiscreteOutput, AttrDataType.BOOL, new byte[] { 1, 0, 0, 0 }, 4);
-                    m_syncReader.SetOutputSetting(m_dwAudioOutputNum, Constants.g_wszSpeakerConfig, AttrDataType.DWORD, new byte[] { 0, 0, 0, 0 }, 4);
+                    bool pfIsProtected;
+                    WMUtils.WMIsContentProtected(path, out pfIsProtected);
+                    if (pfIsProtected)
+                        throw new Exception("DRM present");
                 }
+                WMUtils.WMCreateSyncReader(IntPtr.Zero, Rights.None, out m_syncReader);
 
-                pMediaType = new AMMediaType();
-                pMediaType.formatSize = cbType - Marshal.SizeOf(typeof(AMMediaType));
+                if (IO != null)
+                {
+                    m_IO = IO;
+                    m_streamWrapper = new StreamWrapper(m_IO);
+                    m_syncReader.OpenStream(m_streamWrapper);
+                }
+                else
+                {
+                    m_syncReader.Open(path);
+                }
+                var pProfile = (m_syncReader as IWMProfile);
+                int dwStreamCount;
+                pProfile.GetStreamCount(out dwStreamCount);
+                for (int dwIndex = 0; dwIndex < dwStreamCount; dwIndex++)
+                {
+                    IWMStreamConfig pConfig = null;
+                    pProfile.GetStream(dwIndex, out pConfig);
+                    try
+                    {
+                        Guid guid;
+                        pConfig.GetStreamType(out guid);
+                        if (MediaType.Audio != guid)
+                            continue;
+                        short wStreamNum;
+                        pConfig.GetStreamNumber(out wStreamNum);
+                        int dwBitrate = -1;
+                        pConfig.GetBitrate(out dwBitrate);
+                        var pIWMMediaProps = pConfig as IWMMediaProps;
+                        int cbType = 0;
+                        pIWMMediaProps.GetMediaType(null, ref cbType);
+                        var pMediaType = new AMMediaType();
+                        pMediaType.formatSize = cbType;
+                        try
+                        {
+                            pIWMMediaProps.GetMediaType(pMediaType, ref cbType);
+                            if (pMediaType.formatType != FormatType.WaveEx)
+                                continue;
+                            if (pMediaType.subType != MediaSubType.WMAudio_Lossless)
+                                continue;
+                            m_wStreamNum = wStreamNum;
+                            pcm = WaveFormatExtensible.FromMediaType(pMediaType).GetConfig();
+                            break;
+                        }
+                        finally
+                        {
+                            WMUtils.FreeWMMediaType(pMediaType);
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(pConfig);
+                    }
+                }
+                if (m_wStreamNum == -1)
+                    throw new Exception("No WMA lossless streams found");
 
-                //
-                // Get the value for MediaType
-                //
-                pProps.GetMediaType(pMediaType, ref cbType);
+                m_syncReader.SetReadStreamSamples(m_wStreamNum, false);
+                bool pfCompressed;
+                m_syncReader.GetReadStreamSamples(m_wStreamNum, out pfCompressed);
+                if (pfCompressed)
+                    throw new Exception("doesn't decompress");
+                m_syncReader.GetOutputNumberForStream(m_wStreamNum, out m_dwAudioOutputNum);
+                IWMOutputMediaProps pProps;
+                m_syncReader.GetOutputProps(m_dwAudioOutputNum, out pProps);
 
                 try
                 {
-                    if (MediaType.Audio != pMediaType.majorType)
-                        throw new Exception("not Audio");
-                    if (FormatType.WaveEx != pMediaType.formatType)
-                        throw new Exception("not WaveEx");
-                    var wfe = new WaveFormatExtensible(pcm);
-                    Marshal.FreeCoTaskMem(pMediaType.formatPtr);
-                    pMediaType.formatPtr = IntPtr.Zero;
-                    pMediaType.formatSize = 0;
-                    pMediaType.formatPtr = Marshal.AllocCoTaskMem(Marshal.SizeOf(wfe));
-                    pMediaType.formatSize = Marshal.SizeOf(wfe);
-                    Marshal.StructureToPtr(wfe, pMediaType.formatPtr, false);
-                    pProps.SetMediaType(pMediaType);
-                    m_syncReader.SetOutputProps(m_dwAudioOutputNum, pProps);
+                    StringBuilder sName = null;
+                    AMMediaType pMediaType = null;
+                    int cbType = 0;
+
+                    cbType = 0;
+                    pMediaType = null;
+                    pProps.GetMediaType(pMediaType, ref cbType);
+
+                    // Get the name of the output we'll be using
+                    sName = null;
+                    short iName = 0;
+                    pProps.GetConnectionName(sName, ref iName);
+
+                    sName = new StringBuilder(iName);
+                    pProps.GetConnectionName(sName, ref iName);
+
+                    if (pcm.ChannelCount > 2)
+                    {
+                        m_syncReader.SetOutputSetting(m_dwAudioOutputNum, Constants.g_wszEnableDiscreteOutput, AttrDataType.BOOL, new byte[] { 1, 0, 0, 0 }, 4);
+                        m_syncReader.SetOutputSetting(m_dwAudioOutputNum, Constants.g_wszSpeakerConfig, AttrDataType.DWORD, new byte[] { 0, 0, 0, 0 }, 4);
+                    }
+
+                    pMediaType = new AMMediaType();
+                    pMediaType.formatSize = cbType - Marshal.SizeOf(typeof(AMMediaType));
+
+                    try
+                    {
+                        // Get the value for MediaType.
+                        pProps.GetMediaType(pMediaType, ref cbType);
+                        if (MediaType.Audio != pMediaType.majorType)
+                            throw new Exception("not Audio");
+                        if (FormatType.WaveEx != pMediaType.formatType)
+                            throw new Exception("not WaveEx");
+                        var wfe = new WaveFormatExtensible(pcm);
+                        Marshal.FreeCoTaskMem(pMediaType.formatPtr);
+                        pMediaType.formatPtr = IntPtr.Zero;
+                        pMediaType.formatSize = 0;
+                        pMediaType.formatPtr = Marshal.AllocCoTaskMem(Marshal.SizeOf(wfe));
+                        pMediaType.formatSize = Marshal.SizeOf(wfe);
+                        Marshal.StructureToPtr(wfe, pMediaType.formatPtr, false);
+                        pProps.SetMediaType(pMediaType);
+                        m_syncReader.SetOutputProps(m_dwAudioOutputNum, pProps);
+                    }
+                    finally
+                    {
+                        WMUtils.FreeWMMediaType(pMediaType);
+                    }
                 }
                 finally
                 {
-                    WMUtils.FreeWMMediaType(pMediaType);
+                    Marshal.ReleaseComObject(pProps);
                 }
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(pProps);
-            }
 
-            //try
-            //{
+                //try
+                //{
             //    AttrDataType wmtType;
             //    short cbLength = 0;
             //    short wAnyStream = 0;
@@ -216,12 +231,25 @@ namespace CUETools.Codecs.WMA
             //{
             //}
 
-            //int cbMax;
-            //m_syncReader.GetMaxOutputSampleSize(m_dwAudioOutputNum, out cbMax);
+                //int cbMax;
+                //m_syncReader.GetMaxOutputSampleSize(m_dwAudioOutputNum, out cbMax);
+            }
+            catch
+            {
+                try
+                {
+                    Close();
+                }
+                catch
+                {
+                    // Preserve the decoder initialization failure; Close still attempts every release.
+                }
+                throw;
+            }
         }
 
         private DecoderSettings m_settings;
-        public IAudioDecoderSettings Settings => null;
+        public IAudioDecoderSettings Settings => m_settings;
 
         public void isValid(string filename)
         {
@@ -230,28 +258,56 @@ namespace CUETools.Codecs.WMA
             byte[] data = new byte[pdwDataSize];
             using (FileStream s = new FileStream(filename, FileMode.Open, FileAccess.Read))
             {
-                if (s.Read(data, 0, pdwDataSize) < pdwDataSize)
-                    throw new Exception("partial read"); // TODO
+                int offset = 0;
+                while (offset < pdwDataSize)
+                {
+                    int read = s.Read(data, offset, pdwDataSize - offset);
+                    if (read == 0)
+                        throw new InvalidDataException("WMA header is truncated.");
+                    offset += read;
+                }
             }
             WMUtils.WMValidateData(data, ref pdwDataSize);
         }
 
         public void Close()
         {
-            //if (m_streamWrapper != null)
-            //    m_streamWrapper.Close();
-            if (m_IO != null)
-                m_IO.Close();
-            if (m_pSample != null)
-                Marshal.ReleaseComObject(m_pSample);
-            if (m_syncReader != null)
-            {
-                m_syncReader.Close();
-                Marshal.ReleaseComObject(m_syncReader);
-            }
+            Stream io = m_IO;
+            INSSBuffer sample = m_pSample;
+            IWMSyncReader reader = m_syncReader;
+
             m_IO = null;
+            m_streamWrapper = null;
             m_pSample = null;
             m_syncReader = null;
+
+            try
+            {
+                if (sample != null)
+                    Marshal.ReleaseComObject(sample);
+            }
+            finally
+            {
+                try
+                {
+                    if (reader != null)
+                    {
+                        try
+                        {
+                            reader.Close();
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(reader);
+                        }
+                    }
+                }
+                finally
+                {
+                    if (io != null)
+                        io.Close();
+                }
+            }
         }
 
         public TimeSpan Duration => Length < 0 ? TimeSpan.Zero : TimeSpan.FromSeconds((double)Length / PCM.SampleRate);
@@ -283,9 +339,7 @@ namespace CUETools.Codecs.WMA
                 if (m_sampleCount < 0 || value > m_sampleCount)
                     throw new Exception("seeking past end of stream");
                 if (value < Position)
-                    throw new NotSupportedException();
-                if (value < Position)
-                    throw new Exception("cannot seek backwards");
+                    throw new NotSupportedException("cannot seek backwards");
                 var buff = new AudioBuffer(this, 0x10000);
                 while (value > Position && Read(buff, (int)Math.Min(Int32.MaxValue, value - Position)) != 0)
                     ;
@@ -351,7 +405,7 @@ namespace CUETools.Codecs.WMA
                             throw new Exception("(buff_offset % PCM.BlockAlign) != 0");
                         return buff.Length = buff_offset / PCM.BlockAlign;
                     }
-                    throw ex;
+                    throw;
                 }
                 //if (dwOutputNum != m_dwAudioOutputNum || wStreamNum != m_wStreamNum)
                 //{
