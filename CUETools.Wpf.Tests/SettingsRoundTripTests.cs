@@ -189,7 +189,7 @@ namespace CUETools.Wpf.Tests
             { "fixOffsetMinimumTracksPercent", (uint)77 },   // LoadUInt32("ArFixWhenPercent", 1, 100); default 51
             { "encodeWhenConfidence", (uint)888 },           // LoadUInt32("ArEncodeWhenConfidence", 1, 1000); default 2
             { "encodeWhenPercent", (uint)55 },                // LoadUInt32("ArEncodeWhenPercent", 1, 100); default 100
-            { "maxAlbumArtSize", 500 },                       // LoadInt32("MaxAlbumArtSize", 100, 10000); default 300 - the audit's named offender
+            { "maxAlbumArtSize", 500 },                       // LoadInt32("MaxAlbumArtSize", 100, 10000); default 300
         };
 
         [TestMethod]
@@ -349,7 +349,10 @@ namespace CUETools.Wpf.Tests
         // the next launch, with no message to the user. Keep this entry ONLY until the setter
         // clamps; delete it the moment it does - the assertion below then requires it to clamp like
         // everything else, so a stale entry cannot rot silently.
-        private static readonly HashSet<string> KnownUnclamped = new HashSet<string> { "MaxAlbumArtSize" };
+        // Empty, and it should stay that way: MaxAlbumArtSize's setter now clamps to the loader's own
+        // 100..10000, so the value the page shows after a restart is the value it accepted. An entry
+        // here means a setter that takes a value its loader will silently reject.
+        private static readonly HashSet<string> KnownUnclamped = new HashSet<string>();
 
         [TestMethod]
         public void NumericSetters_ClampToTheSameRangeTheLoaderEnforces()
