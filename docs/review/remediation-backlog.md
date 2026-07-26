@@ -183,15 +183,259 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   verification. The format stays hidden from the app's lists until a real in-process encoder
   registers (the lists only offer encoders that exist).
 
+## 2026-07-26 audit remediation wave
+
+The user approved autonomous implementation of all verified audit findings on 2026-07-26,
+including the protected repair, concurrency, credential, and release-control areas. Approval
+does not relax evidence, rollback, or verification requirements.
+
+### R19. Test & Copy ignores the full-track CRC - bucket B, risk high
+
+- **Area or slice:** modern WPF rip verification; `VerifyHistory.cs`,
+  `TestAndCopyResolver.cs`, and their tests.
+- **Why it matters:** AccurateRip CRCs exclude the first and last five seconds at the disc
+  boundaries. Test & Copy can therefore report independent reads as bit-identical while the
+  already-recorded full `Crc32` differs.
+- **Evidence found:** `SameAudio` compares only ARv2/ARv1; the resolver uses it for every
+  agreement decision; two independent source reviews confirmed the trigger.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** separate cross-drive AR comparison from same-drive Test & Copy
+  comparison, and require a nonzero equal full CRC for Test & Copy.
+- **Verification plan:** unit cases for equal AR/different raw CRC, equal raw CRC, missing raw
+  CRC, held verdict, and full-read selection; full WPF test suite.
+- **Owner:** repo owner.
+- **Status:** in progress.
+
+### R20. Modern WPF CTDB Repair fails before writing - bucket B, risk high
+
+- **Area or slice:** protected data repair; `VerifyService.Repair` and the Processor repair
+  script.
+- **Why it matters:** the fresh `CUESheet` never receives generated destination paths. The
+  second `Go()` switches to Encode and dereferences a null `_destPaths`, so recoverable repairs
+  fail instead of repairing.
+- **Evidence found:** two independent end-to-end source traces identified the same null path
+  before directory creation or audio writes.
+- **Confidence:** verified.
+- **Approval needed:** yes, approved by the user on 2026-07-26.
+- **Smallest safe next step:** design a same-volume staged repair with explicit source mapping,
+  post-repair verification, backup, and rollback. Do not merely initialize a source-equal
+  destination.
+- **Verification plan:** synthetic recoverable fixture or injected repair seam; tests for
+  success, no recoverable entry, cancellation, write failure, verification failure, backup,
+  and rollback. Live CTDB verification remains a separate external check.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R21. Modern WPF exposes known-dead safety controls - bucket A, risk high
+
+- **Area or slice:** WPF Settings and Advanced pages plus `DeadSwitchTests`.
+- **Why it matters:** "No unverified output", write-offset correction, and CTDB submission
+  controls claim behavior the modern WPF path does not perform. The test is green because those
+  controls are explicitly allowlisted as dead.
+- **Evidence found:** runtime-consumer scan and the `KnownDead` set in `DeadSwitchTests`.
+  CTDB Submit/Ask remain live in classic WinForms and must not be removed from shared config.
+- **Confidence:** verified.
+- **Approval needed:** no for removing misleading WPF controls; yes for adding new network or
+  publication behavior, approved on 2026-07-26.
+- **Smallest safe next step:** remove the misleading WPF rows and pass-through properties now,
+  drain the allowlist, and reintroduce controls only with executable behavior tests.
+- **Verification plan:** dead-switch analyzer, settings tests, full WPF suite, and a source
+  search proving classic consumers remain.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R22. Rip publication is not album-transactional or concurrency-safe - bucket B, risk high
+
+- **Area or slice:** standard rip output, Test & Copy commit, `OutputGuard`.
+- **Why it matters:** a disk-full or denied write can leave completed tracks and sidecars in the
+  final folder. Test & Copy copies with overwrite enabled and no rollback. A check-then-use
+  output probe permits two processes to choose the same destination.
+- **Evidence found:** sequential final-directory writes, active-file-only cleanup, recursive
+  overwrite copy, and no output lease.
+- **Confidence:** verified for control flow; exact residue is filesystem-timing dependent.
+- **Approval needed:** yes, approved by the user on 2026-07-26.
+- **Smallest safe next step:** reserve a destination, stage on the destination volume, write a
+  completion marker, publish by atomic rename where supported, and quarantine or remove
+  incomplete staging on failure.
+- **Verification plan:** injected disk-full, access denied, cancellation, copy failure, process
+  interruption recovery, retry, and two concurrent publishers.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R23. CI and release gates do not prove expected work - bucket B, risk high
+
+- **Area or slice:** GitHub workflows, legacy release collection, modern WPF publish.
+- **Why it matters:** modern test projects are omitted, zero-test discovery can pass, release
+  collection has no required-file manifest, and a successful classic release does not build a
+  WPF artifact.
+- **Evidence found:** workflow and pack-script trace plus local zero-test reproduction for
+  legacy TestRipper.
+- **Confidence:** verified for repo controls; hosted runner behavior remains external.
+- **Approval needed:** yes, approved by the user on 2026-07-26.
+- **Smallest safe next step:** add a versioned test-selection manifest and count assertions,
+  run every buildable suite, publish WPF from a clean output, validate required files and plugin
+  loads, and emit a source/toolchain/artifact build receipt.
+- **Verification plan:** local workflow-equivalent scripts, structured test results, clean
+  publish manifest check, and first hosted workflow run.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R24. External encoder process lifecycle can hang or accept bad output - bucket B, risk high
+
+- **Area or slice:** `CUETools.Codecs.CommandLine.AudioEncoder`.
+- **Why it matters:** `WaitForExit()` has no bound or cancellation. Exit zero is accepted without
+  checking that the expected output is present, complete, or decodable.
+- **Evidence found:** close/cleanup path and caller cancellation trace.
+- **Confidence:** verified.
+- **Approval needed:** no for bounded process cleanup; output-validation policy is
+  behavior-changing and approved by the user on 2026-07-26.
+- **Smallest safe next step:** add a configurable bounded wait, kill the process tree when
+  supported, always clean temporary input, require a nonempty output, and add independent
+  decode/sample-count verification for lossless external formats.
+- **Verification plan:** fake encoder processes for success, nonzero exit, hang, early exit,
+  missing output, truncated output, timeout, and cleanup.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R25. WMA Lossless has no post-encode verification - bucket B, risk high
+
+- **Area or slice:** `CUETools.Codecs.WMA`.
+- **Why it matters:** a successful Windows Media `EndWriting` is treated as proof of a good
+  lossless output. No decoded sample count or sample-by-sample comparison exists.
+- **Evidence found:** writer close path, sample counter, and absence of WMA tests.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** use the shared post-encode verification mechanism from R24 with
+  an independent WMA decoder, while keeping lossy WMA exempt from bit-equality.
+- **Verification plan:** Windows-only lossless round trip, mismatch injection, truncated output,
+  sample-count mismatch, and lossy regression.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R26. Settings expose credentials and deserialize unrestricted type metadata - bucket B, risk high
+
+- **Area or slice:** WPF settings storage and `CUEConfig` advanced JSON.
+- **Why it matters:** the proxy password is displayed and serialized in plaintext; settings are
+  truncated in place; `TypeNameHandling.Auto` has no allowlist binder.
+- **Evidence found:** WPF view, `SettingsWriter`, `CUEConfig.Save/Load`, and absence of a
+  credential protector or serialization binder.
+- **Confidence:** verified.
+- **Approval needed:** yes, approved by the user on 2026-07-26.
+- **Smallest safe next step:** protect the credential with Windows DPAPI and migrate legacy
+  plaintext on successful load, write settings through a same-directory temporary file plus
+  replace, and bind polymorphic type names to the known codec/settings types.
+- **Verification plan:** legacy migration, encrypted round trip, wrong-user/decrypt failure,
+  interrupted save, corrupt settings recovery, allowed polymorphic types, and rejected unknown
+  `$type`.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R27. Plugin and imported executable trust is filename-based - bucket B, risk medium
+
+- **Area or slice:** plugin discovery and `EncoderCatalog.Import`.
+- **Why it matters:** every matching DLL in the local plugins folder is loaded and imported
+  encoders are accepted by filename alone.
+- **Evidence found:** explicit `Assembly.LoadFrom` discovery and overwrite copy into AppData.
+- **Confidence:** verified.
+- **Approval needed:** no for integrity metadata and warnings; a mandatory signing policy would
+  change compatibility.
+- **Smallest safe next step:** record SHA-256, size, version, and origin for imported executables;
+  warn and require reapproval when they change; constrain plugin loading to a versioned manifest
+  for the packaged WPF app while retaining an explicit local-plugin mode.
+- **Verification plan:** known manifest, modified binary, missing plugin, wrong architecture,
+  user-approved external plugin, and migration from current installs.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R28. Icecast sends credentials over cleartext HTTP - bucket B, risk high
+
+- **Area or slice:** legacy/plugin Icecast output.
+- **Why it matters:** Basic authentication and metadata travel over HTTP, exposing the source
+  password to an on-path observer.
+- **Evidence found:** hardcoded `http://` stream and metadata URLs.
+- **Confidence:** verified.
+- **Approval needed:** yes for network compatibility, approved by the user on 2026-07-26.
+- **Smallest safe next step:** support and prefer HTTPS, refuse cleartext credentials by default,
+  and require an explicit insecure-transport opt-in for legacy servers.
+- **Verification plan:** HTTPS integration against a test server, certificate failure, explicit
+  HTTP opt-in, authorization header, and metadata update.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R29. Fuzz gate reports parser success without checking parser correctness - bucket A, risk medium
+
+- **Area or slice:** `CUETools.Fuzz` and WPF CI.
+- **Why it matters:** every caught parser exception is counted as an acceptable rejection and the
+  SCSI lane is reported successful unconditionally. The harness also does not cover the main
+  file/archive/codec parsers.
+- **Evidence found:** catch-all parser loop and unconditional report call.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** define expected reject exception types and invariants, fail on
+  unexpected exceptions or invalid accepted results, stop masking boundaries with extra slack,
+  and add deterministic corpus lanes for CUE, ALAC, FLAC, archive, and tag parsing.
+- **Verification plan:** seeded valid/invalid cases, injected invariant violation, bounded memory,
+  deterministic replay, and CI summary assertions.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R30. Architecture, coverage, scenario, and logging records are stale - bucket A, risk medium
+
+- **Area or slice:** `docs/architecture`, `docs/review`, and `docs/unknowns`.
+- **Why it matters:** the documents omit the modern WPF runtime and tests and retain false claims
+  such as "no async" and "CI never runs tests".
+- **Evidence found:** 242 commits and 279 changed paths since the original map, including a new
+  runtime, workflows, tests, plugin packaging, and deletion of old units.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** refresh the maps from the 2026-07-25/26 audit evidence after code
+  remediation stabilizes, preserving closed historical findings as dated history.
+- **Verification plan:** entrypoint/project/workflow inventory diff and citation-existence check.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R31. Diagnostics lose stack context and nullable warnings lack a budget - bucket A, risk medium
+
+- **Area or slice:** Processor/WMA exception paths and modern WPF build warnings.
+- **Why it matters:** `throw ex` destroys the original stack; recurring nullable and unused-code
+  warnings make new warnings difficult to distinguish.
+- **Evidence found:** `CUESheet` and WMA CA2200 sites plus the Release build warning set.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** replace rethrows with `throw`, fix or narrowly suppress proven
+  annotation-only warnings, and add a checked warning baseline that fails on new warnings.
+- **Verification plan:** build affected frameworks and assert exception stack preservation in a
+  focused test where practical.
+- **Owner:** repo owner.
+- **Status:** ready.
+
+### R32. Dependency and artifact provenance controls are incomplete - bucket B, risk medium
+
+- **Area or slice:** NuGet/native dependencies and GitHub Actions.
+- **Why it matters:** there are no lock files, central source policy, SBOM, signed manifest, or
+  immutable action pins. Native and external executable provenance is not recorded.
+- **Evidence found:** project/workflow inventory and current dependency scan.
+- **Confidence:** verified for missing controls; native vulnerability status remains incomplete.
+- **Approval needed:** yes for release controls, approved by the user on 2026-07-26.
+- **Smallest safe next step:** pin actions to full SHAs, introduce reproducible dependency
+  resolution where compatible, generate an SBOM and signed/hash manifest, and document every
+  native artifact's source/build recipe.
+- **Verification plan:** clean restore/build twice, compare manifests, dependency scan, and
+  artifact hash verification.
+- **Owner:** repo owner.
+- **Status:** ready.
+
 ## Ordering
 
-1. R8 (unblocks local builds - do first, enables verifying everything else)
-2. R3, R4 (approved, small, high-value: AR HTTPS + file CTDB issue)
-3. R5, R6 (approved dependency upgrades)
-4. R1, R9, R11 (safety/hardening; R1 needs the evidence step)
-5. R7 (MusicBrainz - scope, then go/no-go)
-6. R2 (MOTD HTTPS/removal)
-7. R10 (test depth), then R12 (modernization) as a program
+1. R19-R21: verification truth, repair design, and removal of false controls.
+2. R22: transactional publication and concurrency.
+3. R24-R26: encoder lifecycle, WMA verification, and protected settings.
+4. R23, R29, R32: CI, fuzz, release, and provenance gates.
+5. R27-R28: plugin/executable integrity and Icecast transport.
+6. R30-R31: document refresh, warning budget, and diagnostic cleanup.
+7. Continue the older open R2, R5, R8, R10b, R12, and R13 items after the current
+   WPF release blockers are closed.
 
 ## Holes / external boundaries
 
@@ -203,3 +447,5 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 ## Changelog
 
 - 2026-07-02 - backlog created from the first full anti-dark-code rollout (comment loop S1-S13, logging audit, adversarial, scenario passes) and the user's decisions D1-D7.
+- 2026-07-26 - added R19-R32 from the modern WPF, codec, security, CI, release, and
+  scenario-stress audit. User approved autonomous remediation, including protected areas.

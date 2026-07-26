@@ -37,3 +37,85 @@ Bounded remediation batches under pass 11 Step 2. One section per batch. Update 
 Revert the batch commits; no data or release artifacts affected.
 
 **Status:** landed 2026-07-02. Local verification matched the known-green baseline exactly: TestParity 18 passed / 4 skipped, TestCodecs 34 passed / 1 skipped, TestProcessor builds. CI verification pending first push (watch the two new test steps).
+
+## Wave 2: 2026-07-26 audit remediation
+
+**Approval:** on 2026-07-26 the user authorized autonomous implementation of all findings
+from the 2026-07-25 audit and allowed green worktree changes to be committed. This includes
+the normally protected repair, concurrency, credential, and release-control areas.
+
+The wave is split into independently reviewable batches. A later batch does not inherit a
+green status from an earlier one.
+
+### Batch 2A: Test & Copy checksum truth
+
+**Backlog source:** R19.
+
+**Exact files:** `CUETools.Wpf/Accuracy/VerifyHistory.cs`,
+`CUETools.Wpf/Accuracy/TestAndCopyResolver.cs`,
+`CUETools.Wpf.Tests/TestAndCopyResolverTests.cs`, and the resolver fuzz test if needed.
+
+**Why safe now:** the full CRC is already recorded. The change narrows the Test & Copy pass
+condition to the bit-identity contract the UI already promises. Cross-drive verify history
+keeps its offset-safe AccurateRip comparison.
+
+**Behavior that must remain unchanged:** cross-drive history matches on ARv2/ARv1; a valid
+same-drive Test & Copy with equal full CRC still passes; staged-read selection remains
+whole-read rather than per-track assembly.
+
+**Checks:** targeted resolver tests, then all `CUETools.Wpf.Tests`; inspect exact discovered,
+passed, failed, and skipped counts.
+
+**Rollback:** revert this batch. No persisted format changes.
+
+**Observability:** the existing Test & Copy log remains the user-visible receipt. No new raw
+metadata is logged.
+
+**Status:** in progress.
+
+### Batch 2B: WPF repair transaction
+
+**Backlog source:** R20.
+
+**Exact files:** `CUETools.Wpf/Services/VerifyService.cs`, the smallest required Processor
+repair seam, repair-specific tests, and user-facing repair copy.
+
+**Why safe now:** the current WPF path fails before writing. The approved change must stage,
+verify, back up, and replace; it must not enable an unguarded in-place rewrite.
+
+**Behavior that must remain unchanged:** plain Verify remains read-only except configured
+verification logs; nonrecoverable inputs remain untouched; classic WinForms repair behavior
+is not changed by a WPF-only seam.
+
+**Checks:** no-entry, recoverable, staged-success, verification-failure, replacement-failure,
+rollback, cancellation, and source-unchanged tests; full WPF and Processor suites.
+
+**Rollback:** restore the WPF repair service and remove only staging created by the new
+transaction. Backups are never deleted during rollback.
+
+**Observability:** log phase names and exception types only. Do not log album paths or audio
+contents.
+
+**Status:** ready after the repair seam is mapped.
+
+### Batch 2C: remove false WPF safety controls
+
+**Backlog source:** R21.
+
+**Exact files:** WPF Settings/Advanced views and view models, `DeadSwitchTests`, and affected
+settings tests.
+
+**Why safe now:** removing controls that perform no action prevents false promises. Shared
+configuration fields and classic WinForms consumers remain intact.
+
+**Behavior that must remain unchanged:** existing settings files continue to load; classic
+applications keep their CTDB configuration; no new network call is introduced.
+
+**Checks:** dead-switch analyzer, settings round trip, WPF build and full tests, source search
+for classic CTDB consumers.
+
+**Rollback:** restore the WPF rows and allowlist entries.
+
+**Observability:** none.
+
+**Status:** ready.
