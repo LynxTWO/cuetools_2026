@@ -6,8 +6,8 @@ using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Accuracy
 {
-    /// <summary>One track's checksums as read. ArV2 is the match criterion (offset-corrected AR CRC),
-    /// ArV1 the fallback for reads predating v2, Crc32 corroboration.</summary>
+    /// <summary>One track's checksums as read. AR checksums support cross-drive history comparison;
+    /// Crc32 is the full-range same-drive Test &amp; Copy checksum.</summary>
     public sealed class TrackCrc
     {
         public uint ArV1 { get; set; }
@@ -78,7 +78,7 @@ namespace CUETools.Wpf.Accuracy
                 int diff = 0;
                 int n = Math.Min(pt.Length, rt.Length);
                 for (int i = 0; i < n; i++)
-                    if (!SameTrack(pt[i], rt[i])) diff++;
+                    if (!SameTrackForHistory(pt[i], rt[i])) diff++;
                 diff += Math.Abs(pt.Length - rt.Length);   // track-count change counts as diff
                 outcome.DiffTrackCount = diff;
                 outcome.Matches = diff == 0;
@@ -91,11 +91,10 @@ namespace CUETools.Wpf.Accuracy
             return outcome;
         }
 
-        // A track matches on the AccurateRip CRC: prefer v2, fall back to v1 when either side lacks v2.
-        // Offset-corrected, so it holds across drives (verify-history's cross-drive case) and, for the
-        // same-drive same-offset reads Test & Copy performs, equals CRC32 bit-identity. Do not switch
-        // this to raw CRC32 - that would break cross-drive matching. Null-tolerant for corrupt history.
-        public static bool SameAudio(TrackCrc a, TrackCrc b)
+        // History must remain comparable across drives and offsets. Prefer v2, then use v1 for older
+        // records; raw CRC32 is deliberately excluded because it is not an offset-corrected contract.
+        // Null-tolerant for corrupt history.
+        public static bool SameAudioForHistory(TrackCrc a, TrackCrc b)
         {
             if (a == null || b == null) return false;
             if (a.ArV2 != 0 && b.ArV2 != 0) return a.ArV2 == b.ArV2;
@@ -103,7 +102,15 @@ namespace CUETools.Wpf.Accuracy
             return false;
         }
 
-        private static bool SameTrack(TrackCrc a, TrackCrc b) => SameAudio(a, b);
+        // Test & Copy compares independent reads from the same drive at the same offset. Require the
+        // full-range checksum, so AccurateRip's intentional disc-edge exclusions cannot certify a
+        // difference there; retain the AR match as an independent corroborating signal.
+        public static bool SameAudioForTestAndCopy(TrackCrc a, TrackCrc b) =>
+            a != null && b != null &&
+            a.Crc32 != 0 && b.Crc32 != 0 && a.Crc32 == b.Crc32 &&
+            SameAudioForHistory(a, b);
+
+        private static bool SameTrackForHistory(TrackCrc a, TrackCrc b) => SameAudioForHistory(a, b);
 
         public static string ToJson(VerifyRecord r) =>
             JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true });

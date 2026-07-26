@@ -75,11 +75,18 @@ Two reads agree on a track when:
 - when the disc is present in AccurateRip, their AR verdicts are consistent (both reads produced the
   same AR outcome). With no AR data, bit-identical agreement alone is the proof.
 
-The equality test is the per-track CRC32 (the audio checksum). For two reads at the same drive
-offset, identical CRC32, identical AR v1, and identical AR v2 all follow from byte-identical audio, so
-the choice is immaterial; the shared comparison checks the CRC record with CRC32 as the primary field.
-The AR-consistency clause is therefore auto-satisfied whenever CRC32 matches - it is corroboration and
-reporting, not a second gate that could fail a bit-agreed track.
+The two checksum contracts are deliberately separate:
+
+- verify-history compares the offset-corrected AccurateRip CRC (v2, falling back to v1), because
+  history can compare reads made by different drives at different offsets;
+- Test & Copy compares reads from the same drive, offset, and session, so it requires a nonzero equal
+  full-range CRC32 and an equal AccurateRip CRC.
+
+The full CRC is mandatory for Test & Copy because AccurateRip intentionally excludes the first and
+last five seconds at the disc boundaries. Reusing the history comparator would let differences in
+those excluded samples pass. Conversely, replacing the history comparator with raw CRC32 would break
+its cross-drive contract. The AR database verdict is reported separately; the locally computed AR
+checksum is the corroborating comparison signal.
 
 The AR status is reported separately in the verdict and log, never used to fail a bit-agreed track:
 

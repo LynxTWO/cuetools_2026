@@ -10,31 +10,37 @@ namespace CUETools.Wpf.Tests
             new TrackCrc { ArV2 = v2, ArV1 = v1, Crc32 = c32 };
 
         [TestMethod]
-        public void SameAudio_MatchesOnV2()
+        public void HistoryComparator_MatchesOnV2()
         {
-            Assert.IsTrue(VerifyHistoryStore.SameAudio(T(10), T(10)));
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(T(10), T(11)));
+            Assert.IsTrue(VerifyHistoryStore.SameAudioForHistory(T(10), T(10)));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(T(10), T(11)));
         }
 
         [TestMethod]
-        public void SameAudio_FallsBackToV1WhenV2Absent()
+        public void HistoryComparator_FallsBackToV1WhenV2Absent()
         {
-            Assert.IsTrue(VerifyHistoryStore.SameAudio(T(0, 5), T(0, 5)));
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(T(0, 5), T(0, 6)));
+            Assert.IsTrue(VerifyHistoryStore.SameAudioForHistory(T(0, 5), T(0, 5)));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(T(0, 5), T(0, 6)));
         }
 
         [TestMethod]
-        public void SameAudio_NullIsNeverEqual()
+        public void HistoryComparator_NullIsNeverEqual()
         {
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(null, T(10)));
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(T(10), null));
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(null, null));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(null, T(10)));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(T(10), null));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(null, null));
         }
 
         [TestMethod]
-        public void SameAudio_AllZeroCrcIsNeverEqual()
+        public void HistoryComparator_AllZeroArCrcIsNeverEqual()
         {
-            Assert.IsFalse(VerifyHistoryStore.SameAudio(T(0), T(0)));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForHistory(T(0), T(0)));
+        }
+
+        [TestMethod]
+        public void HistoryComparator_PreservesCrossDriveArSemantics()
+        {
+            Assert.IsTrue(VerifyHistoryStore.SameAudioForHistory(T(10, c32: 101), T(10, c32: 202)));
         }
 
         private static VerifyRecord Read(params uint[] v2)
@@ -43,6 +49,7 @@ namespace CUETools.Wpf.Tests
             for (int i = 0; i < v2.Length; i++) t[i] = new TrackCrc { ArV2 = v2[i], Crc32 = v2[i] };
             return new VerifyRecord { Tracks = t };
         }
+        private static VerifyRecord Record(params TrackCrc[] tracks) => new VerifyRecord { Tracks = tracks };
         // staging flags: Test read is not staged (index 0); Copy/third reads are staged.
         private static bool[] Staged(int n) { var s = new bool[n]; for (int i = 1; i < n; i++) s[i] = true; return s; }
 
@@ -65,6 +72,48 @@ namespace CUETools.Wpf.Tests
             CollectionAssert.AreEqual(new[] { 1 }, r.HeldTracks);
             Assert.IsFalse(r.Tracks[1].Agreed);
             Assert.AreEqual(-1, r.Tracks[1].SourceReadIndex);
+        }
+
+        [TestMethod]
+        public void EqualArButDifferentFullCrc_HoldsAndHasNoVerifiedRead()
+        {
+            var reads = new[] { Record(T(10, c32: 100)), Record(T(10, c32: 200)) };
+            var result = TestAndCopyResolver.Resolve(reads, Staged(2));
+
+            Assert.AreEqual(TestCopyOutcome.Held, result.Outcome);
+            CollectionAssert.AreEqual(new[] { 0 }, result.HeldTracks);
+            Assert.AreEqual(-1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
+        }
+
+        [TestMethod]
+        public void MatchingFullCrcAndAr_Passes()
+        {
+            var reads = new[] { Record(T(10, c32: 100)), Record(T(10, c32: 100)) };
+            var result = TestAndCopyResolver.Resolve(reads, Staged(2));
+
+            Assert.AreEqual(TestCopyOutcome.Passed, result.Outcome);
+            Assert.AreEqual(1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
+        }
+
+        [TestMethod]
+        public void MatchingFullCrcButDifferentAr_Holds()
+        {
+            var reads = new[] { Record(T(10, c32: 100)), Record(T(20, c32: 100)) };
+            var result = TestAndCopyResolver.Resolve(reads, Staged(2));
+
+            Assert.AreEqual(TestCopyOutcome.Held, result.Outcome);
+            Assert.AreEqual(-1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
+        }
+
+        [TestMethod]
+        public void MissingFullCrc_HoldsAndHasNoVerifiedRead()
+        {
+            var reads = new[] { Record(T(10, c32: 0)), Record(T(10, c32: 0)) };
+            var result = TestAndCopyResolver.Resolve(reads, Staged(2));
+
+            Assert.AreEqual(TestCopyOutcome.Held, result.Outcome);
+            CollectionAssert.AreEqual(new[] { 0 }, result.HeldTracks);
+            Assert.AreEqual(-1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
         }
 
         [TestMethod]
