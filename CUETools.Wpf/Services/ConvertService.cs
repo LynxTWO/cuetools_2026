@@ -106,69 +106,20 @@ public sealed class ConvertService : IConvertService
                 ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                 : outputDir;
 
-            // Naming comes from the ONE naming engine - the same NamingEngine.Render the Naming page
-            // previews with - so what is previewed is what lands on disk. Render each track's relative
-            // path, split off the shared album folder (the .cue/.log/cover go there), create the whole
-            // tree including any "Disc N/" subfolder, then hand the engine the per-track names so it
-            // writes exactly those instead of re-deriving them from trackFilenameFormat (same routing
-            // as RipService's encode branch, so rip and convert output agree).
-            string outDir;
-            int trackCount = Math.Max(0, cue.TrackCount);
-            if (trackCount > 0)
-            {
-                var scheme = _settings.LoadNamingScheme();
-                var rel = new string[trackCount];
-                for (int t = 0; t < trackCount; t++)
-                    rel[t] = NamingEngine.Render(
-                        NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
-                var split = NamingPaths.Split(rel);
-                // A source with no metadata renders the engine's "Unknown Artist - Unknown Album"
-                // fallback, so converting two different untagged files would put both in that one folder
-                // and the second would overwrite the first. Name the folder after the input file instead
-                // - that is distinct per source, and it is what convert did before this routing.
-                string albumRel = split.commonDir;
-                if (string.IsNullOrWhiteSpace(cue.Metadata?.Artist) && string.IsNullOrWhiteSpace(cue.Metadata?.Title))
-                {
-                    string fromFile = Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "");
-                    if (fromFile.Length > 0) albumRel = fromFile;
-                }
-                if (string.IsNullOrWhiteSpace(albumRel))
-                {
-                    // Always keep an album folder: a template with no folder part, or one whose leading
-                    // segment differs per track, otherwise dumps album.cue / the log / the cover into the
-                    // output base where the next convert overwrites them.
+            // One shared layout step for rip AND convert - see OutputLayout. The album fallback here
+            // prefers the INPUT FILE NAME when the source carries no metadata, so converting two
+            // untagged files cannot put both in one "Unknown Artist - Unknown Album" folder.
+            var layout = OutputLayout.PrepareAndApply(cue, baseDir, format, _settings.LoadNamingScheme(),
+                () => {
                     string a = Safe(cue.Metadata?.Artist ?? ""), t = Safe(cue.Metadata?.Title ?? "");
-                    albumRel = (a.Length == 0 && t.Length == 0)
-                        ? (Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "") is { Length: > 0 } f ? f : "Unknown Album")
-                        : $"{a} - {t}".Trim(' ', '-');
-                }
-                // never overwrite an earlier convert of the same album - see
-                // RipService.NonClobberingAlbumDir for why the engine cannot save the sidecars
-                albumRel = OutputGuard.NonClobberingAlbumDir(baseDir, albumRel, format);
-                outDir = Path.Combine(baseDir, albumRel);
-                Directory.CreateDirectory(outDir);
-                // cap the assembled path length, then guarantee non-empty/unique names - in that order,
-                // so the uniquifier can still disambiguate any collision truncation creates
-                var capped = NamingPaths.CapPathLength(split.remainders, outDir.Length);
-                var finalNames = NamingPaths.EnsureUniqueTrackNames(capped);
-                foreach (var r in finalNames)
-                {
-                    string sub = Path.GetDirectoryName(Path.Combine(outDir, r));
-                    if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
-                }
-                cue.SetExplicitTrackNames(finalNames);
-            }
-            else
-            {
-                // no tracks to name (should not happen for a real source) - keep a sane album folder
-                string artist = Safe(cue.Metadata?.Artist ?? "");
-                string title = Safe(cue.Metadata?.Title ?? "");
-                string album = (artist.Length == 0 && title.Length == 0)
-                    ? Path.GetFileNameWithoutExtension(inputPath)
-                    : $"{artist} - {title}";
-                outDir = Path.Combine(baseDir, album);
-                Directory.CreateDirectory(outDir);
-            }
+                    if (a.Length == 0 && t.Length == 0)
+                    {
+                        string f = Safe(Path.GetFileNameWithoutExtension(inputPath) ?? "");
+                        return f.Length > 0 ? f : "Unknown Album";
+                    }
+                    return OutputLayout.AlbumFolderFallback(cue.Metadata, Safe);
+                });
+            string outDir = layout.OutputDir;
 
             cue.Action = CUEAction.Encode;
             cue.OutputStyle = CUEStyle.GapsAppended;
