@@ -54,6 +54,12 @@ public sealed class AppSettings
     public event System.EventHandler? ArtSizeChanged;
     public void NotifyArtSizeChanged() => ArtSizeChanged?.Invoke(this, System.EventArgs.Empty);
 
+    /// <summary>Raised when embed/extract album art is toggled from a surface OTHER than the Rip page.
+    /// The Rip page owns the cover fetch, so without this the Settings-page toggle set the config and
+    /// nothing armed the fetch - the album was ripped with NO art at all while the setting read ON.</summary>
+    public event System.EventHandler? ArtEnabledChanged;
+    public void NotifyArtEnabledChanged() => ArtEnabledChanged?.Invoke(this, System.EventArgs.Empty);
+
     // Per-format lossless/lossy choice for two-faced extensions (wma = WMA Lossless vs Standard;
     // m4a = ALAC vs imported AAC). Compact persisted form: "wma=lossy;m4a=lossless".
     public string FormatTypeOverrides { get; set; } = "";

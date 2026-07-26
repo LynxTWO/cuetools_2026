@@ -40,6 +40,11 @@ public partial class App : Application
             c.decodeHDCDto24bit = false;    // 24-bit HDCD output off by default
             c.maxAlbumArtSize = 1000;       // embed/extract art up to 1000 px
             c.writeArTagsOnEncode = true;   // AccurateRip tags in the files by default
+            // Every engine embed/extract site is "embedAlbumArt || CopyAlbumArt", and CopyAlbumArt
+            // defaults to true - so turning cover art OFF changed nothing on the Convert path: a source
+            // that already carried a front cover still had it embedded into every output file. Legacy
+            // CUERipper clears it for the same reason. This leaves the real setting as the only gate.
+            c.CopyAlbumArt = false;
             return c;
         });
         services.AddSingleton<AppSettings>();

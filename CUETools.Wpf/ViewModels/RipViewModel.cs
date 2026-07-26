@@ -355,6 +355,9 @@ public sealed class RipViewModel : PageViewModel
         };
         // a cover-size change in Settings re-derives the already-fetched cover at the new size
         settings.ArtSizeChanged += (_, _) => RefreshArtSize();
+        // the Settings page can toggle embed/extract too; without this its toggle changed the config
+        // but never armed (or cleared) the cover fetch the Rip page owns
+        settings.ArtEnabledChanged += (_, _) => { if (_config.embedAlbumArt || _config.extractAlbumArt) TriggerArtFetch(); else ClearArt(); };
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
@@ -531,7 +534,9 @@ public sealed class RipViewModel : PageViewModel
         string album = _chosenMetadata?.Title ?? "";
         string artist = _chosenMetadata?.Artist ?? "";
         string barcode = _chosenMetadata?.Barcode ?? "";
-        if (!_config.embedAlbumArt) { ClearArt(); return; }
+        // extract-only is a real choice: it writes folder.jpg without embedding, so it still needs
+        // the cover fetched. Gating on embed alone meant extract silently produced nothing on a rip.
+        if (!_config.embedAlbumArt && !_config.extractAlbumArt) { ClearArt(); return; }
         if (string.IsNullOrWhiteSpace(album) && string.IsNullOrWhiteSpace(artist)) { ClearArt(); return; }
         _ = FetchArtAsync(artist, album, barcode);
     }

@@ -510,7 +510,7 @@ public sealed class RipService : IRipService
             // Embed the hi-res Apple cover when we have one; otherwise leave Metadata.AlbumArt intact
             // so the engine falls back to the CTDB/database cover. Clearing Metadata.AlbumArt stops the
             // engine re-adding the DB cover on top of ours (LoadAndResizeAlbumArt reads that list).
-            if (encode && _config.embedAlbumArt && coverArt != null && coverArt.Length > 0)
+            if (encode && (_config.embedAlbumArt || _config.extractAlbumArt) && coverArt != null && coverArt.Length > 0)
             {
                 try
                 {

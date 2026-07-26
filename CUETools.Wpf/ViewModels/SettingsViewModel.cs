@@ -109,12 +109,15 @@ public sealed class SettingsViewModel : PageViewModel
     public bool CopyUnknownTags { get => _c.copyUnknownTags; set { _c.copyUnknownTags = value; Raise(); } }
 
     // Album art
-    public bool EmbedAlbumArt { get => _c.embedAlbumArt; set { _c.embedAlbumArt = value; Raise(); } }
-    public bool ExtractAlbumArt { get => _c.extractAlbumArt; set { _c.extractAlbumArt = value; Raise(); } }
+    public bool EmbedAlbumArt { get => _c.embedAlbumArt; set { _c.embedAlbumArt = value; Raise(); _app.NotifyArtEnabledChanged(); } }
+    public bool ExtractAlbumArt { get => _c.extractAlbumArt; set { _c.extractAlbumArt = value; Raise(); _app.NotifyArtEnabledChanged(); } }
     public int MaxAlbumArtSize
     {
         get => _c.maxAlbumArtSize;
-        set { _c.maxAlbumArtSize = value; Raise(); _app.NotifyArtSizeChanged(); }   // re-derives a fetched cover live
+        // Clamp to the range CUEConfig.Load enforces (100..10000). Without this the setter accepted
+        // e.g. 12000, used it for the session, wrote it to settings.txt - and the loader then
+        // rejected it, so the page silently showed 1000 again on the next launch.
+        set { _c.maxAlbumArtSize = Math.Clamp(value, 100, 10000); Raise(); _app.NotifyArtSizeChanged(); }
     }
 
     // HDCD
