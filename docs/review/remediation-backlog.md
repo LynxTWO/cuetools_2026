@@ -205,7 +205,9 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** unit cases for equal AR/different raw CRC, equal raw CRC, missing raw
   CRC, held verdict, and full-read selection; full WPF test suite.
 - **Owner:** repo owner.
-- **Status:** in progress.
+- **Status:** fixed 2026-07-26. The history and Test & Copy comparators are separate.
+  Test & Copy requires matching nonzero full CRC32 and matching AR CRC. Focused tests passed
+  25/25; the full WPF suite passed 127/127 in both Debug and Release.
 
 ### R20. Modern WPF CTDB Repair fails before writing - bucket B, risk high
 

@@ -22,7 +22,10 @@ namespace CUETools.Wpf.Tests
                     int len = Math.Max(1, tracks + rnd.Next(-1, 2)); // occasionally ragged
                     var tc = new TrackCrc[len];
                     for (int t = 0; t < len; t++)
-                        tc[t] = new TrackCrc { ArV2 = (uint)rnd.Next(1, 4) }; // small domain -> collisions
+                    {
+                        uint crc = (uint)rnd.Next(1, 4); // small domain -> collisions
+                        tc[t] = new TrackCrc { ArV2 = crc, Crc32 = crc };
+                    }
                     reads.Add(new VerifyRecord { Tracks = tc });
                 }
                 var staged = new bool[readCount];
@@ -44,7 +47,7 @@ namespace CUETools.Wpf.Tests
                         Assert.AreEqual(2, v.AgreeingReads.Length);
                         var a = reads[v.AgreeingReads[0]].Tracks[v.TrackIndex];
                         var b = reads[v.AgreeingReads[1]].Tracks[v.TrackIndex];
-                        Assert.IsTrue(VerifyHistoryStore.SameAudio(a, b), "agreeing pair must actually agree");
+                        Assert.IsTrue(VerifyHistoryStore.SameAudioForTestAndCopy(a, b), "agreeing pair must actually agree");
                     }
                     else
                     {

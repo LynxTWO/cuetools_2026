@@ -746,7 +746,7 @@ public sealed class RipService : IRipService
                             if (j == 1) continue;
                             var ot = reads[j]?.Tracks;
                             var otc = (ot != null && t < ot.Length) ? ot[t] : null;
-                            if (VerifyHistoryStore.SameAudio(ct, otc)) agreesAny = true;
+                            if (VerifyHistoryStore.SameAudioForTestAndCopy(ct, otc)) agreesAny = true;
                         }
                         if (!agreesAny) mismatches.Add(t);
                     }

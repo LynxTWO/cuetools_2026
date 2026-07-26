@@ -71,7 +71,8 @@ passed, failed, and skipped counts.
 **Observability:** the existing Test & Copy log remains the user-visible receipt. No new raw
 metadata is logged.
 
-**Status:** in progress.
+**Status:** fixed 2026-07-26. Focused verification passed 25/25. The full WPF suite passed
+127/127 with 0 failed and 0 skipped in both Debug and Release.
 
 ### Batch 2B: WPF repair transaction
 

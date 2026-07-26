@@ -24,8 +24,9 @@ namespace CUETools.Wpf.Accuracy
     }
 
     /// <summary>Pure Test & Copy resolver: given the per-read checksum records and which reads are
-    /// staged (have audio on disk), decide per track whether two reads agree bit-for-bit and which
-    /// staged read's file to commit. No hardware, no I/O - fully unit-testable.</summary>
+    /// staged (have audio on disk), decide per track whether two same-drive reads agree on both their
+    /// full-range CRC32 and AccurateRip checksum, and which staged read's file to commit. No hardware,
+    /// no I/O - fully unit-testable.</summary>
     public static class TestAndCopyResolver
     {
         public static TestCopyResult Resolve(IReadOnlyList<VerifyRecord> reads, IReadOnlyList<bool> staged)
@@ -55,7 +56,7 @@ namespace CUETools.Wpf.Accuracy
                         if (j == i) continue;
                         var tj = Track(reads[j], t);
                         if (tj == null) continue;
-                        if (VerifyHistoryStore.SameAudio(ti, tj))
+                        if (VerifyHistoryStore.SameAudioForTestAndCopy(ti, tj))
                         {
                             v.Agreed = true;
                             v.SourceReadIndex = i;
@@ -83,9 +84,9 @@ namespace CUETools.Wpf.Accuracy
             return (arr != null && t >= 0 && t < arr.Length) ? arr[t] : null;
         }
 
-        /// <summary>The smallest staged read index that agrees (SameAudio) with some other read on
-        /// EVERY track, or -1 if no single read is clean throughout. Used to commit one read's files
-        /// wholesale (never misaligns) instead of assembling per track.</summary>
+        /// <summary>The smallest staged read index that has a full-range Test &amp; Copy agreement with
+        /// some other read on EVERY track, or -1 if no single read is clean throughout. Used to commit
+        /// one read's files wholesale (never misaligns) instead of assembling per track.</summary>
         public static int FullyVerifiedReadIndex(IReadOnlyList<VerifyRecord> reads, IReadOnlyList<bool> staged)
         {
             if (reads == null || staged == null || staged.Count != reads.Count) return -1;
@@ -102,7 +103,7 @@ namespace CUETools.Wpf.Accuracy
                     for (int j = 0; j < reads.Count && !agrees; j++)
                     {
                         if (j == i) continue;
-                        if (VerifyHistoryStore.SameAudio(ti, Track(reads[j], t))) agrees = true;
+                        if (VerifyHistoryStore.SameAudioForTestAndCopy(ti, Track(reads[j], t))) agrees = true;
                     }
                     if (!agrees) coversAll = false;
                 }
