@@ -119,4 +119,7 @@ for classic CTDB consumers.
 
 **Observability:** none.
 
-**Status:** ready.
+**Status:** complete on 2026-07-26. Removed `NoUnverifiedOutput`, `FixOffset`,
+`FixOffsetToNearest`, `CtdbSubmit`, and `CtdbAsk` from the modern WPF surface while retaining
+their shared configuration compatibility. Focused tests pass 6/6; the full WPF suite passes
+129/129 in both Debug and Release with zero skips.

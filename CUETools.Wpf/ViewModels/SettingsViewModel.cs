@@ -74,17 +74,12 @@ public sealed class SettingsViewModel : PageViewModel
     public bool EjectAfterRip { get => _c.ejectAfterRip; set { _c.ejectAfterRip = value; Raise(); } }
 
     // AccurateRip & CTDB
-    public bool NoUnverifiedOutput { get => _c.noUnverifiedOutput; set { _c.noUnverifiedOutput = value; Raise(); } }
-    public bool FixOffset { get => _c.fixOffset; set { _c.fixOffset = value; Raise(); } }
-    public bool FixOffsetToNearest { get => _c.fixOffsetToNearest; set { _c.fixOffsetToNearest = value; Raise(); } }
     public bool WriteArTagsOnEncode { get => _c.writeArTagsOnEncode; set { _c.writeArTagsOnEncode = value; Raise(); } }
     public bool WriteArTagsOnVerify { get => _c.writeArTagsOnVerify; set { _c.writeArTagsOnVerify = value; Raise(); } }
     public bool WriteArLogOnConvert { get => _c.writeArLogOnConvert; set { _c.writeArLogOnConvert = value; Raise(); } }
     public bool WriteArLogOnVerify { get => _c.writeArLogOnVerify; set { _c.writeArLogOnVerify = value; Raise(); } }
     public bool ArLogToSourceFolder { get => _c.arLogToSourceFolder; set { _c.arLogToSourceFolder = value; Raise(); } }
     public bool ArLogVerbose { get => _c.arLogVerbose; set { _c.arLogVerbose = value; Raise(); } }
-    public bool CtdbSubmit { get => _c.advanced.CTDBSubmit; set { _c.advanced.CTDBSubmit = value; Raise(); } }
-    public bool CtdbAsk { get => _c.advanced.CTDBAsk; set { _c.advanced.CTDBAsk = value; Raise(); } }
 
     // File naming & output. (Filename-hygiene rules - remove special chars, replace spaces,
     // ANSI-safe - are owned by the dedicated naming editor, not duplicated here.)

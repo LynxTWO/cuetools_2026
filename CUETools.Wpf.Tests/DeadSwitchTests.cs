@@ -14,28 +14,15 @@ namespace CUETools.Wpf.Tests
     /// constructor, Save/Load, the ViewModel pass-through itself) actually reads that field.
     ///
     /// It reads the REPO'S OWN SOURCE at test time via <see cref="DeadSwitchAnalyzer"/> (not a
-    /// fixed snapshot), so it fails the moment a new dead switch appears, and fails again - on
-    /// purpose - the moment a KnownDead entry gets wired up or its row removed from the UI: that
-    /// is the "list drains, not rots" rule from the brief. Each entry below is a tracked audit
-    /// finding awaiting an owner decision; see docs/review/decisions-needed.md.
+    /// fixed snapshot), so a newly bound setting without a real consumer fails the test.
     /// </summary>
     [TestClass]
     public class DeadSwitchTests
     {
         public TestContext TestContext { get; set; }
 
-        // Backing-member names (not the ViewModel property names) that the audit found bound,
-        // persisted, and never read for real. Each line carries the one-line reason it is here.
-        private static readonly HashSet<string> KnownDead = new(StringComparer.Ordinal)
-        {
-            "noUnverifiedOutput",   // tracked audit finding, awaiting an owner decision - CUEConfig.noUnverifiedOutput has no reader beyond declaration/defaults/copy-ctor/Save/Load
-            "fixOffset",            // tracked audit finding, awaiting an owner decision - CUEConfig.fixOffset has no reader beyond declaration/defaults/copy-ctor/Save/Load
-            "CTDBSubmit",           // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBSubmit round-trips only through the generic Advanced JSON blob; nothing reads the property
-            "CTDBAsk",              // tracked audit finding, awaiting an owner decision - CUEConfigAdvanced.CTDBAsk round-trips only through the generic Advanced JSON blob; nothing reads the property
-        };
-
         [TestMethod]
-        public void EveryBoundSetting_HasARealConsumer_OrIsATrackedKnownDeadFinding()
+        public void EveryBoundSetting_HasARealConsumer()
         {
             string repoRoot = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
             if (repoRoot == null)
@@ -93,24 +80,37 @@ namespace CUETools.Wpf.Tests
                 TestContext.WriteLine("Unresolved (backing member could not be determined - not asserted on): " + string.Join(", ", unresolved.OrderBy(x => x, StringComparer.Ordinal)));
             TestContext.WriteLine("Dead (zero real consumers found): " + (dead.Count == 0 ? "(none)" : string.Join(", ", dead)));
 
-            // (a) a dead member not on the allowlist is a NEW regression - name it and its binding site.
-            var unexpectedlyDead = dead.Where(m => !KnownDead.Contains(m)).ToList();
-            // (b) an allowlisted member that is no longer dead means the list has rotted - drain it.
-            var noLongerDead = KnownDead.Where(m => !dead.Contains(m)).ToList();
-
-            if (unexpectedlyDead.Count > 0 || noLongerDead.Count > 0)
+            if (dead.Count > 0)
             {
                 var msg = new System.Text.StringBuilder();
                 msg.AppendLine();
-                msg.AppendLine("Dead switches NOT in KnownDead (new regression - add them to KnownDead in DeadSwitchTests.cs, or wire the setting up):");
-                if (unexpectedlyDead.Count == 0) msg.AppendLine("  (none)");
-                else foreach (var m in unexpectedlyDead)
+                msg.AppendLine("Dead switches bound in WPF:");
+                foreach (var m in dead)
                     msg.AppendLine($"  {m}  bound via: {string.Join(", ", xamlFilesByMember[m])}");
-                msg.AppendLine("KnownDead entries that are NO LONGER dead (delete them from KnownDead in DeadSwitchTests.cs):");
-                if (noLongerDead.Count == 0) msg.AppendLine("  (none)");
-                else foreach (var m in noLongerDead) msg.AppendLine($"  {m}");
                 Assert.Fail(msg.ToString());
             }
+        }
+
+        [TestMethod]
+        public void RemovedDeadSettingsHaveNoWpfBindingsOrPassThroughs()
+        {
+            string repoRoot = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
+            if (repoRoot == null)
+            {
+                Assert.Inconclusive("Could not locate repository root from test output: " + AppContext.BaseDirectory);
+                return;
+            }
+
+            var boundNames = DeadSwitchAnalyzer.ScanXamlBindings(repoRoot)
+                .Select(x => x.Name).ToHashSet(StringComparer.Ordinal);
+            string[] removed =
+                { "NoUnverifiedOutput", "FixOffset", "FixOffsetToNearest", "CtdbSubmit", "CtdbAsk" };
+            foreach (var name in removed)
+                Assert.IsFalse(boundNames.Contains(name), name + " must not remain bound in WPF XAML");
+
+            var settingsVm = typeof(CUETools.Wpf.ViewModels.SettingsViewModel);
+            foreach (var name in removed)
+                Assert.IsNull(settingsVm.GetProperty(name), name + " must not remain a WPF pass-through");
         }
     }
 }
