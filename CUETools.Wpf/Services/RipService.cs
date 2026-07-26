@@ -347,54 +347,12 @@ public sealed class RipService : IRipService
                     ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools")
                     : outputBaseDir;
 
-                // Naming comes from the ONE naming engine - the same NamingEngine.Render the Naming page
-                // previews with - so what is previewed is what lands on disk. Render each track's relative
-                // path, split off the shared album folder (the .cue/.log/cover live there), create the
-                // whole tree including any "Disc N/" subfolder, then hand the engine the per-track names
-                // so it writes exactly those instead of re-deriving them from trackFilenameFormat (whose
-                // token vocabulary differs from the WPF one - that mismatch was the encode-path bug).
-                int trackCount = Math.Max(0, cue.TrackCount);
-                if (trackCount > 0)
-                {
-                    var scheme = _settings.LoadNamingScheme();
-                    var rel = new string[trackCount];
-                    for (int t = 0; t < trackCount; t++)
-                        rel[t] = CUETools.Wpf.Services.NamingEngine.Render(
-                            NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
-                    var split = NamingPaths.Split(rel);
-                    // There must ALWAYS be an album folder. A template with no folder part, or one whose
-                    // first segment differs per track (the "Simple" preset on a various-artists disc,
-                    // where %artist% is the leading segment), yields no shared leading directory - and
-                    // then album.cue, the rip log, the cover and rip.verify would be written straight
-                    // into the output base and overwritten by the next such rip, while Test & Copy would
-                    // commit under its temp staging name. Fall back to an album folder derived from the
-                    // metadata so every rip keeps its own directory.
-                    outRelDir = string.IsNullOrWhiteSpace(split.commonDir)
-                        ? AlbumFolderFallback(cue.Metadata) : split.commonDir;
-                    // never write over an existing rip - see NonClobberingAlbumDir
-                    outRelDir = OutputGuard.NonClobberingAlbumDir(baseDir, outRelDir, format, m => _log.Info("rip", m));
-                    outDir = Path.Combine(baseDir, outRelDir);
-                    Directory.CreateDirectory(outDir);
-                    // cap the assembled path length, then guarantee non-empty/unique names - in that
-                    // order, so the uniquifier can still disambiguate any collision truncation creates
-                    var capped = NamingPaths.CapPathLength(split.remainders, outDir.Length);
-                    var finalNames = NamingPaths.EnsureUniqueTrackNames(capped);
-                    foreach (var r in finalNames)
-                    {
-                        string sub = Path.GetDirectoryName(Path.Combine(outDir, r));
-                        if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
-                    }
-                    cue.SetExplicitTrackNames(finalNames);
-                }
-                else
-                {
-                    // no tracks to name (should not happen for a real disc) - keep a sane album folder
-                    string album = AlbumFolderFallback(cue.Metadata);
-                    outRelDir = OutputGuard.NonClobberingAlbumDir(baseDir, album, format, m => _log.Info("rip", m));
-                    album = outRelDir;
-                    outDir = Path.Combine(baseDir, album);
-                    Directory.CreateDirectory(outDir);
-                }
+                // One shared layout step for rip AND convert - see OutputLayout. Keeping this sequence
+                // in two places is what produced the album-folder-collapse and staging-name bugs.
+                var layout = OutputLayout.PrepareAndApply(cue, baseDir, format, _settings.LoadNamingScheme(),
+                    () => OutputLayout.AlbumFolderFallback(cue.Metadata, Safe), m => _log.Info("rip", m));
+                outDir = layout.OutputDir;
+                outRelDir = layout.RelativeDir;
                 // pick the encoder type from the format via the catalog's single rule: a format
                 // with a USABLE lossy encoder encodes lossy (mp3 bundled, wma OS runtime, mpc when
                 // its exe has been imported)
@@ -657,16 +615,6 @@ public sealed class RipService : IRipService
             && !string.Equals(releaseId, loadedId, StringComparison.Ordinal);
         bool countDisagrees = releaseTracks > 0 && loadedTracks > 0 && releaseTracks != loadedTracks;
         return idDisagrees || countDisagrees;
-    }
-
-    /// <summary>"Artist - Album" (or "Unknown Album") for use as the album directory when the naming
-    /// scheme does not produce one. Every rip needs its own folder: without it the .cue, rip log, cover
-    /// and rip.verify collide in the output base, and a Test &amp; Copy commit has no name to re-home to.</summary>
-    private string AlbumFolderFallback(CUEMetadata meta)
-    {
-        string artist = Safe(meta?.Artist ?? ""), title = Safe(meta?.Title ?? "");
-        return (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title))
-            ? "Unknown Album" : $"{artist} - {title}".Trim(' ', '-');
     }
 
     // ---- Test & Copy ---------------------------------------------------------------------
