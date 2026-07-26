@@ -138,16 +138,25 @@ namespace CUETools.Codecs.libwavpack
 
         public void Close()
         {
+            // These three calls all return int, 0 on failure, exactly like WavpackPackSamples which
+            // Write() already checks. Discarding them meant the encode's LAST block could fail to be
+            // written and the file would still close as if it had succeeded - a silently truncated rip.
+            // The message must be read before WavpackCloseFile frees the context, and the throw is
+            // deferred to the end so the context is always closed and the stream always released.
+            string failure = null;
             if (m_initialized)
             {
-                wavpackdll.WavpackFlushSamples(_wpc);
-                if (m_settings.MD5Sum)
+                if (0 == wavpackdll.WavpackFlushSamples(_wpc))
+                    failure = "flushing the final samples failed: " + wavpackdll.WavpackGetErrorMessage(_wpc);
+                if (failure == null && m_settings.MD5Sum)
                 {
                     _md5hasher.TransformFinalBlock (new byte[1], 0, 0);
                     fixed (byte* md5_digest = &_md5hasher.Hash[0])
-                        wavpackdll.WavpackStoreMD5Sum (_wpc, md5_digest);
+                        if (0 == wavpackdll.WavpackStoreMD5Sum (_wpc, md5_digest))
+                            failure = "storing the MD5 sum failed: " + wavpackdll.WavpackGetErrorMessage(_wpc);
                     // Call WavpackFlushSamples() again after writing MD5 sum
-                    wavpackdll.WavpackFlushSamples(_wpc);
+                    if (failure == null && 0 == wavpackdll.WavpackFlushSamples(_wpc))
+                        failure = "flushing the MD5 sum failed: " + wavpackdll.WavpackGetErrorMessage(_wpc);
                 }
                 _wpc = wavpackdll.WavpackCloseFile(_wpc);
                 m_initialized = false;
@@ -157,6 +166,8 @@ namespace CUETools.Codecs.libwavpack
                 m_stream.Close();
                 m_stream = null;
             }
+            if (failure != null)
+                throw new Exception("An error occurred while closing the encoder: " + failure);
             if ((m_finalSampleCount != 0) && (m_samplesWritten != m_finalSampleCount))
                 throw new Exception("samples written differs from the expected sample count");
         }

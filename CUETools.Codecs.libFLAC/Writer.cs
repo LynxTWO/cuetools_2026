@@ -123,9 +123,17 @@ namespace CUETools.Codecs.libFLAC
 
         public void Close()
         {
+            // finish() is where libFLAC reports a verify mismatch in the FINAL block, and where it
+            // flushes the last frames and rewrites STREAMINFO. Discarding its result meant a failed
+            // encode - including a caught verify mismatch - closed silently and looked successful.
+            // The failure is captured here but thrown at the END, so the encoder is always deleted and
+            // the stream always closed first: throwing early would leak the native encoder and leave a
+            // half-written file locked.
+            string failure = null;
             if (m_initialized)
             {
-                FLACDLL.FLAC__stream_encoder_finish(m_encoder);
+                if (0 == FLACDLL.FLAC__stream_encoder_finish(m_encoder))
+                    failure = EncoderStateDetail();
                 FLACDLL.FLAC__stream_encoder_delete(m_encoder);
                 m_encoder = IntPtr.Zero;
                 m_initialized = false;
@@ -135,6 +143,8 @@ namespace CUETools.Codecs.libFLAC
                 m_stream.Close();
                 m_stream = null;
             }
+            if (failure != null)
+                throw new Exception("an error occurred while finishing the encode: " + failure);
             if ((m_finalSampleCount > 0) && (m_samplesWritten != m_finalSampleCount))
                 throw new Exception("samples written differs from the expected sample count");
         }
@@ -162,6 +172,26 @@ namespace CUETools.Codecs.libFLAC
                 File.Delete(m_path);
         }
 
+        /// <summary>The encoder's failure state, with libFLAC's verify-mismatch detail when it has any.
+        /// Shared by Write and Close: a verify mismatch in the FINAL block is only reported by
+        /// FLAC__stream_encoder_finish, so both call sites need the same diagnosis.</summary>
+        private string EncoderStateDetail()
+        {
+            var state = FLACDLL.FLAC__stream_encoder_get_state(m_encoder);
+            string status = state.ToString();
+            if (state == FLAC__StreamEncoderState.FLAC__STREAM_ENCODER_VERIFY_MISMATCH_IN_AUDIO_DATA)
+            {
+                ulong absolute_sample;
+                uint frame_number;
+                uint channel;
+                uint sample;
+                int expected, got;
+                FLACDLL.FLAC__stream_encoder_get_verify_decoder_error_stats(m_encoder, out absolute_sample, out frame_number, out channel, out sample, out expected, out got);
+                status = status + String.Format("({0:x} instead of {1:x} @{2:x})", got, expected, absolute_sample);
+            }
+            return status;
+        }
+
         public void Write(AudioBuffer sampleBuffer)
         {
             if (!m_initialized) Initialize();
@@ -172,21 +202,7 @@ namespace CUETools.Codecs.libFLAC
             {
                 if (0 == FLACDLL.FLAC__stream_encoder_process_interleaved(m_encoder,
                     pSampleBuffer, sampleBuffer.Length))
-                {
-                    var state = FLACDLL.FLAC__stream_encoder_get_state(m_encoder);
-                    string status = state.ToString();
-                    if (state == FLAC__StreamEncoderState.FLAC__STREAM_ENCODER_VERIFY_MISMATCH_IN_AUDIO_DATA)
-                    {
-                        ulong absolute_sample;
-                        uint frame_number;
-                        uint channel;
-                        uint sample;
-                        int expected, got;
-                        FLACDLL.FLAC__stream_encoder_get_verify_decoder_error_stats(m_encoder, out absolute_sample, out frame_number, out channel, out sample, out expected, out got);
-                        status = status + String.Format("({0:x} instead of {1:x} @{2:x})", got, expected, absolute_sample);
-                    }
-                    throw new Exception("an error occurred while encoding: " + status);
-                }
+                    throw new Exception("an error occurred while encoding: " + EncoderStateDetail());
             }
 
             m_samplesWritten += sampleBuffer.Length;
