@@ -245,7 +245,9 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** dead-switch analyzer, settings tests, full WPF suite, and a source
   search proving classic consumers remain.
 - **Owner:** repo owner.
-- **Status:** ready.
+- **Status:** fixed and verified on 2026-07-26. The five WPF-only controls and their
+  pass-throughs are gone, shared settings still round-trip, classic CTDB consumers remain, and
+  the WPF suite passes 129/129 in both Debug and Release with zero skips.
 
 ### R22. Rip publication is not album-transactional or concurrency-safe - bucket B, risk high
 

@@ -237,6 +237,35 @@ namespace CUETools.Wpf.Tests
                 $"{mismatches.Count} of {members.Count} field(s) did not round-trip:\n" + string.Join("\n", mismatches));
         }
 
+        [TestMethod]
+        public void CUEConfig_R21FieldsStillRoundTripForClassicCompatibility()
+        {
+            var source = new CUEConfig
+            {
+                noUnverifiedOutput = true,
+                fixOffset = true,
+                fixOffsetToNearest = false,
+            };
+            source.advanced.CTDBSubmit = false;
+            source.advanced.CTDBAsk = false;
+
+            using (var profile = new TempProfile())
+            {
+                var writer = profile.NewWriter();
+                source.Save(writer);
+                writer.Close();
+
+                var loaded = new CUEConfig();
+                loaded.Load(profile.NewReader());
+
+                Assert.IsTrue(loaded.noUnverifiedOutput);
+                Assert.IsTrue(loaded.fixOffset);
+                Assert.IsFalse(loaded.fixOffsetToNearest);
+                Assert.IsFalse(loaded.advanced.CTDBSubmit);
+                Assert.IsFalse(loaded.advanced.CTDBAsk);
+            }
+        }
+
         // ---- test 2: AppSettings via SettingsStore --------------------------------------------
 
         // Every settable bool/int/string property on AppSettings really is written and read by

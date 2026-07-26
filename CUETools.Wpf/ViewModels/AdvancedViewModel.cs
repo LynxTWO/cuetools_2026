@@ -7,10 +7,9 @@ namespace CUETools.Wpf.ViewModels;
 
 /// <summary>
 /// Advanced engine settings page: the CUEConfigAdvanced options the original WinForms app
-/// exposed through a PropertyGrid but this WPF rebuild had dropped (only CTDBSubmit and
-/// CTDBAsk survived, on the Settings page). All of these already persist - CUEConfig
-/// serializes the whole `advanced` object as JSON under the "Advanced" key - and the engine
-/// already honors every one of them. This page only makes them visible and editable again.
+/// exposed through a PropertyGrid. All of these already persist - CUEConfig serializes the
+/// whole `advanced` object as JSON under the "Advanced" key - and the engine already honors
+/// every one of them. This page only makes them visible and editable again.
 /// </summary>
 public sealed class AdvancedViewModel : PageViewModel
 {
