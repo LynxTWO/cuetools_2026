@@ -93,7 +93,14 @@ namespace CUETools.Codecs.ALAC
                 throw new Exception("unsupported encoder settings");
         }
 
-		[DefaultValue(false)]
+        // On by default, to match FLAC. A rip's whole value is bit-exactness, and an encoder bug is the
+        // one failure a verified read cannot catch: the audio off the disc was right and the file on
+        // disk is wrong. Verify decodes each frame back and compares, so that fails loudly instead of
+        // silently. ALAC does not share FLAC's lookahead bug - its decoder has no read_rice_block path -
+        // and AlacVerifyOnEncodeTests proves transient-heavy content encodes clean at the app's mode 10
+        // with verify on, and that verify does not change the output. Only the default changed - a user
+        // who turned Verify off keeps that choice, since [JsonProperty] persists it.
+		[DefaultValue(true)]
 		[DisplayName("Verify")]
 		[Description("Decode each frame and compare with original")]
         [JsonProperty]

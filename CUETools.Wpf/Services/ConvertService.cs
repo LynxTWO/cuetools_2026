@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -130,8 +130,7 @@ public sealed class ConvertService : IConvertService
             string status = cue.Go();
             onProgress(1, status);
 
-            int files = 0;
-            try { files = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
+            int files = OutputLayout.CountAudioFiles(outDir, format);
 
             return new ConvertResult { Ok = true, Status = status, OutputDir = outDir, FileCount = files };
         }

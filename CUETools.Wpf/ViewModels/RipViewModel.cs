@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -361,7 +361,9 @@ public sealed class RipViewModel : PageViewModel
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
 
-        ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose());
+        // canExecute, not just the early-return guard inside ReadDiscOrClose: without it the button
+        // stays fully enabled during a rip and does nothing when pressed.
+        ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose(), _ => !IsRipping && !IsBusy);
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
@@ -927,9 +929,14 @@ public sealed class RipViewModel : PageViewModel
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
             // the most carefully verified rips ever happened.
-            PublishReport($"Test & Copy ({result.ReadsUsed} reads)", cq, result.ArConfidence, result.ArTotal,
+            // result.CorrectionQuality, not the live dropdown: RunTestAndCopy forces the reads up to at
+            // least Secure, so with the dropdown on Burst a Test & Copy that really read at Secure would
+            // have archived a certificate claiming "Burst".
+            PublishReport($"Test & Copy ({result.ReadsUsed} reads)", result.CorrectionQuality,
+                result.ArConfidence, result.ArTotal,
                 result.CtdbConfidence, result.CtdbTotal, result.Accurate,
-                $"verified by {result.ReadsUsed} independent reads", result.OutputDir, result.FileCount);
+                $"verified by {result.ReadsUsed} independent reads", result.OutputDir, result.FileCount,
+                result.Format);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -994,9 +1001,11 @@ public sealed class RipViewModel : PageViewModel
         {
             // held.CorrectionQuality, not the live dropdown: the reads happened earlier, possibly at a
             // different setting, and the archived report must name the mode they were actually made at
-            PublishReport("Test & Copy (accepted, NOT verified)", held.CorrectionQuality, held.ArConfidence,
+            PublishReport($"Test & Copy (accepted, NOT verified, {held.ReadsUsed} reads)",
+                held.CorrectionQuality, held.ArConfidence,
                 held.ArTotal, held.CtdbConfidence, held.CtdbTotal, held.Accurate,
-                "accepted without agreement - NOT test-verified", dir, held.FileCount);
+                $"accepted without agreement after {held.ReadsUsed} reads - NOT test-verified",
+                dir, OutputLayout.CountAudioFiles(dir, held.Format), held.Format);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
@@ -1092,18 +1101,25 @@ public sealed class RipViewModel : PageViewModel
         // meant "Accept anyway" would commit the PREVIOUS disc's audio while the page showed a different
         // disc - and the panel is nested in the disc-present view, so it silently vanished rather than
         // being dismissed. Release it here, and free its staging so a full album is not orphaned.
+        bool heldDropped = false;
         if (_heldResult != null)
         {
             try { _rip.DiscardStaging(_heldResult); } catch { }
             _heldResult = null;
             TestCopyHeld = false;
-            TestCopyText = "The held Test & Copy was dropped because the disc changed.";
+            TestCopyText = "";   // its only binding sits inside the panel that just collapsed
+            heldDropped = true;
         }
         bool open = tray == DriveTrayState.Open;
         AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc - insert an audio CD";
         AlbumArtist = "";
         DiscInfoText = "";
-        StatusText = open ? "Tray open." : "Drive ready - insert an audio CD.";
+        // Say why the held result vanished. It must be assigned AFTER the line above, which would
+        // otherwise overwrite it, and it cannot go in TestCopyText - that binding lives inside the
+        // panel this same method collapses, so the explanation would never be rendered.
+        StatusText = heldDropped
+            ? "The held Test & Copy was dropped because the disc changed - its staging was freed."
+            : open ? "Tray open." : "Drive ready - insert an audio CD.";
         OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(SelectedRelease));
     }
@@ -1154,14 +1170,16 @@ public sealed class RipViewModel : PageViewModel
 
     private void PublishReport(bool encode, VerifyResult result, int correctionQualityUsed)
         => PublishReport(encode ? "Rip" : "Verify", correctionQualityUsed, result.ArConfidence, result.ArTotal,
-            result.CtdbConfidence, result.CtdbTotal, result.Accurate, result.Status, result.OutputDir, result.FileCount);
+            result.CtdbConfidence, result.CtdbTotal, result.Accurate, result.Status, result.OutputDir,
+            result.FileCount, encode ? result.Format : "");
 
     /// <summary>Record a finished job in the report page and the history list. Every completed operation
     /// belongs here - a Test &amp; Copy most of all, since it is the highest-assurance mode and used to be
     /// the ONE that left no trace: it never called this, so the app's own history had no record that the
     /// most carefully verified rips had ever happened.</summary>
     private void PublishReport(string mode, int correctionQualityUsed, int arConf, int arTotal,
-        int ctConf, int ctTotal, bool accurate, string status, string outputDir, int fileCount)
+        int ctConf, int ctTotal, bool accurate, string status, string outputDir, int fileCount,
+        string format = "")
     {
         var d = _lastDisc;
         var report = new RipReport
@@ -1182,6 +1200,7 @@ public sealed class RipViewModel : PageViewModel
             Status = status,
             OutputDir = outputDir,
             FileCount = fileCount,
+            Format = format,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
             TocId = d?.TocId ?? ""
         };
