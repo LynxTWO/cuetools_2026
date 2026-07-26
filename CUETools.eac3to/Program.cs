@@ -451,11 +451,11 @@ namespace CUETools.eac3to
                         );
                 }
 #if !DEBUG
-                catch (Exception ex)
+                catch (Exception)
                 {
                     if (audioSource != null) audioSource.Close();
                     if (audioDest != null) audioDest.Delete();
-                    throw ex;
+                    throw;
                 }
 #endif
                 audioSource.Close();

@@ -34,25 +34,74 @@ public static class OutputLayout
         public string[] TrackNames { get; init; }
     }
 
+    private sealed class RenderedLayout
+    {
+        public string RelativeDir { get; init; } = "";
+        public string[] TrackRemainders { get; init; } = Array.Empty<string>();
+    }
+
     /// <summary>Compute and create the layout for a job, and hand the sheet its per-track names.
     /// <paramref name="albumFallback"/> supplies an album folder when the naming scheme produces no
     /// shared one; it must never return empty.</summary>
     public static Plan PrepareAndApply(CUESheet cue, string baseDir, string format,
         NamingScheme scheme, Func<string> albumFallback, Action<string>? onNote = null)
     {
+        RenderedLayout rendered = Render(cue, scheme, albumFallback);
+        // Refuse to write over an earlier rip. Must happen before anything is created.
+        string relDir = OutputGuard.NonClobberingAlbumDir(baseDir, rendered.RelativeDir, format, onNote);
+
+        string outDir = Path.Combine(baseDir, relDir);
+        Directory.CreateDirectory(outDir);
+        string[] finalNames = ApplyTrackNames(cue, rendered.TrackRemainders, outDir, outDir.Length);
+        return new Plan { OutputDir = outDir, RelativeDir = relDir, TrackNames = finalNames };
+    }
+
+    /// <summary>
+    /// Prepare a standard rip in an owned same-volume staging directory while atomically reserving
+    /// its final album name. The returned <paramref name="publication"/> must be published or
+    /// disposed by the caller.
+    /// </summary>
+    public static Plan PrepareAndApplyTransactional(CUESheet cue, string baseDir,
+        NamingScheme scheme, Func<string> albumFallback, out AlbumOutputTransaction publication,
+        Action<string>? onNote = null)
+    {
+        RenderedLayout rendered = Render(cue, scheme, albumFallback);
+        publication = AlbumOutputTransaction.Reserve(baseDir, rendered.RelativeDir, onNote);
+        try
+        {
+            string[] finalNames = ApplyTrackNames(cue, rendered.TrackRemainders,
+                publication.StagingDirectory,
+                Math.Max(publication.StagingDirectory.Length,
+                    publication.DestinationDirectory.Length));
+            return new Plan
+            {
+                OutputDir = publication.StagingDirectory,
+                RelativeDir = publication.RelativeDirectory,
+                TrackNames = finalNames,
+            };
+        }
+        catch
+        {
+            publication.Dispose();
+            throw;
+        }
+    }
+
+    private static RenderedLayout Render(CUESheet cue, NamingScheme scheme,
+        Func<string> albumFallback)
+    {
         int trackCount = Math.Max(0, cue.TrackCount);
         if (trackCount == 0)
         {
-            // Nothing to name, but the job still needs its own folder for the cue, log and cover.
-            string onlyDir = OutputGuard.NonClobberingAlbumDir(baseDir, albumFallback(), format, onNote);
-            string onlyFull = Path.Combine(baseDir, onlyDir);
-            Directory.CreateDirectory(onlyFull);
-            return new Plan { OutputDir = onlyFull, RelativeDir = onlyDir, TrackNames = Array.Empty<string>() };
+            string onlyDir = albumFallback();
+            if (string.IsNullOrWhiteSpace(onlyDir)) onlyDir = "Unknown Album";
+            return new RenderedLayout { RelativeDir = onlyDir };
         }
 
         var rel = new string[trackCount];
         for (int t = 0; t < trackCount; t++)
-            rel[t] = NamingEngine.Render(NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
+            rel[t] = NamingEngine.Render(
+                NamingContextMapper.FromMetadata(cue.Metadata, t, trackCount), scheme);
 
         var split = NamingPaths.Split(rel);
 
@@ -62,28 +111,63 @@ public static class OutputLayout
         // into the output base and overwritten by the next such job.
         string relDir = string.IsNullOrWhiteSpace(split.commonDir) ? albumFallback() : split.commonDir;
         if (string.IsNullOrWhiteSpace(relDir)) relDir = "Unknown Album";
+        return new RenderedLayout { RelativeDir = relDir, TrackRemainders = split.remainders };
+    }
 
-        // Refuse to write over an earlier rip. Must happen before anything is created.
-        relDir = OutputGuard.NonClobberingAlbumDir(baseDir, relDir, format, onNote);
-
-        string outDir = Path.Combine(baseDir, relDir);
-        Directory.CreateDirectory(outDir);
-
+    private static string[] ApplyTrackNames(CUESheet cue, string[] remainders, string workingDir,
+        int destinationDirLength)
+    {
+        if (remainders.Length == 0) return Array.Empty<string>();
         // Cap first, THEN uniquify: truncation can create a collision, and only this order lets the
         // uniquifier separate the result.
-        var capped = NamingPaths.CapPathLength(split.remainders, outDir.Length);
+        var capped = NamingPaths.CapPathLength(remainders, destinationDirLength);
         var finalNames = NamingPaths.EnsureUniqueTrackNames(capped);
 
         // A track name may carry its own subdirectory ("Disc 2/..."), which must exist before the
         // engine writes into it.
+        string root = Path.GetFullPath(workingDir);
+        RequirePlainDirectory(root);
+        string prefix = root.TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         foreach (var name in finalNames)
         {
-            string sub = Path.GetDirectoryName(Path.Combine(outDir, name));
-            if (!string.IsNullOrEmpty(sub)) Directory.CreateDirectory(sub);
+            string full = Path.GetFullPath(Path.Combine(root, name));
+            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                throw new IOException(
+                    "A rendered track path escaped the album output directory.");
+            string sub = Path.GetDirectoryName(full);
+            if (!string.IsNullOrEmpty(sub))
+            {
+                Directory.CreateDirectory(sub);
+                RequirePlainDirectoryAncestry(root, sub);
+            }
         }
 
         cue.SetExplicitTrackNames(finalNames);
-        return new Plan { OutputDir = outDir, RelativeDir = relDir, TrackNames = finalNames };
+        return finalNames;
+    }
+
+    private static void RequirePlainDirectoryAncestry(string root, string target)
+    {
+        string relative = Path.GetRelativePath(root, target);
+        if (relative == ".") return;
+        string current = root;
+        foreach (string part in relative.Split(
+            new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+            RequirePlainDirectory(current);
+        }
+    }
+
+    private static void RequirePlainDirectory(string path)
+    {
+        FileAttributes attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.Directory) == 0 ||
+            (attributes & FileAttributes.ReparsePoint) != 0)
+            throw new IOException(
+                "An album output directory is not a regular directory.");
     }
 
     /// <summary>How many audio files a job actually wrote under its album folder.

@@ -26,18 +26,20 @@ jobs:
       MSBUILD_PATH: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe
       SLN_PATH: CUETools.sln
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
-      - name: Apply patches
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+      - name: Apply managed dependency patches
         # yamllint disable-line rule:line-length
         run: |
-          git apply --directory=ThirdParty/flac ThirdParty/submodule_flac_CUETools.patch --verbose --whitespace=nowarn
-          powershell -c "Expand-Archive ThirdParty/MAC_SDK/MAC_1086_SDK.zip -DestinationPath ThirdParty/MAC_SDK/"
-          git apply --directory=ThirdParty/MAC_SDK ThirdParty/ThirdParty_MAC_SDK_CUETools.patch --verbose
           git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose
-          git apply --directory=ThirdParty/WavPack ThirdParty/submodule_WavPack_CUETools.patch --verbose
           git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose
+      - name: Rebuild required x64 native codec DLLs from pinned source
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Build-NativeDependencies.ps1 -Configuration Release
       - name: MSBuild NuGet restore
         run: |
           "%MSBUILD_PATH%" "%SLN_PATH%" -t:restore -p:Configuration=Release
@@ -50,17 +52,37 @@ jobs:
       - name: Build Release|Win32
         run: |
           "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|Win32"
-      # Gate releases on the same suites CI runs; Release|x64 produced ThirdParty\x64\libFLAC_dynamic.dll for the codec tests.
-      - name: Run parity tests
+      - name: Build modern closure with checked warning budget
         run: |
-          dotnet test CUETools\CUETools.TestParity\CUETools.TestParity.csproj -c Release --nologo
-      - name: Run codec tests
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Invoke-BuildWithWarningGate.ps1 -Configuration Release
+      # Gate releases on every hermetic suite with explicit discovery/skip counts.
+      - name: Run all test discovery gates
         run: |
-          dotnet test CUETools\CUETools.TestCodecs\CUETools.TestCodecs.csproj -c Release --nologo
-      - name: Collect files
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Invoke-TestSuites.ps1 -Lane all -Configuration Release -ResultsDirectory "%RUNNER_TEMP%\cuetools-release-tests"
+      - name: Fuzz smoke - properties and parser/decoder corpora
+        run: |
+          dotnet run --project CUETools.Fuzz\CUETools.Fuzz.csproj -c Release --no-build -- 20260712 20000
+      - name: Collect and bind classic package plugins
         run: |
           collect_files.bat
-      - uses: actions/upload-artifact@v4
+      - name: Validate classic artifact contract and architecture-specific trust manifest
+        run: |
+          dotnet run --project eng\release\ArtifactValidator\ArtifactValidator.csproj --configuration Release -- bin\Release\CUETools_2.2.6 eng\release\classic-win.manifest.json
+      - name: Clean-publish and validate CUETools 2026
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Publish-Wpf.ps1 -Configuration Release
+      - name: Generate deterministic artifact hashes and source receipts
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Provenance.ps1 -ArtifactDirectory bin\Release\CUETools_2.2.6 -ContractPath eng\release\classic-win.manifest.json -OutputDirectory bin\Release\evidence\provenance -ArtifactName CUETools_2.2.6
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Provenance.ps1 -ArtifactDirectory bin\Release\CUETools2026-win-x64 -ContractPath eng\release\wpf-win-x64.manifest.json -OutputDirectory bin\Release\evidence\provenance -ArtifactName CUETools2026-win-x64
+      - name: Generate pinned CycloneDX and SPDX SBOMs
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Sboms.ps1 -ArtifactDirectory bin\Release\CUETools2026-win-x64 -OutputDirectory bin\Release\evidence\sbom\wpf -CycloneInputPath CUETools.Wpf\CUETools.Wpf.csproj -CycloneFramework net8.0-windows -CycloneRuntime win-x64 -OutputStem cuetools-wpf -PackageName "CUETools 2026" -PackageVersion 2026.1.0
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Sboms.ps1 -ArtifactDirectory bin\Release\CUETools_2.2.6 -OutputDirectory bin\Release\evidence\sbom\classic -CycloneInputPath CUETools.sln -CycloneFramework net47 -OutputStem cuetools-classic -PackageName CUETools -PackageVersion 2.2.6
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deploy
-          path: bin/Release/CUETools_*/
+          path: |
+            bin/Release/CUETools_2.2.6/
+            bin/Release/CUETools2026-win-x64/
+            bin/Release/evidence/

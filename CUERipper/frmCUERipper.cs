@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
@@ -162,7 +163,8 @@ namespace CUERipper
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine(ex.Message);
+                System.Diagnostics.Trace.WriteLine(
+                    "CUERipper settings load failed (" + ex.GetType().Name + ").");
             }
 
             bindingSourceCR.DataSource = data;
@@ -334,7 +336,8 @@ namespace CUERipper
 				}
 				catch (Exception ex)
 				{
-					System.Diagnostics.Trace.WriteLine(ex.Message);
+					System.Diagnostics.Trace.WriteLine(
+						"Drive probe failed (" + ex.GetType().Name + ").");
 				}
 				reader.Close();
 				if (reader.ARName != null)
@@ -878,7 +881,8 @@ namespace CUERipper
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine(ex.Message);
+                System.Diagnostics.Trace.WriteLine(
+                    "Local metadata lookup failed (" + ex.GetType().Name + ").");
             }
 
             foreach (var ctdbMeta in cueSheet.CTDB.Metadata)
@@ -965,7 +969,9 @@ namespace CUERipper
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Trace.WriteLine(ex.Message);
+                    System.Diagnostics.Trace.WriteLine(
+                        "Metadata release mapping failed (" +
+                        ex.GetType().Name + ").");
                 }
             }
 
@@ -1092,34 +1098,62 @@ namespace CUERipper
 
 		private void frmCUERipper_FormClosed(object sender, FormClosedEventArgs e)
 		{
-			SettingsWriter sw = new SettingsWriter("CUERipper", "settings.txt", Application.ExecutablePath);
-			_config.Save(sw);
-			//sw.Save("CreateEACLOG", _config.createEACLOG);
-			//sw.Save("PreserveHTOA", _config.preserveHTOA);
-			//sw.Save("CreateM3U", _config.createM3U);
-			sw.Save("OutputAudioType", (int)SelectedOutputAudioType);
-			sw.Save("ComboImage", bnComboBoxImage.SelectedIndex);
-			sw.Save("PathFormat", bnComboBoxOutputFormat.Text);
-			sw.Save("SecureMode", trackBarSecureMode.Value);
-			sw.Save("OutputPathUseTemplates", bnComboBoxOutputFormat.Items.Count - OutputPathUseTemplates.Length);
-            sw.Save("TestAndCopy", this.testAndCopy);
-			var SizeIncrement = Size - MinimumSize;
-			sw.Save("WidthIncrement", SizeIncrement.Width);
-			sw.Save("HeightIncrement", SizeIncrement.Height);
-			for (int iFormat = bnComboBoxOutputFormat.Items.Count - 1; iFormat >= OutputPathUseTemplates.Length; iFormat--)
-				sw.Save(string.Format("OutputPathUseTemplate{0}", iFormat - OutputPathUseTemplates.Length), bnComboBoxOutputFormat.Items[iFormat].ToString());
+			try
+			{
+				using (SettingsWriter sw = new SettingsWriter(
+					"CUERipper", "settings.txt", Application.ExecutablePath))
+				{
+					_config.Save(sw);
+					//sw.Save("CreateEACLOG", _config.createEACLOG);
+					//sw.Save("PreserveHTOA", _config.preserveHTOA);
+					//sw.Save("CreateM3U", _config.createM3U);
+					sw.Save("OutputAudioType", (int)SelectedOutputAudioType);
+					sw.Save("ComboImage", bnComboBoxImage.SelectedIndex);
+					sw.Save("PathFormat", bnComboBoxOutputFormat.Text);
+					sw.Save("SecureMode", trackBarSecureMode.Value);
+					sw.Save("OutputPathUseTemplates", bnComboBoxOutputFormat.Items.Count - OutputPathUseTemplates.Length);
+					sw.Save("TestAndCopy", this.testAndCopy);
+					var SizeIncrement = Size - MinimumSize;
+					sw.Save("WidthIncrement", SizeIncrement.Width);
+					sw.Save("HeightIncrement", SizeIncrement.Height);
+					for (int iFormat = bnComboBoxOutputFormat.Items.Count - 1; iFormat >= OutputPathUseTemplates.Length; iFormat--)
+						sw.Save(string.Format("OutputPathUseTemplate{0}", iFormat - OutputPathUseTemplates.Length), bnComboBoxOutputFormat.Items[iFormat].ToString());
 
-            using (TextWriter tw = new StringWriter())
-            using (XmlWriter xw = XmlTextWriter.Create(tw, xmlEmptySettings))
-            {
-                CUERipperConfig.serializer.Serialize(xw, cueRipperConfig, xmlEmptyNamespaces);
-                sw.SaveText("CUERipper", tw.ToString());
-            }
+					using (TextWriter tw = new StringWriter())
+					using (XmlWriter xw = XmlTextWriter.Create(tw, xmlEmptySettings))
+					{
+						CUERipperConfig.serializer.Serialize(xw, cueRipperConfig, xmlEmptyNamespaces);
+						sw.SaveText("CUERipper", tw.ToString());
+					}
 
-			sw.Close();
+					sw.Close();
+				}
+			}
+			catch (PlatformNotSupportedException ex)
+			{
+				ShowCredentialSaveFailure(ex);
+			}
+			catch (CryptographicException ex)
+			{
+				ShowCredentialSaveFailure(ex);
+			}
 			// Save current metadata
 			if (data.selectedRelease != null)
 				data.selectedRelease.metadata.Save();
+		}
+
+		private static void ShowCredentialSaveFailure(Exception exception)
+		{
+			System.Diagnostics.Trace.WriteLine(
+				"Settings save rejected by credential protection: " +
+				exception.GetType().Name);
+			MessageBox.Show(
+				"Settings were not saved because the proxy password could not be protected " +
+				"for the current Windows user. Clear the proxy password or save the settings " +
+				"on Windows, then try again.",
+				"CUERipper settings",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Error);
 		}
 
 		private void listTracks_BeforeLabelEdit(object sender, LabelEditEventArgs e)

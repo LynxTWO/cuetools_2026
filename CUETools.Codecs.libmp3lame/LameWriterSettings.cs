@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace CUETools.Codecs.libmp3lame
@@ -14,6 +15,10 @@ namespace CUETools.Codecs.libmp3lame
 
         [Browsable(false)]
         public abstract string Name { get; }
+
+        [Browsable(false)]
+        public string Version =>
+            Marshal.PtrToStringAnsi(libmp3lamedll.get_lame_version());
 
         [Browsable(false)]
         public Type EncoderType => typeof(AudioEncoder);

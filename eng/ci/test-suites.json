@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "suites": [
+    {
+      "id": "parity",
+      "lane": "legacy",
+      "project": "CUETools/CUETools.TestParity/CUETools.TestParity.csproj",
+      "framework": "net47",
+      "minimumDiscovered": 22,
+      "maximumSkipped": 4
+    },
+    {
+      "id": "codecs",
+      "lane": "legacy",
+      "project": "CUETools/CUETools.TestCodecs/CUETools.TestCodecs.csproj",
+      "framework": "net47",
+      "minimumDiscovered": 109,
+      "maximumSkipped": 2
+    },
+    {
+      "id": "processor",
+      "lane": "legacy",
+      "project": "CUETools/CUETools.TestProcessor/CUETools.TestProcessor.csproj",
+      "framework": "net47",
+      "minimumDiscovered": 8,
+      "maximumSkipped": 1
+    },
+    {
+      "id": "ripper",
+      "lane": "modern",
+      "project": "CUETools.Ripper.Tests/CUETools.Ripper.Tests.csproj",
+      "framework": "net8.0-windows",
+      "minimumDiscovered": 8,
+      "maximumSkipped": 0
+    },
+    {
+      "id": "wpf",
+      "lane": "modern",
+      "project": "CUETools.Wpf.Tests/CUETools.Wpf.Tests.csproj",
+      "framework": "net8.0-windows",
+      "minimumDiscovered": 241,
+      "maximumSkipped": 0
+    }
+  ],
+  "excludedSuites": [
+    {
+      "project": "CUETools/TestRipper/TestRipper.csproj",
+      "reason": "Non-hermetic hardware/fixture experiment: its only test reads 64 captures from the hard-coded Y:\\Temp\\dbg\\960 path during class initialization and uses the retired VS2010 QualityTools adapter."
+    }
+  ]
+}

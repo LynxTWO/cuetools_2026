@@ -1,5 +1,10 @@
 # LAME v4 - Quality-First Plan
 
+> Current-state note, 2026-07-26: official upstream LAME 4.0 now owns the v4
+> version line. Keep this as the test/quality plan for the local 3.100-derived
+> research, but do not integrate or publish it until it has been compared and
+> rebased against official 4.0 and assigned a non-conflicting downstream name.
+
 User mandate 2026-07-02: **do not sacrifice quality for speed; improve the quality of the LAME MP3 codec at all reasonable costs**, and where *more* cost might justify the outcome, plan it and say so. This supersedes the speed-led ordering in `lame-v4-proposal.md` (that doc's baseline numbers and survey remain valid).
 
 ## Non-negotiables

@@ -6,6 +6,14 @@ Use this reference after the first anti-dark-code rollout when you want the outp
 
 For confidence levels, the unknowns entry shape, the canonical approval-gated areas list, and default deliverable paths, see `00-conventions.md`.
 
+## Contents
+
+- Goal, triggers, companion references, and preflight
+- Backlog and bounded safe-fix batches
+- Assurance claims, transactions, and TODO lifecycle
+- Evidence gaps, approval packets, and touched-slice verification
+- Maintenance, companion loop, and acceptance
+
 ## Goal
 
 Turn current anti-dark-code outputs into:
@@ -42,7 +50,7 @@ If those inputs are missing or stale, refresh them first. Do not build remediati
 
 ## Step 0: Preflight and stale-artifact check
 
-Run `00-preflight.md` first. The remediation-loop's preflight needs are a strict subset of what `00-preflight.md` covers, so do not duplicate the work — open it, run it, and use its recommendation to decide whether Step 1 can start now or whether an earlier pass needs to refresh first.
+Run `00-preflight.md` first. The remediation-loop's preflight needs are a strict subset of what `00-preflight.md` covers, so do not duplicate the work - open it, run it, and use its recommendation to decide whether Step 1 can start now or whether an earlier pass needs to refresh first.
 
 The duplication here is intentional: the preflight reference is also a first-class entry point for engagements that begin without remediation in mind. Pass `11` cross-links to it so a remediation-led engagement still gets the same gate.
 
@@ -114,6 +122,61 @@ Before editing, create or update `docs/review/safe-fix-plan.md` with, for each s
 - observability note if relevant
 - whether the item is comment-only, docs-only, or behavior-preserving code cleanup
 
+### Assurance-claim oracle
+
+Treat words such as `verified`, `bit-exact`, `atomic`, `repaired`, `complete`, and `safe` as contracts, not adjectives. For each claim, record:
+
+1. the claimed object and scope (frame, stream, finalized file, staged output set, or published result)
+2. the producer path and an independent oracle that can falsify the claim
+3. every finalization boundary (`finish`, `flush`, `close`, process exit, final length, manifest completion) and how its return or exception is checked
+4. the whole-output proof when the claim covers a whole artifact; frame checks alone do not prove final blocks, container metadata, sample count, or truncation safety
+5. positive, mismatch, truncation, finalization-failure, cancellation, and unavailable-capability results when applicable
+6. the exact runtime, toolchain, target tuple, and observed counts
+7. every UI, tooltip, log, or document that repeats the claim
+
+For lossless audio or similar transforms, a whole-output oracle normally reopens or decodes the finalized output and compares format, expected length or sample count, and all payload data (directly or by a collision-resistant digest over the exact bytes). A successful write or per-frame comparison does not cover an ignored final flush. When the required runtime or codec is unavailable, record `capability unavailable`; do not report the real path as passing.
+
+Do not let one implementation lend its guarantee to another format that lacks the same oracle.
+
+### Transaction and atomic-publication checklist
+
+Use this checklist for repair, import, output publication, multi-file encoding, migration artifacts, or any operation advertised as atomic:
+
+- Resolve canonical source, staging, quarantine, and final paths; enforce containment and reject reparse or traversal surprises where the threat model requires it.
+- Reserve the destination against concurrent writers.
+- Create a unique same-volume sibling stage with an unpredictable ownership token. Delete, move, or quarantine it only after proving ownership; a path name alone is not ownership.
+- Write only to the stage. Keep the source and final destination unchanged until all producers finalize successfully.
+- Check every finalize, flush, close, and child-process result. Require the exact expected output set, nonempty required files, and no silent missing tail outputs.
+- Reopen the staged result through an independent reader or validator. For repairs, prove the repair engine actually applied the intended correction and validate the repaired copy, not the source or an in-memory promise.
+- Write a completion marker only after validation, then publish with one same-volume atomic rename into an absent final destination.
+- Name the exact commit point. Once it succeeds, cleanup, marker removal, reservation
+  release, advisory callbacks, or diagnostics must not reclassify the operation as
+  failed and invite a destructive or duplicate retry. Make post-commit cleanup
+  best-effort or report it through a separate non-transactional channel.
+- On failure or cancellation, expose no partial final result. Preserve the original source and any independently verified evidence; quarantine or remove only owned incomplete staging.
+- Define stale-stage recovery without allowing a replaced or attacker-controlled directory to be deleted.
+- Fault-test mid-write failure, finalization failure, verification mismatch, cancellation, concurrent publication, missing or extra outputs, stale recovery, stage replacement before cleanup, and cleanup failure immediately after the commit point.
+
+State the guarantee precisely. Atomic publication hides partial final results; it does not by itself prove durable storage, content correctness, or successful repair.
+
+### Subprocess timeout and termination checklist
+
+Use this for external tools, isolated parser/fuzz children, helpers, and service probes:
+
+- Bound startup, active work, and stdout/stderr draining according to the actual
+  progress contract; a total-runtime timeout is not interchangeable with an idle
+  timeout.
+- On timeout, attempt process-tree termination where the runtime supports it and
+  preserve the termination failure as explicit evidence.
+- Bound the post-kill reap as well. Never follow a timed `WaitForExit` with an
+  unbounded wait on the path that exists specifically to detect nontermination.
+- Ensure redirected pipes cannot fill while the parent is waiting. Drain
+  concurrently or impose an output cap appropriate to the harness.
+- Return failure if the child cannot be proven terminated. Cleanup failure must not
+  be silently converted into a passing timeout assertion.
+- Fault-test a normal exit, timeout plus successful kill, kill failure, and a child
+  that remains alive after the kill deadline where the platform permits injection.
+
 Edit rules:
 - keep changes small and single-purpose
 - do not bundle unrelated fixes
@@ -145,15 +208,15 @@ A safe fix sometimes has to leave a `TODO` behind because the full fix is approv
 
 Lifecycle:
 
-1. **Plant** — the TODO comment names the area, the reason, and the unknowns or backlog entry it points to. A bare `TODO: fix this` is not allowed in remediation work.
+1. **Plant** - the TODO comment names the area, the reason, and the unknowns or backlog entry it points to. A bare `TODO: fix this` is not allowed in remediation work.
    ```ts
    // TODO(adc): redaction here is shallow because the trace SDK formats the body
    // upstream. Tracked in docs/review/remediation-backlog.md#auth-trace-redaction
    // and docs/unknowns/logging-audit.md#auth-trace-shape.
    ```
-2. **Track** — every planted TODO has a matching backlog row (or unknowns row, when evidence is still soft). The row carries the same status vocabulary the rest of the workflow uses (see `00-conventions.md`).
-3. **Clear** — when the underlying work lands, the TODO is removed in the same change that closes the row. The change record names both the TODO removal and the row that closed.
-4. **Audit** — the maintenance harness (pass `10`) should add a reviewer-checklist item asking whether new `TODO(adc):` lines were planted with backlog references, and whether any cleared TODOs left behind a stale comment.
+2. **Track** - every planted TODO has a matching backlog row (or unknowns row, when evidence is still soft). The row carries the same status vocabulary the rest of the workflow uses (see `00-conventions.md`).
+3. **Clear** - when the underlying work lands, the TODO is removed in the same change that closes the row. The change record names both the TODO removal and the row that closed.
+4. **Audit** - the maintenance harness (pass `10`) should add a reviewer-checklist item asking whether new `TODO(adc):` lines were planted with backlog references, and whether any cleared TODOs left behind a stale comment.
 
 If a TODO outlives the engagement that planted it, the next preflight should treat it as a stop condition and decide whether the row still makes sense before any new pass extends it.
 

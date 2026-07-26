@@ -1,0 +1,263 @@
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version 2.0
+
+$safetyScript = Join-Path $PSScriptRoot "ReleaseSafety.ps1"
+. $safetyScript
+
+$script:checkCount = 0
+function Assert-True([bool]$Condition, [string]$Message) {
+    if (-not $Condition) { throw $Message }
+    $script:checkCount++
+}
+
+function Assert-Equal($Expected, $Actual, [string]$Message) {
+    if (-not [object]::Equals($Expected, $Actual)) {
+        throw "$Message Expected '$Expected', got '$Actual'."
+    }
+    $script:checkCount++
+}
+
+function Assert-Null($Actual, [string]$Message) {
+    if ($null -ne $Actual) {
+        throw "$Message Expected null, got '$Actual'."
+    }
+    $script:checkCount++
+}
+
+function Assert-Throws([scriptblock]$Action, [string]$MessagePattern, [string]$Message) {
+    $exceptionMessage = $null
+    try {
+        & $Action
+    }
+    catch {
+        $exceptionMessage = $_.Exception.Message
+    }
+    if ($null -eq $exceptionMessage) {
+        throw "$Message Expected an exception."
+    }
+    if ($exceptionMessage -notmatch $MessagePattern) {
+        throw "$Message Unexpected exception: $exceptionMessage"
+    }
+    $script:checkCount++
+}
+
+$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$tempRoot = [IO.Path]::Combine(
+    $tempBase,
+    "cuetools-release-safety-" + [Guid]::NewGuid().ToString("N"))
+$reparseEntries = New-Object "Collections.Generic.List[string]"
+New-Item -ItemType Directory -Path $tempRoot | Out-Null
+
+try {
+    $safeRoot = Join-Path $tempRoot "safe"
+    $safeChild = Join-Path $safeRoot "child"
+    New-Item -ItemType Directory -Path $safeChild | Out-Null
+    Assert-NoReparsePointInExistingPath -Path $safeChild -Purpose "Safe test path"
+    $script:checkCount++
+
+    $outside = Join-Path $tempRoot "outside"
+    New-Item -ItemType Directory -Path $outside | Out-Null
+    [IO.File]::WriteAllText((Join-Path $outside "sentinel.txt"), "outside")
+
+    $junction = Join-Path $tempRoot "junction"
+    New-Item -ItemType Junction -Path $junction -Target $outside | Out-Null
+    $reparseEntries.Add($junction)
+    Assert-Throws `
+        { Assert-NoReparsePointInExistingPath -Path $junction -Purpose "Target test path" } `
+        "reparse point" `
+        "A target junction was accepted."
+    Assert-Throws `
+        { Assert-NoReparsePointInExistingPath -Path (Join-Path $junction "child") -Purpose "Parent test path" } `
+        "reparse point" `
+        "A junction in an existing parent component was accepted."
+
+    $outsideReceipt = Join-Path $outside "receipt.json"
+    [IO.File]::WriteAllText($outsideReceipt, "outside-receipt")
+    $receiptLink = Join-Path $tempRoot "receipt.json"
+    try {
+        New-Item `
+            -ItemType SymbolicLink `
+            -Path $receiptLink `
+            -Target $outsideReceipt `
+            -ErrorAction Stop | Out-Null
+    }
+    catch {
+        # Creating file symlinks requires an elevated token when Windows Developer
+        # Mode is unavailable. A leaf junction exercises the same ReparsePoint
+        # attribute gate without weakening the test on those hosts.
+        New-Item -ItemType Junction -Path $receiptLink -Target $outside | Out-Null
+    }
+    $reparseEntries.Add($receiptLink)
+    Assert-Throws `
+        { Assert-NoReparsePointInExistingPath -Path $receiptLink -Purpose "Build receipt output" } `
+        "reparse point" `
+        "An existing receipt leaf reparse point was accepted."
+
+    Assert-True `
+        (Test-SameOrDescendantPath -CandidatePath $safeRoot -RootPath $safeRoot) `
+        "Path equality was not recognized."
+    Assert-True `
+        (Test-SameOrDescendantPath -CandidatePath $safeChild -RootPath $safeRoot) `
+        "A descendant path was not recognized."
+    Assert-True `
+        (-not (Test-SameOrDescendantPath `
+            -CandidatePath (Join-Path $tempRoot "safe-sibling") `
+            -RootPath $safeRoot)) `
+        "A prefix sibling was incorrectly recognized as a descendant."
+
+    foreach ($validName in @("CUETools_2.2.6", "CUETools2026-win-x64")) {
+        Assert-SafeArtifactName -Name $validName
+        $script:checkCount++
+    }
+    foreach ($invalidName in @(
+        "..",
+        "../escape",
+        "bad/name",
+        ".hidden",
+        "name.",
+        "name with space",
+        "NUL",
+        ("x" * 129)
+    )) {
+        Assert-Throws `
+            { Assert-SafeArtifactName -Name $invalidName } `
+            "simple safe filename" `
+            "Unsafe artifact name '$invalidName' was accepted."
+    }
+
+    Assert-Null `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/libFLAC_dynamic.vcxproj") `
+        "A native project source input was classified as generated."
+    Assert-Null `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/libFLAC_dynamic.vcxproj.filters") `
+        "A native project filter source input was classified as generated."
+    Assert-Null `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/stream_decoder.cpp") `
+        "A C++ source input was classified as generated."
+    Assert-Equal `
+        "native-object" `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/x64/Release_dynamic/decode.obj") `
+        "An object file was not classified."
+    Assert-Equal `
+        "native-build-trace" `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/x64/Release_dynamic/build.tlog") `
+        "A native build trace was not classified."
+    Assert-Equal `
+        "native-build-log" `
+        (Get-GeneratedUntrackedClassification "src/libFLAC/x64/Release_dynamic/libFLAC_dynamic.vcxproj.FileListAbsolute.txt") `
+        "A native absolute file list was not classified."
+
+    $artifact = Join-Path $tempRoot "artifact"
+    $artifactChild = Join-Path $artifact "content"
+    New-Item -ItemType Directory -Path $artifactChild | Out-Null
+    [IO.File]::WriteAllText((Join-Path $artifact "root.txt"), "root")
+    [IO.File]::WriteAllText((Join-Path $artifactChild "child.txt"), "child")
+    $verifiedFiles = @(Get-VerifiedArtifactFiles -Root $artifact)
+    Assert-Equal 2 $verifiedFiles.Count "The safe artifact walk returned the wrong file count."
+
+    $artifactJunction = Join-Path $artifact "linked-content"
+    New-Item -ItemType Junction -Path $artifactJunction -Target $outside | Out-Null
+    $reparseEntries.Add($artifactJunction)
+    Assert-Throws `
+        { Get-VerifiedArtifactFiles -Root $artifact } `
+        "reparse point" `
+        "An artifact child junction was accepted."
+    Assert-Throws `
+        { Get-VerifiedArtifactFiles -Root $junction } `
+        "reparse point" `
+        "An artifact root junction was accepted."
+
+    $publishSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "Publish-Wpf.ps1") -Raw
+    $publishGuardIndex = $publishSource.IndexOf(
+        "Assert-NoReparsePointInExistingPath",
+        [StringComparison]::Ordinal)
+    $publishRemoveIndex = $publishSource.IndexOf(
+        "Remove-Item -LiteralPath `$ArtifactDirectory -Recurse -Force",
+        [StringComparison]::Ordinal)
+    $publishTreeGuardIndex = $publishSource.IndexOf(
+        "Get-VerifiedArtifactFiles -Root `$ArtifactDirectory",
+        [StringComparison]::Ordinal)
+    Assert-True `
+        ($publishGuardIndex -ge 0 -and
+            $publishTreeGuardIndex -ge 0 -and
+            $publishRemoveIndex -ge 0 -and
+            $publishGuardIndex -lt $publishRemoveIndex -and
+            $publishTreeGuardIndex -lt $publishRemoveIndex) `
+        "Publish-Wpf.ps1 does not guard the full artifact tree before recursive cleanup."
+
+    $provenanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "New-Provenance.ps1") -Raw
+    Assert-True `
+        ($provenanceSource.Contains("Test-SameOrDescendantPath")) `
+        "New-Provenance.ps1 does not reject equal and descendant output paths."
+    Assert-True `
+        ($provenanceSource.Contains("Get-VerifiedArtifactFiles")) `
+        "New-Provenance.ps1 does not use refusal-based artifact traversal."
+    Assert-True `
+        ($provenanceSource.Contains("Get-GeneratedUntrackedClassification")) `
+        "New-Provenance.ps1 does not classify generated native outputs."
+    $receiptGuardIndex = $provenanceSource.IndexOf(
+        '-Purpose "Build receipt output"',
+        [StringComparison]::Ordinal)
+    $receiptWriteIndex = $provenanceSource.IndexOf(
+        "[IO.File]::WriteAllText(`r`n    `$receiptPath",
+        [StringComparison]::Ordinal)
+    if ($receiptWriteIndex -lt 0) {
+        $receiptWriteIndex = $provenanceSource.IndexOf(
+            "[IO.File]::WriteAllText(`n    `$receiptPath",
+            [StringComparison]::Ordinal)
+    }
+    Assert-True `
+        ($receiptGuardIndex -ge 0 -and
+            $receiptWriteIndex -ge 0 -and
+            $receiptGuardIndex -lt $receiptWriteIndex) `
+        "New-Provenance.ps1 does not reject an existing receipt reparse point before writing."
+
+    Assert-True `
+        (Test-Path -LiteralPath (Join-Path $outside "sentinel.txt") -PathType Leaf) `
+        "The junction target was modified during refusal testing."
+
+    Write-Host "Release safety checks passed: $script:checkCount"
+}
+finally {
+    foreach ($reparsePath in $reparseEntries) {
+        if (Test-Path -LiteralPath $reparsePath) {
+            $reparseInfo = Get-Item -LiteralPath $reparsePath -Force
+            if (($reparseInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -or
+                -not $reparsePath.StartsWith(
+                    $tempRoot.TrimEnd(
+                        [IO.Path]::DirectorySeparatorChar,
+                        [IO.Path]::AltDirectorySeparatorChar) +
+                        [IO.Path]::DirectorySeparatorChar,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove an unexpected test reparse point: $reparsePath"
+            }
+            # Windows PowerShell 5.1 can throw a NullReferenceException when Remove-Item
+            # removes a directory junction. Directory.Delete removes the junction itself,
+            # not its target, after the checks above constrain the exact entry.
+            if ($reparseInfo.PSIsContainer) {
+                [IO.Directory]::Delete($reparsePath)
+            }
+            else {
+                [IO.File]::Delete($reparsePath)
+            }
+        }
+    }
+
+    $tempPrefix = $tempBase.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) +
+        [IO.Path]::DirectorySeparatorChar
+    $tempLeaf = [IO.Path]::GetFileName($tempRoot)
+    if (-not $tempRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        -not $tempLeaf.StartsWith(
+            "cuetools-release-safety-",
+            [StringComparison]::Ordinal)) {
+        throw "Refusing to clean an unexpected test path: $tempRoot"
+    }
+    if (Test-Path -LiteralPath $tempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
+}

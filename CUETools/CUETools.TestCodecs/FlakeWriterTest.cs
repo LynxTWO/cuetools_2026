@@ -173,5 +173,94 @@ namespace CUETools.TestCodecs
             AudioBufferTest.AreEqual(buff1, buff2);
             r.Close();
         }
+
+		[TestMethod()]
+		public void TruncatedStreamInfoIsRejectedWithoutLooping()
+		{
+			byte[] prefix = new byte[]
+			{
+				0x66, 0x4c, 0x61, 0x43, 0x00, 0x00, 0x00, 0x22,
+				0x10, 0x00, 0x10, 0x00, 0x00, 0x07, 0x58, 0x00
+			};
+
+			using (var stream = new MemoryStream(prefix, false))
+			{
+				InvalidDataException exception =
+					Assert.ThrowsException<InvalidDataException>(delegate
+					{
+						new AudioDecoder(new DecoderSettings(), "short.flac", stream);
+					});
+				StringAssert.Contains(exception.Message, "truncated FLAC STREAMINFO");
+			}
+		}
+
+		[TestMethod()]
+		public void LargeMetadataBlockCanBeConsumedFromNonSeekableInput()
+		{
+			const int paddingLength = 200000;
+			byte[] source = File.ReadAllBytes("test.flac");
+			byte[] container = new byte[42 + 4 + paddingLength];
+			Buffer.BlockCopy(source, 0, container, 0, 42);
+			container[4] &= 0x7f; // STREAMINFO is followed by the synthetic padding block.
+			container[42] = 0x81; // Last-metadata flag plus PADDING type.
+			container[43] = (byte)(paddingLength >> 16);
+			container[44] = (byte)((paddingLength >> 8) & 0xff);
+			container[45] = (byte)(paddingLength & 0xff);
+
+			var stream = new NonSeekableReadStream(container);
+			var decoder = new AudioDecoder(new DecoderSettings(), "metadata-only.flac", stream);
+			try
+			{
+				Assert.AreEqual(44100, decoder.PCM.SampleRate);
+				var buffer = new AudioBuffer(decoder, 16);
+				Assert.AreEqual(0, decoder.Read(buffer, -1));
+			}
+			finally
+			{
+				decoder.Close();
+			}
+		}
+
+		private sealed class NonSeekableReadStream : Stream
+		{
+			private readonly MemoryStream inner;
+
+			internal NonSeekableReadStream(byte[] bytes)
+			{
+				inner = new MemoryStream(bytes, false);
+			}
+
+			public override bool CanRead { get { return true; } }
+			public override bool CanSeek { get { return false; } }
+			public override bool CanWrite { get { return false; } }
+			public override long Length { get { throw new NotSupportedException(); } }
+			public override long Position
+			{
+				get { throw new NotSupportedException(); }
+				set { throw new NotSupportedException(); }
+			}
+			public override void Flush() { }
+			public override int Read(byte[] buffer, int offset, int count)
+			{
+				return inner.Read(buffer, offset, count);
+			}
+			public override long Seek(long offset, SeekOrigin origin)
+			{
+				throw new NotSupportedException();
+			}
+			public override void SetLength(long value)
+			{
+				throw new NotSupportedException();
+			}
+			public override void Write(byte[] buffer, int offset, int count)
+			{
+				throw new NotSupportedException();
+			}
+			public override void Close()
+			{
+				inner.Close();
+				base.Close();
+			}
+		}
     }
 }

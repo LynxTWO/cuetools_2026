@@ -1,33 +1,71 @@
-# Unknowns: logging audit
+# Unknowns: Logging Audit
 
-Pass 04, 2026-07-02. Entry shape from `.claude/skills/anti-dark-code/references/00-conventions.md`.
+Current-state refresh: 2026-07-26.
 
 ## Entries
 
-### ProxyPassword storage format at rest
+### CUEPlayer settings persistence and Icecast migration
 
-- **Area or file:** `CUETools.Processor\CUEConfigAdvanced.cs:76`, `CUETools.Processor\Settings\SettingsWriter.cs`
-- **Concern:** `ProxyPassword` is a plain string property; the settings writer serializes config to an INI-style profile file. It appears to be written in cleartext, but exactly which properties SettingsWriter persists (and whether ProxyPassword is among them) was not traced field by field.
-- **Why it matters:** a cleartext proxy credential on disk is readable by any process running as the user; also ends up in backups.
-- **Evidence found so far:** property is public with `[DefaultValue("")]`; used at `CUEConfig.cs:559` to build `NetworkCredential`. Persistence path not fully traced.
-- **Confidence:** inferred
-- **Likely owner:** repo owner
-- **Next best check:** read `SettingsWriter.Save` and the CUEConfigAdvanced save/load to confirm ProxyPassword is written, then decide DPAPI vs Credential Manager vs documenting the exposure.
+- **Area or file:** `CUEPlayer/IcecastCredentialStore.cs`,
+  `CUEPlayer/Properties/Settings.settings`
+- **Concern:** source ordering requests a protected DPAPI save before clearing a
+  legacy plaintext password, but real `ApplicationSettingsBase.Save()`
+  persistence, failure, and migration have not been exercised.
+- **Why it matters:** source ordering alone cannot prove the protected blob
+  reaches disk or that a failed save leaves the previous on-disk configuration
+  recoverable.
+- **Evidence found so far:** DPAPI bounds and call ordering were inspected;
+  source handlers report failure and avoid redisplaying a stored password.
+- **Confidence:** unknown
+- **Likely owner:** CUEPlayer maintainer
+- **Next best check:** run migration against an isolated real user-config file,
+  reopen the application, verify plaintext removal and DPAPI recovery, and
+  inject a save failure to observe disk and UI state.
 - **Risk level:** medium
 - **Status:** open
 
-### Bwg.Scsi\Device.cs log verbosity
+### Bwg SCSI log verbosity
 
-- **Area or file:** `Bwg.Scsi\Device.cs` (~89 log calls), `Bwg.Logging`
-- **Concern:** sampled, not fully read. Confirmed to log SCSI commands/sense data (not personal data), but whether any path dumps large raw read buffers to a sink was not exhaustively checked.
-- **Why it matters:** raw buffer dumps would bloat logs and could, in principle, include disc-identifying data; low but unverified.
-- **Evidence found so far:** grep count and spot reads.
+- **Area or file:** `Bwg.Scsi/Device.cs`, `Bwg.Logging/`,
+  `CUETools.Ripper.SCSI/SCSIDrive.cs`
+- **Concern:** the many opt-in device log calls were sampled rather than read
+  exhaustively. Commands, sense data, sector counts, and drive state are
+  expected; raw audio-buffer dumping has not been fully ruled out.
+- **Why it matters:** raw dumps could make logs unexpectedly large and expose
+  disc content or identifying data.
+- **Evidence found so far:** grep inventory and representative reads found
+  structural SCSI diagnostics, not credentials.
 - **Confidence:** inferred
-- **Likely owner:** repo owner
-- **Next best check:** read the log calls in the read/correct paths of `Device.cs` and `SCSIDrive.cs` for buffer-dumping.
+- **Likely owner:** ripper/SCSI maintainer
+- **Next best check:** classify every read/correct-path log call as command,
+  device identity, count/timing, sense payload, path, or raw audio; add an
+  explicit no-audio-buffer rule/test where practical.
 - **Risk level:** low
 - **Status:** open
 
 ## Closed items
 
-(none yet)
+- **Classic ProxyPassword plaintext at rest:** closed 2026-07-26.
+  `CUEConfig.Save` clears the plaintext property while serializing Advanced
+  settings and stores only a DPAPI CurrentUser `ProxyPasswordProtected` value.
+  Load rejects corrupt, wrong-user, and unsupported-platform blobs. CUETools and
+  CUERipper show save failure rather than silently dropping the credential.
+- **CUETools 2026 proxy plaintext/migration:** closed 2026-07-26.
+  `SettingsStore` uses DPAPI CurrentUser, migrates legacy plaintext, registers
+  the in-memory secret for log redaction, and publishes settings through the
+  same-directory staging writer.
+- **CUETools 2026 custom-path exception redaction:** closed 2026-07-26.
+  Rip, Test & Copy, verify, repair, accept-anyway, and staging-cleanup boundaries
+  register raw and normalized user/generated paths before work. `DiagnosticLog`
+  applies case-insensitive longest-match replacement in one pass over original
+  text. `DiagnosticLogTests` verifies direct messages, nested exceptions,
+  synthetic stack text, overlapping values, and replacement-token safety against
+  an isolated real log file.
+- **CUEPlayer Icecast plaintext settings:** closed 2026-07-26.
+  `IcecastCredentialStore` implements a bounded DPAPI CurrentUser blob and
+  source-level ordering that requests protected save before clearing legacy
+  plaintext. Real `ApplicationSettingsBase.Save()` persistence/failure and
+  migration behavior remain an integration gap, so this closure is limited to
+  the former source-level plaintext design.
+- **Classic MOTD disk cache:** closed 2026-07-26. The live path displays bounded
+  HTTPS text; the remote image/text cache path was removed.

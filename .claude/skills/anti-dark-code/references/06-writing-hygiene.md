@@ -6,6 +6,12 @@ Use this reference when an agent or a person wrote or edited comments, docs, ADR
 
 For the canonical writing rules referenced here, see `00-conventions.md`.
 
+## Contents
+
+- Goal, scope, and hard rules
+- Comment, commit, PR, and unknowns-file rules
+- Self-check, deliverables, and acceptance
+
 ## Goal
 
 Clean touched text so it is plain, specific, and easy to trust. Remove canned phrasing, loose claims, and style habits that make careful work sound machine-made.

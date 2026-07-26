@@ -10,7 +10,7 @@ For canonical status values, classification labels, and risk levels, see `refere
 
 | Area / Slice | Paths | Risk class | Status | Label | Evidence used | Likely owner | Next pass |
 |---|---|---|---|---|---|---|---|
-| <e.g., auth service> | `services/auth/**` | high | mapped | owned-risky | `docs/architecture/system-map.md` § auth | <team> | 03 critical-path comments |
+| <e.g., auth service> | `services/auth/**` | high | mapped | owned-risky | `docs/architecture/system-map.md` section auth | <team> | 03 critical-path comments |
 | <e.g., billing worker> | `workers/billing/**` | high | unscanned | owned-risky | none yet | <team> | 02 architecture map |
 | <e.g., vendored SDK mirror> | `third_party/vendor-sdk/**` | low | excluded | third-party mirror | N/A | upstream | none; document in map |
 
@@ -22,4 +22,4 @@ For canonical status values, classification labels, and risk levels, see `refere
 
 ## Changelog
 
-- <YYYY-MM-DD> — <what changed, why>
+- <YYYY-MM-DD> - <what changed, why>

@@ -53,8 +53,23 @@ public sealed class ConvertService : IConvertService
     private readonly CUEConfig _config;
     private readonly EncoderCatalog _catalog;
     private readonly AppSettings _settings;
+    private readonly Func<CUESheet, string> _runEngine;
 
-    public ConvertService(CUEConfig config, EncoderCatalog catalog, AppSettings settings) { _config = config; _catalog = catalog; _settings = settings; }
+    public ConvertService(CUEConfig config, EncoderCatalog catalog, AppSettings settings)
+        : this(config, catalog, settings, cue => cue.Go())
+    {
+    }
+
+    /// <summary>A narrow engine seam for deterministic publication-failure tests. Layout,
+    /// validation, reservation, and publication remain production code.</summary>
+    internal ConvertService(CUEConfig config, EncoderCatalog catalog, AppSettings settings,
+        Func<CUESheet, string> runEngine)
+    {
+        _config = config;
+        _catalog = catalog;
+        _settings = settings;
+        _runEngine = runEngine ?? throw new ArgumentNullException(nameof(runEngine));
+    }
 
     // The app's rule for a two-faced extension (wma serves both WMA Lossless and WMA Standard):
     // a format with a USABLE lossy encoder is offered as a LOSSY format, once (the dropdown means
@@ -96,6 +111,7 @@ public sealed class ConvertService : IConvertService
 
     public ConvertResult Convert(string inputPath, string format, string outputDir, Action<double, string> onProgress)
     {
+        AlbumOutputTransaction? publication = null;
         try
         {
             var cue = new CUESheet(_config);
@@ -109,7 +125,8 @@ public sealed class ConvertService : IConvertService
             // One shared layout step for rip AND convert - see OutputLayout. The album fallback here
             // prefers the INPUT FILE NAME when the source carries no metadata, so converting two
             // untagged files cannot put both in one "Unknown Artist - Unknown Album" folder.
-            var layout = OutputLayout.PrepareAndApply(cue, baseDir, format, _settings.LoadNamingScheme(),
+            var layout = OutputLayout.PrepareAndApplyTransactional(cue, baseDir,
+                _settings.LoadNamingScheme(),
                 () => {
                     string a = Safe(cue.Metadata?.Artist ?? ""), t = Safe(cue.Metadata?.Title ?? "");
                     if (a.Length == 0 && t.Length == 0)
@@ -118,25 +135,45 @@ public sealed class ConvertService : IConvertService
                         return f.Length > 0 ? f : "Unknown Album";
                     }
                     return OutputLayout.AlbumFolderFallback(cue.Metadata, Safe);
-                });
-            string outDir = layout.OutputDir;
+                }, out publication);
+            string stagingDir = layout.OutputDir;
 
             cue.Action = CUEAction.Encode;
             cue.OutputStyle = CUEStyle.GapsAppended;
             cue.GenerateFilenames(IsLossy(format) ? AudioEncoderType.Lossy : AudioEncoderType.Lossless,
-                format, Path.Combine(outDir, "album.cue"));
+                format, Path.Combine(stagingDir, "album.cue"));
 
             onProgress(0, $"Converting to {format}...");
-            string status = cue.Go();
-            onProgress(1, status);
+            string status = _runEngine(cue);
 
-            int files = OutputLayout.CountAudioFiles(outDir, format);
+            // Finalization has returned, so every path the engine declared must now exist and carry
+            // bytes. This catches a codec that returned success after omitting or truncating a track.
+            RipService.ValidateEncodedOutputs(cue.DestPaths, stagingDir);
+            int files = cue.DestPaths.Length;
+            string outDir = publication.Publish();
 
-            return new ConvertResult { Ok = true, Status = status, OutputDir = outDir, FileCount = files };
+            var result = new ConvertResult
+            {
+                Ok = true,
+                Status = status,
+                OutputDir = outDir,
+                FileCount = files,
+            };
+            try { onProgress(1, status); }
+            catch
+            {
+                // Publication is the commit point. A UI callback cannot turn a committed album into
+                // a reported conversion failure that invites a destructive retry.
+            }
+            return result;
         }
         catch (Exception ex)
         {
             return new ConvertResult { Error = ex.Message };
+        }
+        finally
+        {
+            publication?.Dispose();
         }
     }
 

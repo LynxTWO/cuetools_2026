@@ -6,6 +6,13 @@ Use this reference when auditing the repo for secrets, tokens, raw personal data
 
 For confidence levels, the unknowns entry shape, the canonical sensitive-data class list, and the canonical approval-gated areas list, see `00-conventions.md`.
 
+## Contents
+
+- Goal, approval gate, and repo adaptation
+- Search scope and deliverables
+- Audit document shape and worked example
+- Rules, extra checks, verification, and acceptance
+
 ## Goal
 
 Scan the repo for logging and telemetry paths. Confirm whether those paths leak sensitive data. Document findings with enough evidence that a human can approve the next move. Keep application behavior intact.
@@ -78,13 +85,13 @@ Examples by category:
 
 Create or update `docs/security/logging-audit.md`.
 
-Record unknowns in `docs/unknowns/logging-audit.md` using the canonical entry shape, or in the repo's existing unknowns location when one exists. Keep a short pointer to that file in the audit doc's `Unknowns and follow-up` section.
+Also create or update `docs/unknowns/logging-audit.md` using the canonical entry shape. Keep a short pointer to that file in the audit doc's `Unknowns and follow-up` section; do not keep the only copy of an unknown inline.
 
 ## What to put in `docs/security/logging-audit.md`
 
 ### 1. Scope and method
 
-State what you searched, which sinks or frameworks you reviewed, what parts of the repo were skipped or deferred, where confidence is high or low.
+State what you searched, which sinks or frameworks you reviewed, what parts of the repo were skipped or deferred, where confidence is high or low. For each negative search family, record the candidate-file count and finding count. Zero candidates means the surface was unexamined, not clean.
 
 ### 2. Findings
 
@@ -159,11 +166,11 @@ A useful finding row gives an approver everything they need to say yes or no wit
 ```markdown
 | Finding | File:line | Sink | What it logs | Risk | Protected? | Smallest safe edit |
 |---|---|---|---|---|---|---|
-| auth: full request body in 401 path | services/auth/middleware.ts:142 | pino | req.body (includes password on /login) | active leak | yes — auth | drop body; keep request_id, route, status |
+| auth: full request body in 401 path | services/auth/middleware.ts:142 | pino | req.body (includes password on /login) | active leak | yes - auth | drop body; keep request_id, route, status |
 | auth has logging | services/auth | logger | stuff | likely | maybe | clean it up |
 ```
 
-Findings live or die on the "smallest safe edit" column. If you cannot fill it, you do not have enough evidence yet — record the unknown and stop.
+Findings live or die on the "smallest safe edit" column. If you cannot fill it, you do not have enough evidence yet - record the unknown and stop.
 
 ## Audit rules
 

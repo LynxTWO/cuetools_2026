@@ -10,16 +10,21 @@ namespace CUETools.Codecs.WMA
     {
         IWMWriter m_pEncoder;
         private string outputPath;
+        private readonly WmaOutputTransaction outputTransaction;
         private bool closed = false;
-        private bool fileCreated = false;
+        private bool outputWasRequested = false;
         private bool writingBegan = false;
         private long sampleCount, finalSampleCount;
+        private bool finalSampleCountSet;
+        private readonly bool verifyLossless;
+        private PcmFingerprint inputFingerprint;
 
         public long FinalSampleCount
         {
             set
             {
                 this.finalSampleCount = value;
+                this.finalSampleCountSet = true;
             }
         }
 
@@ -34,8 +39,17 @@ namespace CUETools.Codecs.WMA
 
         public AudioEncoder(EncoderSettings settings, string path, Stream IO = null)
         {
+            if (settings == null)
+                throw new ArgumentNullException("settings");
+            if (settings.PCM == null)
+                throw new ArgumentException("PCM must be configured.", "settings");
+            if (IO != null)
+                throw new NotSupportedException(
+                    "WMA encoding requires a file path and cannot write to an arbitrary stream.");
+
             this.m_settings = settings;
-            this.outputPath = path;
+            this.outputTransaction = new WmaOutputTransaction(path);
+            this.outputPath = outputTransaction.RequestedPath;
 
             try
             {
@@ -74,40 +88,41 @@ namespace CUETools.Codecs.WMA
                 {
                     Marshal.ReleaseComObject(pInput);
                 }
+
+                var losslessSettings = settings as LosslessEncoderSettings;
+                verifyLossless = losslessSettings != null && losslessSettings.DoVerify;
+                if (verifyLossless)
+                    inputFingerprint = new PcmFingerprint();
             }
-            catch (Exception ex)
+            catch
             {
                 if (m_pEncoder != null)
                 {
                     Marshal.ReleaseComObject(m_pEncoder);
                     m_pEncoder = null;
                 }
-                throw ex;
+                throw;
             }
         }
 
         public void Close()
         {
-            if (!this.closed)
-            {
-                try
-                {
-                    if (this.writingBegan)
-                    {
-                        m_pEncoder.EndWriting();
-                        this.writingBegan = false;
-                    }
-                }
-                finally
-                {
-                    if (m_pEncoder != null)
-                    {
-                        Marshal.ReleaseComObject(m_pEncoder);
-                        m_pEncoder = null;
-                    }
-                }
+            if (this.closed)
+                return;
 
-                this.closed = true;
+            try
+            {
+                outputTransaction.Complete(
+                    outputWasRequested,
+                    FinishWritingAndVerify);
+            }
+            finally
+            {
+                if (inputFingerprint != null)
+                {
+                    inputFingerprint.Dispose();
+                    inputFingerprint = null;
+                }
             }
         }
 
@@ -116,16 +131,58 @@ namespace CUETools.Codecs.WMA
             if (this.outputPath == null)
                 throw new InvalidOperationException("This writer was not created from file.");
 
-            if (!this.closed)
+            Exception finishFailure = null;
+            try
             {
-                this.Close();
+                if (!this.closed)
+                    FinishWriting();
+            }
+            catch (Exception ex)
+            {
+                finishFailure = ex;
+            }
 
-                if (this.fileCreated)
+            Exception cleanupFailure = null;
+            try
+            {
+                outputTransaction.CleanupWork();
+            }
+            catch (Exception ex)
+            {
+                cleanupFailure = ex;
+            }
+
+            if (outputTransaction.Published)
+            {
+                try
                 {
-                    File.Delete(this.outputPath);
-                    this.fileCreated = false;
+                    WmaOutputSafety.RemoveOrQuarantine(this.outputPath);
+                }
+                catch (Exception ex)
+                {
+                    cleanupFailure = CombineFailure(cleanupFailure, ex);
                 }
             }
+
+            if (inputFingerprint != null)
+            {
+                inputFingerprint.Dispose();
+                inputFingerprint = null;
+            }
+
+            if (finishFailure != null && cleanupFailure != null)
+                throw new IOException(
+                    "WMA finalization failed, and owned output cleanup also failed: " +
+                    cleanupFailure.Message,
+                    finishFailure);
+            if (finishFailure != null)
+                throw new IOException(
+                    "WMA finalization failed during deletion.",
+                    finishFailure);
+            if (cleanupFailure != null)
+                throw new IOException(
+                    "WMA owned output cleanup failed during deletion.",
+                    cleanupFailure);
         }
 
         public void Write(AudioBuffer buffer)
@@ -133,10 +190,10 @@ namespace CUETools.Codecs.WMA
             if (this.closed)
                 throw new InvalidOperationException("Writer already closed.");
 
-            if (!this.fileCreated)
+            if (!this.outputWasRequested)
             {
-                this.m_pEncoder.SetOutputFilename(outputPath);
-                this.fileCreated = true;
+                this.m_pEncoder.SetOutputFilename(outputTransaction.WorkPath);
+                this.outputWasRequested = true;
             }
             if (!this.writingBegan)
             {
@@ -145,16 +202,88 @@ namespace CUETools.Codecs.WMA
             }
 
             buffer.Prepare(this);
-            INSSBuffer pSample;
-            m_pEncoder.AllocateSample(buffer.ByteLength, out pSample);
-            IntPtr pdwBuffer;
-            pSample.GetBuffer(out pdwBuffer);
-            pSample.SetLength(buffer.ByteLength);
-            Marshal.Copy(buffer.Bytes, 0, pdwBuffer, buffer.ByteLength);
-            long cnsSampleTime = sampleCount * 10000000L / Settings.PCM.SampleRate;
-            m_pEncoder.WriteSample(0, cnsSampleTime, SampleFlag.CleanPoint, pSample);
-            Marshal.ReleaseComObject(pSample);
-            sampleCount += buffer.Length;
+            INSSBuffer pSample = null;
+            try
+            {
+                m_pEncoder.AllocateSample(buffer.ByteLength, out pSample);
+                IntPtr pdwBuffer;
+                pSample.GetBuffer(out pdwBuffer);
+                pSample.SetLength(buffer.ByteLength);
+                Marshal.Copy(buffer.Bytes, 0, pdwBuffer, buffer.ByteLength);
+                long cnsSampleTime = sampleCount * 10000000L / Settings.PCM.SampleRate;
+                m_pEncoder.WriteSample(0, cnsSampleTime, SampleFlag.CleanPoint, pSample);
+            }
+            finally
+            {
+                if (pSample != null)
+                    Marshal.ReleaseComObject(pSample);
+            }
+
+            if (inputFingerprint != null)
+                inputFingerprint.Append(buffer.Bytes, buffer.ByteLength);
+            sampleCount = checked(sampleCount + buffer.Length);
+        }
+
+        private void FinishWriting()
+        {
+            try
+            {
+                if (this.writingBegan)
+                {
+                    m_pEncoder.EndWriting();
+                    this.writingBegan = false;
+                }
+            }
+            finally
+            {
+                if (m_pEncoder != null)
+                {
+                    Marshal.ReleaseComObject(m_pEncoder);
+                    m_pEncoder = null;
+                }
+
+                this.closed = true;
+            }
+        }
+
+        private void FinishWritingAndVerify()
+        {
+            // EndWriting closes the ASF file, and releasing the COM writer ensures the decoder never
+            // verifies buffered data through a still-live writer handle.
+            FinishWriting();
+
+            ValidateExpectedSampleCount(
+                finalSampleCountSet,
+                finalSampleCount,
+                sampleCount);
+            if (!verifyLossless || !outputWasRequested)
+                return;
+
+            WmaLosslessVerification.Verify(
+                outputTransaction.WorkPath,
+                Settings.PCM,
+                sampleCount,
+                inputFingerprint.Complete());
+        }
+
+        internal static void ValidateExpectedSampleCount(
+            bool expectedCountWasSet,
+            long expectedSampleCount,
+            long actualSampleCount)
+        {
+            if (expectedCountWasSet && expectedSampleCount != actualSampleCount)
+                throw new InvalidDataException(Properties.Resources.ExceptionSampleCount);
+        }
+
+        private static Exception CombineFailure(Exception first, Exception second)
+        {
+            if (first == null)
+                return second;
+            if (second == null)
+                return first;
+            return new IOException(
+                first.Message + " Additional cleanup failure: " + second.Message,
+                first);
         }
     }
 }

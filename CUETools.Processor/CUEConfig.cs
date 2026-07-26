@@ -75,6 +75,8 @@ namespace CUETools.Processor
         public bool separateDecodingThread;
 
         public CUEConfigAdvanced advanced { get; private set; }
+        public bool AdvancedSettingsRejected { get; private set; }
+        public bool ProxyCredentialRejected { get; private set; }
         public bool CopyAlbumArt { get; set; }
         public string ArLogFilenameFormat { get; set; }
         public string AlArtFilenameFormat { get; set; }
@@ -263,6 +265,11 @@ namespace CUETools.Processor
 
         public void Save(SettingsWriter sw)
         {
+            Save(sw, ProxyCredentialStore.CanProtectCurrentUser);
+        }
+
+        internal void Save(SettingsWriter sw, bool canProtectCurrentUser)
+        {
             sw.Save("Version", 226);
             sw.Save("ArFixWhenConfidence", fixOffsetMinimumConfidence);
             sw.Save("ArFixWhenPercent", fixOffsetMinimumTracksPercent);
@@ -280,7 +287,7 @@ namespace CUETools.Processor
             sw.Save("UseHTOALengthThreshold", useHTOALengthThreshold);
             sw.Save("EjectAfterRip", ejectAfterRip);
             sw.Save("DisableEjectDisc", disableEjectDisc);
-            sw.Save("DetectGaps", detectGaps);            
+            sw.Save("DetectGaps", detectGaps);
             sw.Save("AutoCorrectFilenames", autoCorrectFilenames);
             sw.Save("KeepOriginalFilenames", keepOriginalFilenames);
             sw.Save("SingleFilenameFormat", singleFilenameFormat);
@@ -328,13 +335,23 @@ namespace CUETools.Processor
             sw.Save("ArLogFilenameFormat", ArLogFilenameFormat);
             sw.Save("AlArtFilenameFormat", AlArtFilenameFormat);
 
-            sw.SaveText("Advanced", JsonConvert.SerializeObject(advanced,
-                Newtonsoft.Json.Formatting.Indented,
-                new JsonSerializerSettings
-                {
-                    DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate,
-                    TypeNameHandling = TypeNameHandling.Auto,
-                }));
+            string proxyPassword = advanced.ProxyPassword ?? "";
+            string protectedProxyPassword =
+                ProxyCredentialStore.ProtectOrNull(
+                    proxyPassword, canProtectCurrentUser);
+            advanced.ProxyPassword = "";
+            try
+            {
+                sw.SaveText("Advanced", JsonConvert.SerializeObject(advanced,
+                    Newtonsoft.Json.Formatting.Indented,
+                    CreateAdvancedJsonSettings(advanced)));
+            }
+            finally
+            {
+                advanced.ProxyPassword = proxyPassword;
+            }
+            if (!string.IsNullOrEmpty(protectedProxyPassword))
+                sw.Save(ProxyCredentialStore.SettingsKey, protectedProxyPassword);
 
             int nFormats = 0;
             foreach (KeyValuePair<string, CUEToolsFormat> format in formats)
@@ -370,6 +387,8 @@ namespace CUETools.Processor
 
         public void Load(SettingsReader sr)
         {
+            AdvancedSettingsRejected = false;
+            ProxyCredentialRejected = false;
             int version = sr.LoadInt32("Version", null, null) ?? 202;
 
             fixOffsetMinimumConfidence = sr.LoadUInt32("ArFixWhenConfidence", 1, 1000) ?? 2;
@@ -443,15 +462,7 @@ namespace CUETools.Processor
                 {
                     var jsonObject = JsonConvert.DeserializeObject(jsonConfig,
                         typeof(CUEConfigAdvanced),
-                        new JsonSerializerSettings
-                        {
-                            DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate,
-                            TypeNameHandling = TypeNameHandling.Auto,
-                            Error = (sender, ev) => {
-                                System.Diagnostics.Trace.WriteLine(ev.ErrorContext.Error.ToString());
-                                ev.ErrorContext.Handled = true;
-                            }
-                        });
+                        CreateAdvancedJsonSettings(backup));
                     if (jsonObject as CUEConfigAdvanced == null)
                         throw new Exception();
                     advanced = jsonObject as CUEConfigAdvanced;
@@ -488,8 +499,28 @@ namespace CUETools.Processor
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Trace.WriteLine(ex.Message);
+                    System.Diagnostics.Trace.WriteLine("Advanced settings rejected: " + ex.GetType().Name);
+                    AdvancedSettingsRejected = true;
                     advanced = backup;
+                }
+            }
+
+            string protectedProxyPassword =
+                sr.Load(ProxyCredentialStore.SettingsKey);
+            if (!string.IsNullOrEmpty(protectedProxyPassword))
+            {
+                try
+                {
+                    advanced.ProxyPassword =
+                        ProxyCredentialStore.Unprotect(protectedProxyPassword);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine(
+                        "Protected proxy credential rejected (" +
+                        ex.GetType().Name + ").");
+                    advanced.ProxyPassword = "";
+                    ProxyCredentialRejected = true;
                 }
             }
 
@@ -545,6 +576,21 @@ namespace CUETools.Processor
                 trackFilenameFormat = "%tracknumber%. %title%";
         }
 
+        private static JsonSerializerSettings CreateAdvancedJsonSettings(CUEConfigAdvanced source)
+        {
+            IEnumerable<Type> knownTypes = source.encoders
+                .Select(encoder => encoder.GetType())
+                .Concat(source.decoders.Select(decoder => decoder.GetType()));
+
+            return new JsonSerializerSettings
+            {
+                DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate,
+                TypeNameHandling = TypeNameHandling.Auto,
+                MissingMemberHandling = MissingMemberHandling.Error,
+                SerializationBinder = new KnownSettingsSerializationBinder(knownTypes),
+            };
+        }
+
         public IWebProxy GetProxy()
         {
             IWebProxy proxy = null;
@@ -566,10 +612,9 @@ namespace CUETools.Processor
         // output path via the filename template. This is the trust boundary for remote
         // metadata from gnudb/MusicBrainz/CTDB: Path.GetInvalidFileNameChars() includes the
         // path separators and ':', so a single field cannot inject a directory or drive and
-        // cannot traverse with '..' (the separators are gone). Two gaps remain by design of
-        // this routine: Windows reserved device names (CON, PRN, NUL, COM1..9, LPT1..9) pass
-        // through unchanged, and trailing dots/spaces are not trimmed. Any caller that builds
-        // a full path from template output must not assume those are handled here.
+        // cannot traverse with '..' (the separators are gone). Windows reserved device names
+        // (CON, PRN, NUL, COM1..9, LPT1..9) and trailing dots/spaces are normalized below so
+        // the resulting component retains the same identity when Windows creates it.
         public string CleanseString(string s)
         {
             StringBuilder sb = new StringBuilder();

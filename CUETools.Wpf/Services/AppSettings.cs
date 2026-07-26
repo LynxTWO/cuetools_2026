@@ -64,6 +64,18 @@ public sealed class AppSettings
     // m4a = ALAC vs imported AAC). Compact persisted form: "wma=lossy;m4a=lossless".
     public string FormatTypeOverrides { get; set; } = "";
 
+    /// <summary>
+    /// Opaque receipts for executables copied into the app-managed encoders directory. Runtime
+    /// resolution requires the current bytes to match the recorded SHA-256 and size. This is local
+    /// user approval, not publisher authentication.
+    /// </summary>
+    public string ExternalEncoderApprovals { get; set; } = "";
+
+    internal bool TryGetExternalEncoderApproval(
+        string fileName,
+        out ExternalEncoderApproval? approval) =>
+        ExternalEncoderApprovalCodec.TryGet(ExternalEncoderApprovals, fileName, out approval);
+
     public bool? GetFormatTypeOverride(string ext)
     {
         foreach (var part in (FormatTypeOverrides ?? "").Split(';'))

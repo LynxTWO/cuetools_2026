@@ -6,6 +6,13 @@ Use this reference when updating or creating coding-agent steering files such as
 
 For confidence levels, risk levels, status vocabulary, the unknowns entry shape, the canonical sensitive-data class list, and the approval-gated areas list, see `00-conventions.md`.
 
+## Contents
+
+- Goal and hard rules
+- Repo checks
+- Required steering sections
+- Output constraints and acceptance
+
 ## Goal
 
 Create or update the repo steering files already present. Those files may live at the repo root or in tool-specific locations the repo already uses.
@@ -99,15 +106,15 @@ Keep this short. Use repo facts only.
 
 Describe the allowed passes. At minimum include:
 
-**Pass 0: Read-only inventory** — inspection and analysis only, no file changes.
+**Pass 0: Read-only inventory** - inspection and analysis only, no file changes.
 
-**Pass 1: Docs and comments only** — comments, manifests, maps, runbooks, ADRs, other docs. No logic, control-flow, import, dependency, config, schema, or formatting changes outside touched lines.
+**Pass 1: Docs and comments only** - comments, manifests, maps, runbooks, ADRs, other docs. No logic, control-flow, import, dependency, config, schema, or formatting changes outside touched lines.
 
 Treat behavior-sensitive comments as code. Do not alter shebangs, encoding markers, pragma comments, linter directives, type-affecting docblocks, SQL hints, magic comments, engine metadata comments, or serialized asset comments.
 
-**Pass 2: Behavior-preserving cleanup** — allowed only after baseline docs and comments exist for the touched area. Requires tests or other evidence. No feature work in the same PR or commit.
+**Pass 2: Behavior-preserving cleanup** - allowed only after baseline docs and comments exist for the touched area. Requires tests or other evidence. No feature work in the same PR or commit.
 
-**Pass 3: Feature or security work** — only when the user asked for it, and only after the needed map, unknowns, and approval gates are in place. Docs, tests, risk notes, and rollback notes stay attached.
+**Pass 3: Feature or security work** - only when the user asked for it, and only after the needed map, unknowns, and approval gates are in place. Docs, tests, risk notes, and rollback notes stay attached.
 
 ### 6. Coverage and slice rules
 

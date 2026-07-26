@@ -1,28 +1,101 @@
-# Unknowns: architecture pass
+# Unknowns: Architecture Pass
 
-This file records things that could not be confidently explained during the architecture mapping pass (2026-07-02). Do not guess. Update as evidence lands.
-
-The entry shape, confidence levels, risk levels, and status values come from `.claude/skills/anti-dark-code/references/00-conventions.md`.
+Current-state refresh: 2026-07-26. This ledger holds architecture questions
+that still block an honest claim. Resolved 2026-07-02 findings are retained
+below as history.
 
 ## Entries
 
-### Patch level and CVE status of vendored binaries
+### Patch level and provenance of vendored binaries
 
-- **Area or file:** `ThirdParty/*.dll`, `ThirdParty/Win32`, `ThirdParty/x64`, `CUETools.CTDB.EACPlugin\Interop.HelperFunctionsLib.dll`
-- **Concern:** the vendored DLL inventory is now dated and versioned (see evidence), but CVE exposure and upgrade paths are not yet mapped. `Freedb.dll` and `MusicBrainz.dll` shadow same-named source projects in this repo; which one ships is still unclear.
-- **Why it matters:** unpatchable, unauditable supply-chain surface inside a tool that parses untrusted input. Two concrete concerns: `ICSharpCode.SharpZipLib.dll` 0.85.5 (committed 2010-02-08) predates all modern SharpZipLib security fixes, and `unrar.dll` 6.11 (2022-05-28) predates the 6.12 fix for the CVE-2022-30333 path traversal (CVE match is inferred from version, not tested).
-- **Evidence found so far:** version/date inventory 2026-07-02: CSScriptLibrary 2.3.2, CUDA.NET 2.3.7, Freedb.dll 1.0.0.1, MusicBrainz.dll 0.0.0.0, SharpZipLib 0.85.5 (all last committed 2010-02-08); Interop.HelperFunctionsLib 1.0.0.0 (2015-02-25); hdcd.dll no version info (2010); libmp3lame 3.100 (2021, current LAME); unrar 6.11 (2022). ffmpeg DLLs are not vendored (built on demand by `build_ffmpeg_dlls.yml`).
-- **Confidence:** verified (inventory), inferred (CVE exposure)
-- **Likely owner:** upstream maintainer
-- **Next best check:** confirm whether `CUETools.Compression.Rar` actually extracts to disk (path traversal reach) and decide replace-vs-upgrade for SharpZipLib and unrar. Reference scan 2026-07-02: `ICSharpCode.SharpZipLib.dll` is live in `CUETools.Compression.Zip.csproj:36`; `CSScriptLibrary.v1.1.dll` only in `CUETools.TestCodecs.csproj:60`; `Freedb.dll`, `MusicBrainz.dll`, `CUDA.NET.dll` are referenced by no csproj HintPath (dead-weight candidates; CUDA.NET may load at runtime, unverified).
+- **Area or file:** `ThirdParty/*.dll`, `ThirdParty/Win32/`,
+  `ThirdParty/x64/`, codec SDK assets, and
+  `CUETools.CTDB.EACPlugin/Interop.HelperFunctionsLib.dll`
+- **Concern:** release contracts can identify and hash expected shipped bytes,
+  but patch/CVE status, upstream origin, and maintainable replacement paths are
+  incomplete for several binaries.
+- **Why it matters:** these binaries parse media or run inside trusted desktop
+  and EAC processes without first-party source-level assurance.
+- **Evidence found so far:** artifact contracts and runtime manifests enumerate
+  current membership; submodule pins and local patches are recorded. Remaining
+  provenance gaps named by the release evidence include HDCD, LAME, UnRAR, and
+  TTA. The reviewed RAR input flow does not extract attacker-controlled paths to
+  disk, so the earlier path-traversal reachability concern is closed without
+  claiming the parser has no other CVEs.
+- **Confidence:** unknown
+- **Likely owner:** release maintainer and upstream dependency owners
+- **Next best check:** complete `eng/release/native-dependencies.json` entries
+  with authoritative upstream/version evidence, then make replace/update/retain
+  decisions per shipped binary.
 - **Risk level:** high
 - **Status:** in progress
-- **Notes:** 2026-07-02 — user decision: the unreferenced DLLs (`Freedb.dll`, `MusicBrainz.dll`, `CUDA.NET.dll`) stay in the tree until the initial anti-dark-code rollout completes. The CUDA.NET runtime-load question is tracked in `docs/unknowns/coverage-pass.md`.
+
+### CTDB and gnudb plaintext transports
+
+- **Area or file:** `CUETools.CTDB/CUEToolsDB.cs`,
+  `Freedb/FreedbHelper.cs`
+- **Concern:** reachable verification, repair, submission, and metadata traffic
+  still uses HTTP.
+- **Why it matters:** an on-path party can observe or modify responses and
+  requests. The repair CRC gate detects ordinary corruption but is not server
+  authentication or a cryptographic signature.
+- **Evidence found so far:** hardcoded/request construction paths were inspected.
+  A 2026-07-02 probe found no usable TLS endpoint for `db.cuetools.net`.
+  AccurateRip, MOTD, and default Icecast transport have separately moved to
+  HTTPS and are not part of this unknown.
+- **Confidence:** unknown
+- **Likely owner:** CTDB/gnudb service operators plus client maintainer
+- **Next best check:** coordinate a CTDB TLS endpoint and test it before changing
+  the client; verify gnudb TLS/protocol options and choose migrate, proxy, or
+  retire.
+- **Risk level:** high
+- **Status:** open
+
+### Hosted and full classic release execution
+
+- **Area or file:** `.github/workflows/CI-windows.yml`,
+  `.github/workflows/release-windows.yml`, `eng/ci/`, `eng/release/`,
+  `collect_files*.bat`
+- **Concern:** current workflow definitions and local gates are inspected, but a
+  successful hosted run and the full classic devenv artifact path have not been
+  observed on the current source state.
+- **Why it matters:** hosted image contents, Visual Studio Installer Projects,
+  legacy resources/dependencies, native builds, and artifact packaging can fail
+  despite static and local script checks.
+- **Evidence found so far:** suite count/skip gates, warning gates, fuzz smoke,
+  net20 probe, artifact contracts, plugin manifests, native probes, provenance,
+  and SBOM steps exist. The local environment does not provide the complete
+  classic Visual Studio toolchain.
+- **Confidence:** unknown
+- **Likely owner:** release maintainer
+- **Next best check:** run CI and release on the intended hosted image, retain
+  TRX/artifact-validator/provenance/SBOM evidence, and record tool versions.
+- **Risk level:** high
+- **Status:** open
 
 ## Closed items
 
-- **CUERipper.WPF intent** — resolved 2026-07-02 by user decision: keep the stub untouched until the initial anti-dark-code rollout completes, then revisit. Recorded as `deferred` in the coverage ledger.
-- **Git history and remote were dropped** — resolved 2026-07-02. `https://github.com/LynxTWO/cuetools_2026` turned out to be a full mirror of upstream `gchudov/cuetools.net` history. Local `master` was reconnected to it at upstream HEAD `e90b1a86`; the working tree matched that commit exactly.
-- **ThirdParty submodules are empty** — resolved 2026-07-02. `git submodule update --init --recursive` restored all five submodules at their pinned commits (flac `1507800d`, taglib-sharp `b5ae84f2`, openclnet `4a10612b`, WavPack `4827b988`, WindowsMediaLib `46d46042`), and all five `ThirdParty/*.patch` files applied cleanly per the README build steps.
-- **freedb service status** — resolved 2026-07-02. The default host is `gnudb.gnudb.org` (`Freedb\FreedbHelper.cs:33`), the live community mirror, not the dead freedb.org. Still plain HTTP.
-- **CTDB and AccurateRip HTTPS support** — resolved 2026-07-02 by probing. `https://www.accuraterip.com/accuraterip/DriveOffsets.bin` returns HTTP 200, so the AccurateRip client can move to HTTPS (remediation candidate). `https://db.cuetools.net` fails TLS handshake, so the CTDB client is blocked on the server operator; raise upstream before touching `CUEToolsDB.cs:74`.
+- **RAR path-traversal reachability:** resolved 2026-07-02. The reachable
+  `RarStream` path uses `Unrar.Test()` and an in-memory callback rather than
+  extracting archive paths to disk. Parser patch/provenance work remains open
+  above.
+- **MusicBrainz client shipping/reachability:** resolved 2026-07-26. The
+  legacy client source/project was deleted and direct lookup was retired.
+  MusicBrainz tag names and browser links remain, but no in-repo client library
+  is loaded.
+- **Loose production plugin loading:** resolved 2026-07-26. Packaged plugins are
+  manifest-bound and rehashed at the managed/native load boundary. Native module
+  paths are checked and bare-name fallback was removed. Loose enumeration is
+  reachable only through the explicit `CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS=1`
+  local-development switch.
+- **AccurateRip HTTPS capability:** resolved. Current client endpoints are
+  HTTPS-only.
+- **Classic MOTD transport/render boundary:** resolved 2026-07-26. The current
+  exact endpoint is bounded HTTPS text; the remote image decode/cache path is
+  gone.
+- **CUERipper.WPF intent:** deferred by owner decision. It remains a historical
+  stub distinct from the live `CUETools.Wpf` application.
+- **Git history/remote and ThirdParty submodule restoration:** resolved
+  2026-07-02; pinned submodules and local patches were restored and checked.
+- **freedb service identity:** resolved 2026-07-02. The client uses the gnudb
+  community mirror; its remaining HTTP transport is tracked above.

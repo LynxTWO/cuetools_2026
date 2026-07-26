@@ -25,7 +25,8 @@ public static class OutputGuard
     /// <summary>The fixed-name artifacts a finished rip leaves behind. Any one of them means the folder
     /// already holds a rip, even if the audio format differs.</summary>
     private static readonly string[] Artifacts =
-        { "album.cue", "album.log", "album.accurip", "folder.jpg", "rip.verify", "Test & Copy.log" };
+        { "album.cue", "album.log", "album.accurip", "folder.jpg", "rip.verify",
+          "Test & Copy.log", AlbumOutputTransaction.CompletionMarkerName };
 
     /// <summary><paramref name="albumRel"/> when nothing would be overwritten under
     /// <paramref name="baseDir"/>, else the same name with " (2)", " (3)" ... appended until free.
@@ -33,28 +34,46 @@ public static class OutputGuard
     public static string NonClobberingAlbumDir(string baseDir, string albumRel, string format,
         Action<string>? onNote = null)
     {
-        if (string.IsNullOrWhiteSpace(albumRel)) return albumRel;
+        if (string.IsNullOrWhiteSpace(baseDir))
+            throw new ArgumentException("An output base directory is required.", nameof(baseDir));
+        if (string.IsNullOrWhiteSpace(albumRel))
+            throw new ArgumentException("An album directory is required.", nameof(albumRel));
         try
         {
-            string candidate = albumRel;
-            for (int n = 2; n <= 99; n++)
+            string baseFull = Path.GetFullPath(baseDir);
+            for (int n = 1; n <= 999; n++)
             {
-                string full = Path.Combine(baseDir, candidate);
-                if (!Directory.Exists(full) || !HoldsARip(full, format))
+                string candidate = n == 1 ? albumRel : albumRel + " (" + n + ")";
+                string full = ResolveContainedPath(baseFull, candidate);
+                if (!TryGetAttributes(full, out FileAttributes attributes) ||
+                    ((attributes & FileAttributes.Directory) != 0 &&
+                     !HoldsARip(full, format)))
                 {
                     if (!string.Equals(candidate, albumRel, StringComparison.Ordinal))
                         onNote?.Invoke("output folder already held a rip - writing to \"" + candidate + "\" instead");
                     return candidate;
                 }
-                candidate = albumRel + " (" + n + ")";
             }
-            // 98 collisions is pathological; fall back to something guaranteed unique rather than clobber
-            return albumRel + " (" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ")";
+
+            // Keep a random suffix after pathological sequential occupancy, but still probe it.
+            // Returning an unprobed timestamp can collide; returning the original name on a probe
+            // exception can clobber. Failure to prove a free path must stop this obsolete path.
+            for (int attempt = 0; attempt < 32; attempt++)
+            {
+                string candidate = albumRel + " (" + Guid.NewGuid().ToString("N") + ")";
+                string full = ResolveContainedPath(baseFull, candidate);
+                if (!TryGetAttributes(full, out _))
+                {
+                    onNote?.Invoke("output folder is heavily occupied - writing to \"" +
+                        candidate + "\" instead");
+                    return candidate;
+                }
+            }
+            throw new IOException("Could not prove a unique output directory.");
         }
-        catch
+        catch (Exception ex)
         {
-            // A probe failure must not stop a rip; the worst case is the pre-existing behaviour.
-            return albumRel;
+            throw new IOException("Could not safely probe the output directory.", ex);
         }
     }
 
@@ -62,12 +81,47 @@ public static class OutputGuard
     /// file of the format about to be written.</summary>
     public static bool HoldsARip(string dir, string format)
     {
-        foreach (var name in Artifacts)
-            if (File.Exists(Path.Combine(dir, name))) return true;
-        if (!string.IsNullOrWhiteSpace(format))
+        foreach (string entry in Directory.EnumerateFileSystemEntries(dir, "*",
+            SearchOption.TopDirectoryOnly))
         {
-            try { if (Directory.GetFiles(dir, "*." + format).Length > 0) return true; } catch { }
+            string name = Path.GetFileName(entry);
+            foreach (string artifact in Artifacts)
+                if (string.Equals(name, artifact, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            if (!string.IsNullOrWhiteSpace(format) &&
+                string.Equals(Path.GetExtension(name), "." + format,
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
         }
         return false;
+    }
+
+    private static string ResolveContainedPath(string baseFull, string relative)
+    {
+        string full = Path.GetFullPath(Path.Combine(baseFull, relative));
+        string prefix = baseFull.TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The album path escapes the selected output directory.");
+        return full;
+    }
+
+    private static bool TryGetAttributes(string path, out FileAttributes attributes)
+    {
+        try
+        {
+            attributes = File.GetAttributes(path);
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            attributes = default;
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            attributes = default;
+            return false;
+        }
     }
 }

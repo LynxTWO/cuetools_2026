@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "cuetools-wpf-win-x64-v1",
+  "productVersion": "2026.1.0",
+  "versionAssembly": "CUETools.Wpf.dll",
+  "forbiddenFiles": [
+    "libmp3lame.dll"
+  ],
+  "requiredFiles": [
+    { "path": "CUETools.Wpf.exe", "minimumBytes": 1 },
+    { "path": "CUETools.Wpf.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Wpf.deps.json", "minimumBytes": 1 },
+    { "path": "CUETools.Wpf.runtimeconfig.json", "minimumBytes": 1 },
+    { "path": "CUETools.Processor.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.Flake.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.ALAC.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.libmp3lame.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.WMA.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.HDCD.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.libFLAC.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.libwavpack.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.MACLib.dll", "minimumBytes": 1 },
+    { "path": "CUETools.Codecs.MPEG.dll", "minimumBytes": 1 },
+    { "path": "coreclr.dll", "minimumBytes": 1 },
+    { "path": "hostfxr.dll", "minimumBytes": 1 },
+    { "path": "hostpolicy.dll", "minimumBytes": 1 },
+    { "path": "License.txt", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.PluginManifest.v1", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.Flake.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.ALAC.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.libmp3lame.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.WMA.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.HDCD.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.libFLAC.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.libwavpack.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.MACLib.dll", "minimumBytes": 1 },
+    { "path": "plugins/CUETools.Codecs.MPEG.dll", "minimumBytes": 1 },
+    { "path": "plugins/x64/hdcd.dll", "minimumBytes": 1 },
+    { "path": "plugins/x64/libFLAC_dynamic.dll", "minimumBytes": 1 },
+    { "path": "plugins/x64/libmp3lame.dll", "minimumBytes": 1 },
+    { "path": "plugins/x64/wavpackdll.dll", "minimumBytes": 1 },
+    { "path": "plugins/x64/MACLibDll.dll", "minimumBytes": 1 }
+  ],
+  "trustManifestProbe": {
+    "pluginDirectory": "plugins",
+    "manifestFile": "CUETools.PluginManifest.v1",
+    "expectedRuntimeArchitecture": "x64",
+    "expectedManifestFiles": [
+      "CUETools.Codecs.ALAC.dll",
+      "CUETools.Codecs.Flake.dll",
+      "CUETools.Codecs.HDCD.dll",
+      "CUETools.Codecs.MACLib.dll",
+      "CUETools.Codecs.MPEG.dll",
+      "CUETools.Codecs.WMA.dll",
+      "CUETools.Codecs.libFLAC.dll",
+      "CUETools.Codecs.libmp3lame.dll",
+      "CUETools.Codecs.libwavpack.dll",
+      "x64/MACLibDll.dll",
+      "x64/hdcd.dll",
+      "x64/libFLAC_dynamic.dll",
+      "x64/libmp3lame.dll",
+      "x64/wavpackdll.dll"
+    ],
+    "expectedRuntimeFiles": [
+      "CUETools.Codecs.ALAC.dll",
+      "CUETools.Codecs.Flake.dll",
+      "CUETools.Codecs.HDCD.dll",
+      "CUETools.Codecs.MACLib.dll",
+      "CUETools.Codecs.MPEG.dll",
+      "CUETools.Codecs.WMA.dll",
+      "CUETools.Codecs.libFLAC.dll",
+      "CUETools.Codecs.libmp3lame.dll",
+      "CUETools.Codecs.libwavpack.dll",
+      "x64/MACLibDll.dll",
+      "x64/hdcd.dll",
+      "x64/libFLAC_dynamic.dll",
+      "x64/libmp3lame.dll",
+      "x64/wavpackdll.dll"
+    ]
+  },
+  "pluginProbe": {
+    "processorAssembly": "CUETools.Processor.dll",
+    "pluginDirectory": "plugins",
+    "expectedPluginFiles": [
+      "CUETools.Codecs.ALAC.dll",
+      "CUETools.Codecs.Flake.dll",
+      "CUETools.Codecs.HDCD.dll",
+      "CUETools.Codecs.MACLib.dll",
+      "CUETools.Codecs.MPEG.dll",
+      "CUETools.Codecs.libFLAC.dll",
+      "CUETools.Codecs.libmp3lame.dll",
+      "CUETools.Codecs.libwavpack.dll",
+      "CUETools.Codecs.WMA.dll"
+    ],
+    "expectedRegistrations": [
+      { "kind": "encoder", "type": "CUETools.Codecs.ALAC.EncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.ALAC.DecoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.Flake.EncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.Flake.DecoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.libmp3lame.VBREncoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.libmp3lame.CBREncoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.WMA.LosslessEncoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.WMA.LossyEncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.WMA.DecoderSettings" },
+      { "kind": "hdcd", "type": "CUETools.Codecs.HDCD.HDCDDotNet" },
+      { "kind": "encoder", "type": "CUETools.Codecs.libFLAC.EncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.libFLAC.DecoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.libwavpack.EncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.libwavpack.DecoderSettings" },
+      { "kind": "encoder", "type": "CUETools.Codecs.MACLib.EncoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.MACLib.DecoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.MPEG.ATSI.DecoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.MPEG.BDLPCM.DecoderSettings" },
+      { "kind": "decoder", "type": "CUETools.Codecs.MPEG.MPLS.DecoderSettings" }
+    ],
+    "nativeProbes": [
+      {
+        "kind": "encoder",
+        "type": "CUETools.Codecs.libmp3lame.VBREncoderSettings",
+        "operation": "nonEmptyStringProperty",
+        "member": "Version"
+      },
+      {
+        "kind": "encoder",
+        "type": "CUETools.Codecs.libFLAC.EncoderSettings",
+        "operation": "nonEmptyStringProperty",
+        "member": "Version"
+      },
+      {
+        "kind": "encoder",
+        "type": "CUETools.Codecs.libwavpack.EncoderSettings",
+        "operation": "nonEmptyStringProperty",
+        "member": "Version"
+      },
+      {
+        "kind": "encoder",
+        "type": "CUETools.Codecs.MACLib.EncoderSettings",
+        "operation": "nonEmptyStringProperty",
+        "member": "Version"
+      },
+      {
+        "kind": "hdcd",
+        "type": "CUETools.Codecs.HDCD.HDCDDotNet",
+        "operation": "hdcdConstructor"
+      }
+    ]
+  }
+}

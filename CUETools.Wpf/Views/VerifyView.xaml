@@ -14,8 +14,7 @@
       <DockPanel LastChildFill="True">
         <TextBlock DockPanel.Dock="Left" Text="Source" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,0"/>
         <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Style="{StaticResource Accent}" Padding="16,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
-        <Button DockPanel.Dock="Right" Content="Folder..." Command="{Binding BrowseFolderCommand}" Padding="12,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
-        <Button DockPanel.Dock="Right" Content="File..." Command="{Binding BrowseFileCommand}" Padding="12,7" VerticalAlignment="Center"/>
+        <Button DockPanel.Dock="Right" Content="File..." Command="{Binding BrowseFileCommand}" Padding="12,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Border Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="6" Padding="10,6" VerticalAlignment="Center">
           <TextBlock Text="{Binding SourcePath}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5" TextTrimming="CharacterEllipsis"/>
         </Border>
@@ -30,7 +29,7 @@
                   Visibility="{Binding HasResult, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
         <TextBlock Text="Verify a rip you already have" FontFamily="{StaticResource Serif}" FontSize="22" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"/>
         <TextBlock TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,8,0,0"
-                   Text="Pick a .cue, an album folder, or a file with an embedded cue. CUETools checks every track against AccurateRip and the CUETools database. If a track has errors that CTDB can recover, Repair rebuilds it from parity."/>
+                   Text="Pick a .cue, .m3u, or supported lossless file. CUETools checks every track against AccurateRip and the CUETools database. If CTDB can recover errors, Repair builds and verifies a new sibling copy without changing the source."/>
       </StackPanel>
 
       <!-- result state -->
@@ -64,7 +63,7 @@
               <Button DockPanel.Dock="Right" Content="Repair" Command="{Binding RepairCommand}" Padding="18,8" VerticalAlignment="Center" Margin="12,0,0,0"/>
               <StackPanel>
                 <TextBlock Text="Errors found - recoverable from CTDB parity" Foreground="{DynamicResource Ink}" FontSize="13" FontWeight="SemiBold"/>
-                <TextBlock Text="Repair rewrites the affected audio in place. Back up the rip first if you want to keep the original." Foreground="{DynamicResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                <TextBlock Text="Repair creates and verifies a new sibling folder. The selected source files remain unchanged." Foreground="{DynamicResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,3,0,0"/>
               </StackPanel>
             </DockPanel>
           </Border>

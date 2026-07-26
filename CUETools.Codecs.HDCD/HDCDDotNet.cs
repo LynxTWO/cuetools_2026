@@ -9,35 +9,47 @@ namespace CUETools.Codecs.HDCD
 		{
 			_decoder = IntPtr.Zero;
 #if !MONO
-			if (decode)
-				_audioBuffer = new AudioBuffer(new AudioPCMConfig(output_bps, channels, 44100), 256);
-			_decoder = HDCDDLL.hdcd_decoder_new();
-			_channelCount = channels;
-			_bitsPerSample = output_bps;
-			if (_decoder == IntPtr.Zero)
-				throw new Exception("Failed to initialize HDCD decoder.");
-			bool b = true;
-			b &= HDCDDLL.hdcd_decoder_set_num_channels(_decoder, (short) _channelCount);
-			b &= HDCDDLL.hdcd_decoder_set_sample_rate(_decoder, sample_rate);
-			b &= HDCDDLL.hdcd_decoder_set_input_bps(_decoder, 16);
-			b &= HDCDDLL.hdcd_decoder_set_output_bps(_decoder, (short)_bitsPerSample);
-			if (!b)
-				throw new Exception("Failed to set up HDCD _decoder parameters.");
-			_decoderCallback = decode ? new HDCDDLL.hdcd_decoder_write_callback(DecoderCallback) : null;
-			_gch = GCHandle.Alloc(this);
-			hdcd_decoder_init_status status = HDCDDLL.hdcd_decoder_init(_decoder, IntPtr.Zero, _decoderCallback, (IntPtr) _gch);
-			switch (status)
+			try
 			{
-				case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_OK:
-					break;
-				case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_MEMORY_ALOCATION_ERROR:
-					throw new Exception("Memory allocation error.");
-				case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_INVALID_NUM_CHANNELS:
-					throw new Exception("Invalid number of channels.");
-				case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_INVALID_SAMPLE_RATE:
-					throw new Exception("Invalid sample rate.");
-				default:
-					throw new Exception("Unknown error(" + status.ToString() + ").");
+				if (decode)
+					_audioBuffer = new AudioBuffer(new AudioPCMConfig(output_bps, channels, 44100), 256);
+				_decoder = HDCDDLL.hdcd_decoder_new();
+				_channelCount = channels;
+				_bitsPerSample = output_bps;
+				if (_decoder == IntPtr.Zero)
+					throw new Exception("Failed to initialize HDCD decoder.");
+				bool b = true;
+				b &= HDCDDLL.hdcd_decoder_set_num_channels(_decoder, (short) _channelCount);
+				b &= HDCDDLL.hdcd_decoder_set_sample_rate(_decoder, sample_rate);
+				b &= HDCDDLL.hdcd_decoder_set_input_bps(_decoder, 16);
+				b &= HDCDDLL.hdcd_decoder_set_output_bps(_decoder, (short)_bitsPerSample);
+				if (!b)
+					throw new Exception("Failed to set up HDCD _decoder parameters.");
+				_decoderCallback = decode ? new HDCDDLL.hdcd_decoder_write_callback(DecoderCallback) : null;
+				_gch = GCHandle.Alloc(this);
+				hdcd_decoder_init_status status = HDCDDLL.hdcd_decoder_init(
+					_decoder,
+					IntPtr.Zero,
+					_decoderCallback,
+					(IntPtr)_gch);
+				switch (status)
+				{
+					case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_OK:
+						break;
+					case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_MEMORY_ALOCATION_ERROR:
+						throw new Exception("Memory allocation error.");
+					case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_INVALID_NUM_CHANNELS:
+						throw new Exception("Invalid number of channels.");
+					case hdcd_decoder_init_status.HDCD_DECODER_INIT_STATUS_INVALID_SAMPLE_RATE:
+						throw new Exception("Invalid sample rate.");
+					default:
+						throw new Exception("Unknown error(" + status.ToString() + ").");
+				}
+			}
+			catch
+			{
+				RollBackConstructorNoThrow();
+				throw;
 			}
 #else
 			throw new Exception("HDCD unsupported.");
@@ -156,11 +168,57 @@ namespace CUETools.Codecs.HDCD
 		{
 #if !MONO
 			if (_decoder != IntPtr.Zero)
-                HDCDDLL.hdcd_decoder_delete(_decoder);
-			_decoder = IntPtr.Zero;
-			if (_gch.IsAllocated)
+			{
+				IntPtr decoder = _decoder;
+				_decoder = IntPtr.Zero;
+				try
+				{
+					HDCDDLL.hdcd_decoder_delete(decoder);
+				}
+				finally
+				{
+					if (_gch.IsAllocated)
+						_gch.Free();
+					_gch = default(GCHandle);
+				}
+			}
+			else if (_gch.IsAllocated)
+			{
 				_gch.Free();
+				_gch = default(GCHandle);
+			}
 #endif
+		}
+
+		private void RollBackConstructorNoThrow()
+		{
+#if !MONO
+			if (_decoder != IntPtr.Zero)
+			{
+				IntPtr decoder = _decoder;
+				_decoder = IntPtr.Zero;
+				try
+				{
+					HDCDDLL.hdcd_decoder_delete(decoder);
+				}
+				catch
+				{
+				}
+			}
+			if (_gch.IsAllocated)
+			{
+				try
+				{
+					_gch.Free();
+				}
+				catch
+				{
+				}
+			}
+			_gch = default(GCHandle);
+#endif
+			_decoderCallback = null;
+			_audioBuffer = null;
 		}
 
 		public void Delete()

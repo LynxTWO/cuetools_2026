@@ -12,5 +12,20 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CUETools.Wpf\CUETools.Wpf.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.Icecast\CUETools.Codecs.Icecast.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.HDCD\CUETools.Codecs.HDCD.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libwavpack\CUETools.Codecs.libwavpack.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.MACLib\CUETools.Codecs.MACLib.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.MPEG\CUETools.Codecs.MPEG.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Native wrappers resolve dependencies relative to their managed assembly. Keep the test
+         layout identical to the production plugins\x64 contract so net8 exercises the real loader. -->
+    <None Include="..\ThirdParty\x64\hdcd.dll" Link="x64\hdcd.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\x64\libFLAC_dynamic.dll" Link="x64\libFLAC_dynamic.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\x64\libmp3lame.dll" Link="x64\libmp3lame.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\x64\wavpackdll.dll" Link="x64\wavpackdll.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\x64\MACLibDll.dll" Link="x64\MACLibDll.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -16,7 +16,7 @@ namespace CUETools.Wpf.Controls;
 ///    counts; <see cref="Npar"/> is the real parity depth used (4/8/16).
 ///  - The pipeline (syndrome -> locate -> Chien -> Forney -> apply) is the real RS decode. The first
 ///    four stages are computed during the Verify pass, so they light as soon as errors are found; the
-///    fifth (apply) is the destructive write and lights only during / after Repair.
+///    fifth (apply) is the staged repair-copy write and lights only during / after Repair.
 ///
 /// States: recoverable (post-verify, damage shown amber, parity sufficient), repairing (a sweep
 /// reconstructs left-to-right, tied to the real repair <see cref="Progress"/>), repaired (all green).

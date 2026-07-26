@@ -6,13 +6,16 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 **User decisions recorded 2026-07-02.** Implementation happens after the anti-dark-code review passes complete (user's sequencing).
 
-## Approved - queued for implementation
+## Approved decisions and current status
 
-### D1. AccurateRip: switch lookups to HTTPS - APPROVED
+### D1. AccurateRip: switch lookups to HTTPS - DONE
 
 - **Decision:** flip HTTP -> HTTPS. Server answers HTTPS; no reason to stay on HTTP.
-- **Evidence:** `www.accuraterip.com` answered HTTPS 200 in a 2026-07 probe. Client hardcodes `http://` at `CUETools.AccurateRip\AccurateRip.cs:829,1230`.
-- **Plan:** change the two scheme literals; keep an http fallback on TLS failure; verify a real lookup still parses and DriveOffsets.bin still downloads.
+- **Evidence:** `www.accuraterip.com` answered HTTPS 200 in a 2026-07 probe.
+  `CUETools.AccurateRip\AccurateRip.cs:837,1248` now uses HTTPS for both the disc
+  response and `DriveOffsets.bin`.
+- **Policy:** there is no HTTP downgrade. A TLS failure is a failed external check,
+  not permission to accept unauthenticated confidence data.
 
 ### D2. CTDB HTTPS - DONE 2026-07-02 (tracking issue filed)
 
@@ -46,11 +49,16 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Why not complete:** the old-style (non-SDK) csproj do not restore a PackageReference injected via the shared targets, so the old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`, and old-style `CLParity`/`FLACCL`) still cannot `dotnet build`. The clean fix is SDK-style conversion of those projects - real work that needs the GUI run to verify resource loading (cannot be done headless) and belongs to the modernization program (R12), not a blind headless change to the shipping GUIs.
 - **Verified:** CUEControls builds under `dotnet build`; TestParity 18/18, TestCodecs 34/34 green; devenv/CI unaffected by construction (Core-gated).
 
-## Still deferred (your earlier call)
+## Previously deferred decisions
 
-### D5. Delete dead projects/binaries - DEFERRED
+### D5. Delete dead projects/binaries - PARTIALLY DONE
 
-- FlaCuda projects (absent from sln), `CUDA.NET.dll`, `Freedb.dll`, `MusicBrainz.dll` (no csproj refs). Keep until the initial rollout completes. Note: D6 may retire the MusicBrainz source project; revisit D5 together with D6's outcome.
+- The dead MusicBrainz mirror was removed after D6 selected CTDB-proxied metadata.
+- FlaCuda and its console wrapper were deleted on 2026-07-23 after confirming they
+  were absent from the solution and unreferenced outside their own directories.
+  FLACCL is the live OpenCL path.
+- Do not infer that every old binary is dead: `Freedb.dll` remains reachable in the
+  current products, and legacy/package reachability must be checked per artifact.
 
 ## R12 / R13 - large programs, need your sequencing call (assessed 2026-07-10)
 
@@ -78,25 +86,24 @@ than starting a large program blind.
 
 ### R13 decision - codec refresh needs your codec wishlist + a native build/verify path
 
-- **Current pins (measured in the working tree):** libFLAC **1.5.0**, WavPack **5.8.1**,
-  taglib-sharp **2.3.0.0** - all at or near latest stable already. The submodules are
-  checked out at these versions but the superproject still pins older commits (they show
-  as modified/uncommitted), and each carries local `ThirdParty/*.patch` that must be
-  re-verified on any bump. MAC (APE) SDK 10.86 and unrar 6.11 (D3, approved-but-deferred)
-  are the laggards.
-- **Why I did not just commit the bumps:** advancing a native codec is behavior-affecting
-  (bit-exactness must hold) and needs a native rebuild + round-trip verification that this
-  headless env cannot do. The managed-codec safety net already exists - `TestCodecs`
-  asserts byte-exact encoder output (e.g. `FlakeWriterTest.ConstructorTest` compares
-  against a committed `flake.flac`) - but the native DLLs are built by CI, not here.
-- **Two things I need from you before implementing R13:**
+- **Current pins and upstream check (2026-07-26):** libFLAC 1.5.0 and
+  taglib-sharp 2.3.0.0 match current upstream releases. WavPack 5.8.1 trails
+  5.9.0, MAC SDK 10.86 trails 13.20, and vendored LAME 3.100 trails the newly
+  released official 4.0. The standalone, currently unshipped FFmpeg 7.1.1 path
+  trails 8.1.2.
+- **Why the remaining bumps are not part of this commit:** WavPack and
+  taglib-sharp contain existing local work that must be preserved; MAC has
+  crossed native interface generations; LAME is a new major release without a
+  packaged MP3 decode/quality gate; and FFmpeg is not part of either primary
+  artifact. The current native build/probe gate is available, but it does not
+  replace per-codec compatibility and corpus evidence.
+- **Product input still needed for the format-addition half of R13:**
   1. **Codec wishlist:** which formats to *add* (e.g. Opus? newer ALAC? DSD?). R13 cannot
      start the "add codecs" half without this list.
-  2. **Bump-and-verify path:** confirm bumps land as reviewable branches that CI builds and
-     round-trips (native bit-exactness), since I cannot verify native output headless.
-- **Safe next step I can take now without a decision:** produce the full per-codec
-  version-vs-latest table + patch-reapply risk note (read-only), and land the D3 unrar
-  upgrade once a real `.rar` round-trip can be run. Say the word and I will.
+- **Next safe implementation sequence:** preserve/reconcile the dirty submodule
+  work, upgrade one native integration at a time, rebuild both architectures,
+  run its independent decode/corpus gate, and update provenance before moving to
+  the next codec. UnRAR still needs a real `.rar` round-trip.
 
 ## Resolved / actioned
 

@@ -6,6 +6,14 @@ Use this reference when mapping a repo before any code changes. This is the base
 
 For confidence levels, the unknowns entry shape, and default deliverable paths, see `00-conventions.md`.
 
+## Contents
+
+- Goal, repo branches, and source inventory
+- Runtime units, dependency graphs, and reachability
+- Interfaces, stores, language surfaces, dependencies, and configuration
+- Trust boundaries, critical flows, operations, and known gaps
+- Worked example, rules, and acceptance
+
 ## Goal
 
 Create a clear map of the repo so a new engineer can understand what exists, how the system is entered, what data it stores, what it depends on, where trust changes, and which areas are still unclear.
@@ -87,6 +95,57 @@ For each:
 - what it depends on
 - who calls it or what triggers it
 - what data or side effects it owns
+
+### 2a. Dependency and shipping graphs
+
+Mixed and plugin-based repos have several different graphs. Name the graph before calling a project, library, codec, module, or binary "referenced", "unreferenced", "reachable", or "dead":
+
+- solution or workspace membership, including configuration and architecture build mappings
+- static source references such as project, package, or module references
+- dynamic discovery such as plugin scans, reflection, registries, manifests, or dependency injection
+- packaging and release copy rules
+- runtime native-library, external-process, driver, model, or asset dependencies
+
+Map the edges that affect what builds, what ships, and what can load at runtime. A node outside one graph may be live through another.
+
+Do not infer a build blocker merely because a generated binary is absent from a clean checkout. Trace its source, build project, pinned SDK or submodule, patch step, workflow, expected output path, and packaging consumer.
+
+For every submodule, inventory the superproject gitlink and expected commit, initialization state, checked-out commit, gitlink drift, tracked modifications, untracked files, ignored build artifacts by count or class, nested submodules, expected build outputs, and local consumers. A patch-applied worktree, local source edit, ignored build output, and changed gitlink are different states with different owners and recovery paths.
+
+#### End-to-end reachability proof
+
+Before calling a plugin, project, codec, module, binary, or optional feature reachable, dead, imported, or unreferenced, trace all applicable links:
+
+1. implementation source and language or native boundary, including candidate-file and finding counts for negative searches
+2. build target, configuration, framework, and architecture mapping
+3. copy, package, publish, or deployment rule
+4. discovery, registration, reflection, manifest, or loader path
+5. native library, external process, driver, model, asset, or SDK dependencies and their expected locations
+6. default and user-controlled enablement or selection
+7. invocation path from a real entrypoint
+8. an observed build, package, load, selection, and invocation test, with the exact target tuple and result
+
+Stop at the first broken or unproven link and name it. A text-only trace can prove configuration facts, but a behavioral reachability claim stays `inferred` until observed. Failure in one target tuple does not prove the feature is unreachable in every supported tuple.
+
+Use these terminal descriptions so configuration evidence is not mistaken for execution evidence:
+
+- `reachable-observed` - all applicable links, including link 8, were observed for the named tuple
+- `configured-not-observed` - links 1 through 7 are evidenced, but link 8 was not run or observed
+- `blocked-at-link-N` - a required link is proven absent or failed for the named tuple
+- `unknown-at-link-N` - evidence for the link was not available
+- `not-applicable` - the link genuinely does not apply; state why
+
+If execution is forbidden, capability can still be `configured-not-observed`; test-pass and
+runtime-behavior claims remain `unknown`.
+
+#### Historical scope boundary
+
+When the user asks for historical or superseded implementations, define the boundary before
+enumerating. By default include current production implementations, their frontends and native
+backends, plus deleted or renamed direct predecessors that are named by current build files,
+review artifacts, migration notes, or relevant history. Exclude vendor examples, samples, and
+tests unless they can ship or the user asks for them. State the boundary, queries, and commit
+snapshots used. "All history" is not a bounded scope.
 
 ### 3. Interface surface
 
@@ -210,5 +269,6 @@ The result should let a new teammate answer:
 - which secrets and config inputs exist
 - where the trust boundaries are
 - which non-obvious live entrypoints and control-plane paths exist
+- which build, static-reference, dynamic-load, packaging, and runtime-dependency graphs make each shipped unit reachable
 - which out-of-repo boundaries still shape behavior
 - what is still unclear

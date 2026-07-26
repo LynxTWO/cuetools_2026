@@ -1,5 +1,19 @@
 # Scenario Stress-Test
 
+## Current-state addendum - 2026-07-26
+
+The scenarios below are the preserved 2026-07-02 pass. SC2, SC3, SC4, SC6, and SC8
+are now closed by bounded decoders, HTTPS text-only MOTD, filename hardening,
+AccurateRip HTTPS, and DPAPI/atomic settings respectively. SC5 is closed for
+manifest-bound packaged plugins but remains a deliberate trust boundary when local
+plugins are explicitly enabled.
+
+The follow-up pass added and exercised repo-specific failure scenarios for
+cross-process album publication, repair staging/verification, external encoder
+timeouts and truncated output, WMA lossless mismatches, plugin identity preloading,
+settings-write interruption, native finalization failure, and artifact omissions.
+Results and residual external checks are in `2026-07-26-autonomous-audit.md`.
+
 Pass 08, 2026-07-02. Synthetic abuse/failure scenarios that fit CUETools' actual shape, used to test whether the current map and comments would hold. Score key: 0 = the current understanding misses it, 1 = partly covered, 2 = clearly covered. Scorecard in `scenario-scorecard.md`.
 
 ## Scenarios

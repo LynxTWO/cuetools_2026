@@ -14,7 +14,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bwg.Scsi\Bwg.Scsi.csproj" />
+    <ProjectReference Include="..\CUETools.Compression.Zip\CUETools.Compression.Zip.csproj" />
     <ProjectReference Include="..\CUETools.Wpf\CUETools.Wpf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\CUETools\CUETools.TestCodecs\Data\test.flac" Link="Corpus\Codecs\test.flac" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\CUETools\CUETools.TestCodecs\Data\alac.m4a" Link="Corpus\Codecs\alac.m4a" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\CUETools\CUETools.TestProcessor\Test Images\Amarok\Amarok.cue" Link="Corpus\Cue\Amarok.cue" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\CUETools\CUETools.TestProcessor\Test Images\Amarok\Amarok.dummy" Link="Corpus\Cue\Amarok.dummy" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ThirdParty\taglib-sharp\src\TaglibSharp.Tests\samples\sample.mp3" Link="Corpus\Tags\sample.mp3" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

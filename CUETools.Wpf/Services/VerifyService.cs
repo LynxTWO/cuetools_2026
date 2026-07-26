@@ -20,9 +20,11 @@ public sealed class VerifyFilesResult
     public bool HasErrors { get; init; }
     public bool CanRecover { get; init; }
     public string Source { get; init; } = "";
+    /// <summary>The published repaired-copy directory. Empty for verification and failed repair.</summary>
+    public string OutputPath { get; init; } = "";
 
     // CTDB Reed-Solomon repair detail, read straight off the matching DBEntry.repair after the verify
-    // pass (the same data the destructive repair would apply). All real: RepairSamples is the count of
+    // pass (the same data a repair copy would apply). All real: RepairSamples is the count of
     // 16-bit samples the parity can/did reconstruct, RepairSectorMap is a downsampled view of exactly
     // which sectors were damaged (from AffectedSectorArray), RepairNpar the parity depth used.
     public int RepairSamples { get; init; }
@@ -31,19 +33,19 @@ public sealed class VerifyFilesResult
     public int RepairNpar { get; init; }
     public double[] RepairSectorMap { get; init; } = System.Array.Empty<double>();
     public string RepairRanges { get; init; } = "";
-    public bool RepairApplied { get; init; }   // true after the repair pass actually rewrote the audio
+    public bool RepairApplied { get; init; }   // true only after a repaired copy was verified and published
 }
 
-/// <summary>Verify and repair existing audio files (a .cue, a single file, or a folder) against
+/// <summary>Verify and repair existing audio files (a .cue, an .m3u, or a supported lossless file) against
 /// AccurateRip and CTDB - the file-based twin of the disc rip. Blocking + network, so callers
 /// marshal it onto a background thread.</summary>
 public interface IVerifyService
 {
     VerifyFilesResult Verify(string path, Action<double, string> onProgress);
 
-    /// <summary>Drive the engine's "repair" script: verify, then re-encode the affected sectors
-    /// from CTDB Reed-Solomon parity. Only meaningful when a prior Verify reported CanRecover.
-    /// Rewrites the audio the source cue points at (CTDB's in-place repair semantics).</summary>
+    /// <summary>Drive the engine's "repair" script into an isolated sibling staging directory,
+    /// independently verify the repaired files, then atomically publish a new sibling directory.
+    /// The source files are never replaced.</summary>
     VerifyFilesResult Repair(string path, Action<double, string> onProgress);
 }
 
@@ -51,8 +53,19 @@ public sealed class VerifyService : IVerifyService
 {
     private readonly CUEConfig _config;
     private readonly IDiagnosticLog _log;
+    private readonly IRepairEngine _repairEngine;
 
-    public VerifyService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
+    public VerifyService(CUEConfig config, IDiagnosticLog log)
+        : this(config, log, new CueRepairEngine(log))
+    {
+    }
+
+    internal VerifyService(CUEConfig config, IDiagnosticLog log, IRepairEngine repairEngine)
+    {
+        _config = config;
+        _log = log;
+        _repairEngine = repairEngine;
+    }
 
     /// <summary>Root the sheet's output at the verified source so an AccurateRip log written during a
     /// verify lands next to those files. Best-effort: a verify must never fail because of its log.</summary>
@@ -72,11 +85,31 @@ public sealed class VerifyService : IVerifyService
         catch (Exception ex) { _log.Warn("verify", "could not set the AR-log target: " + ex.GetType().Name); }
     }
 
-    public VerifyFilesResult Verify(string path, Action<double, string> onProgress)
+    private void RedactSourcePath(string? path)
     {
+        // Register the raw selection before any normalization or filesystem call can fail. Also
+        // register the absolute file and its containing root because framework/native exceptions
+        // commonly report either form.
+        try { _log.Redact(path); } catch { }
+        if (string.IsNullOrWhiteSpace(path)) return;
         try
         {
-            var cue = new CUESheet(_config);
+            string full = System.IO.Path.GetFullPath(path);
+            string? parent = System.IO.Directory.Exists(full)
+                ? full
+                : System.IO.Path.GetDirectoryName(full);
+            _log.Redact(full, parent);
+        }
+        catch { }
+    }
+
+    public VerifyFilesResult Verify(string path, Action<double, string> onProgress)
+    {
+        RedactSourcePath(path);
+        CUESheet? cue = null;
+        try
+        {
+            cue = new CUESheet(_config);
             cue.CUEToolsProgress += (s, e) => onProgress(Clamp(e.percent), e.status);
             cue.Open(path);
 
@@ -98,48 +131,167 @@ public sealed class VerifyService : IVerifyService
             string status = cue.Go();
             onProgress(1, status);
 
-            return Gather(cue, status, path, ok: true, error: "", applied: false);
+            return Gather(cue, status, path, ok: true, error: "", applied: false, _log);
         }
         catch (Exception ex)
         {
             _log.Error("verify", "file verify failed", ex);
             return new VerifyFilesResult { Error = ex.Message, Source = path };
         }
+        finally
+        {
+            if (cue != null)
+            {
+                try { cue.Close(); }
+                catch (Exception ex)
+                {
+                    _log.Warn("verify", "could not close verify resources: " +
+                        ex.GetType().Name);
+                }
+            }
+        }
     }
 
     public VerifyFilesResult Repair(string path, Action<double, string> onProgress)
     {
+        RedactSourcePath(path);
+        RepairWorkspace? workspace = null;
         try
         {
-            var cue = new CUESheet(_config);
-            cue.CUEToolsProgress += (s, e) => onProgress(Clamp(e.percent), e.status);
-            // When more than one CTDB entry is recoverable, take the first; a lone entry is
-            // auto-selected by ChooseFile(quietIfSingle) without firing this.
-            cue.CUEToolsSelection += (s, e) => e.selection = 0;
-            cue.Open(path);
+            if (System.IO.Directory.Exists(path))
+                return Failure(path, "Choose a .cue, .m3u, or supported lossless file; folder input is not supported.");
+            if (!System.IO.File.Exists(path))
+                return Failure(path, "The selected source file does not exist.");
 
-            if (!_config.scripts.TryGetValue("repair", out var repair))
-                return new VerifyFilesResult { Error = "Repair script not available.", Source = path };
+            CUEConfig repairConfig = CreateRepairConfig(_config);
+            workspace = RepairWorkspace.Create(path);
+            // Repair uses a generated sibling staging/output path. Register it before the repair
+            // engine or a progress callback can include it in an exception.
+            try { _log.Redact(workspace.StagingDirectory); } catch { }
 
-            onProgress(0, "Repairing from CTDB parity...");
-            string status = cue.ExecuteScript(repair);
-            onProgress(1, status);
+            onProgress(0, "Building an isolated repaired copy...");
+            RepairEngineResult repaired = _repairEngine.Repair(
+                path, workspace.StagingDirectory, repairConfig, onProgress);
 
-            return Gather(cue, status, path, ok: true, error: "", applied: true);
+            if (!repaired.Result.Ok || !repaired.Applied || !repaired.Result.RepairApplied)
+                throw new InvalidOperationException(
+                    "CTDB did not apply a repair. The source may already match or no recoverable entry was selected.");
+
+            workspace.RequireNonemptyOutputs(repaired.StagedCuePath, repaired.ExpectedAudioPaths);
+
+            onProgress(0.9, "Independently verifying the repaired copy...");
+            RepairVerificationResult verified = _repairEngine.Verify(
+                repaired.StagedCuePath, new CUEConfig(repairConfig), onProgress);
+            if (!verified.Result.Ok || !verified.Verified)
+                throw new InvalidOperationException(
+                    "The repaired copy could not be independently verified against AccurateRip or CTDB.");
+
+            string published = workspace.Publish();
+            workspace = null;
+            string status = "Repaired copy verified and saved to " + published;
+            // Publication already happened. A UI progress callback must not turn that committed
+            // success into a reported failure.
+            try { onProgress(1, status); }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _log.Warn("verify", "repair completion callback failed: " +
+                        ex.GetType().Name);
+                }
+                catch { }
+            }
+            return PublishedRepair(repaired.Result, verified.Result, path, published, status);
         }
         catch (Exception ex)
         {
             _log.Error("verify", "repair failed", ex);
-            return new VerifyFilesResult { Error = ex.Message, Source = path };
+            return Failure(path, ex.Message);
+        }
+        finally
+        {
+            if (workspace != null)
+            {
+                try { workspace.Dispose(); }
+                catch (Exception ex)
+                {
+                    _log.Warn("verify", "could not remove owned repair staging directory: " + ex.GetType().Name);
+                }
+            }
         }
     }
 
-    private VerifyFilesResult Gather(CUESheet cue, string status, string path, bool ok, string error, bool applied)
+    internal static CUEConfig CreateRepairConfig(CUEConfig source)
+    {
+        var copy = new CUEConfig(source)
+        {
+            writeArTagsOnVerify = false,
+            writeArLogOnVerify = false,
+            writeArLogOnConvert = false,
+            arLogToSourceFolder = false,
+            keepOriginalFilenames = false,
+            trackFilenameFormat = "%tracknumber%",
+            singleFilenameFormat = "album",
+            extractAlbumArt = false,
+            extractLog = false,
+            createM3U = false,
+            createCUEFileInTracksMode = true,
+            createCUEFileWhenEmbedded = true
+        };
+        copy.advanced.WriteCTDBTagsOnVerify = false;
+        copy.advanced.CreateTOC = false;
+        return copy;
+    }
+
+    private static VerifyFilesResult Failure(string path, string error)
+        => new() { Error = error, Source = path };
+
+    private static VerifyFilesResult PublishedRepair(
+        VerifyFilesResult repaired,
+        VerifyFilesResult verified,
+        string source,
+        string outputPath,
+        string status)
+    {
+        return new VerifyFilesResult
+        {
+            Ok = true,
+            Status = status,
+            Artist = verified.Artist.Length == 0 ? repaired.Artist : verified.Artist,
+            Album = verified.Album.Length == 0 ? repaired.Album : verified.Album,
+            TrackCount = verified.TrackCount == 0 ? repaired.TrackCount : verified.TrackCount,
+            ArConfidence = verified.ArConfidence,
+            ArTotal = verified.ArTotal,
+            CtdbConfidence = verified.CtdbConfidence,
+            CtdbTotal = verified.CtdbTotal,
+            Accurate = verified.Accurate,
+            HasErrors = false,
+            CanRecover = false,
+            Source = source,
+            OutputPath = outputPath,
+            RepairSamples = repaired.RepairSamples,
+            RepairSectors = repaired.RepairSectors,
+            RepairTotalSectors = repaired.RepairTotalSectors,
+            RepairNpar = repaired.RepairNpar,
+            RepairSectorMap = repaired.RepairSectorMap,
+            RepairRanges = repaired.RepairRanges,
+            RepairApplied = true
+        };
+    }
+
+    internal static VerifyFilesResult Gather(
+        CUESheet cue,
+        string status,
+        string path,
+        bool ok,
+        string error,
+        bool applied,
+        IDiagnosticLog log)
     {
         int arConf = 0, arTotal = 0;
         // a throw here must not be reported as "not in database" - that is a different fact
         try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
-        catch (Exception ex) { _log.Warn("verify", "AccurateRip result read failed (shown as not in database): " + ex.GetType().Name); }
+        catch (Exception ex) { log.Warn("verify", "AccurateRip result read failed (shown as not in database): " + ex.GetType().Name); }
 
         int ctConf = 0, ctTotal = 0;
         bool hasErrors = false, canRecover = false;
@@ -156,9 +308,18 @@ public sealed class VerifyService : IVerifyService
                 if (rep == null && e.hasErrors && e.canRecover && e.repair != null) rep = e;
             }
             if (rep == null) { var se = cue.CTDB.SelectedEntry; if (se != null && se.repair != null && se.hasErrors) rep = se; }
+
+            // CTDB can contain multiple legitimate pressings. If any entry is an exact match,
+            // differing alternatives are not damage in this source and must not enable Repair.
+            if (ctConf > 0)
+            {
+                hasErrors = false;
+                canRecover = false;
+                rep = null;
+            }
         }
         // if this walk throws, CanRepair would silently never enable - repairable damage unreported
-        catch (Exception ex) { _log.Warn("verify", "CTDB entries walk failed (repair state may be understated): " + ex.GetType().Name); }
+        catch (Exception ex) { log.Warn("verify", "CTDB entries walk failed (repair state may be understated): " + ex.GetType().Name); }
 
         // Pull the real Reed-Solomon repair detail off the chosen entry: how many samples parity can
         // reconstruct, the parity depth, and the exact damaged-sector map (downsampled for drawing).
@@ -185,7 +346,7 @@ public sealed class VerifyService : IVerifyService
                 try { repRanges = fx.AffectedSectors; } catch { }
             }
             // cosmetic blast radius only (the repair scope hides; CanRepair derives from the walk above)
-            catch (Exception ex) { _log.Warn("verify", "repair detail extraction failed: " + ex.GetType().Name); }
+            catch (Exception ex) { log.Warn("verify", "repair detail extraction failed: " + ex.GetType().Name); }
         }
 
         return new VerifyFilesResult
@@ -210,7 +371,10 @@ public sealed class VerifyService : IVerifyService
             RepairNpar = repNpar,
             RepairSectorMap = repMap,
             RepairRanges = repRanges,
-            RepairApplied = applied && rep != null
+            // "Applied" is the explicit engine-state proof (CTDB-fix branch, processed encode).
+            // Repair detail may be cleared when an exact CTDB match suppresses alternate-pressing
+            // errors, so it must not erase that already-observed execution fact.
+            RepairApplied = applied
         };
     }
 

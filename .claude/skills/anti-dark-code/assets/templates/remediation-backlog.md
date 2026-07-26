@@ -8,9 +8,9 @@ For canonical confidence levels, risk levels, and item status values, see `refer
 
 ## Buckets
 
-1. **Safe to fix now** — behavior-preserving, comment-only, docs-only, or narrow redaction outside protected areas
-2. **Approval-gated** — touches a protected area; needs explicit human approval before any edit
-3. **Needs more evidence** — the concern is real but the next safe step is not yet clear
+1. **Safe to fix now** - behavior-preserving, comment-only, docs-only, or narrow redaction outside protected areas
+2. **Approval-gated** - touches a protected area; needs explicit human approval before any edit
+3. **Needs more evidence** - the concern is real but the next safe step is not yet clear
 
 ## Items
 
@@ -41,8 +41,8 @@ Group items by slice, subsystem, runtime unit, or control-plane path when that m
 
 ### <slice or subsystem name>
 
-- <item title> — <bucket> — <risk>
-- <item title> — <bucket> — <risk>
+- <item title> - <bucket> - <risk>
+- <item title> - <bucket> - <risk>
 
 ## Holes and external boundaries
 
@@ -57,4 +57,4 @@ List each boundary once. Note what evidence is missing and what the next best ch
 
 ## Changelog
 
-- <YYYY-MM-DD> — <what changed, who made the call>
+- <YYYY-MM-DD> - <what changed, who made the call>

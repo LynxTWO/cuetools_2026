@@ -299,7 +299,7 @@ namespace CUETools.CLParity
                 catch (OpenCLBuildException ex)
                 {
                     string buildLog = ex.BuildLogs[0];
-                    throw ex;
+                    throw;
                 }
                 //using (Stream kernel = GetType().Assembly.GetManifestResourceStream(GetType(), "parity.cl"))
                 //using (StreamReader sr = new StreamReader(kernel))

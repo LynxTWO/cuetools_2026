@@ -52,10 +52,23 @@ namespace CUETools.Codecs
 
             if (Type.GetType("Mono.Runtime", false) == null)
             {
-                encoders.Add(new CommandLine.EncoderSettings("flac.exe", "flac", true, "0 1 2 3 4 5 6 7 8", "5", "flac.exe", "-%M -P %P - -o %O"));
-                encoders.Add(new CommandLine.EncoderSettings("flake.exe", "flac", true, "0 1 2 3 4 5 6 7 8 9 10 11 12", "8", "flake.exe", "-%M - -o %O -p %P"));
-                encoders.Add(new CommandLine.EncoderSettings("takc.exe", "tak", true, "0 1 2 2e 2m 3 3e 3m 4 4e 4m", "2", "takc.exe", "-e -p%M -overwrite - %O"));
-                encoders.Add(new CommandLine.EncoderSettings("ffmpeg.exe", "m4a", true, "", "", "ffmpeg.exe", "-i - -f ipod -acodec alac -y %O"));
+                encoders.Add(new CommandLine.EncoderSettings("flac.exe", "flac", true, "0 1 2 3 4 5 6 7 8", "5", "flac.exe", "-%M -P %P - -o %O")
+                {
+                    VerificationUsesEncoder = true,
+                    VerificationParameters = "--decode --stdout --totally-silent %I"
+                });
+                // Do not add the historical flake.exe command wrapper: the repository has no
+                // evidenced decoder command for it. Persisted copies fail closed at construction.
+                encoders.Add(new CommandLine.EncoderSettings("takc.exe", "tak", true, "0 1 2 2e 2m 3 3e 3m 4 4e 4m", "2", "takc.exe", "-e -p%M -overwrite - %O")
+                {
+                    VerificationUsesEncoder = true,
+                    VerificationParameters = "-d %I -"
+                });
+                encoders.Add(new CommandLine.EncoderSettings("ffmpeg.exe", "m4a", true, "", "", "ffmpeg.exe", "-i - -f ipod -acodec alac -y %O")
+                {
+                    VerificationUsesEncoder = true,
+                    VerificationParameters = "-v error -i %I -f wav -"
+                });
                 encoders.Add(new CommandLine.EncoderSettings("lame.exe (VBR)", "mp3", false, "V9 V8 V7 V6 V5 V4 V3 V2 V1 V0", "V2", "lame.exe", "--vbr-new -%M - %O"));
                 encoders.Add(new CommandLine.EncoderSettings("lame.exe (CBR)", "mp3", false, "96 128 192 256 320", "256", "lame.exe", "-m s -q 0 -b %M --noreplaygain - %O"));
                 encoders.Add(new CommandLine.EncoderSettings("oggenc.exe", "ogg", false, "-1 -0.5 0 0.5 1 1.5 2 2.5 3 3.5 4 4.5 5 5.5 6 6.5 7 7.5 8", "3", "oggenc.exe", "-q %M - -o %O"));

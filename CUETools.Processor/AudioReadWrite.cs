@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using CUETools.CDImage;
 using CUETools.Codecs;
 
@@ -36,8 +37,9 @@ namespace CUETools.Processor
 			catch (System.Reflection.TargetInvocationException ex)
 			{
 				if (ex.InnerException == null)
-					throw ex;
-				throw ex.InnerException;
+					throw;
+				ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+				throw new InvalidOperationException("Unreachable after rethrow.");
 			}
 		}
 
@@ -70,7 +72,10 @@ namespace CUETools.Processor
             }
             catch (System.Reflection.TargetInvocationException ex)
             {
-                throw ex.InnerException;
+                if (ex.InnerException == null)
+                    throw;
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw new InvalidOperationException("Unreachable after rethrow.");
             }
 			if (o == null || !(o is IAudioDest))
 				throw new Exception("Unsupported audio type: " + path + ": " + settings.EncoderType.FullName);

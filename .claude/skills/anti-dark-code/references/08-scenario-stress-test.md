@@ -6,6 +6,13 @@ Use this reference when testing the current repo understanding against synthetic
 
 For confidence levels and the unknowns entry shape, see `00-conventions.md`. For an output example, see `example-stress-test-report.md`.
 
+## Contents
+
+- Goal and inputs
+- Scenario families and deliverables
+- Report, scorecard, and unknowns shapes
+- Checks, rules, example, and acceptance
+
 ## Goal
 
 Run synthetic stress tests against the current steering docs, system map, coverage ledger, slice plan, and recent summaries.
@@ -43,6 +50,10 @@ Good scenario families:
 - a support-only admin tool with higher privileges than the main app path
 - a mirrored third-party directory that should have been excluded from comment churn
 - a clean public API path hiding a second path through a cron job, queue, or import script
+- a zero-candidate source search incorrectly reported as a clean or pure-managed implementation
+- a dynamically copied and discovered plugin missed by a static-reference-only review
+- an encoder that checks frames but ignores the final flush or never verifies the whole output
+- a repair or publication path that exposes a partial final result, deletes an unowned replacement stage, or changes the source before independent validation
 
 ## Deliverables
 

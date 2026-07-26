@@ -81,7 +81,8 @@ namespace CUETools.CTDB.EACPlugin
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex.Message);
+                Debug.WriteLine(
+                    "Cover preview update failed (" + ex.GetType().Name + ").");
             }
         }
 

@@ -26,12 +26,12 @@ For canonical risk levels, classification labels, and slice status values, see `
 
 Suggested order for current run:
 
-1. <slice name> — <one-line why this one first>
-2. <slice name> — <one-line why>
-3. <slice name> — <one-line why>
+1. <slice name> - <one-line why this one first>
+2. <slice name> - <one-line why>
+3. <slice name> - <one-line why>
 
 ## Exclusions
 
 Slices that will not receive deep code-level passes. Explain how they are described instead (map, manifest, runbook, ownership note).
 
-- **<excluded slice>** — <reason> — <where it is explained instead>
+- **<excluded slice>** - <reason> - <where it is explained instead>

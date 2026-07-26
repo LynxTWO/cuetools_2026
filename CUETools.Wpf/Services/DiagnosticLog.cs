@@ -32,11 +32,31 @@ public sealed class DiagnosticLog : IDiagnosticLog
     private readonly List<string> _secrets = new();
     public string LogPath { get; }
 
-    public DiagnosticLog()
+    public DiagnosticLog() : this(null)
     {
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "logs");
-        try { Directory.CreateDirectory(dir); } catch { }
-        LogPath = Path.Combine(dir, $"cuetools-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    }
+
+    /// <summary>
+    /// The explicit path is for isolated tests. Production always uses the per-user diagnostics
+    /// directory selected by the parameterless constructor.
+    /// </summary>
+    internal DiagnosticLog(string? logPath)
+    {
+        string defaultDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "CUETools2026",
+            "logs");
+        string selectedPath = string.IsNullOrWhiteSpace(logPath)
+            ? Path.Combine(defaultDir, $"cuetools-{DateTime.Now:yyyyMMdd-HHmmss}.log")
+            : logPath;
+        string? dir = Path.GetDirectoryName(selectedPath);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+        }
+        catch { }
+        LogPath = selectedPath;
 
         // always-on scrub targets: user name + home + music folders
         AddSecret(Environment.UserName);
@@ -66,7 +86,9 @@ public sealed class DiagnosticLog : IDiagnosticLog
 
     private void AddSecret(string? s)
     {
-        if (!string.IsNullOrWhiteSpace(s) && s.Length >= 3 && !_secrets.Contains(s))
+        if (!string.IsNullOrWhiteSpace(s) && s.Length >= 3 &&
+            !_secrets.Exists(existing =>
+                string.Equals(existing, s, StringComparison.OrdinalIgnoreCase)))
             _secrets.Add(s);
     }
 
@@ -82,24 +104,50 @@ public sealed class DiagnosticLog : IDiagnosticLog
         catch { /* never let logging break anything */ }
     }
 
-    // Replace any registered sensitive substring with a token. Case-insensitive on the raw text.
-    // The search resumes AFTER the inserted token: restarting from 0 would loop forever when a
-    // secret matches inside "<redacted>" itself (e.g. the artist "Red" - a real album title).
+    // Replace registered sensitive substrings with a token, case-insensitively, in one pass over the
+    // ORIGINAL text. Replacement text must never be searched: "Red" is a real artist/title and also
+    // occurs inside "<redacted>".
     private string Scrub(string s)
     {
         if (string.IsNullOrEmpty(s)) return s;
         const string Token = "<redacted>";
         List<string> secrets;
         lock (_gate) secrets = new List<string>(_secrets);
-        foreach (var secret in secrets)
+        // A custom root normally contains the profile path and user name. Scrub the most specific
+        // value first; otherwise replacing the short prefix would prevent the full root from
+        // matching and leave the identifying remainder in the log.
+        secrets.Sort((left, right) => right.Length.CompareTo(left.Length));
+        var scrubbed = new StringBuilder(s.Length);
+        int position = 0;
+        while (position < s.Length)
         {
-            int start = 0, idx;
-            while (start < s.Length && (idx = s.IndexOf(secret, start, StringComparison.OrdinalIgnoreCase)) >= 0)
+            int next = -1;
+            string? match = null;
+            foreach (string secret in secrets)
             {
-                s = s.Substring(0, idx) + Token + s.Substring(idx + secret.Length);
-                start = idx + Token.Length;
+                int candidate = s.IndexOf(
+                    secret,
+                    position,
+                    StringComparison.OrdinalIgnoreCase);
+                if (candidate >= 0 &&
+                    (next < 0 || candidate < next ||
+                     (candidate == next && secret.Length > match!.Length)))
+                {
+                    next = candidate;
+                    match = secret;
+                }
             }
+
+            if (next < 0)
+            {
+                scrubbed.Append(s, position, s.Length - position);
+                break;
+            }
+
+            scrubbed.Append(s, position, next - position);
+            scrubbed.Append(Token);
+            position = next + match!.Length;
         }
-        return s;
+        return scrubbed.ToString();
     }
 }

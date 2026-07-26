@@ -1,5 +1,32 @@
 # Adversarial Edge-Case Review
 
+## Current-state addendum - 2026-07-26
+
+The body below is preserved as the 2026-07-02 challenge pass. Its formerly open
+claims were re-tested during the 2026-07-26 audit:
+
+- managed FLAC and ALAC reader bounds are now enforced and corpus-fuzzed;
+- MOTD is bounded strict text over HTTPS only, with no remote image decode or cache;
+- reserved/trailing Windows names are hardened;
+- packaged plugin sets are path/identity/architecture/hash-bound. Managed and native
+  bytes are rechecked at their actual load boundary; native module paths are verified,
+  handles remain loaded, and bare-name fallback is forbidden. A deliberately enabled
+  local-development plugin boundary is still not equivalent to publisher signing;
+- managed external encoders are rehashed through a deny-write/delete lease retained
+  across immediate or deferred launch and self-verification;
+- existing album reservation sentinels are never reclaimed by path after inspection;
+  they consume one candidate and force a numbered sibling;
+- archive input remains streamed rather than extracted;
+- the newly exposed high-risk axes were publication races, repair destination
+  initialization, external-process lifetime, WMA whole-output verification, and
+  release proof. Those are remediated locally and detailed in
+  `2026-07-26-autonomous-audit.md`.
+
+Remaining adversarial checks require external environments: hostile replacement of
+an external encoder's shared work file, FLACCL's exact-length OpenCL buffer, real
+Icecast/CTDB/WMA services, classic artifact production, and optical-drive failure
+injection.
+
 Pass 07, 2026-07-02. Purpose: attack the current picture of the repo, not extend it. Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 ## Areas reviewed

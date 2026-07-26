@@ -110,9 +110,10 @@ namespace CUETools.Codecs.ALAC
 	public class AudioEncoder : IAudioDest
 	{
 		Stream _IO = null;
-		bool _pathGiven = false;
 		string _path;
+		readonly LosslessFileOutputTransaction _outputTransaction;
 		long _position;
+		bool closed;
 
 		const int max_header_len = 709 + 38; // minimum 38 bytes in padding
 
@@ -170,7 +171,7 @@ namespace CUETools.Codecs.ALAC
 
 			_path = path;
 			_IO = IO;
-			_pathGiven = _IO == null;
+			_outputTransaction = _IO == null ? new LosslessFileOutputTransaction(path) : null;
 			if (_IO != null && !_IO.CanSeek)
 				throw new NotSupportedException("stream doesn't support seeking");
 
@@ -233,54 +234,19 @@ namespace CUETools.Codecs.ALAC
 				int mdat_len = (int)_IO.Position - first_frame_offset;
 				int header_len = first_frame_offset;
 
-				if (sample_count <= 0 && _position != 0) 
-				{
-					sample_count = (int)_position;
-					header_len = max_header_len
-						+ m_settings.Padding
-						+ frame_count * 4 // stsz
-						+ frame_count * 4 / eparams.chunk_size; // stco
-					//if (header_len % 0x400 != 0)
-					//    header_len += 0x400 - (header_len % 0x400);
-				}
-
 				if (!_creationTime.HasValue)
 					_creationTime = DateTime.Now;
 
-				if (header_len > first_frame_offset)
-				{
-					// if frame_count is high, need to rewrite 
-					// the whole file to increase first_frame_offset
-
-					//System.Diagnostics.Trace.WriteLine(String.Format("Rewriting whole file: {0}/{1} + {2}", header_len, first_frame_offset, mdat_len));
-
-					// assert(_pathGiven);					
-					string tmpPath = _path + ".tmp"; // TODO: make sure tmpPath is unique?
-					FileStream IO2 = new FileStream(tmpPath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
-					byte[] header = write_headers(header_len, mdat_len);
-					IO2.Write(header, 0, header_len);
-					_IO.Position = first_frame_offset;
-					int bufSize = Math.Min(mdat_len, 0x2000);
-					byte[] buffer = new byte[bufSize];
-					int n;
-					do
-					{
-						n = _IO.Read(buffer, 0, buffer.Length);
-						IO2.Write(buffer, 0, n);
-					} while (n != 0);
-					IO2.Close();
-					_IO.Close();
-					File.Delete(_path);
-					File.Move(tmpPath, _path);
-				}
-				else
-				{
-					//System.Diagnostics.Trace.WriteLine(String.Format("{0}/{1}", header_len, first_frame_offset));
-					byte[] header = write_headers(first_frame_offset, mdat_len);
-					_IO.Position = 0;
-					_IO.Write(header, 0, first_frame_offset);
-					_IO.Close();
-				}
+				// FinalSampleCount is mandatory before encode_init, so the header reservation is
+				// fixed before any audio is written. A legacy mismatch path rewrote the whole file
+				// through the predictable name "<output>.tmp", then deleted the requested path
+				// before moving the rewrite into place. Count mismatches now fail before this method;
+				// the owned transaction work file can therefore be finalized in place.
+				byte[] header = write_headers(header_len, mdat_len);
+				_IO.Position = 0;
+				_IO.Write(header, 0, first_frame_offset);
+				_IO.Close();
+				_IO = null;
 				inited = false;
 			}
 
@@ -293,20 +259,62 @@ namespace CUETools.Codecs.ALAC
 
 		public void Close()
 		{
-			DoClose();
-			if (sample_count > 0 && _position != sample_count)
-				throw new Exception("Samples written differs from the expected sample count.");
+			if (closed)
+				return;
+
+			if (_outputTransaction != null)
+				_outputTransaction.Complete(FinalizeEncoder);
+			else
+				FinalizeEncoder();
+			closed = true;
+		}
+
+		void FinalizeEncoder()
+		{
+			try
+			{
+				long pendingSampleCount = checked(_position + samplesInBuffer);
+				if (sample_count >= 0 && pendingSampleCount != sample_count)
+					throw new Exception("Samples written differs from the expected sample count.");
+
+				DoClose();
+				if (sample_count >= 0 && _position != sample_count)
+					throw new Exception("Samples written differs from the expected sample count.");
+			}
+			catch
+			{
+				CloseOpenStream();
+				throw;
+			}
+		}
+
+		void CloseOpenStream()
+		{
+			try
+			{
+				if (_IO != null)
+					_IO.Close();
+			}
+			finally
+			{
+				_IO = null;
+				inited = false;
+			}
 		}
 
 		public void Delete()
 		{
-			if (inited)
-			{
-				_IO.Close();
-				inited = false;
-			}
+			CloseOpenStream();
+			closed = true;
 
-			if (_path != "")
+			if (_outputTransaction != null)
+			{
+				if (_outputTransaction.Published)
+					File.Delete(_outputTransaction.RequestedPath);
+				else
+					_outputTransaction.CleanupWork();
+			}
+			else if (_path != "")
 				File.Delete(_path);
 		}
 
@@ -470,7 +478,7 @@ namespace CUETools.Codecs.ALAC
 				if (value >= lpc.MAX_LPC_PRECISIONS || value < 0)
 					throw new Exception("invalid adaptive_passes " + value.ToString());
 				eparams.adaptive_passes = value;
-			}			
+			}
 		}
 
 		public TimeSpan UserProcessorTime
@@ -491,7 +499,7 @@ namespace CUETools.Codecs.ALAC
 		/// <param name="samples"></param>
 		/// <param name="pos"></param>
 		/// <param name="block"></param>
- 		unsafe void copy_samples(int[,] samples, int pos, int block)
+		unsafe void copy_samples(int[,] samples, int pos, int block)
 		{
 			fixed (int* fsamples = samplesBuffer, src = &samples[pos, 0])
 			{
@@ -699,7 +707,7 @@ namespace CUETools.Codecs.ALAC
 				return;
 			}
 
-			bitwriter.writebits(q + 1 + k, (unary << k) + r + 1); 
+			bitwriter.writebits(q + 1 + k, (unary << k) + r + 1);
 		}
 
 		unsafe int alac_entropy_coder(int* res, int n, int bps, out int modifier)
@@ -880,7 +888,7 @@ namespace CUETools.Codecs.ALAC
 				}
 
 				frame.current.size = (uint)(alac_entropy_estimate(frame.current.residual, frame.blocksize, bps, eparams.max_modifier) + 16 + 16 * order);
-				
+
 				frame.ChooseBestSubframe(ch);
 			}
 		}
@@ -928,7 +936,7 @@ namespace CUETools.Codecs.ALAC
 
                 fixed (LpcWindowSection* sections = &windowSections[iWindow, 0])
                     lpc_ctx.GetReflection(
-                        frame.subframes[ch].sf, max_order, frame.blocksize, smp, 
+                        frame.subframes[ch].sf, max_order, frame.blocksize, smp,
                         frame.window_buffer + iWindow * Alac.MAX_BLOCKSIZE * 2, sections);
 				lpc_ctx.ComputeLPC(lpcs);
 				lpc_ctx.SortOrdersAkaike(frame.blocksize, eparams.estimation_depth, min_order, max_order, 5.0, 1.0/18);
@@ -1294,7 +1302,7 @@ namespace CUETools.Codecs.ALAC
 				else if (frame.type == FrameType.Compressed)
 				{
                     for (int ch = 0; ch < Settings.PCM.ChannelCount; ch++)
-						alac_entropy_coder(bitwriter, frame.subframes[ch].best.residual, frame.blocksize, 
+						alac_entropy_coder(bitwriter, frame.subframes[ch].best.residual, frame.blocksize,
 							bps, frame.subframes[ch].best.ricemodifier);
 				}
 				output_frame_footer(bitwriter);
@@ -1364,16 +1372,28 @@ namespace CUETools.Codecs.ALAC
 
 		public void Write(AudioBuffer buff)
 		{
+			if (closed)
+				throw new InvalidOperationException("Writer already closed.");
+
 			if (!inited)
 			{
-				if (!_pathGiven && sample_count <= 0)
+				if (_outputTransaction == null && sample_count <= 0)
 					throw new NotSupportedException("input and output are both pipes");
 				if (_IO == null)
-					_IO = new FileStream(_path, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
+					_IO = new FileStream(_outputTransaction.WorkPath, FileMode.CreateNew,
+						FileAccess.ReadWrite, FileShare.Read);
 				if (_IO != null && !_IO.CanSeek)
 					throw new NotSupportedException("stream doesn't support seeking");
-                encode_init();
-				inited = true;
+				try
+				{
+					encode_init();
+					inited = true;
+				}
+				catch
+				{
+					CloseOpenStream();
+					throw;
+				}
 			}
 
 			buff.Prepare(this);
@@ -1734,7 +1754,7 @@ namespace CUETools.Codecs.ALAC
 						bitwriter.write('f', 'r', 'e', 'e');
 						bitwriter.writebytes(m_settings.Padding, 0);
 					}
-					chunk_end(bitwriter);					
+					chunk_end(bitwriter);
 				}
 				chunk_end(bitwriter);
 			}
@@ -1880,13 +1900,13 @@ namespace CUETools.Codecs.ALAC
 		// maximum LPC order
 		// set by user prior to calling encode_init
 		// if set to less than 0, it is chosen based on compression.
-		// valid values are 1 to 32 
+		// valid values are 1 to 32
 		public int max_prediction_order;
 
 		// Number of LPC orders to try (for estimate mode)
 		// set by user prior to calling encode_init
 		// if set to less than 0, it is chosen based on compression.
-		// valid values are 1 to 32 
+		// valid values are 1 to 32
 		public int estimation_depth;
 
 		public int adaptive_passes;

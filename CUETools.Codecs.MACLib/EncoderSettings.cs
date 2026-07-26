@@ -61,6 +61,12 @@ namespace CUETools.Codecs.MACLib
             this.Init();
         }
 
+        [DefaultValue(true)]
+        [DisplayName("Verify")]
+        [Description("Decode the completed file and compare it with the encoder input")]
+        [JsonProperty]
+        public bool Verify { get; set; }
+
         [DisplayName("Version")]
         [Description("Library version")]
         public string Version => Marshal.PtrToStringUni(MACLibDll.GetVersionString());

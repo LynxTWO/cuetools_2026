@@ -60,28 +60,42 @@ namespace CUETools.Codecs.libFLAC
             m_bufferOffset = 0;
             m_bufferLength = 0;
 
-            m_stream = (IO != null) ? IO : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            try
+            {
+                m_stream = (IO != null)
+                    ? IO
+                    : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-            m_decoder = FLACDLL.FLAC__stream_decoder_new();
+                m_decoder = FLACDLL.FLAC__stream_decoder_new();
+                if (m_decoder == IntPtr.Zero)
+                    throw new Exception("unable to create the decoder");
 
-            if (0 == FLACDLL.FLAC__stream_decoder_set_metadata_respond(m_decoder, FLAC__MetadataType.FLAC__METADATA_TYPE_VORBIS_COMMENT))
-                throw new Exception("unable to setup the decoder");
+                if (0 == FLACDLL.FLAC__stream_decoder_set_metadata_respond(
+                    m_decoder,
+                    FLAC__MetadataType.FLAC__METADATA_TYPE_VORBIS_COMMENT))
+                    throw new Exception("unable to setup the decoder");
 
-            FLAC__StreamDecoderInitStatus st = FLACDLL.FLAC__stream_decoder_init_stream(
-                m_decoder, m_readCallback,
-                m_stream.CanSeek ? m_seekCallback : null,
-                m_stream.CanSeek ? m_tellCallback : null,
-                m_stream.CanSeek ? m_lengthCallback : null,
-                m_stream.CanSeek ? m_eofCallback : null,
-                m_writeCallback, m_metadataCallback, m_errorCallback, null);
+                FLAC__StreamDecoderInitStatus st = FLACDLL.FLAC__stream_decoder_init_stream(
+                    m_decoder, m_readCallback,
+                    m_stream.CanSeek ? m_seekCallback : null,
+                    m_stream.CanSeek ? m_tellCallback : null,
+                    m_stream.CanSeek ? m_lengthCallback : null,
+                    m_stream.CanSeek ? m_eofCallback : null,
+                    m_writeCallback, m_metadataCallback, m_errorCallback, null);
 
-            if (st != FLAC__StreamDecoderInitStatus.FLAC__STREAM_DECODER_INIT_STATUS_OK)
-                throw new Exception(string.Format("unable to initialize the decoder: {0}", st));
+                if (st != FLAC__StreamDecoderInitStatus.FLAC__STREAM_DECODER_INIT_STATUS_OK)
+                    throw new Exception(string.Format("unable to initialize the decoder: {0}", st));
 
-            m_decoderActive = true;
+                m_decoderActive = true;
 
-            if (0 == FLACDLL.FLAC__stream_decoder_process_until_end_of_metadata(m_decoder))
-                throw new Exception("unable to retrieve metadata");
+                if (0 == FLACDLL.FLAC__stream_decoder_process_until_end_of_metadata(m_decoder))
+                    throw new Exception("unable to retrieve metadata");
+            }
+            catch
+            {
+                RollBackConstructorNoThrow();
+                throw;
+            }
         }
 
 #if SUPPORTMETADATA
@@ -338,16 +352,61 @@ namespace CUETools.Codecs.libFLAC
 
         public void Close()
         {
-            if (m_decoderActive)
+            if (m_decoder != IntPtr.Zero)
             {
-                FLACDLL.FLAC__stream_decoder_finish(m_decoder);
-                FLACDLL.FLAC__stream_decoder_delete(m_decoder);
-                m_decoderActive = false;
+                try
+                {
+                    if (m_decoderActive)
+                        FLACDLL.FLAC__stream_decoder_finish(m_decoder);
+                }
+                finally
+                {
+                    FLACDLL.FLAC__stream_decoder_delete(m_decoder);
+                    m_decoder = IntPtr.Zero;
+                    m_decoderActive = false;
+                }
             }
             if (m_stream != null)
             {
                 m_stream.Close();
                 m_stream = null;
+            }
+        }
+
+        private void RollBackConstructorNoThrow()
+        {
+            if (m_decoder != IntPtr.Zero)
+            {
+                try
+                {
+                    if (m_decoderActive)
+                        FLACDLL.FLAC__stream_decoder_finish(m_decoder);
+                }
+                catch
+                {
+                }
+                try
+                {
+                    FLACDLL.FLAC__stream_decoder_delete(m_decoder);
+                }
+                catch
+                {
+                }
+                m_decoder = IntPtr.Zero;
+                m_decoderActive = false;
+            }
+
+            if (m_stream != null)
+            {
+                Stream stream = m_stream;
+                m_stream = null;
+                try
+                {
+                    stream.Close();
+                }
+                catch
+                {
+                }
             }
         }
 

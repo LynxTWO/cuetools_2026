@@ -1,5 +1,26 @@
 # Scenario Scorecard
 
+## Current-state addendum - 2026-07-26
+
+The original scorecard below is dated 2026-07-02. Re-scoring against current code:
+
+| Scenario | Current score | Current evidence / residual |
+| --- | ---: | --- |
+| SC1 malicious CTDB parity | 2 | Structural/CRC gates remain; CRC32 is still not a signature and live CTDB is external. |
+| SC2 malformed FLAC/ALAC | 2 | Both readers are bounded and covered by deterministic malformed-input lanes. |
+| SC3 crafted MOTD | 2 | No remote image path remains; bounded strict UTF-8 is fetched over HTTPS only. |
+| SC4 reserved/trailing Windows name | 2 | `CleanseString` hardening and collision tests are green. |
+| SC5 poisoned plugin | 2 packaged / 1 explicit local mode | Packaged managed/native plugins are exact manifest/hash/path/identity/architecture bound and rechecked at load; this is integrity, not publisher signing. |
+| SC6 forged AccurateRip transit | 2 | Both AccurateRip requests use HTTPS without downgrade; corroborative-result semantics remain. |
+| SC7 RAR traversal | 2 | Input still streams through callbacks and does not extract paths. |
+| SC8 proxy secret at rest | 2 Windows | DPAPI plus atomic migration/write; non-Windows nonempty-secret save fails closed. |
+| SC9 untested/tampered release | 2 WPF / 1 classic | 388-test selection, artifact contract, hashes, SBOM, and immutable actions exist; full hosted classic artifact is pending. |
+
+New scenarios added in the 2026-07-26 wave - concurrent publication, repair rollback,
+external encoder hangs/truncation and approval races, WMA mismatch, native plugin
+preloading/lookalikes, and settings interruption - are covered in
+`2026-07-26-autonomous-audit.md`.
+
 Pass 08, 2026-07-02. Companion to `scenario-stress-test.md`. Score: 0 = missed, 1 = partly covered, 2 = clearly covered.
 
 ## Per-scenario

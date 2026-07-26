@@ -313,7 +313,9 @@ namespace Freedb
 							
 							catch (Exception ex)
 							{
-								Debug.WriteLine("Failed to parse track Number. Reason: " + ex.Message);
+								Debug.WriteLine(
+									"Freedb track-number parse failed (" +
+									ex.GetType().Name + ").");
 								continue;
 							}
 
@@ -338,7 +340,9 @@ namespace Freedb
 							
 							catch (Exception ex)
 							{
-								Debug.WriteLine("Failed to parse track Number. Reason: " + ex.Message);
+								Debug.WriteLine(
+									"Freedb extended-track-number parse failed (" +
+									ex.GetType().Name + ").");
 								continue;
 							}
 							

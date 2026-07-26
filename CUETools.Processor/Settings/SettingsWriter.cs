@@ -4,14 +4,20 @@ using System.Text;
 
 namespace CUETools.Processor.Settings
 {
-    public class SettingsWriter
+    public class SettingsWriter : IDisposable
     {
-        StreamWriter _sw;
+        private StreamWriter _sw;
+        private readonly string _path;
+        private readonly string _temporaryPath;
+        private bool _committed;
 
         public SettingsWriter(string appName, string fileName, string appPath)
         {
-            string path = Path.Combine(SettingsShared.GetProfileDir(appName, appPath), fileName);
-            _sw = new StreamWriter(path, false, Encoding.UTF8);
+            _path = Path.Combine(SettingsShared.GetProfileDir(appName, appPath), fileName);
+            _temporaryPath = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            _sw = new StreamWriter(
+                new FileStream(_temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None),
+                Encoding.UTF8);
         }
 
         public void Save(string name, string value)
@@ -62,7 +68,49 @@ namespace CUETools.Processor.Settings
 
         public void Close()
         {
-            _sw.Close();
+            if (_committed)
+                return;
+
+            _sw.Flush();
+            _sw.Dispose();
+            _sw = null;
+
+            try
+            {
+                if (File.Exists(_path))
+                    File.Replace(_temporaryPath, _path, null);
+                else
+                    File.Move(_temporaryPath, _path);
+                _committed = true;
+            }
+            finally
+            {
+                if (!_committed)
+                    DeleteTemporaryFile();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_sw != null)
+            {
+                _sw.Dispose();
+                _sw = null;
+            }
+
+            if (!_committed)
+                DeleteTemporaryFile();
+        }
+
+        private void DeleteTemporaryFile()
+        {
+            try
+            {
+                if (File.Exists(_temporaryPath))
+                    File.Delete(_temporaryPath);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 }

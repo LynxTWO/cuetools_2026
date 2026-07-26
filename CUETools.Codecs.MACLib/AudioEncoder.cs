@@ -13,6 +13,9 @@ namespace CUETools.Codecs.MACLib
             m_path = path;
             m_stream = output;
             m_streamGiven = output != null;
+            m_verify = settings.Verify;
+            m_outputTransaction = output == null ? new LosslessFileOutputTransaction(path) : null;
+            m_verificationFingerprint = m_verify ? new LosslessPcmFingerprint() : null;
             m_initialized = false;
             m_finalSampleCount = 0;
             m_samplesWritten = 0;
@@ -21,6 +24,8 @@ namespace CUETools.Codecs.MACLib
                 throw new Exception("Only stereo and mono audio formats are allowed.");
             if (m_settings.PCM.BitsPerSample != 16 && m_settings.PCM.BitsPerSample != 24)
                 throw new Exception("bits per sample must be 16 or 24");
+            if (m_streamGiven && m_verify && !m_stream.CanSeek)
+                throw new InvalidOperationException("Monkey's Audio verification requires a seekable output stream.");
 
             int nRetVal;
             pAPECompress = MACLibDll.c_APECompress_Create(out nRetVal);
@@ -47,30 +52,130 @@ namespace CUETools.Codecs.MACLib
 
         public void Close()
         {
+            if (m_closed)
+                return;
+            m_closed = true;
             try
             {
-                if (pAPECompress != null)
-                    MACLibDll.c_APECompress_Finish(pAPECompress, null, 0, 0);
+                if (m_outputTransaction != null)
+                    m_outputTransaction.Complete(FinalizeAndVerify);
+                else
+                    FinalizeAndVerify();
             }
-            catch (Exception)
+            finally
             {
+                if (m_verificationFingerprint != null)
+                {
+                    m_verificationFingerprint.Dispose();
+                    m_verificationFingerprint = null;
+                }
             }
-            Dispose();
+        }
+
+        private void FinalizeAndVerify()
+        {
+            FinalizeEncoder();
+            if (m_verify)
+                VerifyOutput();
+        }
+
+        private void FinalizeEncoder()
+        {
+            int finishResult = 0;
+            try
+            {
+                if (pAPECompress != IntPtr.Zero)
+                    finishResult = MACLibDll.c_APECompress_Finish(pAPECompress, null, 0, 0);
+            }
+            finally
+            {
+                if (pAPECompress != IntPtr.Zero)
+                {
+                    MACLibDll.c_APECompress_Destroy(pAPECompress);
+                    pAPECompress = IntPtr.Zero;
+                }
+                if (m_StreamIO != null)
+                {
+                    m_StreamIO.Dispose();
+                    m_StreamIO = null;
+                }
+                if (m_stream != null)
+                {
+                    m_stream.Flush();
+                    if (!m_streamGiven || !m_verify)
+                    {
+                        m_stream.Dispose();
+                        m_stream = null;
+                    }
+                }
+                m_initialized = false;
+            }
+
+            if (finishResult != 0)
+                throw new IOException("Monkey's Audio finalization failed with error " + finishResult + ".");
             if ((m_finalSampleCount != 0) && (m_samplesWritten != m_finalSampleCount))
                 throw new Exception("samples written differs from the expected sample count");
         }
 
+        private void VerifyOutput()
+        {
+            byte[] expectedDigest = m_verificationFingerprint.Complete();
+            if (m_outputTransaction != null)
+            {
+                string workPath = m_outputTransaction.WorkPath;
+                LosslessPcmVerifier.Verify(
+                    "Monkey's Audio",
+                    m_settings.PCM,
+                    m_samplesWritten,
+                    expectedDigest,
+                    delegate { return new AudioDecoder(new DecoderSettings(), workPath, null); });
+                return;
+            }
+
+            Stream verificationStream = m_stream;
+            try
+            {
+                verificationStream.Position = 0;
+                LosslessPcmVerifier.Verify(
+                    "Monkey's Audio",
+                    m_settings.PCM,
+                    m_samplesWritten,
+                    expectedDigest,
+                    delegate { return new AudioDecoder(new DecoderSettings(), m_path, verificationStream); });
+            }
+            finally
+            {
+                verificationStream.Dispose();
+                m_stream = null;
+            }
+        }
+
         public void Delete()
         {
-            var path = m_path;
+            m_closed = true;
             Dispose(true);
             m_initialized = false;
-            if (path != "")
-                File.Delete(path);
+            if (m_verificationFingerprint != null)
+            {
+                m_verificationFingerprint.Dispose();
+                m_verificationFingerprint = null;
+            }
+            if (m_outputTransaction != null)
+            {
+                if (m_outputTransaction.Published)
+                    File.Delete(m_outputTransaction.RequestedPath);
+                else
+                    m_outputTransaction.CleanupWork();
+            }
+            else if (!m_streamGiven && m_path != "")
+            {
+                File.Delete(m_path);
+            }
         }
 
         public void Dispose()
         {
+            m_closed = true;
             Dispose(true);
             GC.SuppressFinalize(this);
         }
@@ -102,6 +207,8 @@ namespace CUETools.Codecs.MACLib
 
         public void Write(AudioBuffer sampleBuffer)
         {
+            if (m_closed)
+                throw new InvalidOperationException("The encoder is already closed.");
             if (!m_initialized) Initialize();
 
             sampleBuffer.Prepare(this);
@@ -110,13 +217,15 @@ namespace CUETools.Codecs.MACLib
                 if (0 != MACLibDll.c_APECompress_AddData(pAPECompress, pSampleBuffer, sampleBuffer.ByteLength))
                     throw new Exception("An error occurred while encoding");
 
+            if (m_verificationFingerprint != null)
+                m_verificationFingerprint.Append(sampleBuffer);
             m_samplesWritten += sampleBuffer.Length;
         }
 
         void Initialize()
         {
             if (m_stream == null)
-                m_stream = new FileStream(m_path, FileMode.Create, FileAccess.ReadWrite, FileShare.Read, 0x10000);
+                m_stream = new FileStream(m_outputTransaction.WorkPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, 0x10000);
             m_StreamIO = new StreamIO(m_stream);
 
             WAVEFORMATEX* pWaveFormatEx = stackalloc WAVEFORMATEX[1];
@@ -149,7 +258,11 @@ namespace CUETools.Codecs.MACLib
         EncoderSettings m_settings;
         Stream m_stream;
         bool m_streamGiven;
+        bool m_verify;
+        LosslessPcmFingerprint m_verificationFingerprint;
+        LosslessFileOutputTransaction m_outputTransaction;
         bool m_initialized;
+        bool m_closed;
         string m_path;
         long m_finalSampleCount, m_samplesWritten;
         StreamIO m_StreamIO;

@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using CUETools.Codecs;
 using CUETools.Processor;
 
@@ -71,8 +72,9 @@ namespace CUETools.Converter
             catch (System.Reflection.TargetInvocationException ex)
             {
                 if (ex.InnerException == null)
-                    throw ex;
-                throw ex.InnerException;
+                    throw;
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw new InvalidOperationException("Unreachable after rethrow.");
             }
         }
 
@@ -251,11 +253,11 @@ namespace CUETools.Converter
                         );
                 }
 #if !DEBUG
-                catch (Exception ex)
+                catch (Exception)
                 {
                     if (audioSource != null) audioSource.Close();
                     if (audioDest != null) audioDest.Delete();
-                    throw ex;
+                    throw;
                 }
 #endif
                 audioSource.Close();

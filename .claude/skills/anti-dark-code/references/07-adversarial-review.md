@@ -6,6 +6,13 @@ Use this reference after the first architecture pass and first slice plan when y
 
 For confidence levels, the unknowns entry shape, the canonical approval-gated list, and the canonical sensitive-data class list, see `00-conventions.md`.
 
+## Contents
+
+- Goal, triggers, and deliverables
+- Repo shape, trust, protected areas, and coverage challenges
+- Specialty-stack traps and output shape
+- Rules and acceptance
+
 ## Goal
 
 Try to break the current picture of the repo. Look for blind spots, hidden runtime paths, weak trust-boundary notes, protected-area mistakes, and false claims of coverage.
@@ -86,6 +93,10 @@ Check whether the coverage ledger overstates what was actually reviewed. Look fo
 - a logging audit that skipped client telemetry, crash reports, worker logs, or support tools
 - large excluded areas with no plan to explain them elsewhere
 - one clean path used to hide a dirtier parallel path through scripts, tools, notebooks, CI jobs, release tooling, or remote config
+- a zero-candidate search reported as proof of absence, safety, or a "pure managed" implementation
+- a plugin called unreferenced after checking only static project references, without its copy, discovery, dependency, enablement, and invocation paths
+- a failure called a source defect when the path was unexercised or blocked by a toolchain, native dependency, or unavailable capability
+- an assurance claim such as verified, bit-exact, atomic, or repaired supported only by a happy path, frame-level check, or successful write, without finalization and whole-output evidence
 
 ### 5. Specialty-stack traps
 

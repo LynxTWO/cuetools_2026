@@ -2,6 +2,12 @@
 
 This is an example of what a scenario stress-test report looks like when the check actually surfaces gaps. Use it as a reference for the kind of output the `08-scenario-stress-test.md` pass should produce. It is not a pass to run. It is a worked example.
 
+## Contents
+
+- Score key
+- Five mock-repo scenarios
+- Main themes and honest limits
+
 ## Score key
 
 - 0 = missed
