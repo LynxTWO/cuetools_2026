@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 
 namespace CUETools.Wpf.Models;
@@ -26,6 +26,9 @@ public sealed class RipReport
     public string Status { get; init; } = "";
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
+    /// <summary>Codec extension the files were written as ("flac", "m4a"...). Empty on reports
+    /// archived before this field existed, which render the neutral word "audio".</summary>
+    public string Format { get; init; } = "";
     public int TrackCount { get; init; }
     public string TocId { get; init; } = "";
 
@@ -58,10 +61,15 @@ public sealed class RipReport
         sb.Append("CTDB          : ").Append(CtdbConfidence > 0
             ? "verified (confidence " + CtdbConfidence + ")"
             : "not found").Append('\n');
-        if (Mode == "Rip")
+        // Any mode that WROTE something, not just Mode=="Rip": a Test & Copy writes files too, and
+        // gating on the literal "Rip" left the highest-assurance mode's certificate naming neither
+        // its file count nor its output folder. The codec is reported rather than assumed - this
+        // line said "FLAC files" for every m4a and mp3 rip.
+        if (OutputDir.Length > 0)
         {
-            sb.Append("Output        : ").Append(FileCount).Append(" FLAC files\n");
-            if (OutputDir.Length > 0) sb.Append("Folder        : ").Append(OutputDir).Append('\n');
+            sb.Append("Output        : ").Append(FileCount).Append(' ')
+              .Append(Format.Length > 0 ? Format.ToUpperInvariant() : "audio").Append(" files\n");
+            sb.Append("Folder        : ").Append(OutputDir).Append('\n');
         }
         sb.Append("Result        : ").Append(Status.Replace("\r", " ").Replace("\n", " ")).Append('\n');
         return sb.ToString();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using CUETools.AccurateRip;
@@ -22,6 +22,9 @@ public sealed class VerifyResult
     public bool Accurate { get; init; }
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
+    /// <summary>Codec the files were written as. Reported rather than assumed, so a certificate for an
+    /// m4a rip does not claim FLAC. Empty on a verify-only pass, which writes nothing.</summary>
+    public string Format { get; init; } = "";
 
     /// <summary>The per-track checksum record this read produced (used by Test & Copy to compare
     /// reads). Null when the record build failed.</summary>
@@ -496,8 +499,8 @@ public sealed class RipService : IRipService
             // a throw here would otherwise read as "not found in AccurateRip" - a different fact
             try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
             catch (Exception ex) { _log.Warn("rip", "AccurateRip result read failed (reported as not found): " + ex.GetType().Name); }
-            int files = 0;
-            try { if (encode && Directory.Exists(outDir)) files = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
+            // Recursive: track names can carry their own subdirectory. See OutputLayout.CountAudioFiles.
+            int files = encode ? OutputLayout.CountAudioFiles(outDir, format) : 0;
 
             _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
                 $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
@@ -569,6 +572,7 @@ public sealed class RipService : IRipService
                 Accurate = arConf > 0,
                 OutputDir = outDir,
                 FileCount = files,
+                Format = encode ? format : "",
                 ArPerTrack = arpt,
                 CtdbPerTrack = ctpt,
                 HistoryKnown = vh.KnownDisc,
@@ -703,6 +707,9 @@ public sealed class RipService : IRipService
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
                     CorrectionQuality = rq,   // the mode the reads were really made at
+                    // What the Copy read actually staged. Never left unset: it is what the history row
+                    // and the certificate report if the user accepts this held result anyway.
+                    FileCount = OutputLayout.CountAudioFiles(copyResult.OutputDir, fmt),
                     HeldTracks = heldTracks,
                     CopyStagingDir = copyResult.OutputDir,
                     StagingDirs = dirs,
@@ -908,8 +915,7 @@ public sealed class RipService : IRipService
         try { File.WriteAllText(Path.Combine(outDir, "rip.verify"), VerifyHistoryStore.ToJson(committedRecord)); }
         catch (Exception ex) { _log.Warn("verify.history", "test&copy sidecar write failed: " + ex.GetType().Name); }
 
-        int fileCount = 0;
-        try { fileCount = Directory.GetFiles(outDir, "*." + format).Length; } catch { }
+        int fileCount = OutputLayout.CountAudioFiles(outDir, format);
         return (outDir, fileCount);
     }
 

@@ -1,4 +1,4 @@
-<UserControl x:Class="CUETools.Wpf.Views.RipView"
+﻿<UserControl x:Class="CUETools.Wpf.Views.RipView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ctl="clr-namespace:CUETools.Wpf.Controls">
@@ -304,9 +304,12 @@
       </Border>
     </Grid>
 
-    <!-- no disc: status + recently ripped -->
+    <!-- no disc: status + recently ripped. Keyed off ShowDiscArea, NOT IsDiscPresent: this sits in
+         the SAME grid cell as the disc area and is declared after it, so with eject-after-rip on
+         (IsDiscPresent false, RipDone still true) it painted its opaque panel straight over the
+         completion summary - hiding the output path, "Open folder" and "Dismiss". -->
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                  Visibility="{Binding IsDiscPresent, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+                  Visibility="{Binding ShowDiscArea, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
       <StackPanel Margin="24">
         <!-- the drive tray: slides out on Eject, pulls in on Close, then the disc reads itself -->
         <ctl:DiscTray Width="264" Height="150" HorizontalAlignment="Center" Margin="0,2,0,6"

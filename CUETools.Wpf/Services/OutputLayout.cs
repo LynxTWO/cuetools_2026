@@ -86,6 +86,22 @@ public static class OutputLayout
         return new Plan { OutputDir = outDir, RelativeDir = relDir, TrackNames = finalNames };
     }
 
+    /// <summary>How many audio files a job actually wrote under its album folder.
+    ///
+    /// Recursive on purpose. A track name may carry its own subdirectory - "Disc 2/..." for a box set,
+    /// or a whole per-track chain when the template has no shared leading folder (the "Simple" preset on
+    /// a various-artists disc). A non-recursive count reported "Ripped 0 flac files" for those rips even
+    /// though every file was written and verified, and wrote that 0 into the archived report as well.</summary>
+    public static int CountAudioFiles(string dir, string format)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return 0;
+            return Directory.GetFiles(dir, "*." + format, SearchOption.AllDirectories).Length;
+        }
+        catch { return 0; }   // a count is cosmetic; never fail a completed rip over it
+    }
+
     /// <summary>"Artist - Album", or "Unknown Album" when the metadata carries neither. Shared so the
     /// rip and convert paths cannot drift on what an unnamed album is called.</summary>
     public static string AlbumFolderFallback(CUEMetadata? meta, Func<string, string> cleanse)

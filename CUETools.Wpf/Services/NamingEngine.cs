@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -111,7 +111,10 @@ public static class NamingEngine
             ["artist"] = ta,
             ["album"] = album,
             ["title"] = title,
-            ["year"] = (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : c.Year ?? "",
+            // NeutralizeSeparators on every one of these: Render splits on '/' AFTER substitution, so a
+            // separator arriving from a value - not just from the template - silently becomes a new
+            // directory level. Normalize() already does this for the text fields; these five bypassed it.
+            ["year"] = NeutralizeSeparators((c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : c.Year ?? ""),
             ["tracknumber"] = c.TrackNumber.ToString("00"),
             // padded to the set's width for the same sort reason as the %disc% folder (see
             // DiscNumberPadded); a single-disc release still renders a bare "1"
@@ -119,18 +122,18 @@ public static class NamingEngine
             ["totaldiscs"] = c.TotalDiscs.ToString(),
             ["discsubtitle"] = Normalize(c.DiscSubtitle ?? "", s, 80, swapArticles: false),
             ["disc"] = DiscFolder(c, s),
-            ["releasedescriptor"] = s.ReleaseDescriptor ? ReleaseDescriptorText(c) : "",
+            ["releasedescriptor"] = s.ReleaseDescriptor ? NeutralizeSeparators(ReleaseDescriptorText(c)) : "",
             ["featsuffix"] = s.ExtractFeatured ? FeatSuffix(c, s) : "",
             ["label"] = Normalize(c.Label ?? "", s, 80, swapArticles: false),
             ["catalog"] = Normalize(c.Catalog ?? "", s, 40, swapArticles: false),
             ["barcode"] = Normalize(c.Barcode ?? "", s, 40, swapArticles: false),
             ["country"] = Normalize(c.Country ?? "", s, 40, swapArticles: false),
             ["genre"] = Normalize(c.Genre ?? "", s, 40, swapArticles: false),
-            ["originalyear"] = (c.OriginalYear ?? "").Length >= 4 ? c.OriginalYear.Substring(0, 4)
-                                : (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : "",
+            ["originalyear"] = NeutralizeSeparators((c.OriginalYear ?? "").Length >= 4 ? c.OriginalYear.Substring(0, 4)
+                                : (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : ""),
             ["isrc"] = Normalize(c.Isrc ?? "", s, 40, swapArticles: false),
-            ["releasetype"] = ReleaseTypeText(c),
-            ["releasestatus"] = TitleCase(c.ReleaseStatus ?? ""),
+            ["releasetype"] = NeutralizeSeparators(ReleaseTypeText(c)),
+            ["releasestatus"] = NeutralizeSeparators(TitleCase(c.ReleaseStatus ?? "")),
         };
     }
 

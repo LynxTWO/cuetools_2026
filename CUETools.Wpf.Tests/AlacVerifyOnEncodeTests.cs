@@ -8,10 +8,14 @@ using AlacSettings = CUETools.Codecs.ALAC.EncoderSettings;
 namespace CUETools.Wpf.Tests
 {
     /// <summary>
-    /// ALAC (m4a) verify-on-encode gate. ALAC has verify ON in the shipped config and hands its verify
-    /// decoder a single frame the same way the FLAC encoder did, so it is checked against the same
-    /// transient-heavy content that exposed the FLAC lookahead bug. See
-    /// docs/review/flac-verify-on-encode-finding.md.
+    /// ALAC (m4a) verify-on-encode gate. ALAC hands its verify decoder a single exact-length frame the
+    /// same way the FLAC encoder did, so it is checked against the same transient-heavy content that
+    /// exposed the FLAC lookahead bug. See docs/review/flac-verify-on-encode-finding.md.
+    ///
+    /// This class previously claimed ALAC "has verify ON in the shipped config". It did not:
+    /// ALACWriter's DoVerify was [DefaultValue(false)] and AudioEncoderSettings.Init resets every
+    /// property to its default, so m4a rips encoded unverified. These tests are what made it safe to
+    /// flip that default to true.
     /// </summary>
     [TestClass]
     public class AlacVerifyOnEncodeTests
@@ -57,6 +61,17 @@ namespace CUETools.Wpf.Tests
             }
             finally { enc.Close(); }
             return path;
+        }
+
+        [TestMethod]
+        public void ShippedDefault_IsVerifyOn()
+        {
+            // The guard for the defect that hid here: a session claimed ALAC "already ships with verify
+            // ON" when the attribute said false, so m4a rips went out unverified while the log said
+            // otherwise. Assert the SHIPPED default rather than trusting the attribute by eye, because
+            // AudioEncoderSettings.Init resets every property through it.
+            Assert.IsTrue(new AlacSettings() { PCM = Cd }.DoVerify,
+                "ALAC must ship with verify-on-encode enabled, matching FLAC");
         }
 
         [TestMethod]

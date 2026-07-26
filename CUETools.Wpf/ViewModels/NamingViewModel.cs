@@ -134,31 +134,30 @@ public sealed class NamingViewModel : PageViewModel
             // trailing year-parenthetical so the engine gets a clean artist (the year is a field).
             string cleanArtist = System.Text.RegularExpressions.Regex.Replace(
                 vm.AlbumArtist ?? "", @"\s*\(\d{4}\)\s*$", "").Trim();
+            // Go through NamingContextMapper, the SAME mapper the rip uses, rather than hand-building a
+            // context here. Two mappers drifted: this one set seven fields, the real one sets eighteen,
+            // and the two it omitted were DiscNumber/TotalDiscs - so every box set previewed as a
+            // single disc while the rip wrote "Artist - Album [3-CD Set]/Disc 2/...". A preview that
+            // does not match the output is worse than no preview.
+            var meta = vm.SelectedRelease?.Metadata ?? SyntheticMeta(vm, cleanArtist, year);
             var g = new NamingPreviewGroup { Label = "Disc in tray: " + vm.AlbumTitle };
-            foreach (var t in vm.Tracks.Take(4))
-            {
-                var ctx = new NamingContext
-                {
-                    AlbumArtist = cleanArtist,
-                    Artist = cleanArtist,
-                    Album = vm.AlbumTitle,
-                    Title = t.Title,
-                    Year = year,
-                    TrackNumber = t.Number,
-                    TotalTracks = vm.Tracks.Count,
-                    // Match what the REAL output does: NamingContextMapper leaves release type and
-                    // status empty (they arrive with the MusicBrainz client in a later phase), so the
-                    // NamingContext defaults of "album"/"official" would make this preview claim a
-                    // "%releasetype%" folder the rip will not actually write.
-                    PrimaryType = "",
-                    ReleaseStatus = "",
-                    SecondaryTypes = System.Array.Empty<string>(),
-                };
-                g.Lines.Add(NamingEngine.Render(ctx, _scheme));
-            }
+            for (int i = 0; i < Math.Min(4, vm.Tracks.Count); i++)
+                g.Lines.Add(NamingEngine.Render(
+                    NamingContextMapper.FromMetadata(meta, i, vm.Tracks.Count), _scheme));
             if (vm.Tracks.Count > 4) g.Lines.Add($"... and {vm.Tracks.Count - 4} more");
             return g;
         }
         catch { return null; }
+    }
+
+    /// <summary>A release object for a disc that matched no metadata source, built from what the tray
+    /// header actually shows. Exists so the preview always feeds NamingContextMapper - never a second,
+    /// hand-rolled context that can drift from it.</summary>
+    private static CUEMetadata SyntheticMeta(RipViewModel vm, string artist, string year)
+    {
+        var m = new CUEMetadata("", vm.Tracks.Count) { Artist = artist, Title = vm.AlbumTitle, Year = year };
+        for (int i = 0; i < vm.Tracks.Count && i < m.Tracks.Count; i++)
+            m.Tracks[i].Title = vm.Tracks[i].Title ?? "";
+        return m;
     }
 }

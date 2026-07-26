@@ -156,6 +156,17 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void ShippedDefault_IsVerifyOn()
+        {
+            // Assert the SHIPPED default, not the attribute by eye. Verify-on-encode is only a safety
+            // net if it is actually on by default, and a one-word attribute change would otherwise turn
+            // it off across every rip with nothing failing. See AlacVerifyOnEncodeTests for the sibling
+            // guard, added after ALAC was found shipping with verify OFF.
+            Assert.IsTrue(new EncoderSettings() { PCM = Cd }.DoVerify,
+                "FLAC must ship with verify-on-encode enabled");
+        }
+
+        [TestMethod]
         public void VerifyOn_EveryCompressionMode_Encodes()
         {
             // the app ships FLAC mode 8; sweep every offered mode so no compression level can

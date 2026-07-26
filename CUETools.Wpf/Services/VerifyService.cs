@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using CUETools.CTDB;
 using CUETools.Processor;
 
@@ -80,6 +80,10 @@ public sealed class VerifyService : IVerifyService
             cue.CUEToolsProgress += (s, e) => onProgress(Clamp(e.percent), e.status);
             cue.Open(path);
 
+            // Fast on purpose, same reason as the rip path: this call is the CTDB VERIFICATION
+            // contact, not disc identification. A file being verified already carries its metadata,
+            // so a broader sweep here would only add latency. The "Metadata search" setting governs
+            // identification instead.
             cue.UseCUEToolsDB("CUETools 2026", null, true, CTDBMetadataSearch.Fast);
             cue.UseAccurateRip();
             cue.Action = CUEAction.Verify;
