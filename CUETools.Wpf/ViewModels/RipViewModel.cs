@@ -361,6 +361,7 @@ public sealed class RipViewModel : PageViewModel
         _settings = settings;
         _status = status;
         _codecs = codecs;
+        _drives.SelectedDriveChanged += OnSharedSelectedDriveChanged;
         // restore the persisted rip prefs; empty means never set - fall back to defaults
         _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
             ? settings.OutputBaseDir
@@ -427,6 +428,20 @@ public sealed class RipViewModel : PageViewModel
         {
             StatusText = "No optical drive found.";
         }
+    }
+
+    private void OnSharedSelectedDriveChanged(object? sender, EventArgs e)
+    {
+        char selected = _drives.SelectedDrive;
+        if (selected == '\0' || selected == _selectedDrive || !Drives.Contains(selected))
+            return;
+        // Drive & Read exposes the same session selection. Its selector is locked while a job owns
+        // a drive, so an external change here is always an idle-time request to read the new disc.
+        if (IsRipping || IsBusy)
+            return;
+        _selectedDrive = selected;
+        OnPropertyChanged(nameof(SelectedDrive));
+        _ = ReadDiscAsync();
     }
 
     // Poll the drive for tray/media changes so the UI reacts to the physical eject button and to a

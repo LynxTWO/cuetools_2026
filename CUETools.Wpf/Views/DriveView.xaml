@@ -31,12 +31,28 @@
       <DockPanel LastChildFill="False">
         <StackPanel DockPanel.Dock="Left">
           <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="26" Foreground="{DynamicResource Ink}"/>
-          <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="620"/>
+          <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12.5" Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="500"/>
         </StackPanel>
-        <Button DockPanel.Dock="Right" Content="Detect" Command="{Binding DetectCommand}" Style="{StaticResource Accent}" Padding="16,8" VerticalAlignment="Top"
-                ToolTip="Re-read the drive over SCSI (identity, capabilities, speeds, offset)."/>
-        <Button DockPanel.Dock="Right" Content="Calibrate" Command="{Binding CalibrateCommand}" Padding="14,8" Margin="0,0,10,0" VerticalAlignment="Top"
-                ToolTip="Probe this drive's read behaviour with the loaded disc: cache size/defeat, lead-in and lead-out overread, and its read-speed range. Read-only - it reads audio sectors and writes nothing. Saved per drive; Rip, Verify, and Test &amp; Copy do this automatically on first use."/>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+          <StackPanel Margin="0,0,10,0">
+            <TextBlock Text="DRIVE" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="2,0,0,3"/>
+            <ComboBox ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}"
+                      IsEnabled="{Binding IsDriveSelectionEnabled}" MinWidth="68" Padding="9,5"
+                      ToolTip="Choose which attached optical drive to inspect. This selection stays synchronized with the Rip page and is locked while a job owns the drive.">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock FontFamily="{StaticResource Mono}">
+                    <Run Text="{Binding Mode=OneWay}"/><Run Text=":"/>
+                  </TextBlock>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <Button Content="Calibrate" Command="{Binding CalibrateCommand}" Padding="14,8" Margin="0,15,10,0" VerticalAlignment="Top"
+                  ToolTip="Probe this drive's read behaviour with the loaded disc: cache size/defeat, lead-in and lead-out overread, and its read-speed range. Read-only - it reads audio sectors and writes nothing. Saved per drive; Rip, Verify, and Test &amp; Copy do this automatically on first use."/>
+          <Button Content="Detect" Command="{Binding DetectCommand}" Style="{StaticResource Accent}" Padding="16,8" Margin="0,15,0,0" VerticalAlignment="Top"
+                  ToolTip="Re-read the selected drive over SCSI (identity, capabilities, speeds, offset)."/>
+        </StackPanel>
       </DockPanel>
 
       <!-- identity + read offset -->

@@ -1069,10 +1069,45 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed and software/H:-hardware verified 2026-07-27. H: completed 25
   Paranoid cache-defeat windows twice; the final-source run used the real offset,
   consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF suite
-  passes 347/347, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
-  net8/net47/net20. The final K: damaged-disc pass is pending because Windows
-  currently refuses to open that device handle; this is retained as an external
-  hardware state, not converted into a software pass.
+  passes 349/349, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
+  net8/net47/net20. After an elevated device restart and tray cycle, K: reopened
+  and started a real Paranoid Test & Copy. Its first read found a stuck window with
+  two errors at 60 percent, slowed, and converged to zero remaining errors on pass
+  9 while the measured 786,432-byte flush was active. Final Test/Copy agreement and
+  CTDB repair remain pending until that live job completes.
+
+### R54. Multiple drives cannot rip concurrently under one safe job controller - bucket B, risk high
+
+- **Area or slice:** WPF multi-drive UX, rip job ownership, Stop/keep-awake state,
+  cross-process drive leases, shared persistence, and output publication.
+- **Why it matters:** users with two or more drives should be able to rip in
+  parallel without launching arbitrary duplicate windows, selecting the same drive
+  twice, corrupting shared caches, losing settings, or allowing one job's Stop or
+  cleanup to affect another.
+- **Evidence found:** drive letters are enumerated dynamically and independent
+  device opens can stream concurrently, but `RipService` currently has one
+  `_current` CUESheet and one `_stopRequested` latch, and `RipViewModel` owns one
+  active job. Separate processes isolate those fields, and album reservations plus
+  gzip calibration/history updates are cross-process safe. Settings are
+  last-writer-wins, diagnostic names can collide within one second, legacy metadata
+  and LocalDB caches are not transaction-safe, and no cross-process lease prevents
+  two instances from opening the same physical drive.
+- **Confidence:** verified by code trace.
+- **Approval needed:** no; the user requested concurrent multi-drive ripping on
+  2026-07-27.
+- **Smallest safe next step:** build an explicit process-per-drive worker boundary
+  behind one dashboard. Add a cross-process lease keyed by stable device identity,
+  unique per-worker logs, safe shared-cache/settings policy, immutable per-job
+  configuration, authenticated worker status/Stop messages, and per-drive result
+  cards. Do not emulate concurrency by sharing the current singleton job state.
+- **Verification plan:** simultaneous real H:/K: rips; a negative test that a
+  second worker cannot claim the same drive; cross-process output-name collision,
+  history/calibration update, settings-exit, log-uniqueness, worker-crash, Stop,
+  CTDB repair, and machine-sleep/tray-lock tests.
+- **Owner:** repo owner.
+- **Status:** open. The Drive & Read dropdown now enumerates and synchronizes all
+  attached drives and locks selection across the full current job, but parallel
+  workers are deliberately not claimed yet.
 
 ## Ordering
 
@@ -1085,9 +1120,11 @@ dependency:
 3. Run the final-source K: damaged-disc CTDB repair/Test & Copy lane after its device
    reset. Retain the passing H: cache-defeat, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
-4. Run the pinned hosted workflows and compare them with the local receipts.
-5. Choose and implement a publisher signing/attestation identity and policy.
-6. Continue R5/R8/R12/R13 modernization and lock-file rollout.
+4. Implement R54's process-per-drive worker boundary and prove simultaneous H:/K:
+   operation without shared-state or same-drive collisions.
+5. Run the pinned hosted workflows and compare them with the local receipts.
+6. Choose and implement a publisher signing/attestation identity and policy.
+7. Continue R5/R8/R12/R13 modernization and lock-file rollout.
 
 ## Holes / external boundaries
 
@@ -1116,3 +1153,5 @@ dependency:
   preservation, and R53 with first-use calibration, monotonic cache defeat,
   offset-sized overread, and named CRC evidence. The exact classic release then
   rebuilt, receipted, and published all three configurations locally.
+- 2026-07-27 - added R54 after the two-drive hardware run exposed the difference
+  between dynamic drive selection and safe concurrent job ownership.
