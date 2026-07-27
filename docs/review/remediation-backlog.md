@@ -1112,6 +1112,64 @@ does not relax evidence, rollback, or verification requirements.
   attached drives and locks selection across the full current job, but parallel
   workers are deliberately not claimed yet.
 
+### R55. Payload medium errors bypass damaged-sector recovery - bucket A, risk high
+
+- **Area or slice:** SCSI `FetchSectors`, secure voting, failed-sector reporting,
+  Test & Copy, and post-rip CTDB repair.
+- **Why it matters:** a disc may complete all configured retries on several damaged
+  windows, then lose the entire Test & Copy transaction when a later READ CD command
+  reports a medium error that is not the one legacy special case.
+- **Evidence found:** the K: Copy read retained unreadable windows at 84% and 86%,
+  then aborted after 744 seconds with `medium error: NO SEEK COMPLETE`.
+  `FetchSectors` degrades only `DeviceFailed` sense `64/00` to single-sector reads;
+  all other payload failures throw.
+- **Confidence:** verified.
+- **Approval needed:** no; the user requested damaged-disc recovery and CTDB repair.
+- **Recommended next reference or pass type:** pass 11 bounded safe fix.
+- **Smallest safe next step:** split payload medium-error batches into single-sector
+  reads, mark persistent medium-error sectors as untrusted input to the existing
+  vote, and continue only under the existing retry/stop policy.
+- **Verification plan:** pure failure-policy tests, all SCSI target builds, ripper
+  and WPF suites, then repeat the damaged K: Test & Copy lane.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. Only
+  device-reported medium errors are converted into damaged-sector evidence.
+  Multi-sector payload failures split into individual reads; persistent
+  single-sector medium errors enter the existing low-confidence vote and retry
+  path. Hardware, not-ready, unit-attention, command, removal, and transport
+  failures remain fatal. The modern ripper suite passes 12/12, the WPF suite passes
+  352/352, and the SCSI project builds for net8/net47/net20. The damaged K: rerun is
+  still required to prove the real `NO SEEK COMPLETE` path completes as failed
+  sectors and reaches CTDB.
+
+### R56. Fixed Rip-page rails clip actions at narrow widths - bucket A, risk medium
+
+- **Area or slice:** modern WPF Rip page layout.
+- **Why it matters:** the default 1200-pixel window can hide the correction-quality
+  selector and primary commands, and long album headings are clipped without an
+  accessible full value.
+- **Evidence found:** user captures at 1200 and 1784 pixels; `RipView.xaml` fixes
+  the side rails at 252 and 234 pixels and places every setting and action in one
+  non-wrapping `DockPanel`.
+- **Confidence:** verified.
+- **Approval needed:** no; this is a presentation-only accessibility fix.
+- **Recommended next reference or pass type:** pass 11 bounded safe fix.
+- **Smallest safe next step:** use bounded proportional rails, wrapping actions,
+  rail scrolling, title trimming/tooltips, and a below-minimum horizontal fallback.
+  Keep the default-on Deep recovery policy in Settings instead of spending the
+  primary action row on a per-rip-looking checkbox.
+- **Verification plan:** XAML layout-contract test, full WPF suite, then visual
+  inspection at 1784, 1200, and 1024 logical pixels.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. The layout
+  contract requires viewport-bound work grids, bounded proportional rails,
+  vertically scrolling side content, wrapped actions, and tooltip-backed trimming.
+  Deep recovery remains a durable default-on expert setting but no longer consumes
+  the primary action row.
+  The WPF suite passes 352/352. A loaded-disc 1200-pixel capture proved the action
+  controls and CRC columns remain reachable after the viewport fix. Final-source
+  1784-, 1200-, and 1024-pixel presentation captures remain.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1158,3 +1216,6 @@ dependency:
   rebuilt, receipted, and published all three configurations locally.
 - 2026-07-27 - added R54 after the two-drive hardware run exposed the difference
   between dynamic drive selection and safe concurrent job ownership.
+- 2026-07-27 - implemented R55's damaged-media failure classification and R56's
+  responsive Rip layout. Deterministic gates pass; the damaged K: rerun and
+  final-source presentation captures remain external evidence.

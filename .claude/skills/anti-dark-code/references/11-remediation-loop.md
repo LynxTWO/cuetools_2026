@@ -173,6 +173,13 @@ device cache, boundary read, media property, or persisted calibration.
 - Make proof-establishing side effects complete or explicit. A partial cache flush,
   incomplete seek-away read, shortened scrub, or ignored device status must not be
   reported as an independent reread.
+- At a hardware or parser boundary, separate bad subject data from failure of the
+  reader, device, transport, or command. Convert only the subject-data class into
+  explicitly untrusted evidence that the existing retry, quarantine, or repair
+  policy can consume. Keep removal, not-ready, unit-attention, transport, protocol,
+  illegal-command, and hardware failures fatal unless independent evidence defines
+  a narrower recovery. Test the classifier without hardware, then exercise the real
+  failure beyond its original time or location.
 - Probe the exact command, transfer shape, flags, and range the runtime will consume.
   A multi-block boundary probe can falsely reject a valid one-block overread; a
   successful capability flag is useless if the read path still pads or bypasses it.

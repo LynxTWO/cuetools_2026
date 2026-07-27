@@ -65,6 +65,7 @@ public sealed class SettingsViewModel : PageViewModel
     public bool PreventSleepDuringRip { get => _app.PreventSleepDuringRip; set { _app.PreventSleepDuringRip = value; Raise(); } }
     public bool LockTrayDuringRip { get => _app.LockTrayDuringRip; set { _app.LockTrayDuringRip = value; Raise(); } }
     public bool StopOnUnrecoverable { get => _app.StopOnUnrecoverable; set { _app.StopOnUnrecoverable = value; Raise(); } }
+    public bool DeepRecovery { get => _app.DeepRecovery; set { _app.DeepRecovery = value; Raise(); } }
     public bool DisableEject { get => _c.disableEjectDisc; set { _c.disableEjectDisc = value; Raise(); } }
     public bool AdaptiveReadSpeed { get => _app.AdaptiveReadSpeed; set { _app.AdaptiveReadSpeed = value; Raise(); } }
 

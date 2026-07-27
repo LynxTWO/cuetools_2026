@@ -1454,26 +1454,82 @@ namespace CUETools.Ripper.SCSI
 			if (!abort)
 				return st;
 			SCSIException ex = new SCSIException(Resource1.ReadCDError, m_device, st);
-			if (sector != 0 && Sectors2Read > 1 && st == Device.CommandStatus.DeviceFailed && m_device.GetSenseAsc() == 0x64 && m_device.GetSenseAscq() == 0x00)
+			Device.SenseKeyType senseKey = st == Device.CommandStatus.DeviceFailed
+				? m_device.GetSenseKey()
+				: Device.SenseKeyType.NoSense;
+			byte asc = st == Device.CommandStatus.DeviceFailed
+				? m_device.GetSenseAsc()
+				: (byte)0;
+			byte ascq = st == Device.CommandStatus.DeviceFailed
+				? m_device.GetSenseAscq()
+				: (byte)0;
+			bool mediumError =
+				PayloadReadFailurePolicy.IsMediumError(st, senseKey);
+			bool legacyTrackMode =
+				sector != 0 && st == Device.CommandStatus.DeviceFailed &&
+				asc == 0x64 && ascq == 0x00;
+
+			if (Sectors2Read == 1 && mediumError)
+			{
+				MarkSectorUnreadable(sector);
+				return Device.CommandStatus.Success;
+			}
+
+			if (Sectors2Read > 1 &&
+				PayloadReadFailurePolicy.ShouldSplitBatch(
+					st,
+					senseKey,
+					asc,
+					ascq) &&
+				(mediumError || legacyTrackMode))
 			{
 				if (_debugMessages)
 					System.Console.WriteLine("\n{0}: retrying one sector at a time", ex.Message);
 				int iErrors = 0;
 				for (int iSector = 0; iSector < Sectors2Read; iSector++)
 				{
-					if (FetchSectors(sector + iSector, 1, false) != Device.CommandStatus.Success)
+					Device.CommandStatus singleStatus =
+						FetchSectors(sector + iSector, 1, false);
+					if (singleStatus != Device.CommandStatus.Success)
 					{
+						Device.SenseKeyType singleSense =
+							singleStatus == Device.CommandStatus.DeviceFailed
+								? m_device.GetSenseKey()
+								: Device.SenseKeyType.NoSense;
+						if (mediumError &&
+							!PayloadReadFailurePolicy.IsMediumError(
+								singleStatus,
+								singleSense))
+						{
+							// A batch-level media fault may expose a different failure on the
+							// pinpoint read. Do not mislabel device removal, transport, readiness,
+							// command, or hardware failures as damage that CTDB can repair.
+							throw new SCSIException(
+								Resource1.ReadCDError,
+								m_device,
+								singleStatus);
+						}
 						iErrors ++;
-						for (int i = 0; i < 294; i++)
-							C2Count[sector + iSector - _currentStart, i] ++;
+						MarkSectorUnreadable(sector + iSector);
 						if (_debugMessages)
 							System.Console.WriteLine("\nSector lost");
 					}
 				}
-				if (iErrors < Sectors2Read)
+				// A medium error is media evidence even when every sector in this small
+				// transfer failed. Keep those sectors in the existing vote/retry pipeline;
+				// StopOnUnrecoverable decides whether the job stops after retries exhaust.
+				// Preserve the legacy 64/00 behavior, which required at least one readable
+				// sector to prove that the command still worked in this region.
+				if (mediumError || iErrors < Sectors2Read)
 					return Device.CommandStatus.Success;
 			}
 			throw ex;
+		}
+
+		private void MarkSectorUnreadable(int sector)
+		{
+			for (int i = 0; i < 294; i++)
+				C2Count[sector - _currentStart, i]++;
 		}
 
 		// The secure-ripping decision. For each sample byte it runs a weighted majority vote
