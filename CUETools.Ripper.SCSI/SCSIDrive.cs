@@ -39,7 +39,6 @@ namespace CUETools.Ripper.SCSI
 	/// </summary>
 	public class CDDriveReader : ICDRipper
 	{
-		byte[] cdtext = null;
 		private Device m_device;
 		int _sampleOffset = 0;
 		int _driveOffset = 0;

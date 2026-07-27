@@ -1286,6 +1286,35 @@ does not relax evidence, rollback, or verification requirements.
   self-contained artifact passes its production contract. The K: end-to-end rerun
   remains.
 
+### R60. Legacy satellite linking receives incompatible revision metadata - bucket A, risk low
+
+- **Area or slice:** net20 SCSI builds, satellite resource linking, and the checked
+  modern warning baseline.
+- **Why it matters:** repeated legacy build warnings conceal new warnings and make
+  a successful receipt look less trustworthy than it is.
+- **Evidence found:** full MSBuild reproduced AL1053 for both satellite cultures
+  in Bwg.Scsi and CUETools.Ripper.SCSI. Passing
+  `IncludeSourceRevisionInInformationalVersion=false` removed every AL1053 while
+  retaining the projects' numeric versions. A prior MSB3088 disappeared on a clean
+  full-MSBuild rebuild and was traced to an unsupported `dotnet` net20 attempt.
+  `CDDriveReader.cdtext` has one declaration, one commented historical assignment,
+  and no live reads or writes.
+- **Confidence:** verified.
+- **Approval needed:** no; the user requested this warning cleanup and previously
+  approved autonomous remediation.
+- **Smallest safe next step:** condition the informational-version property on
+  `net20` in the two affected projects, remove the dead field and its accepted
+  warning fingerprint, and use full MSBuild for the legacy resource lane.
+- **Verification plan:** require a warning-free full-MSBuild net20 rebuild, build
+  net47/net8, run ripper/WPF tests and the warning gate, and keep vendor worktrees
+  clean.
+- **Owner:** repo owner.
+- **Status:** implemented and verified 2026-07-27. Full Visual Studio MSBuild
+  rebuilds the net20 SCSI graph with zero warnings and zero errors. The net47 and
+  net8 SCSI builds are also clean; ripper tests pass 20/20, WPF tests pass 358/358,
+  and the modern warning gate passes with 34 unchanged fingerprints and no new
+  warnings. The transient MSB3088 requires no source suppression.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1345,3 +1374,6 @@ dependency:
 - 2026-07-27 - added R59 when the next K: run proved the same exact child failure
   was also reachable through rejected-batch decomposition. Added classifier-route
   coverage rather than widening R58's medium-parent claim.
+- 2026-07-27 - closed R60 by making source-revision metadata target-local to
+  modern SCSI builds, removing a proven-dead CD-Text field, and pruning its warning
+  fingerprint. The full-MSBuild net20 graph is now warning-free.

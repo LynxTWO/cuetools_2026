@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>net47;net20;net8.0-windows</TargetFrameworks>
     <Version>0.0.7.1</Version>
+    <!-- Legacy al.exe accepts numeric product versions only. -->
+    <IncludeSourceRevisionInInformationalVersion Condition="'$(TargetFramework)' == 'net20'">false</IncludeSourceRevisionInInformationalVersion>
     <AssemblyName>Bwg.Scsi</AssemblyName>
     <RootNamespace>Bwg.Scsi</RootNamespace>
     <Product>BwgBurn</Product>
