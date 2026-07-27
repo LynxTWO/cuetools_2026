@@ -213,7 +213,7 @@ public partial class App : Application
         bool shown = false;
         for (int attempt = 1; attempt <= 6 && !shown; attempt++)
         {
-            MainWindow window = null;
+            MainWindow? window = null;
             try
             {
                 window = new MainWindow(theme, provider.GetRequiredService<AppStatusService>())

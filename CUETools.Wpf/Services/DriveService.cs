@@ -186,9 +186,11 @@ public sealed class DriveService : IDriveService
                         meta.Artist = cdtext.AlbumPerformer;
                         for (int t = 1; t <= (int)toc.AudioTracks && t - 1 < meta.Tracks.Count; t++)
                         {
-                            string tt, tp;
-                            if (cdtext.TrackTitles.TryGetValue(t, out tt)) meta.Tracks[t - 1].Title = tt;
-                            if (cdtext.TrackPerformers.TryGetValue(t, out tp)) meta.Tracks[t - 1].Artist = tp;
+                            string? tt, tp;
+                            if (cdtext.TrackTitles.TryGetValue(t, out tt))
+                                meta.Tracks[t - 1].Title = tt ?? "";
+                            if (cdtext.TrackPerformers.TryGetValue(t, out tp))
+                                meta.Tracks[t - 1].Artist = tp ?? "";
                         }
                         matches.Add(BuildMatch(new CUEMetadataEntry(meta, toc, "cdtext"), idx++, (int)toc.AudioTracks));
                         _log.Info("disc", $"cdtext present: album={(cdtext.AlbumTitle.Length > 0 ? "yes" : "no")} " +

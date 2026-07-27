@@ -3,6 +3,9 @@ using System.Runtime.InteropServices;
 
 namespace CUETools.Codecs.libFLAC
 {
+    // These packets are filled by native libFLAC before the write callback runs.
+    // Managed code must not fake assignments or remove fields the native ABI owns.
+#pragma warning disable CS0649
     internal struct FLAC__FrameHeader
     {
         internal int blocksize;
@@ -35,6 +38,7 @@ namespace CUETools.Codecs.libFLAC
         //fixed FLAC__Subframe subframes[FLACDLL.FLAC__MAX_CHANNELS];
         //FLAC__FrameFooter footer;
     };
+#pragma warning restore CS0649
 
     [StructLayout(LayoutKind.Explicit), Serializable]
     internal struct FLAC__StreamMetadata

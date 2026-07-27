@@ -180,6 +180,16 @@ namespace ProgressODoom {
 		public static bool operator ==(HSV left, HSV right) {
 			return (left.Hue == right.Hue && left.Value == right.Value && left.Saturation == right.Saturation);
 		}
+		public override bool Equals(object obj) {
+			return obj is HSV && this == (HSV)obj;
+		}
+		public override int GetHashCode() {
+			unchecked {
+				int hash = Hue;
+				hash = (hash * 397) ^ Saturation;
+				return (hash * 397) ^ Value;
+			}
+		}
 		public override string ToString() {
 			string s = string.Format("HSV({0:f2}, {1:f2}, {2:f2})", Hue, Saturation, Value);
 			return s;

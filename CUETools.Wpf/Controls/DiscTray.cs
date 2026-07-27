@@ -167,7 +167,7 @@ public sealed class DiscTray : FrameworkElement
     private static Point Add(Point p, double dx, double dy) => new Point(p.X + dx, p.Y + dy);
     private static Point Mid(Point a, Point b) => new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
 
-    private static void Poly(DrawingContext dc, Brush fill, Pen pen, params Point[] pts)
+    private static void Poly(DrawingContext dc, Brush fill, Pen? pen, params Point[] pts)
     {
         var g = new StreamGeometry();
         using (var c = g.Open())

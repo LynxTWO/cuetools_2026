@@ -1288,32 +1288,128 @@ does not relax evidence, rollback, or verification requirements.
 
 ### R60. Legacy satellite linking receives incompatible revision metadata - bucket A, risk low
 
-- **Area or slice:** net20 SCSI builds, satellite resource linking, and the checked
-  modern warning baseline.
+- **Area or slice:** net20 resource-bearing projects, satellite resource linking,
+  and the checked modern warning baseline.
 - **Why it matters:** repeated legacy build warnings conceal new warnings and make
   a successful receipt look less trustworthy than it is.
-- **Evidence found:** full MSBuild reproduced AL1053 for both satellite cultures
-  in Bwg.Scsi and CUETools.Ripper.SCSI. Passing
-  `IncludeSourceRevisionInInformationalVersion=false` removed every AL1053 while
-  retaining the projects' numeric versions. A prior MSB3088 disappeared on a clean
-  full-MSBuild rebuild and was traced to an unsupported `dotnet` net20 attempt.
-  `CDDriveReader.cdtext` has one declaration, one commented historical assignment,
-  and no live reads or writes.
+- **Evidence found:** 36 projects target net20; five contain source resources:
+  Bwg.Scsi, CUETools.Ripper.SCSI, CUEControls, CUETools.Codecs.Flake, and
+  CUETools.Codecs.WMA. Full MSBuild reproduced AL1053 where revision-suffixed
+  product versions reached the legacy Assembly Linker. Setting
+  `IncludeSourceRevisionInInformationalVersion=false` only for net20 removed every
+  AL1053 while retaining numeric assembly versions. A prior MSB3088 disappeared
+  on a clean full-MSBuild rebuild and was traced to an unsupported `dotnet` net20
+  attempt. `CDDriveReader.cdtext` has one declaration, one commented historical
+  assignment, and no live reads or writes.
 - **Confidence:** verified.
 - **Approval needed:** no; the user requested this warning cleanup and previously
   approved autonomous remediation.
 - **Smallest safe next step:** condition the informational-version property on
-  `net20` in the two affected projects, remove the dead field and its accepted
-  warning fingerprint, and use full MSBuild for the legacy resource lane.
+  `net20` in all five resource-bearing projects, remove the dead field and its
+  accepted warning fingerprint, and use full MSBuild for the legacy resource lane.
 - **Verification plan:** require a warning-free full-MSBuild net20 rebuild, build
   net47/net8, run ripper/WPF tests and the warning gate, and keep vendor worktrees
   clean.
 - **Owner:** repo owner.
 - **Status:** implemented and verified 2026-07-27. Full Visual Studio MSBuild
-  rebuilds the net20 SCSI graph with zero warnings and zero errors. The net47 and
-  net8 SCSI builds are also clean; ripper tests pass 20/20, WPF tests pass 358/358,
-  and the modern warning gate passes with 34 unchanged fingerprints and no new
-  warnings. The transient MSB3088 requires no source suppression.
+  rebuilds all five net20 resource-bearing projects with zero AL1053 warnings.
+  The net47 and net8 SCSI builds are also clean; ripper tests pass 20/20, WPF
+  tests pass 358/358, and the modern warning gate passes with zero emitted
+  warnings against an empty baseline. The transient MSB3088 requires no source
+  suppression.
+
+### R61. Dead codec paths and native-populated fields share one warning class - bucket A, risk medium
+
+- **Area or slice:** managed ALAC and Flake encoders, libFLAC decoder interop, and
+  ZIP decompression.
+- **Why it matters:** treating every CS0649 as dead code could remove fields that
+  native libFLAC writes into unmanaged callback memory. Leaving genuinely dead
+  encoder paths beside those fields makes that mistake easier.
+- **Evidence found:** ALAC has 13 candidate C# files; `cbits` and `porder` have one
+  declaration each and no live use. Its window loop always breaks before the
+  compiler-reported tail. Flake has 19 candidate C# files; `sr_code1` is read but
+  never assigned, while initialization explicitly rejects sample rates outside its
+  table. The four libFLAC C# files show `FLAC__Frame*` arriving from the native
+  decoder write callback and the header fields being consumed there. The two ZIP
+  C# files show password acquisition owned by `ZipCompressionProvider`; the
+  stream's duplicate event has no subscriber or invocation, but it is a public
+  compatibility surface and must not be deleted as dead private code. A full
+  net20 rebuild also found `MediaSlider.Dispose()` intentionally occupying the
+  inherited public signature without declaring `new`; adding the keyword preserves
+  its existing behavior and binary member.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** delete only proven-dead internal fields and
+  branches, retain executed statements and public API, and scope documented
+  suppressions to the native callback packet and compatibility-only ZIP event.
+- **Verification plan:** touched-project builds, encode verification tests, full
+  WPF tests, warning gate, publish, and native plugin probes.
+- **Owner:** repo owner.
+- **Status:** fixed and verified 2026-07-27. Touched codec projects build with
+  zero warnings for their applicable netstandard2.0, net47, and net20 targets.
+  The public ZIP event and native-owned libFLAC packet remain intact. The WPF
+  suite passes 358/358, and the modern warning gate emits zero warnings.
+
+### R62. Nullable warnings hide missing result and persistence guards - bucket A, risk high
+
+- **Area or slice:** WPF startup, drive calibration, metadata naming, persisted
+  verify history, Test & Copy, output layout, and rip result publication.
+- **Why it matters:** most locations already degrade null to an empty display value,
+  but Test & Copy currently adds nullable checksum records to a non-null comparison
+  list after checking only `Ok`. A record-build failure on a verify-only phase can
+  therefore escape its intended boundary and fail later without a phase-specific
+  result.
+- **Evidence found:** the 34 checked fingerprints expand to 51 warning locations in
+  no-incremental WPF and fuzz builds. `VerifyResult.Record` is explicitly nullable;
+  encode requires it, but verify-only allows record construction to fail while the
+  optical read remains successful. Other locations are optional store returns,
+  legacy metadata, WPF nullable drawing parameters, or BCL methods such as
+  `Path.GetDirectoryName`.
+- **Confidence:** verified.
+- **Approval needed:** no; the user explicitly requested the warning cleanup.
+- **Smallest safe next step:** express nullable inputs and returns, add explicit
+  invariants where null was already fatal, and reject a missing Test & Copy record
+  immediately. Empty the baseline only after both warning-gated builds emit zero.
+- **Verification plan:** focused policy and persistence tests, all 358 WPF tests,
+  no-incremental WPF/fuzz builds, empty warning gate, clean publish/artifact
+  contract, and vendor-clean check.
+- **Owner:** repo owner.
+- **Status:** fixed and verified 2026-07-27. WPF and fuzz no-incremental builds
+  emit zero warnings, the checked warning baseline is empty, and all 358 WPF
+  tests pass. Test & Copy rejects a missing checksum record at its phase boundary.
+
+### R63. The classic solution has a separate unmanaged warning budget - bucket A, risk medium
+
+- **Area or slice:** classic managed solution build, FLACCL/OpenCL, legacy UI,
+  CoreAudio, resampler, LossyWAV, and three command-line target frameworks.
+- **Why it matters:** the modern gate can be empty while the full solution still
+  emits warnings. Mixing GPU-populated fields, pinned third-party compatibility
+  calls, dead state, and unsupported frameworks in one unclassified set makes
+  future warning cleanup unsafe.
+- **Evidence found:** the Visual Studio Release Any CPU rebuild succeeded for 58
+  projects but emitted 28 warning lines with 19 distinct messages. Four FLACCL
+  task fields are read from a pinned OpenCL buffer after a device-to-host copy.
+  Two LossyWAV fields and one resampler local have no live use. CoreAudio's
+  private sample offset is never changed, so its public position has always been
+  zero. FLACCL advertises and parses `--ignore-chunk-sizes` but does not apply it
+  to file input. Three command-line projects target unsupported netcoreapp2.0.
+  The remaining four warnings come from the immutable OpenCLNet gitlink.
+- **Confidence:** verified from a full clean build and bounded source searches.
+- **Approval needed:** no; this is part of the requested warning cleanup.
+- **Smallest safe next step:** fix the proven first-party cases, retain and
+  document GPU-owned packet fields, move the three command-line targets to net8.0,
+  and scope exact warning suppression to the pinned OpenCLNet project.
+- **Verification plan:** affected-project rebuilds, available-device FLACCL
+  exercise, codec/WPF tests, warning gate, and a zero-managed-warning classic
+  solution rebuild.
+- **Owner:** repo owner.
+- **Status:** fixed and verified 2026-07-27. Release Any CPU rebuilt 58 projects
+  with zero managed warnings and no failures; Release x64 and Win32 each rebuilt
+  nine selected projects with zero managed warnings and no failures. Native
+  warnings remain governed by their separate checked baseline. FLACCL verify
+  passed on the RTX 3060 through OpenCL 3.0 with the repaired option enabled.
+  Codec tests pass 112/113 with one pre-existing skip, WPF tests pass 358/358,
+  and the three net8 command-line outputs start with complete dependency closures.
 
 ## Ordering
 
@@ -1375,5 +1471,14 @@ dependency:
   was also reachable through rejected-batch decomposition. Added classifier-route
   coverage rather than widening R58's medium-parent claim.
 - 2026-07-27 - closed R60 by making source-revision metadata target-local to
-  modern SCSI builds, removing a proven-dead CD-Text field, and pruning its warning
-  fingerprint. The full-MSBuild net20 graph is now warning-free.
+  all five net20 resource-bearing projects, removing a proven-dead CD-Text field,
+  and pruning its warning fingerprint. The full-MSBuild resource lane is now free
+  of AL1053.
+- 2026-07-27 - closed R61 and R62 by separating dead managed paths from native
+  and public compatibility contracts, making WPF null boundaries explicit, and
+  replacing the 34-fingerprint modern warning allowance with an empty baseline.
+- 2026-07-27 - added R63 after the full classic solution rebuild exposed 19
+  distinct managed warnings outside the modern gate.
+- 2026-07-27 - closed R63 with zero managed warnings across the classic
+  Any CPU, x64, and Win32 rebuilds, an RTX 3060 FLACCL verification run, and
+  working net8 command-line dependency closures.

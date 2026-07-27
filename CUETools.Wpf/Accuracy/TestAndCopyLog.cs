@@ -44,7 +44,7 @@ namespace CUETools.Wpf.Accuracy
                 sb.AppendLine("Test & Copy HELD - no agreement on track(s): " + string.Join(", ", oneBased));
             }
 
-            var last = reads.Count > 0 ? reads[reads.Count - 1] : null;
+            VerifyRecord? last = reads.Count > 0 ? reads[reads.Count - 1] : null;
             int arConf = last?.ArConfidence ?? 0, ctConf = last?.CtdbConfidence ?? 0;
             sb.AppendLine("AccurateRip: " + (arConf > 0 ? "accurate, confidence " + arConf : "not found"));
             sb.AppendLine("CTDB:        " + (ctConf > 0 ? "match, confidence " + ctConf : "not found"));
@@ -54,7 +54,7 @@ namespace CUETools.Wpf.Accuracy
             return sb.ToString();
         }
 
-        private static TrackCrc Track(VerifyRecord r, int t)
+        private static TrackCrc? Track(VerifyRecord? r, int t)
         {
             var arr = r?.Tracks;
             return (arr != null && t >= 0 && t < arr.Length) ? arr[t] : null;

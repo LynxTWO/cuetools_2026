@@ -4,6 +4,8 @@
     <!-- net8.0-windows added for the WPF app (backlog R18): WMA encodes via the OS's Windows Media
          runtime (wmvcore), so no native DLL ships; COM interop works on modern .NET on Windows. -->
     <TargetFrameworks>net47;net20;net8.0-windows</TargetFrameworks>
+    <!-- Legacy al.exe accepts numeric product versions only. -->
+    <IncludeSourceRevisionInInformationalVersion Condition="'$(TargetFramework)' == 'net20'">false</IncludeSourceRevisionInInformationalVersion>
     <Version>2.2.6.0</Version>
     <AssemblyName>CUETools.Codecs.WMA</AssemblyName>
     <RootNamespace>CUETools.Codecs.WMA</RootNamespace>

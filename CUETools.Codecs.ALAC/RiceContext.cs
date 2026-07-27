@@ -8,11 +8,6 @@
             esc_bps = new int[Alac.MAX_PARTITIONS];
         }
         /// <summary>
-        /// partition order
-        /// </summary>
-        public int porder;
-
-        /// <summary>
         /// Rice parameters
         /// </summary>
         public int[] rparams;

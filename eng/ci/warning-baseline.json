@@ -11,43 +11,8 @@
       "project": "CUETools.Fuzz/CUETools.Fuzz.csproj"
     }
   ],
-  "fingerprints": [
-    "CUETools.Codecs.ALAC/ALACSubframe.cs|CS0649|Field 'ALACSubframe.cbits' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.ALAC/ALACWriter.cs|CS0162|Unreachable code detected",
-    "CUETools.Codecs.ALAC/RiceContext.cs|CS0649|Field 'RiceContext.porder' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.Flake/AudioEncoder.cs|CS0649|Field 'AudioEncoder.sr_code1' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__Frame.header' is never assigned to, and will always have its default value",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.bits_per_sample' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.blocksize' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.channel_assignment' is never assigned to, and will always have its default value",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.channels' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.crc' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.number_type' is never assigned to, and will always have its default value",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.sample_number' is never assigned to, and will always have its default value 0",
-    "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.sample_rate' is never assigned to, and will always have its default value 0",
-    "CUETools.Compression.Zip/SeekableZipStream.cs|CS0067|The event 'SeekableZipStream.PasswordRequired' is never used",
-    "CUETools.Wpf/Accuracy/DriveCalibrationService.cs|CS8603|Possible null reference return.",
-    "CUETools.Wpf/Accuracy/TestAndCopyLog.cs|CS8603|Possible null reference return.",
-    "CUETools.Wpf/Accuracy/TestAndCopyResolver.cs|CS8603|Possible null reference return.",
-    "CUETools.Wpf/Accuracy/VerifyHistory.cs|CS8625|Cannot convert null literal to non-nullable reference type.",
-    "CUETools.Wpf/App.xaml.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
-    "CUETools.Wpf/Controls/DiscTray.cs|CS8625|Cannot convert null literal to non-nullable reference type.",
-    "CUETools.Wpf/Converters/BoolToBrushConverter.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
-    "CUETools.Wpf/Models/DriveDetails.cs|CS8604|Possible null reference argument for parameter 'a' in 'string DriveDetails.Join(string a, string b, string c, string none)'.",
-    "CUETools.Wpf/Models/DriveDetails.cs|CS8604|Possible null reference argument for parameter 'b' in 'string DriveDetails.Join(string a, string b, string c, string none)'.",
-    "CUETools.Wpf/Models/DriveDetails.cs|CS8604|Possible null reference argument for parameter 'c' in 'string DriveDetails.Join(string a, string b, string c, string none)'.",
-    "CUETools.Wpf/Services/DriveService.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
-    "CUETools.Wpf/Services/NamingContextMapper.cs|CS8603|Possible null reference return.",
-    "CUETools.Wpf/Services/NamingContextMapper.cs|CS8604|Possible null reference argument for parameter 'date' in 'string NamingContextMapper.Year4(string date)'.",
-    "CUETools.Wpf/Services/NamingContextMapper.cs|CS8604|Possible null reference argument for parameter 's' in 'int NamingContextMapper.ParseInt(string s, int dflt)'.",
-    "CUETools.Wpf/Services/NamingEngine.cs|CS8602|Dereference of a possibly null reference.",
-    "CUETools.Wpf/Services/OutputLayout.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
-    "CUETools.Wpf/Services/RipService.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
-    "CUETools.Wpf/Services/RipService.cs|CS8602|Dereference of a possibly null reference.",
-    "CUETools.Wpf/Services/RipService.cs|CS8604|Possible null reference argument for parameter 'b' in 'bool VerifyHistoryStore.SameAudioForTestAndCopy(TrackCrc a, TrackCrc b)'.",
-    "CUETools.Wpf/Services/RipService.cs|CS8604|Possible null reference argument for parameter 'item' in 'void List<VerifyRecord>.Add(VerifyRecord item)'."
-  ],
+  "fingerprints": [],
   "limitations": [
-    "This checked baseline covers the .NET 8 WPF/fuzz closure. Imported x64 native dependencies have a separate checked baseline in native-warning-baseline.json; the complete classic solution's Any CPU and Win32 warning surface remains a hosted Visual Studio lane."
+    "The empty baseline requires warning-free .NET 8 WPF and fuzz builds. Imported x64 native dependencies have a separate checked baseline in native-warning-baseline.json; complete classic Any CPU, x64, and Win32 builds are verified by the Visual Studio release lane."
   ]
 }

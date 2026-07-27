@@ -8,7 +8,7 @@ namespace CUETools.Wpf.Services
     /// blank. Pure - no I/O.</summary>
     public static class NamingContextMapper
     {
-        public static NamingContext FromMetadata(CUEMetadata m, int trackIndex, int totalTracks)
+        public static NamingContext FromMetadata(CUEMetadata? m, int trackIndex, int totalTracks)
         {
             string trackArtist = "", trackTitle = "", isrc = "";
             if (m?.Tracks != null && trackIndex >= 0 && trackIndex < m.Tracks.Count)
@@ -44,9 +44,10 @@ namespace CUETools.Wpf.Services
             };
         }
 
-        private static int ParseInt(string s, int dflt) => int.TryParse((s ?? "").Trim(), out int v) && v > 0 ? v : dflt;
+        private static int ParseInt(string? s, int dflt) =>
+            int.TryParse((s ?? "").Trim(), out int v) && v > 0 ? v : dflt;
 
-        private static string Year4(string date)
+        private static string? Year4(string? date)
         {
             date = (date ?? "").Trim();
             return date.Length >= 4 && int.TryParse(date.Substring(0, 4), out _) ? date.Substring(0, 4) : null;
