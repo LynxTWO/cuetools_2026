@@ -38,6 +38,16 @@
   </ItemGroup>
 
   <!--
+    Several old-style projects name Visual Studio's installed AllRules.ruleset.
+    Core MSBuild does not search that Visual Studio ruleset directory, so the
+    setting cannot take effect there and only emits MSB3884. Preserve the rule
+    selection for full Visual Studio builds and clear the unresolved Core value.
+  -->
+  <PropertyGroup Condition="'$(MSBuildRuntimeType)' == 'Core' And '$(CodeAnalysisRuleSet)' == 'AllRules.ruleset' And !Exists('$(MSBuildProjectDirectory)\AllRules.ruleset')">
+    <CodeAnalysisRuleSet />
+  </PropertyGroup>
+
+  <!--
     The pinned OpenCLNet gitlink deliberately retains OpenCL 1.1 fallback calls for old devices,
     and its unused DirectX 9 extension carries an upstream #warning. Keep those compatibility
     decisions visible here without editing or dirtying the immutable vendor source.

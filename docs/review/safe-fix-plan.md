@@ -652,3 +652,78 @@ on the NVIDIA RTX 3060 through OpenCL 3.0 with the repaired option enabled.
 The net47 codec suite passes 112/113 with its one pre-existing skip, the WPF suite
 passes 358/358, and all three new net8 command-line outputs start with their
 dependency closures present.
+
+### Remove the checked native libFLAC warning set
+
+**Exact files:** `ThirdParty/submodule_flac_CUETools.patch`,
+`eng/ci/native-warning-baseline.json`, `eng/ci/VendorSourceStaging.ps1`,
+`docs/review/remediation-backlog.md`, `docs/review/safe-fix-plan.md`, and the
+R64 review record. The vendor patch payload changes `bitwriter.c`, `fixed.c`,
+`format.c`, `lpc.c`,
+`metadata_object.c`, `stream_decoder.c`, and `stream_encoder.c` in the staged
+libFLAC 1.5.0 source. The `ThirdParty/flac` gitlink stays immutable.
+
+**Safety and unchanged behavior:** take the bit-writer capacity calculation from
+current upstream libFLAC, where capacity is compared in words and the old
+byte-size multiplication cannot overflow. Use 64-bit shift operands for the two
+24-bit metadata limits. Add explicit residual casts only where the encoder first
+proves the selected fixed predictor or LPC residual fits `FLAC__int32`; retain
+the existing limit-residual rejection paths. Constant and warm-up samples narrow
+only under their existing `bps <= 32` branches. Retain a missing-frame gap in
+64 bits through the existing five-second and 50-frame caps, then narrow after
+the cap proves the value fits. Check 33-bit channel decorrelation results before
+placing them in the 32-bit output buffer so malformed frames cannot wrap before
+the existing bounds check. Make the apodization default a `FLAC__real` value
+without changing its value. Read the UTF-8 vendor ownership manifest explicitly
+as UTF-8 so Windows PowerShell 5.1 preserves non-ASCII upstream paths.
+
+**Checks:** rebuild staged libFLAC for Win32 and x64 with the checked native
+warning gate; require an empty native baseline; run native-backed FLAC encode,
+decode, and verify-on-encode tests; run the upstream libFLAC tests available on
+Windows; and finish with the vendor-clean gate. Refresh classic and publish
+receipts only after the active rip releases the running application.
+
+**Rollback:** revert the R64 vendor patch hunks and restore the eight native
+warning fingerprints together. Do not replace the fixes with project-wide
+warning suppression.
+
+**Observability:** malformed 33-bit decorrelation that reconstructs outside the
+declared 32-bit sample range now reports the existing out-of-bounds decoder
+status. Missing-frame silence remains capped by the existing policy, but large
+gaps can no longer wrap below that cap. No audio samples, metadata values, or
+logs change for valid input. Vendor staging now accepts the same manifest under
+Windows PowerShell 5.1 and PowerShell 7.
+
+**Status:** implemented and locally verified on 2026-07-27. All six native
+dependency builds complete with zero warnings against an empty baseline. The
+focused native-backed FLAC tests pass 25/25, upstream libFLAC and libFLAC++ tests
+pass 2/2, the classic codec suite passes 112/113 with its established skip, and
+the WPF suite passes 358/358. Vendor staging passes 15 checks, reproduces the
+same seven compiled source files under PowerShell 5.1 and 7, and leaves all five
+submodules clean. The source-bound classic receipt remains pending until the
+active rip releases the running application.
+
+### Keep Visual Studio rulesets out of Core MSBuild
+
+**Exact files:** `Directory.Build.targets`,
+`docs/review/remediation-backlog.md`, and `docs/review/safe-fix-plan.md`.
+
+**Safety and unchanged behavior:** clear `AllRules.ruleset` only when Core
+MSBuild is running and the project does not contain that file. Core MSBuild
+cannot resolve Visual Studio's installed ruleset directory and currently emits
+MSB3884 without applying the rules. Full Visual Studio MSBuild retains the
+existing ruleset value and analysis behavior.
+
+**Checks:** rebuild `CUETools.TestHelpers` through the net47 codec suite and
+require no MSB3884. Rebuild the classic solution through full Visual Studio and
+confirm its warning count remains zero.
+
+**Rollback:** remove the Core-only property override. Do not delete the project
+ruleset declarations while full Visual Studio still resolves them.
+
+**Observability:** none. This changes build configuration only.
+
+**Status:** implemented and locally verified on 2026-07-27.
+`CUETools.TestHelpers` rebuilds through Core MSBuild with zero warnings. The
+full Visual Studio receipt check remains paired with the post-rip classic
+release run.
