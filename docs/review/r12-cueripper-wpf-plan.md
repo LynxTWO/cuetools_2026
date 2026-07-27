@@ -62,10 +62,15 @@ are the known integration snags to clear.
 
 ## Verification split
 
-- **Here (headless Build-Tools box):** everything compiles (`dotnet build` net8.0-windows),
-  view-model logic unit-tests, drive enumeration code paths.
-- **Owner's box (5950X, ASUS Blu-ray on K:):** the actual rip/encode/verify against a real
-  disc, since ripping needs hardware and a CD.
+- **Automated/local:** compile, view-model and service tests, artifact contracts, and
+  deterministic failure cases.
+- **Hardware:** H: and K: now provide the live SCSI/read fixtures. Both completed
+  full-disc read-only verification with zero read errors, and H: completed a full
+  11-track FLAC rip with CUE/log/AccurateRip evidence. H: also completed a clean
+  two-read Test & Copy that published 11 FLAC files and committed explicit
+  decoded-and-compared output assurance into `rip.verify`. A no-build final-source
+  repeat is pending because the behavior-preserving `SecureSectorVote` extraction
+  landed afterward.
 
 ## Status
 
@@ -75,9 +80,10 @@ are the known integration snags to clear.
   `kernel32`/`ntdll` P/Invoke, no net8-hostile APIs. `DriveProbe/` is a net8 console that
   enumerates drives via `CDDrivesList.DrivesAvailable()` and opens each with
   `CDDriveReader` (real SCSI INQUIRY + ReadTOC). It runs on .NET 8.0.28 here; this
-  sandbox exposes no optical drive, so the live SCSI read against the BD-RE on K: is the
-  owner's step: `dotnet DriveProbe/bin/Release/net8.0-windows/DriveProbe.dll` with an
-  audio CD inserted. **Confirmed live 2026-07-10** on the owner's box: enumerated K:,
+  initial sandbox exposed no optical drive, so the first live SCSI read against the BD-RE
+  on K: was an owner step:
+  `dotnet DriveProbe/bin/Release/net8.0-windows/DriveProbe.dll` with an audio CD
+  inserted. **Confirmed live 2026-07-10** on the owner's box: enumerated K:,
   INQUIRY returned "ASUS BW-16D1HT", and read a 9-track / 46:20 disc TOC on .NET 8.0.28.
   The one real risk is fully cleared.
 - [x] **Phase 2 (WPF scaffold) - 2026-07-10/11.** `CUETools.Wpf` (net8.0-windows, WinExe,
@@ -106,5 +112,6 @@ are the known integration snags to clear.
     teal accent, dark ComboBox - all verified from rendered PNGs via a `SwitchRender` harness
     (WPF `RenderTargetBitmap`), not guessed.
 - [ ] Phase 4: light/dark theme toggle; speed graph on Rip; packaging + CI. Live disc
-  rip/encode still needs the owner's hardware to confirm end-to-end (headless box proved
-  drive read, metadata, verify, and encode via probes + a real disc read).
+  rip/encode is no longer an evidence gap: H: completed the full 11-track FLAC path on
+  2026-07-26 plus a clean same-drive Test & Copy, while K: completed a separate
+  12-track full-disc read. Hosted CI and the optional UI enhancements remain.

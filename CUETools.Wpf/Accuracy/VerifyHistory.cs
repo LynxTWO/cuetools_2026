@@ -33,6 +33,13 @@ namespace CUETools.Wpf.Accuracy
         public string Artist { get; set; } = "";
         public DateTime Utc { get; set; }
         public string RipperVersion { get; set; } = "";
+        /// <summary>Encoded-file assurance carried in the album's rip.verify sidecar. It is not
+        /// consulted for optical-read history matching.</summary>
+        public string Format { get; set; } = "";
+        public bool OutputVerificationKnown { get; set; }
+        public bool LosslessOutput { get; set; }
+        public bool OutputVerificationPerformed { get; set; }
+        public string OutputVerificationDetail { get; set; } = "";
     }
 
     /// <summary>Result of comparing a new read against this disc's stored history.</summary>
@@ -61,34 +68,51 @@ namespace CUETools.Wpf.Accuracy
 
         public VerifyOutcome CompareAndUpsert(VerifyRecord r)
         {
-            var all = GzJson.Load<Dictionary<string, List<VerifyRecord>>>(_path)
-                      ?? new Dictionary<string, List<VerifyRecord>>();
-            string key = (r.DiscId ?? "").Trim();
-            all.TryGetValue(key, out var reads);
-            reads ??= new List<VerifyRecord>();
+            return GzJson.Update<
+                Dictionary<string, List<VerifyRecord>>,
+                VerifyOutcome>(
+                _path,
+                loaded =>
+                {
+                    if (loaded.Status == GzJsonLoadStatus.Failed)
+                        throw new InvalidDataException(
+                            "The verify-history store exists but could not be read; it was left unchanged.",
+                            loaded.Error);
+                    var all = loaded.Status == GzJsonLoadStatus.Loaded
+                        ? loaded.Value!
+                        : new Dictionary<string, List<VerifyRecord>>();
+                    string key = (r.DiscId ?? "").Trim();
+                    all.TryGetValue(key, out var reads);
+                    reads ??= new List<VerifyRecord>();
 
-            var outcome = new VerifyOutcome { KnownDisc = reads.Count > 0, PriorReads = reads.Count };
-            if (outcome.KnownDisc)
-            {
-                var prev = reads[reads.Count - 1];   // newest stored read
-                // A corrupt-but-valid-gzip history file can deserialize a record whose Tracks is
-                // null (JSON "Tracks":null); treat that as an empty track list rather than crash.
-                var pt = prev.Tracks ?? Array.Empty<TrackCrc>();
-                var rt = r.Tracks ?? Array.Empty<TrackCrc>();
-                int diff = 0;
-                int n = Math.Min(pt.Length, rt.Length);
-                for (int i = 0; i < n; i++)
-                    if (!SameTrackForHistory(pt[i], rt[i])) diff++;
-                diff += Math.Abs(pt.Length - rt.Length);   // track-count change counts as diff
-                outcome.DiffTrackCount = diff;
-                outcome.Matches = diff == 0;
-            }
+                    var outcome = new VerifyOutcome
+                    {
+                        KnownDisc = reads.Count > 0,
+                        PriorReads = reads.Count
+                    };
+                    if (outcome.KnownDisc)
+                    {
+                        var prev = reads[reads.Count - 1];   // newest stored read
+                        // A corrupt-but-valid-gzip history file can deserialize a record whose
+                        // Tracks is null (JSON "Tracks":null); treat that as an empty track list
+                        // rather than crash.
+                        var pt = prev.Tracks ?? Array.Empty<TrackCrc>();
+                        var rt = r.Tracks ?? Array.Empty<TrackCrc>();
+                        int diff = 0;
+                        int n = Math.Min(pt.Length, rt.Length);
+                        for (int i = 0; i < n; i++)
+                            if (!SameTrackForHistory(pt[i], rt[i])) diff++;
+                        diff += Math.Abs(pt.Length - rt.Length);
+                        outcome.DiffTrackCount = diff;
+                        outcome.Matches = diff == 0;
+                    }
 
-            reads.Add(r);
-            if (reads.Count > MaxPerDisc) reads.RemoveRange(0, reads.Count - MaxPerDisc);
-            all[key] = reads;
-            GzJson.Save(_path, all);
-            return outcome;
+                    reads.Add(r);
+                    if (reads.Count > MaxPerDisc)
+                        reads.RemoveRange(0, reads.Count - MaxPerDisc);
+                    all[key] = reads;
+                    return (all, outcome);
+                });
         }
 
         // History must remain comparable across drives and offsets. Prefer v2, then use v1 for older

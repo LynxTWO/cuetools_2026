@@ -187,9 +187,15 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
             ?? throw new InvalidOperationException("no encoder for " + format);
         var s = _enc.Settings;
 
-        bool cli = s is CUETools.Codecs.CommandLine.EncoderSettings;
+        var cliSettings =
+            s as CUETools.Codecs.CommandLine.EncoderSettings;
+        bool cli = cliSettings != null;
         Title = $"{format.ToUpperInvariant()} encoder - {_enc.Name}";
-        Subtitle = cli
+        Subtitle = cliSettings?.UsesLegacyUnverifiedCompatibility == true
+            ? "Legacy external lossless encoder retained for compatibility. Its output is not "
+                + "independently verified. Configure exactly one verification decoder and a "
+                + "%I decode command below to enable verified publication."
+            : cli
             ? "External command-line encoder. The advanced settings below include the program path and its argument template."
             : "Built-in encoder (runs in-process). Changes apply immediately and are saved when the app closes.";
 
@@ -253,8 +259,9 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
         "Parameters" => "The argument template used to run the program. %M = the selected mode, " +
                         "%O = the output file, %P = padding. Change only if you know the encoder's " +
                         "command line.",
-        "Lossless" => "Whether this external encoder produces lossless output. Affects verification " +
-                      "and which list the format appears in.",
+        "Lossless" => "Whether this external encoder produces lossless output. New lossless " +
+                      "configurations require independent decode verification. Pre-contract " +
+                      "profiles remain explicitly unverified until a decoder is configured.",
         _ => "Encoder-specific setting. The codec's documentation describes its effect."
     };
 }

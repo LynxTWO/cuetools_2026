@@ -51,6 +51,7 @@
 			this.labelGenre = new System.Windows.Forms.Label();
 			this.textBoxMP3Options = new System.Windows.Forms.TextBox();
 			this.labelMP3Options = new System.Windows.Forms.Label();
+			this.checkBoxJointStereo = new System.Windows.Forms.CheckBox();
 			this.checkBoxAllowInsecureHttp = new System.Windows.Forms.CheckBox();
 			this.labelInsecureWarning = new System.Windows.Forms.Label();
 			this.icecastSettingsDataBindingSource = new System.Windows.Forms.BindingSource(this.components);
@@ -60,7 +61,7 @@
 			// buttonCancel
 			//
 			this.buttonCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-			this.buttonCancel.Location = new System.Drawing.Point(338, 330);
+			this.buttonCancel.Location = new System.Drawing.Point(338, 354);
 			this.buttonCancel.Name = "buttonCancel";
 			this.buttonCancel.Size = new System.Drawing.Size(75, 23);
 			this.buttonCancel.TabIndex = 0;
@@ -70,7 +71,7 @@
 			// buttonOk
 			//
 			this.buttonOk.DialogResult = System.Windows.Forms.DialogResult.OK;
-			this.buttonOk.Location = new System.Drawing.Point(257, 330);
+			this.buttonOk.Location = new System.Drawing.Point(257, 354);
 			this.buttonOk.Name = "buttonOk";
 			this.buttonOk.Size = new System.Drawing.Size(75, 23);
 			this.buttonOk.TabIndex = 1;
@@ -226,7 +227,7 @@
 			//
 			// textBoxMP3Options
 			//
-			this.textBoxMP3Options.DataBindings.Add(new System.Windows.Forms.Binding("Text", this.icecastSettingsDataBindingSource, "MP3Options", true));
+			this.textBoxMP3Options.DataBindings.Add(new System.Windows.Forms.Binding("Text", this.icecastSettingsDataBindingSource, "Bitrate", true, System.Windows.Forms.DataSourceUpdateMode.Never));
 			this.textBoxMP3Options.Location = new System.Drawing.Point(91, 221);
 			this.textBoxMP3Options.Name = "textBoxMP3Options";
 			this.textBoxMP3Options.Size = new System.Drawing.Size(181, 20);
@@ -237,17 +238,28 @@
 			this.labelMP3Options.AutoSize = true;
 			this.labelMP3Options.Location = new System.Drawing.Point(12, 224);
 			this.labelMP3Options.Name = "labelMP3Options";
-			this.labelMP3Options.Size = new System.Drawing.Size(68, 13);
+			this.labelMP3Options.Size = new System.Drawing.Size(62, 13);
 			this.labelMP3Options.TabIndex = 19;
-			this.labelMP3Options.Text = "MP3 Options";
+			this.labelMP3Options.Text = "MP3 bitrate";
+			//
+			// checkBoxJointStereo
+			//
+			this.checkBoxJointStereo.AutoSize = true;
+			this.checkBoxJointStereo.DataBindings.Add(new System.Windows.Forms.Binding("Checked", this.icecastSettingsDataBindingSource, "JointStereo", true));
+			this.checkBoxJointStereo.Location = new System.Drawing.Point(91, 247);
+			this.checkBoxJointStereo.Name = "checkBoxJointStereo";
+			this.checkBoxJointStereo.Size = new System.Drawing.Size(80, 17);
+			this.checkBoxJointStereo.TabIndex = 20;
+			this.checkBoxJointStereo.Text = "Joint stereo";
+			this.checkBoxJointStereo.UseVisualStyleBackColor = true;
 			//
 			// checkBoxAllowInsecureHttp
 			//
 			this.checkBoxAllowInsecureHttp.AutoSize = true;
-			this.checkBoxAllowInsecureHttp.Location = new System.Drawing.Point(15, 253);
+			this.checkBoxAllowInsecureHttp.Location = new System.Drawing.Point(15, 277);
 			this.checkBoxAllowInsecureHttp.Name = "checkBoxAllowInsecureHttp";
 			this.checkBoxAllowInsecureHttp.Size = new System.Drawing.Size(260, 17);
-			this.checkBoxAllowInsecureHttp.TabIndex = 20;
+			this.checkBoxAllowInsecureHttp.TabIndex = 21;
 			this.checkBoxAllowInsecureHttp.Text = "Allow insecure HTTP for a legacy Icecast server";
 			this.checkBoxAllowInsecureHttp.UseVisualStyleBackColor = true;
 			this.checkBoxAllowInsecureHttp.CheckedChanged += new System.EventHandler(this.checkBoxAllowInsecureHttp_CheckedChanged);
@@ -256,11 +268,11 @@
 			//
 			this.labelInsecureWarning.AutoSize = true;
 			this.labelInsecureWarning.ForeColor = System.Drawing.Color.Firebrick;
-			this.labelInsecureWarning.Location = new System.Drawing.Point(12, 276);
+			this.labelInsecureWarning.Location = new System.Drawing.Point(12, 300);
 			this.labelInsecureWarning.MaximumSize = new System.Drawing.Size(400, 0);
 			this.labelInsecureWarning.Name = "labelInsecureWarning";
 			this.labelInsecureWarning.Size = new System.Drawing.Size(397, 26);
-			this.labelInsecureWarning.TabIndex = 21;
+			this.labelInsecureWarning.TabIndex = 22;
 			this.labelInsecureWarning.Text = "Warning: the source password and metadata credential will cross the network without encryption.";
 			this.labelInsecureWarning.Visible = false;
 			//
@@ -274,9 +286,10 @@
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.CancelButton = this.buttonCancel;
-			this.ClientSize = new System.Drawing.Size(425, 365);
+			this.ClientSize = new System.Drawing.Size(425, 389);
 			this.Controls.Add(this.labelInsecureWarning);
 			this.Controls.Add(this.checkBoxAllowInsecureHttp);
+			this.Controls.Add(this.checkBoxJointStereo);
 			this.Controls.Add(this.labelMP3Options);
 			this.Controls.Add(this.textBoxMP3Options);
 			this.Controls.Add(this.labelGenre);
@@ -336,6 +349,7 @@
 		private System.Windows.Forms.BindingSource icecastSettingsDataBindingSource;
 		private System.Windows.Forms.TextBox textBoxMP3Options;
 		private System.Windows.Forms.Label labelMP3Options;
+		private System.Windows.Forms.CheckBox checkBoxJointStereo;
 		private System.Windows.Forms.CheckBox checkBoxAllowInsecureHttp;
 		private System.Windows.Forms.Label labelInsecureWarning;
 	}

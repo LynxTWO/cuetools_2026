@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.IO;
@@ -19,8 +18,11 @@ namespace CUEPlayer
 	{
 		private ShellIconMgr _icon_mgr;
 		private CUEConfig _config;
-		DataSet1TableAdapters.PlaylistTableAdapter adapterPlayList = new DataSet1TableAdapters.PlaylistTableAdapter();
-		private DataSet1 dataSet = new DataSet1();
+		private readonly PlaylistStore playlistStore;
+		private PlaylistModel playlistModel = new PlaylistModel();
+		private bool playlistPersistenceEnabled = true;
+		private bool playlistDirty;
+		private bool playlistSessionOnlyWarningShown;
 		private Thread mixThread;
 		private MixingSource _mixer;
 
@@ -32,11 +34,29 @@ namespace CUEPlayer
 			}
 		}
 
-		internal DataSet1 DataSet
+		internal PlaylistModel PlaylistModel
 		{
 			get
 			{
-				return dataSet;
+				return playlistModel;
+			}
+		}
+
+		internal void PlaylistChanged()
+		{
+			playlistDirty = true;
+			if (!playlistPersistenceEnabled &&
+				!playlistSessionOnlyWarningShown)
+			{
+				playlistSessionOnlyWarningShown = true;
+				MessageBox.Show(
+					this,
+					"Playlist saving is unavailable for this session. " +
+					"These playlist changes are session-only and will be " +
+					"discarded when CUEPlayer exits.",
+					"Playlist changes are session-only",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Warning);
 			}
 		}
 
@@ -70,6 +90,8 @@ namespace CUEPlayer
 			_icon_mgr = new ShellIconMgr();
 			_config = new CUEConfig();
 			_config.separateDecodingThread = false;
+			playlistStore = new PlaylistStore(
+				PlaylistStore.GetDefaultFilePath());
 		}
 
 		internal Deck deckA = new Deck(0, "A");
@@ -86,10 +108,7 @@ namespace CUEPlayer
 				Properties.Settings.Default.AppSettings.IcecastServers.Add(new CUETools.Codecs.Icecast.IcecastSettingsData());
 			}
 
-			//System.Data.SqlServerCe.SqlCeDataAdapter ad = new System.Data.SqlServerCe.SqlCeDataAdapter();
-			//ad.SelectCommand = new System.Data.SqlServerCe.SqlCeCommand("SELECT * FROM Playlist WHERE track=1", adapterPlayList.Connection);
-			//ad.Fill(dataSet.Playlist);
-			adapterPlayList.Fill(dataSet.Playlist);
+			LoadPlaylist();
 
 			_mixer = new MixingSource(new AudioPCMConfig(32, 2, 44100), 100, 2);
 
@@ -120,15 +139,269 @@ namespace CUEPlayer
 
 		private void frmCUEPlayer_FormClosing(object sender, FormClosingEventArgs e)
 		{
+			if (!playlistDirty)
+				return;
+
+			if (!playlistPersistenceEnabled)
+			{
+				DialogResult discardChanges = MessageBox.Show(
+					this,
+					"Playlist saving is unavailable for this session. Exit " +
+					"and discard the session-only playlist changes?",
+					"Discard session-only playlist changes?",
+					MessageBoxButtons.YesNo,
+					MessageBoxIcon.Warning,
+					MessageBoxDefaultButton.Button2);
+				if (discardChanges == DialogResult.No)
+					e.Cancel = true;
+				return;
+			}
+
 			try
 			{
-				int rowsAffected = adapterPlayList.Update(dataSet.Playlist);
+				playlistStore.Save(playlistModel);
+				playlistDirty = false;
 			}
 			catch (Exception ex)
 			{
 				System.Diagnostics.Trace.WriteLine(
 					"Playlist save failed (" + ex.GetType().Name + ").");
+				DialogResult exitWithoutSaving = MessageBox.Show(
+					this,
+					"The playlist could not be saved. Exit without saving " +
+					"the playlist changes?",
+					"Playlist save failed",
+					MessageBoxButtons.YesNo,
+					MessageBoxIcon.Error,
+					MessageBoxDefaultButton.Button2);
+				if (exitWithoutSaving == DialogResult.No)
+					e.Cancel = true;
 			}
+		}
+
+		private void LoadPlaylist()
+		{
+			try
+			{
+				PlaylistLoadResult result = playlistStore.Load();
+				playlistModel = result.Playlist;
+				if (result.Source == PlaylistLoadSource.Backup)
+				{
+					Trace.WriteLine(
+						"Playlist primary failed; recovered the backup (" +
+						(result.PrimaryFailure == null
+							? "primary missing"
+							: result.PrimaryFailure.GetType().Name) +
+						").");
+					try
+					{
+						PlaylistPromotionResult promotion =
+							playlistStore.PromoteRecoveredBackup();
+						PlaylistLoadResult repaired = playlistStore.Load();
+						if (repaired.Source != PlaylistLoadSource.Primary)
+						{
+							throw new InvalidDataException(
+								"Playlist recovery did not produce a valid primary.");
+						}
+						playlistModel = repaired.Playlist;
+						playlistDirty = false;
+						if (promotion.Promoted)
+						{
+							Trace.WriteLine(
+								"Playlist backup promoted; validated backup " +
+								"was preserved.");
+						}
+						if (promotion.QuarantinedPrimaryPath != null)
+						{
+							MessageBox.Show(
+								this,
+								"The playlist was recovered from its backup. " +
+								"The damaged primary file was preserved at:\r\n\r\n" +
+								promotion.QuarantinedPrimaryPath,
+								"Playlist recovered",
+								MessageBoxButtons.OK,
+								MessageBoxIcon.Warning);
+						}
+					}
+					catch (Exception promotionFailure)
+					{
+						DisableRecoveredPlaylistPersistence(
+							promotionFailure);
+					}
+				}
+				else if (result.Source == PlaylistLoadSource.Empty)
+				{
+					TryImportLegacyPlaylist();
+				}
+			}
+			catch (InvalidDataException ex)
+			{
+				DisablePlaylistPersistence(ex);
+			}
+			catch (IOException ex)
+			{
+				DisablePlaylistPersistence(ex);
+			}
+			catch (UnauthorizedAccessException ex)
+			{
+				DisablePlaylistPersistence(ex);
+			}
+			catch (TimeoutException ex)
+			{
+				DisablePlaylistPersistence(ex);
+			}
+		}
+
+		private void DisableRecoveredPlaylistPersistence(Exception failure)
+		{
+			playlistPersistenceEnabled = false;
+			playlistDirty = false;
+			Trace.WriteLine(
+				"Playlist backup loaded, but primary repair failed; saving " +
+				"is disabled for this session (" +
+				failure.GetType().Name + ").");
+			MessageBox.Show(
+				this,
+				"The playlist was loaded from its backup, but the primary " +
+				"file could not be repaired safely. The backup was left " +
+				"unchanged. Playlist saving is disabled for this session.",
+				"Playlist recovery incomplete",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
+		}
+
+		private void DisablePlaylistPersistence(Exception failure)
+		{
+			playlistModel = new PlaylistModel();
+			playlistPersistenceEnabled = false;
+			playlistDirty = false;
+			Trace.WriteLine(
+				"Playlist load failed; corrupt files were preserved and " +
+				"saving is disabled for this session (" +
+				failure.GetType().Name + ").");
+			MessageBox.Show(
+				this,
+				"The playlist could not be loaded. The XML files were left " +
+				"unchanged, and playlist saving is disabled for this session.",
+				"Playlist load failed",
+				MessageBoxButtons.OK,
+				MessageBoxIcon.Warning);
+		}
+
+		private void TryImportLegacyPlaylist()
+		{
+			bool legacyPlaylistFound = false;
+			Exception lastFailure = null;
+			foreach (string legacyPath in GetLegacyPlaylistPaths())
+			{
+				if (!File.Exists(legacyPath))
+					continue;
+				legacyPlaylistFound = true;
+
+				PlaylistModel imported;
+				Exception failure;
+				if (!LegacyPlaylistImporter.TryImport(
+					legacyPath,
+					out imported,
+					out failure))
+				{
+					if (failure != null)
+					{
+						lastFailure = failure;
+						Trace.WriteLine(
+							"Legacy playlist import failed (" +
+							failure.GetType().Name + ").");
+					}
+					continue;
+				}
+
+				playlistModel = imported;
+				playlistDirty = true;
+				try
+				{
+					playlistStore.Save(playlistModel);
+					playlistDirty = false;
+					Trace.WriteLine(
+						"Legacy playlist imported to the per-user XML store.");
+				}
+				catch (Exception ex)
+				{
+					Trace.WriteLine(
+						"Legacy playlist was loaded for this session but " +
+						"could not be persisted (" +
+						ex.GetType().Name + ").");
+				}
+				return;
+			}
+
+			if (legacyPlaylistFound)
+			{
+				Trace.WriteLine(
+					"A legacy playlist database remains untouched, but it " +
+					"could not be imported (" +
+					(lastFailure == null
+						? "SQL Server Compact unavailable"
+						: lastFailure.GetType().Name) +
+					"). New playlist changes can still be saved as XML.");
+				MessageBox.Show(
+					this,
+					"A legacy CUEPlayer playlist was found but could not be " +
+					"imported. " +
+					(lastFailure == null
+						? "SQL Server Compact 3.5 is unavailable. "
+						: "The legacy database could not be read safely. ") +
+					"The legacy .sdf file was not changed.\r\n\r\n" +
+					"You can still create and save a new XML playlist. If " +
+					"you make no playlist changes, migration will be retried " +
+					"the next time CUEPlayer starts.",
+					"Legacy playlist not imported",
+					MessageBoxButtons.OK,
+					MessageBoxIcon.Warning);
+			}
+		}
+
+		private static IEnumerable<string> GetLegacyPlaylistPaths()
+		{
+			List<string> paths = new List<string>();
+			object dataDirectory =
+				AppDomain.CurrentDomain.GetData("DataDirectory");
+			AddLegacyPlaylistPath(paths, dataDirectory as string);
+			AddLegacyPlaylistPath(
+				paths,
+				AppDomain.CurrentDomain.BaseDirectory);
+			return paths;
+		}
+
+		private static void AddLegacyPlaylistPath(
+			List<string> paths,
+			string directory)
+		{
+			if (String.IsNullOrEmpty(directory))
+				return;
+
+			string candidate;
+			try
+			{
+				candidate = Path.GetFullPath(
+					Path.Combine(directory, "CUEPlayer.sdf"));
+			}
+			catch (Exception ex)
+			{
+				Trace.WriteLine(
+					"Legacy playlist path was ignored (" +
+					ex.GetType().Name + ").");
+				return;
+			}
+
+			foreach (string existing in paths)
+			{
+				if (String.Equals(
+					existing,
+					candidate,
+					StringComparison.OrdinalIgnoreCase))
+					return;
+			}
+			paths.Add(candidate);
 		}
 
 		private void MixThread()

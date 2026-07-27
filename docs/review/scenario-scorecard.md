@@ -6,15 +6,15 @@ The original scorecard below is dated 2026-07-02. Re-scoring against current cod
 
 | Scenario | Current score | Current evidence / residual |
 | --- | ---: | --- |
-| SC1 malicious CTDB parity | 2 | Structural/CRC gates remain; CRC32 is still not a signature and live CTDB is external. |
+| SC1 malicious CTDB parity | 2 | Structural/CRC gates remain and a live deliberately damaged image was repaired/post-verified without changing the source. CRC32 is still not a signature and CTDB TLS remains external. |
 | SC2 malformed FLAC/ALAC | 2 | Both readers are bounded and covered by deterministic malformed-input lanes. |
 | SC3 crafted MOTD | 2 | No remote image path remains; bounded strict UTF-8 is fetched over HTTPS only. |
 | SC4 reserved/trailing Windows name | 2 | `CleanseString` hardening and collision tests are green. |
-| SC5 poisoned plugin | 2 packaged / 1 explicit local mode | Packaged managed/native plugins are exact manifest/hash/path/identity/architecture bound and rechecked at load; this is integrity, not publisher signing. |
+| SC5 poisoned plugin | 2 packaged and enrolled / 1 development override | Packaged and explicitly enrolled user plugins use separate exact manifests and are rechecked at load. Registration requires exact encoder/decoder/ripper contract identity, rejecting interface-name lookalikes; compression attributes require the real provider contract, and HDCD requires its complete filter/interface/constructor shape. The local-development environment override remains deliberately unmanifested. Hash enrollment is integrity, not publisher signing. |
 | SC6 forged AccurateRip transit | 2 | Both AccurateRip requests use HTTPS without downgrade; corroborative-result semantics remain. |
-| SC7 RAR traversal | 2 | Input still streams through callbacks and does not extract paths. |
+| SC7 RAR traversal | 2 | Input streams through callbacks and does not extract paths. Official signed UnRAR 7.23 is ABI/runtime-tested in both architectures; a committed RAR5 regression exposed and fixed backward-seek replay against stale EOF and passed 20/20 repeats. |
 | SC8 proxy secret at rest | 2 Windows | DPAPI plus atomic migration/write; non-Windows nonempty-secret save fails closed. |
-| SC9 untested/tampered release | 2 WPF / 1 classic | 388-test selection, artifact contract, hashes, SBOM, and immutable actions exist; full hosted classic artifact is pending. |
+| SC9 untested/tampered release | 2 WPF / 1 classic | Canonical suite selection, artifact contracts (36 WPF paths / 97 classic paths), hashes, SBOM, immutable actions, and local actionlint exist. Classic AnyCPU is green at 53/0; x64 and Win32 are each 2/0 with 59 skipped configuration entries; TTA builds both; the installer is 8/0 and produced a 929,792-byte MSI. TestRipper passes its three-test/zero-skip contract. Frozen classic receipts, final-source H: repeat, and hosted execution remain pending. |
 
 New scenarios added in the 2026-07-26 wave - concurrent publication, repair rollback,
 external encoder hangs/truncation and approval races, WMA mismatch, native plugin

@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Globalization;
 using System.Net;
 using System.IO;
 using CUETools.Codecs;
@@ -11,10 +10,11 @@ namespace CUETools.Codecs.Icecast
 	{
 		private const int NetworkTimeoutMilliseconds = 30000;
 		private long _sampleOffset = 0;
+		private long _bytesWritten = 0;
         private Codecs.WAV.EncoderSettings m_settings;
 		private libmp3lame.AudioEncoder encoder = null;
-		private HttpWebRequest req = null;
-		private HttpWebResponse resp = null;
+		private IcecastSourceConnection sourceConnection = null;
+		private IcecastResponse resp = null;
 		private Stream reqStream;
 		private IcecastSettingsData settings = null;
 
@@ -34,7 +34,22 @@ namespace CUETools.Codecs.Icecast
 
 		#region IAudioDest Members
 
+		[Obsolete(
+			"Version 3 uses a raw full-duplex transport and has no HttpWebResponse. " +
+			"Use ProtocolResponse; rejected connections throw IcecastProtocolException.")]
 		public HttpWebResponse Response
+		{
+			get
+			{
+				if (resp == null)
+					return null;
+				throw new NotSupportedException(
+					"The Icecast 3 streaming transport has no HttpWebResponse. " +
+					"Use ProtocolResponse.");
+			}
+		}
+
+		public IcecastResponse ProtocolResponse
 		{
 			get
 			{
@@ -42,79 +57,50 @@ namespace CUETools.Codecs.Icecast
 			}
 		}
 
-		// Opens an Icecast SOURCE stream. Two things to know before touching this:
+		// Opens an Icecast source stream. Two things to know before touching this:
 		// 1) HTTP Basic is only an encoding. IcecastEndpointPolicy therefore selects HTTPS by
 		//    default and permits HTTP only through the persisted explicit legacy opt-in.
-		// 2) The reflection below pokes private HttpWebRequest/HttpWebResponse internals to
-		//    force the legacy SOURCE/chunked streaming behavior. This is tightly coupled to
-		//    .NET Framework's internal field names and will not survive the move to modern
-		//    .NET (HttpClient) - it is a known migration landmine, not a stable API.
+		// 2) Source uploads are full-duplex: Icecast returns the authentication result while
+		//    the connection-delimited MP3 body must remain open. IcecastSourceConnection
+		//    implements that protocol directly instead of mutating private HttpWebRequest state.
 		public void Connect()
 		{
+			if (sourceConnection != null)
+				throw new InvalidOperationException("The Icecast writer is already connected.");
+
 			try
 			{
+				// Reject local configuration errors before sending credentials or opening a
+				// network connection.
+				if (!IcecastSettingsData.IsSupportedBitrate(settings.Bitrate))
+					throw new ArgumentOutOfRangeException(
+						"settings",
+						"Icecast MP3 bitrate must be 96, 128, 192, 256, or 320 kbps.");
 				Uri uri = IcecastEndpointPolicy.BuildSourceUri(settings);
-				req = (HttpWebRequest)WebRequest.Create(uri);
-				//req.Proxy = proxy;
-				//req.UserAgent = userAgent;
-				req.ProtocolVersion = HttpVersion.Version10; // new Version("ICE/1.0");
-				req.Method = "SOURCE";
-				req.ContentType = "audio/mpeg";
-				req.Headers.Add("ice-name", settings.Name ?? "no name");
-				req.Headers.Add("ice-public", "1");
-				if ((settings.Url ?? "") != "") req.Headers.Add("ice-url", settings.Url);
-				if ((settings.Genre ?? "") != "") req.Headers.Add("ice-genre", settings.Genre);
-				if ((settings.Description ?? "") != "") req.Headers.Add("ice-description", settings.Description);
-				req.Headers.Add("Authorization", string.Format("Basic {0}", Convert.ToBase64String(Encoding.ASCII.GetBytes(string.Format("source:{0}", settings.Password)))));
-				// Streaming itself has no wall-clock limit, but connection, response, and stalled
-				// writes must remain interruptible. Infinite timeouts strand the player thread when
-				// a server accepts TCP and then stops speaking.
-				req.Timeout = NetworkTimeoutMilliseconds;
-				req.ReadWriteTimeout = NetworkTimeoutMilliseconds;
-				//req.ContentLength = 999999999;
-				req.KeepAlive = false;
-				req.SendChunked = true;
-				req.AllowWriteStreamBuffering = false;
-				req.CachePolicy = new System.Net.Cache.HttpRequestCachePolicy(System.Net.Cache.HttpRequestCacheLevel.BypassCache);
+				sourceConnection = IcecastSourceConnection.Open(
+					uri,
+					settings,
+					NetworkTimeoutMilliseconds);
+				resp = sourceConnection.Response;
+				reqStream = sourceConnection.RequestStream;
 
-				System.Reflection.PropertyInfo pi = typeof(ServicePoint).GetProperty("HttpBehaviour", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-				if (pi == null || pi.PropertyType.GetField("Unknown") == null)
-					throw new PlatformNotSupportedException("The legacy Icecast HTTP streaming hook is unavailable.");
-				pi.SetValue(req.ServicePoint, pi.PropertyType.GetField("Unknown").GetValue(null), null);
-
-				reqStream = req.GetRequestStream();
-
-				System.Reflection.FieldInfo fi = reqStream.GetType().GetField("m_HttpWriteMode", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-				System.Reflection.MethodInfo mi = reqStream.GetType().GetMethod("CallDone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null, new Type[0], null);
-				if (fi == null || fi.FieldType.GetField("Buffer") == null || mi == null)
-					throw new PlatformNotSupportedException("The legacy Icecast request-stream hook is unavailable.");
-				fi.SetValue(reqStream, fi.FieldType.GetField("Buffer").GetValue(null));
-				mi.Invoke(reqStream, null);
-
-				resp = req.GetResponse() as HttpWebResponse;
-				if (resp.StatusCode == HttpStatusCode.OK)
-				{
-                    var encoderSettings = new CUETools.Codecs.libmp3lame.CBREncoderSettings() { PCM = AudioPCMConfig.RedBook };
-                    //encoderSettings.StereoMode = settings.JointStereo ?
-                    //    CUETools.Codecs.LAME.Interop.MpegMode.JOINT_STEREO :
-                    //    CUETools.Codecs.LAME.Interop.MpegMode.STEREO;
-                    //encoderSettings.CustomBitrate = settings.Bitrate;
-                    encoder = new CUETools.Codecs.libmp3lame.AudioEncoder(encoderSettings, "", reqStream);
-				}
-			}
-			catch (WebException ex)
-			{
-				if (ex.Status == WebExceptionStatus.ProtocolError)
-					resp = ex.Response as HttpWebResponse;
-				else
-				{
-					Cleanup(false);
-					throw;
-				}
+				var encoderSettings =
+					new CUETools.Codecs.libmp3lame.CBREncoderSettings()
+					{
+						PCM = AudioPCMConfig.RedBook,
+						EncoderMode = settings.Bitrate.ToString(
+							CultureInfo.InvariantCulture),
+						StereoMode = settings.JointStereo
+							? CUETools.Codecs.libmp3lame.LameStereoMode.JointStereo
+							: CUETools.Codecs.libmp3lame.LameStereoMode.Stereo,
+					};
+				encoder = new CUETools.Codecs.libmp3lame.AudioEncoder(encoderSettings, "", reqStream);
 			}
 			catch
 			{
-				Cleanup(false);
+				// Authentication and handshake failures must not attempt to flush
+				// more audio into a connection the server has already rejected.
+				Cleanup(true);
 				throw;
 			}
 		}
@@ -125,21 +111,23 @@ namespace CUETools.Codecs.Icecast
 			HttpWebRequest req2 = (HttpWebRequest)WebRequest.Create(uri);
 			req2.Method = "GET";
 			req2.Credentials = new NetworkCredential("source", settings.Password);
+			req2.PreAuthenticate = true;
+			// Never replay source credentials through a redirect. The configured endpoint must
+			// authenticate and answer directly; operators can update the saved host/port instead.
+			req2.AllowAutoRedirect = false;
 			req2.Timeout = NetworkTimeoutMilliseconds;
 			req2.ReadWriteTimeout = NetworkTimeoutMilliseconds;
-			//req.Proxy = proxy;
-			//req.UserAgent = userAgent;
-			//req2.Headers.Add("Authorization", string.Format("Basic {0}", Convert.ToBase64String(Encoding.ASCII.GetBytes(string.Format("source:{0}", settings.Password)))));
-			HttpStatusCode accResult = HttpStatusCode.OK;
 			try
 			{
 				using (HttpWebResponse metadataResponse =
 					(HttpWebResponse)req2.GetResponse())
 				{
-					accResult = metadataResponse.StatusCode;
-				}
-				if (accResult == HttpStatusCode.OK)
-				{
+					if ((int)metadataResponse.StatusCode < 200 ||
+						(int)metadataResponse.StatusCode >= 300)
+						throw new IcecastProtocolException(
+							"metadata update",
+							metadataResponse.StatusCode,
+							metadataResponse.StatusDescription);
 				}
 			}
 			catch (WebException ex)
@@ -148,11 +136,19 @@ namespace CUETools.Codecs.Icecast
 				if (ex.Status == WebExceptionStatus.ProtocolError &&
 					errorResponse != null)
 				{
+					HttpStatusCode statusCode;
+					string statusDescription;
 					using (errorResponse)
-						accResult = errorResponse.StatusCode;
+					{
+						statusCode = errorResponse.StatusCode;
+						statusDescription = errorResponse.StatusDescription;
+					}
+					throw new IcecastProtocolException(
+						"metadata update",
+						statusCode,
+						statusDescription);
 				}
-				else
-					accResult = HttpStatusCode.BadRequest;
+				throw new IOException("Icecast metadata update failed.", ex);
 			}
 		}
 
@@ -175,27 +171,27 @@ namespace CUETools.Codecs.Icecast
 			Exception failure = null;
 			libmp3lame.AudioEncoder currentEncoder = encoder;
 			Stream currentStream = reqStream;
-			HttpWebResponse currentResponse = resp;
-			HttpWebRequest currentRequest = req;
+			IcecastSourceConnection currentConnection = sourceConnection;
+			if (currentEncoder != null)
+				_bytesWritten = currentEncoder.BytesWritten;
 			encoder = null;
 			reqStream = null;
 			resp = null;
-			req = null;
+			sourceConnection = null;
 
 			try
 			{
 				if (currentEncoder != null)
 				{
-					if (deleteEncoder) currentEncoder.Delete();
+					if (deleteEncoder) currentEncoder.Abort();
 					else currentEncoder.Close();
+					_bytesWritten = currentEncoder.BytesWritten;
 				}
 			}
 			catch (Exception ex) { failure = ex; }
 			try { if (currentStream != null) currentStream.Close(); }
 			catch (Exception ex) { if (failure == null) failure = ex; }
-			try { if (currentResponse != null) currentResponse.Close(); }
-			catch (Exception ex) { if (failure == null) failure = ex; }
-			try { if (currentRequest != null) currentRequest.Abort(); }
+			try { if (currentConnection != null) currentConnection.Close(); }
 			catch (Exception ex) { if (failure == null) failure = ex; }
 			return failure;
 		}
@@ -213,6 +209,7 @@ namespace CUETools.Codecs.Icecast
 			Buffer.BlockCopy(src.Float, 0, tmp.Float, 0, src.Length * 8);
 			tmp.Length = src.Length;
 			encoder.Write(tmp);
+			_sampleOffset += src.Length;
 		}
 
         public long Position => _sampleOffset;
@@ -231,7 +228,7 @@ namespace CUETools.Codecs.Icecast
 		{
 			get
 			{
-				return encoder == null ? 0 : encoder.BytesWritten;
+				return encoder == null ? _bytesWritten : encoder.BytesWritten;
 			}
 		}
 	}
@@ -265,5 +262,14 @@ namespace CUETools.Codecs.Icecast
 		public int    Bitrate { get; set; }
 		public bool   JointStereo { get; set; }
 		public bool   AllowInsecureHttp { get; set; }
+
+		public static bool IsSupportedBitrate(int bitrate)
+		{
+			foreach (int supported in
+				CUETools.Codecs.libmp3lame.CBREncoderSettings.bps_table)
+				if (supported == bitrate)
+					return true;
+			return false;
+		}
 	}
 }

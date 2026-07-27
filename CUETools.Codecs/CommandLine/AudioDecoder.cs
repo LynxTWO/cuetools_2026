@@ -45,9 +45,20 @@ namespace CUETools.Codecs.CommandLine
             set
             {
                 Initialize();
-                if (value != _reader.Position)
+                long current = _reader.Position;
+                if (value < current)
                     throw new NotSupportedException(
-                        "Seeking is not supported by a command-line decoder stream.");
+                        "Backward seeking is not supported by a command-line decoder stream.");
+                if (value == current)
+                    return;
+
+                // Decoder stdout is a forward-only pipe. WAV.AudioDecoder implements a forward
+                // seek on such streams by consuming and discarding samples, which is exactly what
+                // callers that skip a leading range need. Never delegate a backward seek: the WAV
+                // reader would have to seek the underlying pipe and would fail after mutating its
+                // logical position.
+                _reader.Position = value;
+                ResetProcessTimeout();
             }
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
 using CUETools.CDImage;
 using CUETools.Codecs;
 using CUETools.Ripper;
@@ -7,25 +8,39 @@ using CUETools.Ripper;
 namespace CUETools.Wpf.Services;
 
 /// <summary>
-/// Wraps a real <see cref="ICDRipper"/> and taps the audio as CUESheet pulls it, computing the
-/// true per-channel peak of each buffer. That drives the VU meter with real disc levels - no
-/// engine change, because CUESheet already reads through this interface. Everything else is
-/// delegated to the inner ripper unchanged.
+/// Wraps a real <see cref="ICDRipper"/> and taps the audio as CUESheet pulls it. Telemetry is
+/// copied into a preallocated bounded mailbox; a stalled UI can drop visualization, but it can
+/// never block or change the underlying audio read. Everything else delegates unchanged.
 /// </summary>
 public sealed class LevelMeteringRipper : ICDRipper
 {
-    private const int WindowSize = 16384;  // contiguous frames handed to the codec scope per read
-
     private readonly ICDRipper _inner;
-    private readonly Action<double, double> _onLevels;
-    private readonly Action<float[]>? _onSamples;
-    private DateTime _lastPush = DateTime.MinValue;
+    private readonly RipTelemetryMailbox _telemetry;
+    private readonly long _minimumPublishIntervalTicks;
+    private long _lastPushTimestamp;
 
-    public LevelMeteringRipper(ICDRipper inner, Action<double, double> onLevels, Action<float[]>? onSamples = null)
+    public LevelMeteringRipper(
+        ICDRipper inner,
+        RipTelemetryMailbox telemetry)
+        : this(
+            inner,
+            telemetry,
+            Math.Max(1, Stopwatch.Frequency / 50))
     {
-        _inner = inner;
-        _onLevels = onLevels;
-        _onSamples = onSamples;
+    }
+
+    internal LevelMeteringRipper(
+        ICDRipper inner,
+        RipTelemetryMailbox telemetry,
+        long minimumPublishIntervalTicks)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _telemetry =
+            telemetry ?? throw new ArgumentNullException(nameof(telemetry));
+        if (minimumPublishIntervalTicks < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(minimumPublishIntervalTicks));
+        _minimumPublishIntervalTicks = minimumPublishIntervalTicks;
     }
 
     public int Read(AudioBuffer buffer, int maxLength)
@@ -33,37 +48,19 @@ public sealed class LevelMeteringRipper : ICDRipper
         int n = _inner.Read(buffer, maxLength);
         try
         {
-            if (n > 0 && buffer.PCM.ChannelCount >= 2)
+            if (n > 0 &&
+                buffer.PCM.ChannelCount >= 2 &&
+                buffer.PCM.BitsPerSample == 16)
             {
-                int[,] s = buffer.Samples;
-                double full = 1 << (buffer.PCM.BitsPerSample - 1);
-                // RMS (average power) over a short recent window, not peak over the whole 1.5s
-                // buffer: peak pins near full-scale for any loud music, so the needle would sit
-                // frozen at the top. RMS reflects loudness and actually moves with the music.
-                int start = Math.Max(0, n - 8192);   // most recent ~186ms of the read
-                double sumL = 0, sumR = 0; int cnt = 0;
-                for (int i = start; i < n; i += 2)
+                long now = Stopwatch.GetTimestamp();
+                if (_minimumPublishIntervalTicks == 0 ||
+                    now - _lastPushTimestamp >=
+                    _minimumPublishIntervalTicks)
                 {
-                    int a = s[i, 0]; int b = s[i, 1];
-                    sumL += (double)a * a; sumR += (double)b * b; cnt++;
-                }
-                double rmsL = cnt > 0 ? Math.Sqrt(sumL / cnt) / full : 0;
-                double rmsR = cnt > 0 ? Math.Sqrt(sumR / cnt) / full : 0;
-                _onLevels(rmsL, rmsR);
-
-                // Hand the codec scope a big chunk of CONSECUTIVE mono samples (not decimated). We
-                // deliver a large slice, not a tiny snippet, so the scope has real audio to keep
-                // scrolling through during the long gaps between reads in secure mode (a Read() can
-                // block for seconds re-reading a hard sector). Light throttle (~20ms) so the burst
-                // reads - the ripper drains its buffer in ~3ms chunks - do not flood the dispatcher.
-                if (_onSamples != null && n > 0 && (DateTime.UtcNow - _lastPush).TotalMilliseconds >= 20)
-                {
-                    int m = Math.Min(WindowSize, n);
-                    var win = new float[m];
-                    float inv = (float)(1.0 / full);
-                    for (int i = 0; i < m; i++) win[i] = ((s[i, 0] + s[i, 1]) * 0.5f) * inv;
-                    _onSamples(win);
-                    _lastPush = DateTime.UtcNow;
+                    _lastPushTimestamp = now;
+                    _telemetry.TryPublish(
+                        buffer,
+                        n);
                 }
             }
         }

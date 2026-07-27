@@ -1,6 +1,6 @@
 ---
 name: anti-dark-code
-description: Staged workflow for mapping, auditing, and hardening unfamiliar or messy codebases from evidence. Use for a thorough codebase audit or readiness review, requests to determine what remains to be done, tested, or improved, autonomous remediation of an existing audit, architecture and trust-boundary mapping, critical-path comments, logging or telemetry leak reviews, large-repo coverage ledgers, adversarial or scenario reviews, localization or transcreation boundaries, remediation backlogs, steering files, and maintenance guardrails. Trigger phrases include dark code, legacy code review, critical paths, approval gates, unknowns files, anti-dark-code, hidden control flow, thorough audit, readiness, what remains, what still needs done, and autonomous remediation.
+description: Staged workflow for mapping, auditing, and hardening unfamiliar or messy codebases from evidence. Use for a thorough codebase audit or readiness review, requests to determine what remains to be done, tested, or improved, autonomous remediation of an existing audit, architecture and trust-boundary mapping, critical-path comments, logging or telemetry leak reviews, large-repo coverage ledgers, adversarial or scenario reviews, duplication or refactoring audits in hot, streaming, publication, or destructive paths, localization or transcreation boundaries, remediation backlogs, steering files, and maintenance guardrails. Trigger phrases include dark code, legacy code review, critical paths, approval gates, unknowns files, anti-dark-code, hidden control flow, thorough audit, readiness, what remains, what still needs done, autonomous remediation, and correctness-preserving refactor.
 ---
 
 # Anti-Dark-Code
@@ -102,6 +102,7 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
 - Prove negative scans read file contents: do not pipe a filename listing into a content search, and require a known-positive sentinel or fixture before trusting a whole-repo zero.
 - Use the end-to-end reachability proof in `02-architecture-map.md` before calling a plugin, project, binary, or feature reachable or dead.
 - Use the assurance oracle and transaction checklist in `11-remediation-loop.md` before accepting claims such as verified, bit-exact, atomic, or repaired.
+- For release or generated-source claims, require one shared-writer boundary, pre-cleanup intent recovery, archive-wide expansion evidence, explicit hashes for ignored inputs, and policy results from the exact build logs that produced the collected bytes.
 - Distinguish a source defect from an unexercised path, missing toolchain, unavailable capability, or missing native dependency.
 - Name out-of-repo boundaries when they affect live behavior.
 - Do not claim whole-repo coverage from one clean path.

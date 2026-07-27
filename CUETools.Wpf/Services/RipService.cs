@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using CUETools.AccurateRip;
+using CUETools.Codecs;
 using CUETools.CTDB;
 using CUETools.Processor;
 using CUETools.Ripper;
@@ -26,6 +27,22 @@ public sealed class VerifyResult
     /// <summary>Codec the files were written as. Reported rather than assumed, so a certificate for an
     /// m4a rip does not claim FLAC. Empty on a verify-only pass, which writes nothing.</summary>
     public string Format { get; init; } = "";
+    /// <summary>Whether this job recorded the encoded-output assurance contract. False on verify-only
+    /// jobs and reports produced before the field existed.</summary>
+    public bool OutputVerificationKnown { get; init; }
+    public bool LosslessOutput { get; init; }
+    /// <summary>True only when the selected lossless encoder passed its own check and CUESheet then
+    /// decoded the final, metadata-complete files against the PCM delivered to each encoder.
+    /// AccurateRip/CTDB and optical-read agreement are separate evidence.</summary>
+    public bool OutputVerificationPerformed { get; init; }
+    public string OutputVerificationDetail { get; init; } = "";
+    /// <summary>
+    /// Non-persisted evidence for the exact encoded output set. The proof objects expose no
+    /// digests; Test &amp; Copy carries them across a later copy instead of detaching the public
+    /// assurance fields from the bytes that earned them.
+    /// </summary>
+    internal IReadOnlyList<LosslessOutputProof> OutputProofs { get; init; } =
+        Array.Empty<LosslessOutputProof>();
 
     /// <summary>The per-track checksum record this read produced (used by Test & Copy to compare
     /// reads). Null when the record build failed.</summary>
@@ -44,8 +61,25 @@ public sealed class VerifyResult
     public int[] ArPerTrack { get; init; } = System.Array.Empty<int>();
     public int[] CtdbPerTrack { get; init; } = System.Array.Empty<int>();
 
+    /// <summary>
+    /// CTDB repair evidence computed from the same PCM stream that was ripped. An exact CTDB match
+    /// suppresses alternative-pressing differences, so these fields describe genuine recoverable
+    /// damage rather than merely a different database pressing.
+    /// </summary>
+    public bool CtdbHasErrors { get; init; }
+    public bool CtdbCanRecover { get; init; }
+    public int CtdbRepairSectors { get; init; }
+    public string CtdbRepairRanges { get; init; } = "";
+    /// <summary>
+    /// Exact published input for the source-preserving repair transaction. This is album.cue for
+    /// track sets, or the sole lossless audio file for image mode. Empty means the output cannot be
+    /// reconstructed unambiguously.
+    /// </summary>
+    public string RepairSourcePath { get; init; } = "";
+
     /// <summary>Local verify-history outcome (second-source bit-exactness): whether this disc was read
     /// before, whether the read matched, how many prior reads, and how many tracks differed.</summary>
+    public bool HistoryRecorded { get; init; }
     public bool HistoryKnown { get; init; }
     public bool HistoryMatches { get; init; }
     public int HistoryPriorReads { get; init; }
@@ -68,6 +102,11 @@ public sealed class TestCopyRunResult
     public int CtdbConfidence { get; init; }
     public int CtdbTotal { get; init; }
     public bool Accurate { get; init; }
+    public bool HistoryRecorded { get; init; }
+    public bool HistoryKnown { get; init; }
+    public bool HistoryMatches { get; init; }
+    public int HistoryPriorReads { get; init; }
+    public int HistoryDiffTracks { get; init; }
     public string CopyStagingDir { get; init; } = "";
     public string[] StagingDirs { get; init; } = System.Array.Empty<string>();
     internal TestCopyStagingWorkspace? StagingWorkspace { get; init; }
@@ -76,6 +115,12 @@ public sealed class TestCopyRunResult
     /// button was pressed. The caller must report THIS in the completion summary, or a mid-verify
     /// codec change makes the summary lie about what was written.</summary>
     public string Format { get; init; } = "";
+    public bool OutputVerificationKnown { get; init; }
+    public bool LosslessOutput { get; init; }
+    public bool OutputVerificationPerformed { get; init; }
+    public string OutputVerificationDetail { get; init; } = "";
+    internal IReadOnlyList<LosslessOutputProof> OutputProofs { get; init; } =
+        Array.Empty<LosslessOutputProof>();
 
     /// <summary>The rendered album folder relative to the output base (see VerifyResult.OutputRelDir).
     /// Accepting a held read must re-home the staging with THIS, not its last path segment.</summary>
@@ -90,21 +135,22 @@ public sealed class TestCopyRunResult
 public interface IRipService
 {
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
-    /// <paramref name="onLevels"/> receives the real per-channel RMS loudness (L,R) of each read.
+    /// <paramref name="telemetry"/> receives best-effort RMS and scope samples through a bounded
+    /// mailbox; a stalled UI drops visualization instead of delaying the disc read.
     /// <paramref name="onReread"/> reports a real sector re-read: (reReads, maxReReads, errorSectors,
     /// discFrac); reReads &gt; 0 only when the drive is doing extra passes over a stuck window.
     /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null);
+    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
-    /// given. <paramref name="onSamples"/> receives a window of real consecutive PCM samples for
-    /// the codec scope. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).
+    /// given. <paramref name="telemetry"/> receives bounded best-effort RMS and consecutive PCM
+    /// samples. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).
     /// <paramref name="coverArt"/>, when given, is the hi-res cover to embed (already resized); the
     /// engine's database cover is used when it is null. <paramref name="onEncodeStart"/>, when
     /// given, fires once right before the actual encode begins (never on a verify-only pass) - the
     /// caller uses it to lock the codec choice at that moment.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null);
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
@@ -117,7 +163,7 @@ public interface IRipService
     /// <paramref name="format"/> is otherwise used as-is. <paramref name="onEncodeStart"/> fires once
     /// before each of those encode reads (never before the Test read) so the caller can lock the
     /// codec choice once encoding actually starts.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null);
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -140,6 +186,7 @@ public sealed class RipService : IRipService
     private readonly CUETools.Wpf.Accuracy.DriveCalibrationStore _calStore;
     private readonly CUETools.Wpf.Accuracy.VerifyHistoryStore _history;
     private readonly CUETools.Wpf.Accuracy.DriveCalibrationService _calService;
+    internal Action<string>? AfterProofDirectoryMoveForTest { get; set; }
 
     public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history, CUETools.Wpf.Accuracy.DriveCalibrationService calService)
     { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; _calService = calService; }
@@ -178,8 +225,8 @@ public sealed class RipService : IRipService
             _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
     }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null) { _stopRequested = false; return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, onLevels, onSamples, onReread); }
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) { _stopRequested = false; return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, onLevels, onSamples, onReread, coverArt, onEncodeStart: onEncodeStart); }
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null) { _stopRequested = false; return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, telemetry, onReread); }
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) { _stopRequested = false; return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart); }
 
     private void RedactOutputRoot(string? outputBaseDir)
     {
@@ -206,7 +253,7 @@ public sealed class RipService : IRipService
         try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
     }
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
@@ -254,7 +301,24 @@ public sealed class RipService : IRipService
             // speed is the adaptive ceiling (the Drive & Read page says so), and the controller has
             // always accepted a ceiling argument that nobody passed - so the calibrated value was read
             // only into a display string and the tooltip's claim was simply untrue.
-            var cal = _calStore.Get((reader.ARName ?? "").Trim());
+            DriveCalibration? cal = null;
+            try
+            {
+                cal = _calStore.Get((reader.ARName ?? "").Trim());
+            }
+            catch (InvalidDataException ex)
+            {
+                // Calibration is an optimization for a normal rip, not evidence about the audio.
+                // Keep the corrupt store untouched, surface the degraded mode, and continue without
+                // applying values we could not prove came from a valid record. Test & Copy has a
+                // stricter path in EnsureIndependence and will refuse when it cannot establish cache
+                // defeat.
+                _log.Warn("rip",
+                    "drive calibration store unreadable; using uncalibrated drive settings: " +
+                    ex.GetType().Name);
+                onProgress(0,
+                    "Warning: saved drive calibration is unreadable; using safe uncalibrated settings.");
+            }
 
             AdaptiveSpeedController speedCtl = null;
             int lastRequested = 0;
@@ -314,10 +378,10 @@ public sealed class RipService : IRipService
             _log.Info("rip", $"start mode={(encode ? "encode" : "verify")} format={format} cq={cq} offset={offset} drive='{(reader.ARName ?? "").Trim()}' " +
                 $"chosen_release={(metadata != null)} preventSleep={keepAwakeTaken} lockTray={trayLockTaken}");
 
-            // Tap real audio for the VU meter (levels) and the codec scope (a window of real
-            // samples); everything else delegates to the drive unchanged.
-            ICDRipper ripper = (onLevels != null || onSamples != null)
-                ? new LevelMeteringRipper(reader, onLevels ?? ((_, _) => { }), onSamples)
+            // Tap real audio into a bounded preallocated visualization mailbox. Queue pressure
+            // can discard telemetry only; everything else delegates to the drive unchanged.
+            ICDRipper ripper = telemetry != null
+                ? new LevelMeteringRipper(reader, telemetry)
                 : reader;
 
             var cue = new CUESheet(_config);
@@ -373,6 +437,14 @@ public sealed class RipService : IRipService
 
             string outDir = "";
             string outRelDir = "";   // the album folder relative to baseDir - see VerifyResult.OutputRelDir
+            var outputAssurance = new OutputVerificationAssurance(
+                known: false, lossless: false, performed: false, detail: "");
+            IReadOnlyList<LosslessOutputProof> outputProofs =
+                Array.Empty<LosslessOutputProof>();
+            AudioEncoderSettingsViewModel? selectedEncoder = null;
+            bool outputLossy = false;
+            VerifyFilesResult? repairAssessment = null;
+            string repairSourceRelativePath = "";
             if (encode)
             {
                 cue.Action = CUEAction.Encode;
@@ -402,12 +474,16 @@ public sealed class RipService : IRipService
                 // pick the encoder type from the format via the catalog's single rule: a format
                 // with a USABLE lossy encoder encodes lossy (mp3 bundled, wma OS runtime, mpc when
                 // its exe has been imported)
-                bool lossy = _config.formats.TryGetValue(format, out var fmtInfo) && _catalog.IsLossyFormat(fmtInfo);
-                cue.GenerateFilenames(lossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
+                outputLossy = _config.formats.TryGetValue(format, out var fmtInfo) &&
+                    _catalog.IsLossyFormat(fmtInfo);
+                selectedEncoder = fmtInfo == null
+                    ? null
+                    : outputLossy ? fmtInfo.encoderLossy : fmtInfo.encoderLossless;
+                cue.GenerateFilenames(outputLossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
                 // DestPaths includes a preserved HTOA file when one is emitted; TrackCount does not.
                 expectedAudioFiles = cue.DestPaths?.Length ?? 0;
                 string displayDir = publication?.DestinationDirectory ?? outDir;
-                onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(lossy ? " (lossy)" : "")} -> {displayDir}");
+                onProgress(0, $"Encoding to {format.ToUpperInvariant()}{(outputLossy ? " (lossy)" : "")} -> {displayDir}");
             }
             else
             {
@@ -536,12 +612,66 @@ public sealed class RipService : IRipService
                 catch (Exception ex) { _log.Warn("rip", "cover inject failed (database cover keeps): " + ex.GetType().Name); }
             }
 
-            onProgress(0, encode ? "Ripping + verifying..." : "Verifying against AccurateRip + CTDB...");
-            // Fire exactly once, right before the encode actually starts, and only for a real encode -
-            // a verify-only pass never touches the codec, so it never locks it. This is the moment the
-            // caller uses to lock the codec dropdown (the format string above is already final by now).
-            if (encode) onEncodeStart?.Invoke();
+            // Fire exactly once and freeze the assurance claim at the same boundary as the format
+            // choice: immediately before CUESheet constructs and starts the encoder. A verify-only
+            // pass never touches the codec and therefore never locks it.
+            if (encode)
+            {
+                onEncodeStart?.Invoke();
+                outputAssurance = OutputVerificationAssuranceEvaluator.Evaluate(
+                    selectedEncoder?.Settings, outputLossy);
+                // Only exact trusted encoder contracts reach Performed=true. CUESheet uses this
+                // request to retain PCM receipts and run a second decode after every TagLib save.
+                cue.VerifyFinalOutputAfterMetadata = outputAssurance.Performed;
+            }
+            string startText = !encode
+                ? "Verifying against AccurateRip + CTDB..."
+                : outputAssurance.Performed
+                    ? "Ripping + verifying final encoded output..."
+                    : outputAssurance.Lossless
+                        ? "Ripping (encoded output verification not performed)..."
+                        : "Ripping...";
+            onProgress(0, startText);
             string status = cue.Go();
+            // The rip already has the complete CTDB error map. Preserve that evidence instead of
+            // forcing the user to rediscover it on the Verify page. Gather also applies the
+            // alternate-pressing rule: any exact CTDB match suppresses repair for differences that
+            // belong to another valid pressing.
+            repairAssessment = VerifyService.Gather(
+                cue,
+                status,
+                "",
+                ok: true,
+                error: "",
+                applied: false,
+                _log);
+            if (encode &&
+                !outputLossy &&
+                repairAssessment.HasErrors &&
+                repairAssessment.CanRecover)
+            {
+                repairSourceRelativePath = FindRepairSourceRelativePath(
+                    outDir,
+                    cue.DestPaths);
+            }
+            if (outputAssurance.Performed &&
+                !cue.FinalOutputVerifiedAfterMetadata)
+            {
+                throw new InvalidDataException(
+                    "The encoder verification contract completed without final-artifact proof.");
+            }
+            if (outputAssurance.Performed)
+            {
+                outputProofs = SnapshotAndValidateOutputProofs(
+                    cue.DestPaths,
+                    outDir,
+                    cue.FinalOutputProofs);
+            }
+            else if (cue.FinalOutputProofs.Count != 0)
+            {
+                throw new InvalidDataException(
+                    "Final-output proofs were produced without a trusted verification contract.");
+            }
             try { onProgress(0.99, status + " Finalizing output..."); }
             catch (Exception ex)
             {
@@ -576,6 +706,7 @@ public sealed class RipService : IRipService
             // in the bytes) and compare against our own earlier reads of this disc - a second, offline,
             // AccurateRip-independent bit-exactness check.
             var vh = new CUETools.Wpf.Accuracy.VerifyOutcome();
+            bool historyRecorded = false;
             CUETools.Wpf.Accuracy.VerifyRecord? built = null;
             Exception? recordFailure = null;
             try
@@ -606,6 +737,15 @@ public sealed class RipService : IRipService
                     Artist = cue.Metadata?.Artist ?? "",
                     Utc = DateTime.UtcNow,
                     RipperVersion = "2026.1.0",
+                    Format = encode ? format : "",
+                    OutputVerificationKnown =
+                        encode && outputAssurance.Known,
+                    LosslessOutput =
+                        encode && outputAssurance.Lossless,
+                    OutputVerificationPerformed =
+                        encode && outputAssurance.Performed,
+                    OutputVerificationDetail =
+                        encode ? outputAssurance.Detail : "",
                 };
             }
             catch (Exception ex)
@@ -628,7 +768,14 @@ public sealed class RipService : IRipService
                 File.WriteAllText(Path.Combine(outDir, "rip.verify"),
                     CUETools.Wpf.Accuracy.VerifyHistoryStore.ToJson(built!));
                 ThrowIfStopRequested();
-                outDir = publication.Publish();
+                outDir = outputAssurance.Performed
+                    ? PublishProofBoundOutput(
+                        publication,
+                        format,
+                        outputProofs,
+                        built,
+                        null)
+                    : publication.Publish();
                 // Directory.Move does not change the staged contents; the exact count was checked
                 // immediately before publication. Keep that proven count instead of a best-effort
                 // cosmetic recount that intentionally maps access errors to zero.
@@ -642,6 +789,7 @@ public sealed class RipService : IRipService
                 try
                 {
                     vh = _history.CompareAndUpsert(built);
+                    historyRecorded = true;
                     _log.Info("verify.history", $"disc={built.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
                 }
                 catch (Exception ex)
@@ -654,6 +802,7 @@ public sealed class RipService : IRipService
             {
                 _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
+                    $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch
@@ -679,8 +828,16 @@ public sealed class RipService : IRipService
                 OutputDir = outDir,
                 FileCount = files,
                 Format = encode ? format : "",
+                OutputVerificationKnown = encode && outputAssurance.Known,
+                LosslessOutput = encode && outputAssurance.Lossless,
+                OutputVerificationPerformed = encode && outputAssurance.Performed,
+                OutputVerificationDetail = encode ? outputAssurance.Detail : "",
+                OutputProofs = encode
+                    ? outputProofs
+                    : Array.Empty<LosslessOutputProof>(),
                 ArPerTrack = arpt,
                 CtdbPerTrack = ctpt,
+                HistoryRecorded = historyRecorded,
                 HistoryKnown = vh.KnownDisc,
                 HistoryMatches = vh.Matches,
                 HistoryPriorReads = vh.PriorReads,
@@ -688,6 +845,17 @@ public sealed class RipService : IRipService
                 Record = built,
                 FailedWindows = failedWindows,
                 OutputRelDir = outRelDir,
+                CtdbHasErrors = repairAssessment?.HasErrors ?? false,
+                CtdbCanRecover =
+                    encode &&
+                    !outputLossy &&
+                    (repairAssessment?.HasErrors ?? false) &&
+                    (repairAssessment?.CanRecover ?? false),
+                CtdbRepairSectors = repairAssessment?.RepairSectors ?? 0,
+                CtdbRepairRanges = repairAssessment?.RepairRanges ?? "",
+                RepairSourcePath = ResolvePublishedRepairSource(
+                    outDir,
+                    repairSourceRelativePath),
             };
         }
         catch (StopException)
@@ -732,6 +900,76 @@ public sealed class RipService : IRipService
         }
     }
 
+    /// <summary>
+    /// Pick the exact input the existing file-repair transaction must reopen. A cue is authoritative
+    /// for a track set. With no cue, only a single image is unambiguous. Never infer an album from
+    /// several loose tracks because a partial or unrelated sibling set could then be repaired.
+    /// </summary>
+    internal static string FindRepairSourceRelativePath(
+        string outputDirectory,
+        IReadOnlyList<string>? audioPaths)
+    {
+        if (string.IsNullOrWhiteSpace(outputDirectory) ||
+            !Directory.Exists(outputDirectory))
+            return "";
+
+        string root = Path.GetFullPath(outputDirectory);
+        string rootPrefix = root.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string cuePath = Path.Combine(root, "album.cue");
+        if (IsSafeRepairSource(cuePath, rootPrefix))
+            return "album.cue";
+
+        if (audioPaths == null || audioPaths.Count != 1)
+            return "";
+        string candidate;
+        try { candidate = Path.GetFullPath(audioPaths[0]); }
+        catch { return ""; }
+        if (!IsSafeRepairSource(candidate, rootPrefix))
+            return "";
+        return Path.GetRelativePath(root, candidate);
+    }
+
+    private static bool IsSafeRepairSource(string candidate, string rootPrefix)
+    {
+        string fullPath;
+        try { fullPath = Path.GetFullPath(candidate); }
+        catch { return false; }
+        if (!fullPath.StartsWith(
+                rootPrefix,
+                StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(fullPath))
+            return false;
+        try
+        {
+            return (File.GetAttributes(fullPath) &
+                FileAttributes.ReparsePoint) == 0;
+        }
+        catch { return false; }
+    }
+
+    private static string ResolvePublishedRepairSource(
+        string outputDirectory,
+        string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) ||
+            string.IsNullOrWhiteSpace(outputDirectory))
+            return "";
+        string root;
+        string candidate;
+        try
+        {
+            root = Path.GetFullPath(outputDirectory);
+            candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+        }
+        catch { return ""; }
+        string rootPrefix = root.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return IsSafeRepairSource(candidate, rootPrefix) ? candidate : "";
+    }
+
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
 
 
@@ -750,7 +988,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, Action<double, double>? onLevels = null, Action<float[]>? onSamples = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
     {
         // Calibration and drive setup can fail before the first staged Run call, so protect the
         // final user-selected destination at this outer entry point too.
@@ -782,7 +1020,7 @@ public sealed class RipService : IRipService
             // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
             // against but its checksums still count as an independent read.
             ThrowIfStopRequested();
-            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), onLevels, onSamples, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
+            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
 
             // Read 2 (Copy, index 1): staged encode - this is the file set that gets committed on a
@@ -792,12 +1030,13 @@ public sealed class RipService : IRipService
             // file-extension count below, so it stays consistent with what was actually encoded.
             { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
-            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
 
             var reads = new System.Collections.Generic.List<VerifyRecord> { testResult.Record, copyResult.Record };
             var staged = new System.Collections.Generic.List<bool> { false, true };
             var stagingAlbumDirs = new System.Collections.Generic.List<string> { "", copyResult.OutputDir };
+            var encodedResults = new System.Collections.Generic.List<VerifyResult?> { null, copyResult };
             int failedWindows = Math.Max(testResult.FailedWindows, copyResult.FailedWindows);
 
             var resolve = TestAndCopyResolver.Resolve(reads, staged);
@@ -810,12 +1049,13 @@ public sealed class RipService : IRipService
                 // so this re-poll is just for consistency - it will report the same locked choice.
                 { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
                 ThrowIfStopRequested();
-                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), onLevels, onSamples, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
+                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
 
                 reads.Add(thirdResult.Record);
                 staged.Add(true);
                 stagingAlbumDirs.Add(thirdResult.OutputDir);
+                encodedResults.Add(thirdResult);
                 failedWindows = Math.Max(failedWindows, thirdResult.FailedWindows);
 
                 resolve = TestAndCopyResolver.Resolve(reads, staged);
@@ -852,6 +1092,13 @@ public sealed class RipService : IRipService
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
                     Accurate = (last?.ArConfidence ?? 0) > 0,
+                    OutputVerificationKnown = copyResult.OutputVerificationKnown,
+                    LosslessOutput = copyResult.LosslessOutput,
+                    OutputVerificationPerformed =
+                        copyResult.OutputVerificationPerformed,
+                    OutputVerificationDetail =
+                        copyResult.OutputVerificationDetail,
+                    OutputProofs = copyResult.OutputProofs,
                 };
             }
 
@@ -896,7 +1143,13 @@ public sealed class RipService : IRipService
                 // already proven correct and forcing a full re-rip. Hold them until the commit returns.
                 ThrowIfStopRequested();   // do not commit an album the user cancelled
                 keepStaging = true;
-                var (outDir, fileCount) = AssembleAndCommit(resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId, driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir);
+                VerifyResult committedEncoded = encodedResults[whole] ??
+                    throw new InvalidDataException(
+                        "The selected Test & Copy read has no encoded output.");
+                var (outDir, fileCount, historyRecorded, history) = AssembleAndCommit(
+                    resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId,
+                    driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir,
+                    committedEncoded);
                 keepStaging = false;   // committed - the staging is now redundant
                 var last = reads[reads.Count - 1];
                 _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
@@ -916,6 +1169,19 @@ public sealed class RipService : IRipService
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
                     Accurate = (last?.ArConfidence ?? 0) > 0,
+                    HistoryRecorded = historyRecorded,
+                    HistoryKnown = history.KnownDisc,
+                    HistoryMatches = history.Matches,
+                    HistoryPriorReads = history.PriorReads,
+                    HistoryDiffTracks = history.DiffTrackCount,
+                    OutputVerificationKnown =
+                        committedEncoded.OutputVerificationKnown,
+                    LosslessOutput = committedEncoded.LosslessOutput,
+                    OutputVerificationPerformed =
+                        committedEncoded.OutputVerificationPerformed,
+                    OutputVerificationDetail =
+                        committedEncoded.OutputVerificationDetail,
+                    OutputProofs = committedEncoded.OutputProofs,
                 };
             }
             else
@@ -992,7 +1258,11 @@ public sealed class RipService : IRipService
     /// commits ONE staged read's folder wholesale - the read <see cref="TestAndCopyResolver.FullyVerifiedReadIndex"/>
     /// found to agree with some other read on every track - so the files are track-aligned by
     /// construction and there is nothing to sort or index per track.</summary>
-    private (string outDir, int fileCount) AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads, string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir, string discId, string drive, int offset, int failedWindows, string format, string albumRelDir)
+    private (string outDir, int fileCount, bool historyRecorded, VerifyOutcome history)
+        AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads,
+            string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir,
+            string discId, string drive, int offset, int failedWindows, string format,
+            string albumRelDir, VerifyResult encodedResult)
     {
         // Re-home the staged album folder using the RENDERED relative dir, not its last path segment:
         // a multi-disc scheme renders "Artist - Album [2-CD Set]/Disc 2", so taking the last segment
@@ -1010,7 +1280,14 @@ public sealed class RipService : IRipService
         // path remains absent until the complete folder is renamed into place.
         using var publication = AlbumOutputTransaction.Reserve(realBase, albumName,
             m => _log.Info("rip", m));
-        CopyDirectoryRecursiveVerified(sourceStagingAlbumDir, publication.StagingDirectory);
+        IReadOnlyList<LosslessOutputProof>? transferProofs =
+            GetTransferProofs(encodedResult);
+        CopyDirectoryRecursiveVerified(
+            sourceStagingAlbumDir,
+            publication.StagingDirectory,
+            transferProofs,
+            format,
+            GetKnownAudioFormats(format));
         if (CountAudioFilesRequired(publication.StagingDirectory, format) != sourceFileCount)
             throw new InvalidDataException("The Test & Copy staging transfer is incomplete.");
 
@@ -1034,24 +1311,47 @@ public sealed class RipService : IRipService
             Artist = newest?.Artist ?? "",
             Utc = DateTime.UtcNow,
             RipperVersion = "2026.1.0",
+            Format = format,
+            OutputVerificationKnown =
+                encodedResult.OutputVerificationKnown,
+            LosslessOutput = encodedResult.LosslessOutput,
+            OutputVerificationPerformed =
+                encodedResult.OutputVerificationPerformed,
+            OutputVerificationDetail =
+                encodedResult.OutputVerificationDetail,
         };
 
         string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
+        if (encodedResult.OutputVerificationKnown)
+            logText += "\nEncoded-output verification: " +
+                encodedResult.OutputVerificationDetail + "\n";
         File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), logText);
         File.WriteAllText(Path.Combine(publication.StagingDirectory, "rip.verify"),
             VerifyHistoryStore.ToJson(committedRecord));
         ThrowIfStopRequested();
-        string outDir = publication.Publish();
+        string outDir = transferProofs != null
+            ? PublishProofBoundOutput(
+                publication,
+                format,
+                transferProofs,
+                committedRecord,
+                Path.Combine(
+                    publication.StagingDirectory,
+                    "Test & Copy.log"))
+            : publication.Publish();
 
         // History follows publication so a failed copy cannot masquerade as a retained verified rip.
+        var history = new VerifyOutcome();
+        bool historyRecorded = false;
         try
         {
-            var vh = _history.CompareAndUpsert(committedRecord);
-            _log.Info("verify.history", $"disc={committedRecord.DiscId} known={(vh.KnownDisc ? 1 : 0)} matches={(vh.Matches ? 1 : 0)} diffTracks={vh.DiffTrackCount}");
+            history = _history.CompareAndUpsert(committedRecord);
+            historyRecorded = true;
+            _log.Info("verify.history", $"disc={committedRecord.DiscId} known={(history.KnownDisc ? 1 : 0)} matches={(history.Matches ? 1 : 0)} diffTracks={history.DiffTrackCount}");
         }
         catch (Exception ex) { _log.Warn("verify.history", "test&copy upsert failed: " + ex.GetType().Name); }
 
-        return (outDir, sourceFileCount);
+        return (outDir, sourceFileCount, historyRecorded, history);
     }
 
     /// <summary>Accept a held Test &amp; Copy's Copy read into the output folder anyway, flagged not
@@ -1082,7 +1382,14 @@ public sealed class RipService : IRipService
                 throw new InvalidDataException("The held Copy read contains no audio files.");
             using var publication = AlbumOutputTransaction.Reserve(realBase, albumName,
                 m => _log.Info("rip", m));
-            CopyDirectoryRecursiveVerified(held.CopyStagingDir, publication.StagingDirectory);
+            IReadOnlyList<LosslessOutputProof>? transferProofs =
+                GetTransferProofs(held);
+            CopyDirectoryRecursiveVerified(
+                held.CopyStagingDir,
+                publication.StagingDirectory,
+                transferProofs,
+                format,
+                GetKnownAudioFormats(format));
             if (CountAudioFilesRequired(publication.StagingDirectory, format) != sourceFileCount)
                 throw new InvalidDataException("The held Copy staging transfer is incomplete.");
 
@@ -1090,9 +1397,22 @@ public sealed class RipService : IRipService
             string log = "Test & Copy log\n\n" +
                 "NOT test-verified - accepted by user without agreement.\n" +
                 $"Reads used: {held.ReadsUsed}\n" +
-                $"Held track(s) (no agreement): {heldList}\n";
+                $"Held track(s) (no agreement): {heldList}\n" +
+                (held.OutputVerificationKnown
+                    ? "Encoded-output verification: " +
+                        held.OutputVerificationDetail + "\n"
+                    : "");
             File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), log);
-            string outDir = publication.Publish();
+            string outDir = transferProofs != null
+                ? PublishProofBoundOutput(
+                    publication,
+                    format,
+                    transferProofs,
+                    null,
+                    Path.Combine(
+                        publication.StagingDirectory,
+                        "Test & Copy.log"))
+                : publication.Publish();
 
             try
             {
@@ -1135,7 +1455,108 @@ public sealed class RipService : IRipService
         catch (Exception ex) { _log.Warn("rip", "test&copy staging cleanup failed: " + ex.GetType().Name); }
     }
 
-    internal static void CopyDirectoryRecursiveVerified(string srcDir, string dstDir)
+    private static IReadOnlyList<LosslessOutputProof>? GetTransferProofs(
+        VerifyResult result)
+    {
+        if (result == null)
+            throw new ArgumentNullException(nameof(result));
+        return GetTransferProofs(
+            result.OutputVerificationPerformed,
+            result.OutputProofs);
+    }
+
+    private static IReadOnlyList<LosslessOutputProof>? GetTransferProofs(
+        TestCopyRunResult result)
+    {
+        if (result == null)
+            throw new ArgumentNullException(nameof(result));
+        return GetTransferProofs(
+            result.OutputVerificationPerformed,
+            result.OutputProofs);
+    }
+
+    private static IReadOnlyList<LosslessOutputProof>? GetTransferProofs(
+        bool verificationPerformed,
+        IReadOnlyList<LosslessOutputProof>? proofs)
+    {
+        int count = proofs?.Count ?? 0;
+        if (verificationPerformed)
+        {
+            if (count == 0)
+            {
+                throw new InvalidDataException(
+                    "Encoded-output assurance has no transferable proof set.");
+            }
+            return proofs;
+        }
+
+        if (count != 0)
+        {
+            throw new InvalidDataException(
+                "Encoded-output proofs exist without a performed assurance claim.");
+        }
+        return null;
+    }
+
+    internal static IReadOnlyList<LosslessOutputProof>
+        SnapshotAndValidateOutputProofs(
+            string[]? expectedPaths,
+            string rootDirectory,
+            IReadOnlyList<LosslessOutputProof>? proofs)
+    {
+        ValidateEncodedOutputs(expectedPaths, rootDirectory);
+        if (proofs == null ||
+            expectedPaths == null ||
+            proofs.Count != expectedPaths.Length)
+        {
+            throw new InvalidDataException(
+                "Final-output assurance does not cover the exact encoded output set.");
+        }
+
+        string root = Path.GetFullPath(rootDirectory);
+        var expected = new HashSet<string>(
+            expectedPaths.Length,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (string path in expectedPaths)
+            expected.Add(Path.GetFullPath(path));
+
+        var snapshot = new List<LosslessOutputProof>(proofs.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < proofs.Count; i++)
+        {
+            LosslessOutputProof proof = proofs[i] ??
+                throw new InvalidDataException(
+                    "Final-output assurance contains an empty proof.");
+            string provedPath =
+                Path.GetFullPath(proof.GetConstrainedPath(root));
+            if (!expected.Contains(provedPath) ||
+                !seen.Add(provedPath) ||
+                !string.Equals(
+                    provedPath,
+                    Path.GetFullPath(expectedPaths[i]),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    "Final-output assurance names a missing, duplicate, unexpected, or misordered output.");
+            }
+            proof.VerifyFile(root);
+            snapshot.Add(proof);
+        }
+        if (seen.Count != expected.Count)
+        {
+            throw new InvalidDataException(
+                "Final-output assurance missed an encoded output.");
+        }
+        return new System.Collections.ObjectModel
+            .ReadOnlyCollection<LosslessOutputProof>(snapshot);
+    }
+
+    internal static void CopyDirectoryRecursiveVerified(
+        string srcDir,
+        string dstDir,
+        IReadOnlyList<LosslessOutputProof>? outputProofs = null,
+        string? provedFormat = null,
+        IEnumerable<string>? knownAudioFormats = null)
     {
         string sourceRoot = Path.GetFullPath(srcDir);
         string destinationRoot = Path.GetFullPath(dstDir);
@@ -1145,6 +1566,27 @@ public sealed class RipService : IRipService
         if ((File.GetAttributes(sourceRoot) & FileAttributes.ReparsePoint) != 0 ||
             (File.GetAttributes(destinationRoot) & FileAttributes.ReparsePoint) != 0)
             throw new IOException("A staging root cannot be a reparse point.");
+
+        Dictionary<string, LosslessOutputProof>? proofByRelativePath = null;
+        HashSet<string>? copiedProofs = null;
+        if (outputProofs != null)
+        {
+            if (string.IsNullOrWhiteSpace(provedFormat))
+            {
+                throw new InvalidDataException(
+                    "A proved transfer requires the encoded audio format.");
+            }
+            ValidateProofSetAgainstAudioFiles(
+                sourceRoot,
+                provedFormat,
+                outputProofs,
+                verifyBytes: true,
+                knownAudioFormats);
+            proofByRelativePath =
+                BuildProofPathMap(sourceRoot, outputProofs);
+            copiedProofs =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
         var pending = new Stack<string>();
         pending.Push(sourceRoot);
@@ -1166,10 +1608,366 @@ public sealed class RipService : IRipService
                     continue;
                 }
 
-                File.Copy(source, destination, false);
-                VerifyCopiedFile(source, destination);
+                string normalizedRelative =
+                    NormalizeRelativePath(relative);
+                LosslessOutputProof? proof = null;
+                if (proofByRelativePath != null)
+                    proofByRelativePath.TryGetValue(
+                        normalizedRelative,
+                        out proof);
+
+                if (proof == null)
+                {
+                    File.Copy(source, destination, false);
+                    VerifyCopiedFile(source, destination);
+                    continue;
+                }
+
+                using (FileStream sourceLease =
+                    proof.OpenVerifiedReadLease(sourceRoot))
+                {
+                    if (!string.Equals(
+                            Path.GetFullPath(sourceLease.Name),
+                            Path.GetFullPath(source),
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException(
+                            "A proved source path changed during transfer.");
+                    }
+                    using (var destinationStream = new FileStream(
+                        destination,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None,
+                        0x10000,
+                        FileOptions.SequentialScan))
+                    {
+                        sourceLease.CopyTo(destinationStream);
+                        destinationStream.Flush(flushToDisk: true);
+                    }
+                }
+                proof.VerifyFile(destinationRoot);
+                copiedProofs!.Add(normalizedRelative);
             }
         }
+
+        if (proofByRelativePath != null)
+        {
+            if (copiedProofs!.Count != proofByRelativePath.Count)
+            {
+                throw new InvalidDataException(
+                    "The proved transfer missed an encoded output.");
+            }
+            ValidateProofSetAgainstAudioFiles(
+                destinationRoot,
+                provedFormat!,
+                outputProofs!,
+                verifyBytes: true,
+                knownAudioFormats);
+        }
+    }
+
+    private string PublishProofBoundOutput(
+        AlbumOutputTransaction publication,
+        string format,
+        IReadOnlyList<LosslessOutputProof> proofs,
+        VerifyRecord? record,
+        string? verificationLogPath)
+    {
+        IReadOnlyCollection<string> knownAudioFormats =
+            GetKnownAudioFormats(format);
+        var leases = new List<FileStream>(proofs.Count);
+        bool moved = false;
+        string published = publication.DestinationDirectory;
+        try
+        {
+            // Windows refuses a parent-directory rename while a child file has an active sharing
+            // lease, even when delete sharing is requested. Bind the complete stage immediately
+            // before the move, then re-open and freeze every proof at the destination before the
+            // reservation/ownership marker is released or success is reported.
+            ValidateProofSetAgainstAudioFiles(
+                publication.StagingDirectory,
+                format,
+                proofs,
+                verifyBytes: true,
+                knownAudioFormats);
+
+            published = publication.PublishPendingValidation();
+            moved = true;
+            AfterProofDirectoryMoveForTest?.Invoke(published);
+            ValidateProofSetAgainstAudioFiles(
+                published,
+                format,
+                proofs,
+                verifyBytes: false,
+                knownAudioFormats);
+            foreach (LosslessOutputProof proof in proofs)
+                leases.Add(proof.OpenVerifiedReadLease(published));
+            ValidateProofSetAgainstAudioFiles(
+                published,
+                format,
+                proofs,
+                verifyBytes: false,
+                knownAudioFormats);
+            publication.CompletePublication();
+            return published;
+        }
+        catch (Exception ex) when (moved)
+        {
+            for (int i = leases.Count - 1; i >= 0; i--)
+                leases[i].Dispose();
+            leases.Clear();
+            InvalidatePublishedAssurance(
+                published,
+                record,
+                verificationLogPath);
+            string retained = published;
+            try
+            {
+                retained =
+                    publication.QuarantinePublishedProofFailure();
+            }
+            catch
+            {
+                // A non-cooperating writer may prevent the quarantine rename. The operation still
+                // fails closed and never records history or reports encoded-output assurance.
+            }
+            throw new InvalidDataException(
+                "The published album failed its final encoded-output proof boundary. " +
+                "The output was retained as incomplete at: " + retained,
+                ex);
+        }
+        finally
+        {
+            for (int i = leases.Count - 1; i >= 0; i--)
+                leases[i].Dispose();
+        }
+    }
+
+    private static void InvalidatePublishedAssurance(
+        string publishedRoot,
+        VerifyRecord? record,
+        string? verificationLogPath)
+    {
+        const string detail =
+            "not retained (the published files failed the final encoded-output proof boundary)";
+        if (record != null)
+        {
+            try
+            {
+                record.OutputVerificationPerformed = false;
+                record.OutputVerificationDetail = detail;
+                string path = Path.Combine(
+                    publishedRoot,
+                    "rip.verify");
+                using var stream = new FileStream(
+                    path,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.Read);
+                using var writer = new StreamWriter(
+                    stream,
+                    new System.Text.UTF8Encoding(false),
+                    1024,
+                    leaveOpen: true);
+                writer.Write(VerifyHistoryStore.ToJson(record));
+                writer.Flush();
+                stream.Flush(true);
+            }
+            catch
+            {
+                // The transaction-level failure marker and quarantine remain the primary signal.
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(verificationLogPath))
+        {
+            try
+            {
+                string relocated = Path.Combine(
+                    publishedRoot,
+                    Path.GetFileName(verificationLogPath));
+                using var stream = new FileStream(
+                    relocated,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.Read);
+                using var writer = new StreamWriter(
+                    stream,
+                    new System.Text.UTF8Encoding(false),
+                    1024,
+                    leaveOpen: true);
+                writer.WriteLine();
+                writer.WriteLine(
+                    "Encoded-output verification invalidated: " +
+                    detail);
+                writer.Flush();
+                stream.Flush(true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private IReadOnlyCollection<string> GetKnownAudioFormats(
+        string selectedFormat)
+    {
+        var formats = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(selectedFormat))
+            formats.Add(selectedFormat.Trim().TrimStart('.'));
+        foreach (string extension in _config.formats.Keys)
+        {
+            if (!string.IsNullOrWhiteSpace(extension))
+                formats.Add(extension.Trim().TrimStart('.'));
+        }
+        foreach (IAudioEncoderSettings encoder in
+            CUEProcessorPlugins.encs)
+        {
+            if (!string.IsNullOrWhiteSpace(encoder.Extension))
+                formats.Add(encoder.Extension.Trim().TrimStart('.'));
+        }
+        foreach (IAudioDecoderSettings decoder in
+            CUEProcessorPlugins.decs)
+        {
+            if (!string.IsNullOrWhiteSpace(decoder.Extension))
+                formats.Add(decoder.Extension.Trim().TrimStart('.'));
+        }
+        return formats;
+    }
+
+    private static Dictionary<string, LosslessOutputProof>
+        BuildProofPathMap(
+            string rootDirectory,
+            IReadOnlyList<LosslessOutputProof> proofs)
+    {
+        var result = new Dictionary<string, LosslessOutputProof>(
+            proofs.Count,
+            StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < proofs.Count; i++)
+        {
+            LosslessOutputProof proof = proofs[i] ??
+                throw new InvalidDataException(
+                    "The encoded-output proof set contains an empty entry.");
+            string path = proof.GetConstrainedPath(rootDirectory);
+            string relative = NormalizeRelativePath(
+                Path.GetRelativePath(rootDirectory, path));
+            if (!result.TryAdd(relative, proof))
+            {
+                throw new InvalidDataException(
+                    "The encoded-output proof set contains a duplicate path.");
+            }
+        }
+        return result;
+    }
+
+    private static void ValidateProofSetAgainstAudioFiles(
+        string rootDirectory,
+        string format,
+        IReadOnlyList<LosslessOutputProof> proofs,
+        bool verifyBytes,
+        IEnumerable<string>? knownAudioFormats = null)
+    {
+        if (proofs == null)
+            throw new ArgumentNullException(nameof(proofs));
+        if (string.IsNullOrWhiteSpace(format))
+            throw new InvalidDataException(
+                "The encoded audio format is missing.");
+
+        string root = Path.GetFullPath(rootDirectory);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException(
+                "The proved output root is missing.");
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException(
+                "The proved output root cannot be a reparse point.");
+
+        string extension = "." + format.Trim().TrimStart('.');
+        var audioExtensions = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            extension
+        };
+        if (knownAudioFormats != null)
+        {
+            foreach (string knownFormat in knownAudioFormats)
+            {
+                if (!string.IsNullOrWhiteSpace(knownFormat))
+                {
+                    audioExtensions.Add(
+                        "." + knownFormat.Trim().TrimStart('.'));
+                }
+            }
+        }
+        var audioPaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count != 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(
+                current,
+                "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                FileAttributes attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new IOException(
+                        "The proved output set cannot contain a reparse point.");
+                }
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    pending.Push(entry);
+                    continue;
+                }
+                string entryExtension = Path.GetExtension(entry);
+                if (audioExtensions.Contains(entryExtension) &&
+                    !string.Equals(
+                        entryExtension,
+                        extension,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException(
+                        "Encoded-output assurance found an unproved audio file in another registered format.");
+                }
+                if (string.Equals(
+                    entryExtension,
+                    extension,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    audioPaths.Add(NormalizeRelativePath(
+                        Path.GetRelativePath(root, entry)));
+                }
+            }
+        }
+
+        Dictionary<string, LosslessOutputProof> proofPaths =
+            BuildProofPathMap(root, proofs);
+        if (proofPaths.Count != audioPaths.Count)
+        {
+            throw new InvalidDataException(
+                "Encoded-output assurance does not cover the exact audio file set.");
+        }
+        foreach (KeyValuePair<string, LosslessOutputProof> entry in
+            proofPaths)
+        {
+            if (!audioPaths.Contains(entry.Key))
+            {
+                throw new InvalidDataException(
+                    "Encoded-output assurance names a missing or unexpected audio file.");
+            }
+            if (verifyBytes)
+                entry.Value.VerifyFile(root);
+        }
+    }
+
+    private static string NormalizeRelativePath(string relative)
+    {
+        return relative.Replace(
+            Path.AltDirectorySeparatorChar,
+            Path.DirectorySeparatorChar);
     }
 
     private static string ResolveCopyDestination(string destinationRoot, string relative)

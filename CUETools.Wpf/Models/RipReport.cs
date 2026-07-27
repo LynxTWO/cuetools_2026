@@ -4,8 +4,8 @@ using System.Text;
 namespace CUETools.Wpf.Models;
 
 /// <summary>
-/// The result of one Verify or Rip job, in the shape the Report page renders as a certificate
-/// and the shape the tamper-evident log is sealed over. Every field is a receipt: it comes
+/// The result of one Verify or Rip job, in the shape the Report page renders as a receipt.
+/// Every field comes
 /// from the live AccurateRip / CTDB check or the drive, never a placeholder.
 /// </summary>
 public sealed class RipReport
@@ -23,12 +23,25 @@ public sealed class RipReport
     public int CtdbConfidence { get; init; }
     public int CtdbTotal { get; init; }
     public bool Accurate { get; init; }
+    /// <summary>Total optical reads used by a passed Test &amp; Copy run. Zero for ordinary
+    /// rip/verify jobs and for an unverified accepted copy.</summary>
+    public int OpticalReadsUsed { get; init; }
+    /// <summary>Minimum number of reads known to agree for every committed track. Test &amp; Copy
+    /// currently proves two-read agreement per track; when a third read is needed, the agreeing
+    /// partner can differ by track, so this must not be reported as three-way agreement.</summary>
+    public int MinimumAgreeingReads { get; init; }
     public string Status { get; init; } = "";
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
     /// <summary>Codec extension the files were written as ("flac", "m4a"...). Empty on reports
     /// archived before this field existed, which render the neutral word "audio".</summary>
     public string Format { get; init; } = "";
+    /// <summary>Final encoded-output assurance is intentionally separate from database and
+    /// optical-read evidence. Old reports and verify-only jobs leave Known false.</summary>
+    public bool OutputVerificationKnown { get; init; }
+    public bool LosslessOutput { get; init; }
+    public bool OutputVerificationPerformed { get; init; }
+    public string OutputVerificationDetail { get; init; } = "";
     public int TrackCount { get; init; }
     public string TocId { get; init; } = "";
 
@@ -36,7 +49,14 @@ public sealed class RipReport
     public string CorrectionQualityName => CqNames[Math.Clamp(CorrectionQuality, 0, 2)];
 
     /// <summary>True when the disc was confirmed by at least one independent database.</summary>
-    public bool Confirmed => Accurate || CtdbConfidence > 0;
+    public bool DatabaseConfirmed => Accurate || CtdbConfidence > 0;
+    /// <summary>Compatibility name for database confirmation. Independent read agreement is a
+    /// different assurance source and must not be mislabeled as an AccurateRip/CTDB match.</summary>
+    public bool Confirmed => DatabaseConfirmed;
+    public bool IndependentReadsVerified =>
+        OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2;
+    /// <summary>True when either a database or multiple independent reads verified the audio.</summary>
+    public bool Verified => DatabaseConfirmed || IndependentReadsVerified;
 
     public string OffsetText => Offset >= 0 ? "+" + Offset : Offset.ToString();
 
@@ -61,6 +81,10 @@ public sealed class RipReport
         sb.Append("CTDB          : ").Append(CtdbConfidence > 0
             ? "verified (confidence " + CtdbConfidence + ")"
             : "not found").Append('\n');
+        if (IndependentReadsVerified)
+            sb.Append("Independent   : verified after ").Append(OpticalReadsUsed)
+              .Append(" optical reads; every track agreed across at least ")
+              .Append(MinimumAgreeingReads).Append(" reads\n");
         // Any mode that WROTE something, not just Mode=="Rip": a Test & Copy writes files too, and
         // gating on the literal "Rip" left the highest-assurance mode's certificate naming neither
         // its file count nor its output folder. The codec is reported rather than assumed - this
@@ -69,6 +93,16 @@ public sealed class RipReport
         {
             sb.Append("Output        : ").Append(FileCount).Append(' ')
               .Append(Format.Length > 0 ? Format.ToUpperInvariant() : "audio").Append(" files\n");
+            if (OutputVerificationKnown)
+                sb.Append("Output verify : ")
+                  .Append(OutputVerificationDetail.Length > 0
+                      ? OutputVerificationDetail
+                      : OutputVerificationPerformed
+                          ? "performed after metadata finalization"
+                          : LosslessOutput
+                              ? "not performed"
+                              : "not applicable (lossy output)")
+                  .Append('\n');
             sb.Append("Folder        : ").Append(OutputDir).Append('\n');
         }
         sb.Append("Result        : ").Append(Status.Replace("\r", " ").Replace("\n", " ")).Append('\n');

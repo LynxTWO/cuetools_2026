@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.ComponentModel;
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
 
 namespace CUETools.Codecs.CommandLine
@@ -23,6 +24,11 @@ namespace CUETools.Codecs.CommandLine
 
         private bool _lossless;
         private bool _verificationRequired;
+        private bool _deserializing;
+        private int _verificationContractVersion;
+        private bool _verificationUsesEncoder;
+        private string _verificationPath;
+        private string _verificationParameters;
 
         [JsonProperty]
         public bool Lossless
@@ -33,8 +39,11 @@ namespace CUETools.Codecs.CommandLine
                 _lossless = value;
                 // Once a command encoder has been designated for a lossless face, toggling a
                 // mutable UI label must never turn off its output verification in the live session.
-                if (value)
+                if (value && !_deserializing)
+                {
                     _verificationRequired = true;
+                    _verificationContractVersion = 1;
+                }
             }
         }
 
@@ -45,11 +54,37 @@ namespace CUETools.Codecs.CommandLine
             get { return _verificationRequired; }
             set
             {
-                // Sticky by design. Old JSON has no field, but setting Lossless=true above migrates
-                // it; a later false value cannot downgrade an already-lossless command contract.
                 if (value)
+                {
                     _verificationRequired = true;
+                    if (!_deserializing)
+                        _verificationContractVersion = 1;
+                }
+                else if (_deserializing)
+                {
+                    _verificationRequired = false;
+                }
             }
+        }
+
+        /// <summary>
+        /// Version 1 means a lossless command encoder is governed by the independent-decoder
+        /// contract. Version 0 is reserved for profiles created before that contract existed:
+        /// they remain usable, but explicitly unverified, until the user configures a decoder.
+        /// </summary>
+        [Browsable(false)]
+        [DefaultValue(0)]
+        [JsonProperty]
+        public int VerificationContractVersion
+        {
+            get { return _verificationContractVersion; }
+            set { _verificationContractVersion = value; }
+        }
+
+        [Browsable(false)]
+        public bool UsesLegacyUnverifiedCompatibility
+        {
+            get { return Lossless && !VerificationRequired; }
         }
 
         [Browsable(false)]
@@ -85,6 +120,7 @@ namespace CUETools.Codecs.CommandLine
         public EncoderSettings()
         {
             this.Init();
+            _verificationContractVersion = 1;
         }
 
         public EncoderSettings(
@@ -98,6 +134,7 @@ namespace CUETools.Codecs.CommandLine
             )
         {
             this.Init();
+            _verificationContractVersion = 1;
             Name = name;
             Extension = extension;
             Lossless = lossless;
@@ -150,8 +187,12 @@ namespace CUETools.Codecs.CommandLine
         [JsonProperty]
         public bool VerificationUsesEncoder
         {
-            get;
-            set;
+            get { return _verificationUsesEncoder; }
+            set
+            {
+                _verificationUsesEncoder = value;
+                EnableVerificationWhenConfigured();
+            }
         }
 
         [DefaultValue("")]
@@ -160,8 +201,12 @@ namespace CUETools.Codecs.CommandLine
         [JsonProperty]
         public string VerificationPath
         {
-            get;
-            set;
+            get { return _verificationPath; }
+            set
+            {
+                _verificationPath = value;
+                EnableVerificationWhenConfigured();
+            }
         }
 
         [DefaultValue("")]
@@ -170,22 +215,68 @@ namespace CUETools.Codecs.CommandLine
         [JsonProperty]
         public string VerificationParameters
         {
-            get;
-            set;
+            get { return _verificationParameters; }
+            set
+            {
+                _verificationParameters = value;
+                EnableVerificationWhenConfigured();
+            }
         }
 
         [Browsable(false)]
         public bool HasLosslessVerifier
         {
+            get { return HasConfiguredLosslessVerifier; }
+        }
+
+        private bool HasConfiguredLosslessVerifier
+        {
             get
             {
-                if (!VerificationRequired)
-                    return true;
                 if (String.IsNullOrEmpty(VerificationParameters) ||
                     !VerificationParameters.Contains("%I"))
                     return false;
                 return VerificationUsesEncoder ^
                     !String.IsNullOrEmpty(VerificationPath);
+            }
+        }
+
+        private void EnableVerificationWhenConfigured()
+        {
+            if (_deserializing || !_lossless || !HasConfiguredLosslessVerifier)
+                return;
+            _verificationRequired = true;
+            _verificationContractVersion = 1;
+        }
+
+        [OnDeserializing]
+        private void OnDeserializing(StreamingContext context)
+        {
+            // Constructors establish version 1 for newly-created settings. Reset before reading so
+            // an absent marker is unambiguously a pre-contract profile.
+            _deserializing = true;
+            _verificationContractVersion = 0;
+            _verificationRequired = false;
+        }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            _deserializing = false;
+            if (!_lossless)
+                return;
+
+            if (_verificationContractVersion >= 1 ||
+                HasConfiguredLosslessVerifier)
+            {
+                _verificationRequired = true;
+                _verificationContractVersion = 1;
+            }
+            else
+            {
+                // Compatibility is explicit and observable, not a fake verifier: old custom
+                // encoders keep working, while UI and reports can label their output unverified.
+                _verificationRequired = false;
             }
         }
 

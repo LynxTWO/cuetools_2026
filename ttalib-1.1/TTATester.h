@@ -47,7 +47,7 @@ namespace TTALib
 
 		virtual bool TestFrame ()
 		{
-			unsigned long frame_crc32, result;
+			unsigned long stored_frame_crc32, result;
 
 			if (fst >= seek_table + fframes)
 				return false;
@@ -57,8 +57,8 @@ namespace TTALib
 				throw TTAException (READ_ERROR);
 			else input_byte_count += result;
 
-			CopyMemory(&frame_crc32, data + (result - 4), 4);		
-			if (crc32(data, *fst - 4) != ENDSWAP_INT32(frame_crc32))
+			CopyMemory(&stored_frame_crc32, data + (result - 4), 4);
+			if (crc32(data, *fst - 4) != ENDSWAP_INT32(stored_frame_crc32))
 				throw TTAException (FILE_ERROR);
 			
 			fst ++;			

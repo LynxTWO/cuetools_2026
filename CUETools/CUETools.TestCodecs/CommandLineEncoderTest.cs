@@ -895,7 +895,7 @@ namespace CUETools.TestCodecs
         }
 
         [TestMethod]
-        public void LegacyAndDowngradeJsonCannotDisableLosslessVerificationRequirement()
+        public void VersionedOrConfiguredJsonCannotDisableLosslessVerificationRequirement()
         {
             EncoderSettings legacy = JsonConvert.DeserializeObject<EncoderSettings>(
                 "{\"Lossless\":true,\"Path\":\"fake.exe\"," +
@@ -912,12 +912,35 @@ namespace CUETools.TestCodecs
 
             EncoderSettings downgrade =
                 JsonConvert.DeserializeObject<EncoderSettings>(
-                    "{\"Lossless\":true,\"VerificationRequired\":false," +
+                    "{\"Lossless\":true,\"VerificationContractVersion\":1," +
+                    "\"VerificationRequired\":false," +
                     "\"Path\":\"fake.exe\",\"VerificationUsesEncoder\":true," +
                     "\"VerificationParameters\":\"-d %I -\"}");
             Assert.IsTrue(
                 downgrade.VerificationRequired,
                 "A later JSON property may not downgrade the sticky lossless contract.");
+        }
+
+        [TestMethod]
+        public void PreContractCustomLosslessEncoderRemainsUsableButExplicitlyUnverified()
+        {
+            EncoderSettings legacy =
+                JsonConvert.DeserializeObject<EncoderSettings>(
+                    "{\"Name\":\"custom.exe\",\"Extension\":\"custom\"," +
+                    "\"Lossless\":true,\"Path\":\"custom.exe\"," +
+                    "\"Parameters\":\"%O\"}");
+
+            Assert.IsFalse(legacy.VerificationRequired);
+            Assert.IsFalse(legacy.HasLosslessVerifier);
+            Assert.IsTrue(legacy.UsesLegacyUnverifiedCompatibility);
+
+            legacy.VerificationUsesEncoder = true;
+            legacy.VerificationParameters = "-d %I -";
+
+            Assert.IsTrue(legacy.VerificationRequired);
+            Assert.IsTrue(legacy.HasLosslessVerifier);
+            Assert.IsFalse(legacy.UsesLegacyUnverifiedCompatibility);
+            Assert.AreEqual(1, legacy.VerificationContractVersion);
         }
 
         [TestMethod]
@@ -1269,6 +1292,67 @@ namespace CUETools.TestCodecs
             Assert.IsTrue(process.StartInfo.RedirectStandardOutput);
             Assert.IsFalse(process.StartInfo.RedirectStandardError,
                 "stderr is inherited, not left as an unconsumed redirected pipe");
+        }
+
+        [TestMethod]
+        public void CommandDecoderForwardSeekConsumesWaveStdoutAndRejectsBackwardSeek()
+        {
+            AudioBuffer decoded = CreatePcmBuffer(
+                AudioPCMConfig.RedBook,
+                new int[,]
+                {
+                    { 10, -10 },
+                    { 20, -20 },
+                    { 30, -30 },
+                    { 40, -40 },
+                    { 50, -50 }
+                });
+            FakeEncoderProcess process = new FakeEncoderProcess();
+            process.Output = new NonSeekableReadStream(CreateWaveBytes(decoded));
+            DecoderSettings settings = new DecoderSettings(
+                "fake", "fake", "fake-decoder.exe", "-d %I -");
+            AudioDecoder decoder = new AudioDecoder(
+                settings,
+                NewOutputPath(),
+                null,
+                new FakeEncoderProcessFactory(process));
+
+            try
+            {
+                decoder.Position = 2;
+                Assert.AreEqual(2L, decoder.Position);
+
+                AudioBuffer actual = new AudioBuffer(decoder.PCM, 2);
+                Assert.AreEqual(2, decoder.Read(actual, 2));
+                Assert.AreEqual(4L, decoder.Position);
+                Assert.AreEqual(30, actual.Samples[0, 0]);
+                Assert.AreEqual(-30, actual.Samples[0, 1]);
+                Assert.AreEqual(40, actual.Samples[1, 0]);
+                Assert.AreEqual(-40, actual.Samples[1, 1]);
+
+                NotSupportedException backward =
+                    Assert.ThrowsException<NotSupportedException>(
+                        delegate { decoder.Position = 1; });
+                StringAssert.Contains(backward.Message, "Backward seeking");
+                Assert.AreEqual(
+                    4L,
+                    decoder.Position,
+                    "A rejected backward seek must not mutate the logical stream position.");
+
+                AudioBuffer tail = new AudioBuffer(decoder.PCM, 1);
+                Assert.AreEqual(1, decoder.Read(tail, 1));
+                Assert.AreEqual(50, tail.Samples[0, 0]);
+                Assert.AreEqual(-50, tail.Samples[0, 1]);
+                Assert.AreEqual(5L, decoder.Position);
+                Assert.AreEqual(0, decoder.Read(tail, 1));
+            }
+            finally
+            {
+                decoder.Close();
+            }
+
+            Assert.IsFalse(process.Killed);
+            Assert.IsTrue(process.Disposed);
         }
 
         [TestMethod]
@@ -1671,6 +1755,54 @@ namespace CUETools.TestCodecs
                 _killSignal.Close();
                 if (DisposeException != null)
                     throw DisposeException;
+            }
+        }
+
+        private sealed class NonSeekableReadStream : Stream
+        {
+            private readonly MemoryStream _inner;
+
+            internal NonSeekableReadStream(byte[] bytes)
+            {
+                _inner = new MemoryStream(bytes, false);
+            }
+
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return false; } }
+            public override bool CanWrite { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position
+            {
+                get { throw new NotSupportedException(); }
+                set { throw new NotSupportedException(); }
+            }
+
+            public override void Flush() { }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                return _inner.Read(buffer, offset, count);
+            }
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override void SetLength(long value)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override void Close()
+            {
+                _inner.Close();
+                base.Close();
             }
         }
 

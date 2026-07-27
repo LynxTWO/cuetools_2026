@@ -510,8 +510,8 @@ TTALib::TTAError TTALib::TTA2Wav (const char *infile, const char *outfile,
 
 TTALib::TTAError TTALib::TTATest (const char *infile,
 					TTACALLBACK TTACallback, void *uParam)
-{	
-	unsigned long result, len = 0;
+{
+	unsigned long len = 0;
 	TTALib::TTAError err;
 	TTALib::TTAStat stat = {0, 0, 0};
 	TTATester *tester;

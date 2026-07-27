@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using CUETools.Codecs;
 using CUETools.Codecs.WMA;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -372,21 +373,26 @@ namespace CUETools.TestCodecs
             LosslessEncoderSettings settings,
             out string reason)
         {
+            object writer = null;
             try
             {
-                string modes = settings.SupportedModes;
-                if (String.IsNullOrEmpty(modes))
-                {
-                    reason = "no compatible encoder format was enumerated";
-                    return false;
-                }
+                // SupportedModes is a UI choice list, not an availability signal. A valid codec
+                // with one compatible format has no mode label and therefore returns an empty
+                // string. Acquire the actual configured writer instead.
+                writer = settings.GetWriter();
                 reason = null;
                 return true;
             }
-            catch (Exception ex)
+            catch (NotSupportedException ex) when (
+                String.Equals(ex.Message, "codec/format not found", StringComparison.Ordinal))
             {
                 reason = ex.GetType().Name + ": " + ex.Message;
                 return false;
+            }
+            finally
+            {
+                if (writer != null && Marshal.IsComObject(writer))
+                    Marshal.ReleaseComObject(writer);
             }
         }
 

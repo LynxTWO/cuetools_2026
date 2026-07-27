@@ -11,6 +11,7 @@ internal sealed class ArtifactManifest
     public string VersionAssembly { get; set; } = "";
     public List<RequiredFile> RequiredFiles { get; set; } = new();
     public List<string> ForbiddenFiles { get; set; } = new();
+    public bool RequireExactFiles { get; set; }
     public TrustManifestProbe? TrustManifestProbe { get; set; }
     public PluginProbe? PluginProbe { get; set; }
 }
@@ -19,6 +20,7 @@ internal sealed class RequiredFile
 {
     public string Path { get; set; } = "";
     public long MinimumBytes { get; set; } = 1;
+    public string PeMachine { get; set; } = "";
 }
 
 internal sealed class PluginProbe
@@ -109,6 +111,8 @@ internal static class Program
                 if (length < required.MinimumBytes)
                     throw new InvalidDataException(
                         $"Required file '{required.Path}' is {length} bytes; minimum is {required.MinimumBytes}.");
+                if (!string.IsNullOrWhiteSpace(required.PeMachine))
+                    ValidatePeMachine(path, required.Path, required.PeMachine);
             }
 
             var forbiddenSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -126,6 +130,20 @@ internal static class Program
                         $"Forbidden artifact path exists: {forbidden}");
             }
 
+            int artifactFileCount = 0;
+            if (manifest.RequireExactFiles)
+            {
+                string[] actualFiles = EnumerateRegularArtifactFiles(artifactRoot);
+                string[] expectedFiles = manifest.RequiredFiles
+                    .Select(required => Path.GetRelativePath(
+                            artifactRoot,
+                            ResolveContainedPath(artifactRoot, required.Path))
+                        .Replace('\\', '/'))
+                    .ToArray();
+                AssertExactArtifactPaths(expectedFiles, actualFiles);
+                artifactFileCount = actualFiles.Length;
+            }
+
             (int trustEntries, int runtimeEntries) = manifest.TrustManifestProbe == null
                 ? (0, 0)
                 : ValidateTrustManifest(artifactRoot, manifest.TrustManifestProbe);
@@ -140,7 +158,8 @@ internal static class Program
             Console.WriteLine(
                 $"Artifact contract PASS: id={manifest.ManifestId}, version={manifest.ProductVersion}, " +
                 $"requiredFiles={manifest.RequiredFiles.Count}, " +
-                $"forbiddenFiles={manifest.ForbiddenFiles.Count}, trustEntries={trustEntries}, " +
+                $"forbiddenFiles={manifest.ForbiddenFiles.Count}, exactFiles={artifactFileCount}, " +
+                $"trustEntries={trustEntries}, " +
                 $"runtimeTrustEntries={runtimeEntries}, pluginRegistrations={registrations}, " +
                 $"nativePluginProbes={nativeProbes}");
             return 0;
@@ -151,6 +170,53 @@ internal static class Program
             Console.Error.WriteLine(
                 $"Artifact contract FAIL: {cause.GetType().Name}: {cause.Message}");
             return 1;
+        }
+    }
+
+    private static void ValidatePeMachine(
+        string path,
+        string relativePath,
+        string expectedMachine)
+    {
+        ushort expected = expectedMachine switch
+        {
+            "x86" => 0x014c,
+            "x64" => 0x8664,
+            _ => throw new InvalidDataException(
+                $"Required file '{relativePath}' has unsupported PE machine contract " +
+                $"'{expectedMachine}'.")
+        };
+
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read);
+        using var reader = new BinaryReader(stream);
+        if (stream.Length < 0x40 || reader.ReadUInt16() != 0x5a4d)
+            throw new InvalidDataException(
+                $"Required file '{relativePath}' is not a valid PE image.");
+        stream.Position = 0x3c;
+        int peOffset = reader.ReadInt32();
+        if (peOffset < 0x40 || peOffset > stream.Length - 6)
+            throw new InvalidDataException(
+                $"Required file '{relativePath}' has an invalid PE header offset.");
+        stream.Position = peOffset;
+        if (reader.ReadUInt32() != 0x00004550)
+            throw new InvalidDataException(
+                $"Required file '{relativePath}' has an invalid PE signature.");
+        ushort actual = reader.ReadUInt16();
+        if (actual != expected)
+        {
+            string actualName = actual switch
+            {
+                0x014c => "x86",
+                0x8664 => "x64",
+                _ => $"0x{actual:X4}"
+            };
+            throw new InvalidDataException(
+                $"Required file '{relativePath}' PE machine is {actualName}; " +
+                $"contract requires {expectedMachine}.");
         }
     }
 
@@ -291,6 +357,61 @@ internal static class Program
         throw new InvalidDataException(
             $"{description} differ: missing=[{string.Join(", ", missing)}], " +
             $"unexpected=[{string.Join(", ", unexpected)}].");
+    }
+
+    private static void AssertExactArtifactPaths(
+        IEnumerable<string> expectedPaths,
+        IEnumerable<string> actualPaths)
+    {
+        string[] expected = expectedPaths.ToArray();
+        string[] actual = actualPaths.ToArray();
+        Array.Sort(expected, StringComparer.OrdinalIgnoreCase);
+        Array.Sort(actual, StringComparer.OrdinalIgnoreCase);
+        if (expected.SequenceEqual(actual, StringComparer.OrdinalIgnoreCase))
+            return;
+        string[] missing = expected
+            .Except(actual, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string[] unexpected = actual
+            .Except(expected, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        throw new InvalidDataException(
+            $"Exact artifact files differ: missing=[{string.Join(", ", missing)}], " +
+            $"unexpected=[{string.Join(", ", unexpected)}].");
+    }
+
+    private static string[] EnumerateRegularArtifactFiles(string artifactRoot)
+    {
+        var pending = new Stack<DirectoryInfo>();
+        var files = new List<string>();
+        pending.Push(new DirectoryInfo(artifactRoot));
+        while (pending.Count > 0)
+        {
+            DirectoryInfo directory = pending.Pop();
+            if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException(
+                    $"Artifact directory must not be a reparse point: {directory.FullName}");
+
+            foreach (FileSystemInfo entry in directory.EnumerateFileSystemInfos())
+            {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException(
+                        $"Artifact must not contain a reparse point: {entry.FullName}");
+                if (entry is DirectoryInfo childDirectory)
+                {
+                    pending.Push(childDirectory);
+                    continue;
+                }
+                if (entry is not FileInfo)
+                    throw new InvalidDataException(
+                        $"Artifact contains an unsupported filesystem entry: {entry.FullName}");
+
+                string relativePath = Path.GetRelativePath(artifactRoot, entry.FullName)
+                    .Replace('\\', '/');
+                files.Add(relativePath);
+            }
+        }
+        return files.ToArray();
     }
 
     private static bool IsSha256(string value)

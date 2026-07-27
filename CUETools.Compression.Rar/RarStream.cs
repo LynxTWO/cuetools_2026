@@ -95,7 +95,11 @@ namespace CUETools.Compression.Rar
 			{
 				lock (this)
 				{
-					while (_buffer == null && !_eof && !_close)
+					// A backward seek asks the worker to abort the current Test() callback and
+					// reopen the archive. Until that rewind is acknowledged, _eof can still carry
+					// the completed prior pass. Treating that stale EOF as final lets Read return
+					// zero bytes before the worker has a chance to replay the stream.
+					while (_buffer == null && (!_eof || _rewind) && !_close)
 						Monitor.Wait(this);
 					if (_close)
 						throw _ex ?? new IOException("Decompression failed");

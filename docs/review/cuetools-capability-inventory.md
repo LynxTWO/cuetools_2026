@@ -110,7 +110,7 @@ It also packages five x64 native codec dependencies for HDCD, libFLAC, LAME, Wav
 and Monkey's Audio under `plugins/x64`. WAV encode/decode lives in the base codec
 assembly.
 
-The WPF release contract requires 34 paths. Its plugin trust contract contains 14 exact
+The WPF release contract requires 36 paths. Its plugin trust contract contains 14 exact
 hash entries, expects nine managed plugin files, 19 registrations, and five native
 probes. This is the package contract, not a count of every framework DLL in a
 self-contained publish.
@@ -118,7 +118,26 @@ self-contained publish.
 Before managed plugin instantiation, each required native entry is rehashed under
 deny-write/delete sharing and loaded by its approved full path. The returned module
 path is checked, handles remain loaded for process lifetime, and wrapper loaders no
-longer fall back to an unmanifested bare DLL name.
+longer fall back to an unmanifested bare DLL name. Managed discovery requires exact
+`IsAssignableFrom` identity for encoder, decoder, and ripper contracts; a plugin that
+merely defines an interface with the same short name cannot register or append a null
+cast into the runtime list. Compression discovery likewise requires a type marked with
+the plugin attribute to implement the real `ICompressionProvider` contract. HDCD
+registration requires the complete usable filter shape: `HDCDDotNet`, `IAudioDest`,
+`IAudioFilter`, `IFormattable`, and the public `(int,int,int,bool)` constructor.
+
+Both releases include a supported
+[`Install-CUEToolsPlugin.ps1`](../plugin-installation.md) enrollment path for
+third-party plugins. It publishes an exact DLL-only set and SHA-256 manifest under
+`%AppData%\CUETools2026\plugins`, separate from the immutable packaged allowlist.
+Replacement requires `-Replace`, preserves the prior set as a timestamped backup,
+and requires an application restart. This records explicit user approval of exact
+bytes; it is not publisher authentication.
+
+Legacy loose drop-ins are not migrated automatically. A release must be extracted
+cleanly, and any prior third-party DLLs must be prepared as a separate package and
+explicitly enrolled. Unexpected DLLs beside the packaged manifest remain a visible
+integrity failure.
 
 The directly available output families are WAV, FLAC, ALAC/M4A, WavPack, APE, WMA
 lossless/lossy, and MP3. Actual WMA capability still depends on the Windows Media runtime.
@@ -133,9 +152,18 @@ Classic copies the same main codec families and additionally packages:
 - Win32 and x64 TTA C++/CLI wrappers over `ttalib-1.1`;
 - the standalone LossyWAV CLI and library.
 
-The classic release contract requires 63 paths and hash-binds 34 plugin/dependency files.
+The classic release contract requires 97 paths and separately binds plugin/dependency
+identity through the generated trust manifest.
 Only 26 of those files apply to an x64 runtime because the manifest also contains Win32
 variants.
+
+The redirected-output classic AnyCPU solution build now completes with 53 succeeded
+and 0 failed after the declared-net20 tuple and collection fixes. The x64 and Win32
+solution configurations each complete with 2 succeeded, 0 failed, and 59 skipped
+configuration entries; TTA compiles and links for both. The targeted Installer
+Projects build passes 8 projects with 0 failures and produces a 929,792-byte MSI.
+These local results use the Visual Studio 18 resolver with the VS2022 v143 toolset;
+final frozen-output receipts and hosted-image parity remain pending.
 
 The managed FFmpeg wrapper is no longer in either primary package. Its project remains in
 the solution, and a separate manual workflow can build FFmpeg native DLL artifacts, but
@@ -172,18 +200,28 @@ contain an evidenced encoder plus independent decoder contract.
 
 The UI must not give every lossless format the same guarantee:
 
-- WavPack, Monkey's Audio, WMA Lossless, and lossless command encoders verify the
+- WavPack, Monkey's Audio, WMA Lossless, TTA, and lossless command encoders verify the
   finalized staged output through an independent decoder.
 - libFLAC uses its integrated verify mode and checks `finish()`, including final-block
   failures.
-- Flake and ALAC decode and compare each encoded frame.
-- WAV and TTA have no independent whole-output PCM oracle.
-- FLACCL verification defaults off and still has an unresolved exact-length decoder
-  boundary defect. FLACCL is classic-only.
+- Flake, ALAC, and FLACCL decode and compare each encoded frame.
+- Raw WAV has no independent whole-output PCM oracle.
+- FLACCL is classic-only. Its exact-length boundary was fixed with a per-task
+  zero-lookahead verification buffer and exercised on an RTX 3060 across OpenCL modes
+  0-8, two CPU workers, 24-bit input, and an exact 4096-sample boundary. App-hosted
+  settings receive a one-time verify-on migration; the standalone CLI remains
+  explicitly opt-in through `--verify`.
 
-The net47 codec suite currently discovers 109 tests: 107 passed and two expected tests were
-skipped on the 2026-07-26 run. Focused WPF codec-import tests passed 16/16 and
-manifest trust tests passed 13/13.
+Assurance recognition is intentionally exact. Bundled guarantees require the exact
+known settings type, command encoders require their explicit verifier contract, and
+FLACCL requires its exact assembly/type identity. A user-plugin subclass inheriting a
+bundled `DoVerify`/`Verify` property remains an unknown implementation and cannot
+inherit the bundled assurance label.
+
+Aggregate test counts are refreshed by the final canonical gate after all current
+changes land; older suite totals are historical. Evidence-specific focused runs include
+WPF codec-import 16/16 and manifest trust 13/13, plus a real net8 WMA Lossless
+encode/finalize/independent-decode/PCM verification.
 
 ## Encoder settings
 
@@ -194,14 +232,14 @@ The live encoder editor still binds through `EncoderListViewModel` and
 | --- | --- | --- |
 | Flake | WPF + classic | FLAC modes, padding, MD5, predictor/window/stereo controls; verify defaults on. |
 | libFLAC | WPF + classic | modes 0-8, padding, MD5; native verify defaults on and final `finish()` is checked. |
-| FLACCL | classic only | OpenCL settings, MD5, non-subset controls; verify defaults off pending the exact-length fix. |
+| FLACCL | classic only | OpenCL settings, MD5, non-subset controls; exact-length-safe per-frame verification. App-hosted settings migrate verify on once; the standalone CLI remains opt-in. |
 | ALAC | WPF + classic | modes 0-10; verify defaults on; current encoder accepts 44.1 kHz, stereo, 16-bit PCM. |
 | libwavpack | WPF + classic | fast/normal/high/high+, extra mode, MD5, threads; finalized-output verify defaults on. |
 | MACLib | WPF + classic | fast through insane; finalized-output verify defaults on. |
 | WMA Lossless | WPF + classic | OS-enumerated profiles; finalized-output verify defaults on. |
 | WMA lossy | WPF + classic | OS-enumerated VBR/profile settings; no lossless PCM-equality claim. |
-| LAME | WPF + classic | VBR and CBR settings; lossy output, no bit-exact claim. |
-| TTA | classic only | C++/CLI implementation; no independent finalized-output verifier. |
+| LAME | WPF + classic | VBR and CBR settings; lossy output, no bit-exact claim. CUEPlayer Icecast passes its configured MP3 bitrate and joint-stereo values into the writer, and rejects unsupported bitrates before opening the source connection. |
+| TTA | classic only | C++/CLI implementation; x64 and Win32 runtime workers passed 16-bit stereo and 24-bit six-channel encodes, independent managed and ffmpeg PCM-equality decodes, cross-architecture bitstream identity, and failure-preserving finalized-output verification. Packaging remains pending. |
 
 The WPF one-time archival-default migration may select a stronger mode than a codec
 class's type-level default. After migration, the saved user choice wins.
@@ -219,6 +257,15 @@ The current stores are product-specific:
 WPF and classic protect a nonempty proxy password with the platform's Windows data
 protection API before committing settings. A platform that cannot protect a nonempty
 secret fails the save instead of silently dropping it.
+
+The WPF settings dialog edits a detached draft and copies values into the live
+configuration only on Save. Cancel therefore discards edits instead of mutating
+persisted configuration through shared object references.
+
+CUEPlayer Icecast persistence is transactional at the live-consumer boundary: if the
+settings save fails, it restores both the active settings object and the prior
+in-memory protected-password blob. A reported "not saved" outcome therefore cannot
+quietly reconfigure the active stream.
 
 ### General and WPF lifecycle
 
@@ -272,10 +319,31 @@ Implemented:
 - a read-only drive cache probe;
 - measured flush-size cache defeat for secure re-reads;
 - supported/minimum speed probing;
-- adaptive speed requests applied at safe read-window boundaries;
+- adaptive speed requests applied at safe read-window boundaries. Its ascending rung
+  ladder uses a net20-compatible `List<T>`; the 97% cutoff preserves ordering below
+  the appended real maximum;
 - deep recovery with progress-aware retrying and slow-to-floor behavior;
+- slip correlation through a named result/out-parameter API that remains compatible
+  with declared net20 consumers (no `System.ValueTuple` metadata dependency);
 - same-drive Test & Copy with a third read when needed;
 - persisted drive calibration with confirmed/estimated/unconfirmed confidence.
+
+Observed hardware evidence on 2026-07-26:
+
+- H: (`HL-DT-ST BD-RE WH16NS40`, firmware 1.05) completed an 11-track read-only
+  verification and a full 11-track FLAC rip with zero read errors; the rip produced
+  473 MB of track files plus CUE, log, and AccurateRip evidence. The read report
+  recorded AccurateRip 107/424 and CTDB 114/544;
+- H: also completed a clean same-drive Test & Copy run: confirmed 786,432-byte cache
+  flush, two independent full reads (413 seconds verify, 410 seconds encode), 11 FLAC
+  outputs, AR 107/424 and CTDB 114/544 on both reads, and zero reread/failed windows.
+  Both the runtime result and deserialized `rip.verify` asserted lossless output
+  verification was known and performed with decoded-and-compared detail. This proves
+  the mechanism; a final-source no-build rerun is pending because the behavior-preserving
+  `SecureSectorVote` extraction landed afterward;
+- K: (`ASUS BW-16D1HT`, firmware 3.11) completed a 12-track read-only verification
+  with zero read errors, recording AccurateRip 257/707 and CTDB 1345/1464;
+- both drives answered simultaneous SCSI inquiry and TOC reads.
 
 Still not implemented:
 
@@ -285,7 +353,11 @@ Still not implemented:
 
 `DriveCalibrationService` currently writes both overread flags as false with an explicit
 follow-up comment. The data fields existing in `DriveCalibration` do not make the hardware
-probe real.
+probe real. Corrupt calibration JSON fails closed; `DriveViewModel` reports the error and
+clears its busy flag on every exit rather than silently replacing the file or leaving the
+page stuck. Detect/calibrate also reject re-entry while busy or while a rip owns the
+drive, and invalidate command state when work starts and finishes so enabled controls
+match the real operation.
 
 Classic per-drive settings still include read offset, C2 mode, and read command. WPF uses
 its own app setting for Burst/Secure/Paranoid depth and its calibration store for cache and
@@ -313,13 +385,17 @@ The earlier proposal to build one settings service, reuse encoder/decoder view m
 share a shell over `CUESheet` is now implemented in the WPF source. The remaining
 capability work is narrower:
 
-- run the complete WPF artifact and hardware smoke matrix on supported Windows hosts;
-- run the full classic Win32/x64 release matrix on hosted Visual Studio;
+- repeat H: Test & Copy against the final source after `SecureSectorVote` extraction,
+  retain the passing H:/K: optical/mechanism evidence, and add cancellation,
+  disagreement, and other deliberate failure-injection hardware cases;
+- finish frozen 97-path artifact/receipt validation for the passing local classic
+  AnyCPU/x64/Win32/MSI matrix, then repeat it on the pinned hosted VS2022 image;
 - implement and validate lead-in/lead-out overread before exposing those flags as
   calibrated capability;
 - decide whether dual-drive comparison belongs in this product;
-- close the FLACCL exact-length verification defect on real OpenCL hardware;
-- add behavioral coverage for TTA and MP3, and a WMA Lossless run on a capable host.
+- add behavioral coverage for TTA and MP3;
+- retain the passing WMA Lossless and FLACCL hardware integrations in a repeatable
+  release matrix.
 
 ## Historical corrections
 
@@ -332,7 +408,8 @@ are superseded:
 - Overread and dual-drive comparison remain future work.
 - TTA is a classic-only C++/CLI plugin.
 - FlaCuda is deleted.
-- FLACCL is classic-only and its verify path is not ready to default on.
+- FLACCL is classic-only; its exact-length verifier is fixed and app-hosted settings
+  now receive a one-time verify-on migration, while its CLI stays opt-in.
 - The managed FFmpeg wrapper is not shipped by either primary product.
 - Ogg, Opus, Musepack, TAK, and AAC output are conditional external-executable paths,
   not bundled in-process codecs.

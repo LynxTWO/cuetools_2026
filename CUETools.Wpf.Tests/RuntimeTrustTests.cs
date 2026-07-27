@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CUETools.Codecs;
 using CUETools.Codecs.Icecast;
+using CUETools.Compression;
 using CUETools.Processor;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -16,6 +17,88 @@ namespace CUETools.Wpf.Tests;
 [TestClass]
 public sealed class PluginManifestTrustTests
 {
+    [TestMethod]
+    public void PluginDiscovery_RequiresCompressionProviderContract()
+    {
+        Assert.IsTrue(
+            CUEProcessorPlugins.IsCompressionProviderType(
+                typeof(ValidCompressionProvider)));
+        Assert.IsFalse(
+            CUEProcessorPlugins.IsCompressionProviderType(
+                typeof(AttributedImpostor)));
+    }
+
+    [TestMethod]
+    public void PluginDiscovery_RequiresCompleteHdcdFilterContract()
+    {
+        Assert.IsTrue(
+            CUEProcessorPlugins.IsHdcdFilterType(
+                typeof(CUETools.Codecs.HDCD.HDCDDotNet)));
+        Assert.IsFalse(
+            CUEProcessorPlugins.IsHdcdFilterType(
+                typeof(HDCDDotNet)));
+    }
+
+    [TestMethod]
+    public void PluginDiscovery_RequiresExactSharedInterfaceIdentity()
+    {
+        string repoRoot = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
+        Assert.IsNotNull(repoRoot);
+        string discovery = File.ReadAllText(
+            Path.Combine(
+                repoRoot,
+                "CUETools.Processor",
+                "CUEProcessorPlugins.cs"));
+
+        StringAssert.Contains(
+            discovery,
+            "typeof(IAudioEncoderSettings).IsAssignableFrom(type)");
+        StringAssert.Contains(
+            discovery,
+            "typeof(IAudioDecoderSettings).IsAssignableFrom(type)");
+        StringAssert.Contains(
+            discovery,
+            "typeof(ICDRipper).IsAssignableFrom(type)");
+        Assert.IsFalse(
+            discovery.Contains(
+                "GetInterface(typeof(IAudioEncoderSettings).Name)",
+                StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void RejectedUserPluginTypesRestoreRegistryMembershipAndBindings()
+    {
+        int encoderCount = CUEProcessorPlugins.encs.Count;
+        int decoderCount = CUEProcessorPlugins.decs.Count;
+        int compressionProviderCount = CUEProcessorPlugins.arcp.Count;
+        int compressionFormatCount = CUEProcessorPlugins.arcp_fmt.Count;
+        Type hdcd = CUEProcessorPlugins.hdcd;
+        Type ripper = CUEProcessorPlugins.ripper;
+
+        Assert.ThrowsException<InvalidOperationException>(
+            () => CUEProcessorPlugins.AddPluginTypesTransactionally(
+                new[]
+                {
+                    typeof(ValidEncoderSettings),
+                    typeof(ThrowingEncoderSettings)
+                },
+                "transaction test"));
+
+        Assert.AreEqual(encoderCount, CUEProcessorPlugins.encs.Count);
+        Assert.AreEqual(decoderCount, CUEProcessorPlugins.decs.Count);
+        Assert.AreEqual(
+            compressionProviderCount,
+            CUEProcessorPlugins.arcp.Count);
+        Assert.AreEqual(
+            compressionFormatCount,
+            CUEProcessorPlugins.arcp_fmt.Count);
+        Assert.AreSame(hdcd, CUEProcessorPlugins.hdcd);
+        Assert.AreSame(ripper, CUEProcessorPlugins.ripper);
+        Assert.IsFalse(
+            CUEProcessorPlugins.encs.Any(
+                settings => settings is ValidEncoderSettings));
+    }
+
     [TestMethod]
     public void Manifest_ApprovesExactRuntimeDllSet()
     {
@@ -28,6 +111,58 @@ public sealed class PluginManifestTrustTests
         Assert.AreEqual(1, entries.Count);
         Assert.AreEqual("CUETools.Approved.dll", entries[0].RelativePath);
         Assert.AreEqual(Path.GetFullPath(approved), entries[0].FullPath);
+    }
+
+    [CompressionProviderClass("valid-test")]
+    private sealed class ValidCompressionProvider : ICompressionProvider
+    {
+        public Stream Decompress(string file) => Stream.Null;
+        public void Close() { }
+        public IEnumerable<string> Contents => Array.Empty<string>();
+        public event EventHandler<CompressionPasswordRequiredEventArgs> PasswordRequired
+        {
+            add { }
+            remove { }
+        }
+        public event EventHandler<CompressionExtractionProgressEventArgs> ExtractionProgress
+        {
+            add { }
+            remove { }
+        }
+    }
+
+    private sealed class ValidEncoderSettings
+        : CUETools.Codecs.CommandLine.EncoderSettings
+    {
+    }
+
+    private sealed class ThrowingEncoderSettings
+        : CUETools.Codecs.CommandLine.EncoderSettings
+    {
+        public ThrowingEncoderSettings()
+        {
+            // Approved code runs in-process and can touch the legacy public registries. The
+            // The loader must restore even this direct collection side effect before rejecting
+            // the complete user set. Approved code is not sandboxed from other object mutation.
+            CUEProcessorPlugins.encs.Add(new ValidEncoderSettings());
+            throw new InvalidOperationException("deliberate constructor failure");
+        }
+    }
+
+    [CompressionProviderClass("impostor-test")]
+    private sealed class AttributedImpostor
+    {
+    }
+
+    private sealed class HDCDDotNet
+    {
+        public HDCDDotNet(
+            int channels,
+            int sampleRate,
+            int outputBits,
+            bool decode)
+        {
+        }
     }
 
     [TestMethod]
@@ -397,8 +532,17 @@ public sealed class PluginManifestTrustTests
             },
             relativePaths);
 
-        string collectScript = File.ReadAllText(
+        string compatibilityEntryPoint = File.ReadAllText(
             Path.Combine(repoRoot, "collect_files.bat"));
+        Assert.IsTrue(compatibilityEntryPoint.Contains(
+            "eng\\release\\Invoke-ClassicRelease.ps1",
+            StringComparison.Ordinal));
+        Assert.IsFalse(compatibilityEntryPoint.Contains(
+            "-File \"%~dp0eng\\release\\Collect-ClassicArtifacts.ps1",
+            StringComparison.OrdinalIgnoreCase),
+            "The compatibility entry point must not bypass the leased build/receipt orchestrator.");
+        string collectScript = File.ReadAllText(
+            Path.Combine(repoRoot, "eng", "release", "Collect-ClassicArtifacts.ps1"));
         Assert.IsTrue(collectScript.Contains(
             "tools\\Write-PluginManifest.ps1",
             StringComparison.Ordinal));
@@ -597,7 +741,7 @@ public sealed class ExternalEncoderTrustTests
     }
 
     [TestMethod]
-    public void LosslessEncoderWithoutSelfBoundVerifierIsNotUsable()
+    public void LosslessEncoderRequiresAResolvableVerificationDecoder()
     {
         using var tree = new EncoderTree();
         string external = tree.WriteSource(
@@ -613,9 +757,20 @@ public sealed class ExternalEncoderTrustTests
 
         settings.VerificationPath = external;
         settings.VerificationParameters = "-d %I -";
+        Assert.IsTrue(tree.Catalog.IsUsable(tree.Encoder));
+        Assert.AreEqual(
+            Path.GetFullPath(external),
+            settings.VerificationPath,
+            true,
+            "A separately configured verifier must be frozen to one absolute executable.");
+
+        settings.VerificationPath = Path.Combine(
+            tree.ManagedDirectory, "unapproved-decoder.exe");
+        Directory.CreateDirectory(tree.ManagedDirectory);
+        File.WriteAllText(settings.VerificationPath, "not enrolled");
         Assert.IsFalse(
             tree.Catalog.IsUsable(tree.Encoder),
-            "WPF may not advertise a separately resolved, unapproved verifier.");
+            "The separate-verifier path may not bypass managed-directory receipts.");
     }
 
     [TestMethod]

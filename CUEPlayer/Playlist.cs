@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.IO;
@@ -15,9 +14,12 @@ namespace CUEPlayer
 {
 	public partial class Playlist : Form
 	{
+		internal const string EntryDragFormat =
+			"CUEPlayer.PlaylistEntry";
+
 		private CUEConfig _config;
 		private ShellIconMgr _icon_mgr;
-		private DataSet1 dataSet;
+		private PlaylistModel playlistModel;
 
 		public Playlist()
 		{
@@ -27,22 +29,13 @@ namespace CUEPlayer
 		public void Init(frmCUEPlayer parent)
 		{
 			_config = parent.Config;
-			dataSet = parent.DataSet;
+			playlistModel = parent.PlaylistModel;
 			MdiParent = parent;
 			Show();
 			_icon_mgr = parent.IconMgr;
 			listViewTracks.SmallImageList = _icon_mgr.ImageList;
-			foreach (DataSet1.PlaylistRow row in dataSet.Playlist)
-			{
-				try
-				{
-					listViewTracks.Items.Add(ToItem(row));
-				}
-				catch (Exception ex)
-				{
-					Trace.WriteLine("Playlist row skipped (" + ex.GetType().Name + ").");
-				}
-			}
+			foreach (PlaylistEntry entry in playlistModel)
+				listViewTracks.Items.Add(ToItem(entry));
 		}
 
 		public ListView List
@@ -53,31 +46,87 @@ namespace CUEPlayer
 			}
 		}
 
-		public ListViewItem ToItem(DataSet1.PlaylistRow row)
+		public ListViewItem ToItem(PlaylistEntry entry)
 		{
 			ListViewGroup in_group = null;
-			string group_name = (row.artist ?? "") + " - " + (row.album ?? "");
-			foreach (ListViewGroup group in listViewTracks.Groups)
+			string group_name = entry.Artist + " - " + entry.Album;
+			try
 			{
-				if (group.Name == group_name)
+				foreach (ListViewGroup group in listViewTracks.Groups)
 				{
-					in_group = group;
-					break;
+					if (group.Name == group_name)
+					{
+						in_group = group;
+						break;
+					}
+				}
+				if (in_group == null)
+				{
+					in_group = new ListViewGroup(group_name, group_name);
+					listViewTracks.Groups.Add(in_group);
 				}
 			}
-			if (in_group == null)
+			catch (ArgumentException ex)
 			{
-				in_group = new ListViewGroup(group_name, group_name);
-				listViewTracks.Groups.Add(in_group);
+				Trace.WriteLine(
+					"Playlist grouping unavailable (" +
+					ex.GetType().Name + ").");
+				in_group = null;
 			}
-			int iconIndex = _icon_mgr.GetIconIndex(new FileInfo(row.path), true);
-			ListViewItem item = new ListViewItem(row.title, iconIndex);
-			TimeSpan Length = TimeSpan.FromSeconds(row.length);
-			string lenStr = string.Format("{0:d}.{1:d2}:{2:d2}:{3:d2}", Length.Days, Length.Hours, Length.Minutes, Length.Seconds).TrimStart('0', ':', '.');
-			item.SubItems.Add(new ListViewItem.ListViewSubItem(item, lenStr));
-			item.Group = in_group;
-			item.Tag = row;
+			catch (InvalidOperationException ex)
+			{
+				Trace.WriteLine(
+					"Playlist grouping unavailable (" +
+					ex.GetType().Name + ").");
+				in_group = null;
+			}
+
+			Exception iconFailure;
+			ListViewItem item = PlaylistItemFactory.Create(
+				entry,
+				delegate(PlaylistEntry candidate)
+				{
+					return _icon_mgr.GetIconIndex(
+						new FileInfo(candidate.Path),
+						true);
+				},
+				in_group,
+				out iconFailure);
+			if (iconFailure != null)
+			{
+				Trace.WriteLine(
+					"Playlist icon unavailable (" +
+					iconFailure.GetType().Name + ").");
+			}
 			return item;
+		}
+
+		private PlaylistEntry AddAndDisplay(
+			string path,
+			string artist,
+			string title,
+			string album,
+			int lengthSeconds,
+			int trackNumber)
+		{
+			PlaylistEntry entry = playlistModel.Add(
+				path,
+				artist,
+				title,
+				album,
+				lengthSeconds,
+				trackNumber);
+			try
+			{
+				listViewTracks.Items.Add(ToItem(entry));
+			}
+			catch
+			{
+				playlistModel.Remove(entry);
+				throw;
+			}
+			(MdiParent as frmCUEPlayer).PlaylistChanged();
+			return entry;
 		}
 
 		private void exploreToolStripMenuItem_Click(object sender, EventArgs e)
@@ -85,8 +134,13 @@ namespace CUEPlayer
 			if (listViewTracks.SelectedIndices.Count == 1)
 			{
 				int index = listViewTracks.SelectedIndices[0];
-				string path = (listViewTracks.Items[index].Tag as DataSet1.PlaylistRow).path;
-				(MdiParent as frmCUEPlayer).browser.TreeView.SelectedPath = path;
+				PlaylistEntry entry =
+					listViewTracks.Items[index].Tag as PlaylistEntry;
+				if (entry != null)
+				{
+					(MdiParent as frmCUEPlayer).browser.TreeView.SelectedPath =
+						entry.Path;
+				}
 			}
 		}
 
@@ -95,8 +149,16 @@ namespace CUEPlayer
 			while (listViewTracks.SelectedIndices.Count > 0)
 			{
 				int index = listViewTracks.SelectedIndices[0];
-				(listViewTracks.Items[index].Tag as DataSet1.PlaylistRow).Delete();
+				PlaylistEntry entry =
+					listViewTracks.Items[index].Tag as PlaylistEntry;
+				if (entry == null || !playlistModel.Remove(entry))
+				{
+					Trace.WriteLine(
+						"Playlist row identity was unavailable; removal stopped.");
+					return;
+				}
 				listViewTracks.Items.RemoveAt(index);
+				(MdiParent as frmCUEPlayer).PlaylistChanged();
 			}
 		}
 
@@ -108,41 +170,70 @@ namespace CUEPlayer
 				if (files.Length == 1)
 				{
 					string path = files[0];
+					CUESheet cue = null;
 					try
 					{
-						CUESheet cue = new CUESheet(_config);
+						cue = new CUESheet(_config);
 						cue.Open(path);
-						for (int iTrack = 0; iTrack < cue.TrackCount; iTrack++)
-						{
-							DataSet1.PlaylistRow row = dataSet.Playlist.AddPlaylistRow(
-								path,
-								cue.Metadata.Artist,
-								cue.Metadata.Tracks[iTrack].Title,
-								cue.Metadata.Title,
-								(int)cue.TOC[cue.TOC.FirstAudio + iTrack].Length / 75,
-								iTrack + 1);
-							listViewTracks.Items.Add(ToItem(row));
-						}
-						cue.Close();
-						return;
 					}
 					catch (Exception ex)
 					{
+						if (cue != null)
+						{
+							try
+							{
+								cue.Close();
+							}
+							catch (Exception closeFailure)
+							{
+								Trace.WriteLine(
+									"Playlist CUE cleanup failed (" +
+									closeFailure.GetType().Name + ").");
+							}
+						}
+						cue = null;
 						Trace.WriteLine("Playlist CUE probe failed (" +
 							ex.GetType().Name + ").");
 					}
 
-					FileInfo fi = new FileInfo(path);
-					if (fi.Extension != ".cue")
+					if (cue != null)
 					{
-						DataSet1.PlaylistRow row = dataSet.Playlist.AddPlaylistRow(
+						try
+						{
+							for (int iTrack = 0;
+								iTrack < cue.TrackCount;
+								iTrack++)
+							{
+								AddAndDisplay(
+									path,
+									cue.Metadata.Artist,
+									cue.Metadata.Tracks[iTrack].Title,
+									cue.Metadata.Title,
+									(int)cue.TOC[
+										cue.TOC.FirstAudio + iTrack].Length / 75,
+									iTrack + 1);
+							}
+						}
+						finally
+						{
+							cue.Close();
+						}
+						return;
+					}
+
+					FileInfo fi = new FileInfo(path);
+					if (!String.Equals(
+						fi.Extension,
+						".cue",
+						StringComparison.OrdinalIgnoreCase))
+					{
+						AddAndDisplay(
 							path,
 							null, // cue.Artist,
 							null, // cue.Tracks[iTrack].Title,
 							null, // cue.Title,
 							0, // (int)cue.TOC[cue.TOC.FirstAudio + iTrack].Length / 75,
 							0);
-						listViewTracks.Items.Add(ToItem(row));
 					}
 				}
 			}
@@ -166,7 +257,12 @@ namespace CUEPlayer
 		{
 			if (e.Item != null && e.Item is ListViewItem)
 			{
-				DataObject dobj = new DataObject(DataFormats.Serializable, listViewTracks.SelectedIndices);
+				PlaylistEntry entry =
+					(e.Item as ListViewItem).Tag as PlaylistEntry;
+				if (entry == null)
+					return;
+				DataObject dobj = new DataObject();
+				dobj.SetData(EntryDragFormat, false, entry);
 				DragDropEffects effects = DoDragDrop(dobj, DragDropEffects.All);
 				return;
 			}

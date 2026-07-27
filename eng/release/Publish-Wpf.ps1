@@ -65,6 +65,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "License.txt") -Destination $ArtifactDirectory
+$pluginInstaller = Join-Path $PSScriptRoot "Install-CUEToolsPlugin.ps1"
+Copy-Item -LiteralPath $pluginInstaller -Destination $ArtifactDirectory
+$noticesScript = Join-Path $PSScriptRoot "New-ThirdPartyNotices.ps1"
+& $noticesScript `
+    -OutputPath (Join-Path $ArtifactDirectory "THIRD-PARTY-NOTICES.txt") `
+    -Flavor Wpf
 
 $validatorProject = Join-Path $PSScriptRoot "ArtifactValidator\ArtifactValidator.csproj"
 & dotnet run --project $validatorProject --configuration Release -- $ArtifactDirectory $ContractPath

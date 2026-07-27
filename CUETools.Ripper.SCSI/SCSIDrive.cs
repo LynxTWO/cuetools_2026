@@ -724,10 +724,15 @@ namespace CUETools.Ripper.SCSI
                 // not a near-duplicate of the max (e.g. an 8448 "48x" step vs the drive's 8467 max,
                 // whose first step-down would be imperceptible)
                 int[] steps = { 4 * X, 8 * X, 12 * X, 16 * X, 24 * X, 32 * X, 40 * X, 48 * X };
-                var set = new SortedSet<int>();
-                foreach (int s in steps) if (s <= maxKBps * 97 / 100) set.Add(s);
-                set.Add(maxKBps);
-                return new List<int>(set).ToArray();
+                var speeds = new List<int>();
+                // steps is already strictly ascending, and the 97% cutoff guarantees every
+                // retained rung is below the final max, so no set/deduplication is needed.
+                // List<T> also keeps the declared .NET 2.0 target buildable.
+                foreach (int s in steps)
+                    if (s <= maxKBps * 97 / 100)
+                        speeds.Add(s);
+                speeds.Add(maxKBps);
+                return speeds.ToArray();
             }
             catch { return new int[0]; }
         }
@@ -918,14 +923,20 @@ namespace CUETools.Ripper.SCSI
         /// cross-correlate the extra reads against the first. Strong correlation at a nonzero offset =
         /// real audio shifting between reads (recoverable jitter); strong at offset 0 = identical reads
         /// (cache or stable); weak = no shared signal (dead media). Reads audio only, into its OWN
-        /// buffer - does NOT fold into the vote and never modifies rip data. Returns (best offset,
-        /// best correlation strength as 0-100).</summary>
-        private unsafe (int offset, int strengthPct) ClassifySlip(int startSector)
+        /// buffer - does NOT fold into the vote and never modifies rip data. Returns the best
+        /// offset and correlation strength (0-100) through out parameters so the declared net20
+        /// target does not acquire a System.ValueTuple dependency.</summary>
+        private unsafe void ClassifySlip(
+            int startSector,
+            out int bestOffset,
+            out int bestStrengthPct)
         {
+            bestOffset = 0;
+            bestStrengthPct = 0;
             try
             {
                 int chunk = Math.Min(m_max_sectors, _currentEnd - startSector);
-                if (chunk < 1) return (0, 0);
+                if (chunk < 1) return;
                 int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
                 int perSector = 4 * 588 + c2Size;
                 var buf = new byte[chunk * perSector];
@@ -946,19 +957,32 @@ namespace CUETools.Ripper.SCSI
                     return s;
                 }
 
-                if (!RawRead()) return (0, 0);
+                if (!RawRead()) return;
                 short[] reference = AudioShorts();
                 int bestPct = 0, bestOff = 0;
                 for (int k = 0; k < 3; k++)
                 {
                     if (!RawRead()) continue;
-                    var (off, str) = SlipCorrelator.FindOffset(reference, AudioShorts(), 32);
-                    int pct = (int)(str * 100);
-                    if (pct > bestPct) { bestPct = pct; bestOff = off; }
+                    SlipCorrelationResult correlation =
+                        SlipCorrelator.FindOffset(
+                            reference,
+                            AudioShorts(),
+                            32);
+                    int pct = (int)(correlation.Strength * 100);
+                    if (pct > bestPct)
+                    {
+                        bestPct = pct;
+                        bestOff = correlation.Offset;
+                    }
                 }
-                return (bestOff, bestPct);
+                bestOffset = bestOff;
+                bestStrengthPct = bestPct;
             }
-            catch { return (0, 0); }
+            catch
+            {
+                bestOffset = 0;
+                bestStrengthPct = 0;
+            }
         }
 
         public void DisableEjectDisc(bool bDisable)
@@ -1423,28 +1447,16 @@ namespace CUETools.Ripper.SCSI
 				// 4  7  2  4
 				// 6 10     5
 				//16 25    10
-				bool fError = false;
-				const byte c2div = 128;
-				int er_limit = c2div * (1 + _correctionQuality) - 1;
-				// need at least 1 + _correctionQuality good passes
-				for (int iPar = 0; iPar < 4 * 588; iPar++)
-				{
-					long val = UserData[pos, 0, iPar];
-					long val1 = UserData[pos, 1, iPar];
-					byte c2 = C2Count[pos, iPar >> 3];
-					int ave = (pass + 1 - c2) * c2div + c2;
-					int bestValue = 0;
-					for (int i = 0; i < 8; i++)
-					{
-						int sum = ave - 2 * (int)((val & 0xff) * c2div + (val1 & 0xff));
-						int sig = sum >> 31; // bit value
-						fError |= (sum ^ sig) < er_limit;
-						bestValue += sig & (1 << i);
-						val >>= 8;
-						val1 >>= 8;
-					}
-					currentData.Bytes[pos * 4 * 588 + iPar] = (byte)bestValue;
-				}
+				// need at least 1 + _correctionQuality good passes. The pure helper is
+				// deliberately the shipping implementation exercised by TestRipper; the old test
+				// carried a copied, stale variant that ignored the C2 vote plane.
+				bool fError = SecureSectorVote.CorrectSector(
+					UserData,
+					C2Count,
+					currentData.Bytes,
+					pos,
+					pass + 1,
+					_correctionQuality);
                 
                 if (fError) _thisPassErrors++;   // diagnostic (read-only): sector flagged on THIS pass
 
@@ -1610,7 +1622,10 @@ namespace CUETools.Ripper.SCSI
 					{
 						if (++_slipStreak >= 2)
 						{
-							(_slipVerdictOff, _slipVerdictPct) = ClassifySlip(_currentStart);
+							ClassifySlip(
+								_currentStart,
+								out _slipVerdictOff,
+								out _slipVerdictPct);
 							_slipClassified = true; _slipVerdictPending = true;
 						}
 					}

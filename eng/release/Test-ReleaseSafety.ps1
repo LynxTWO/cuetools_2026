@@ -188,6 +188,60 @@ try {
             $publishTreeGuardIndex -lt $publishRemoveIndex) `
         "Publish-Wpf.ps1 does not guard the full artifact tree before recursive cleanup."
 
+    $noticesSource = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "New-ThirdPartyNotices.ps1") -Raw
+    Assert-True `
+        ($noticesSource.Contains("Test-SameOrDescendantPath") -and
+            $noticesSource.Contains("Assert-NoReparsePointInExistingPath")) `
+        "New-ThirdPartyNotices.ps1 does not constrain and inspect its output path."
+    $pluginInstallerSource = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "Install-CUEToolsPlugin.ps1") -Raw
+    Assert-True `
+        ($pluginInstallerSource.Contains("Assert-TreeHasNoReparsePoints") -and
+            $pluginInstallerSource.Contains(".plugins-stage-") -and
+            $pluginInstallerSource.Contains("plugins-backup-") -and
+            $pluginInstallerSource.Contains("[IO.Directory]::Move")) `
+        "Install-CUEToolsPlugin.ps1 does not retain the staged, reparse-refusing publication contract."
+    Assert-True `
+        ($publishSource.Contains("Install-CUEToolsPlugin.ps1")) `
+        "Publish-Wpf.ps1 does not copy the supported user plugin installer."
+    $classicCollectionSource = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "..\..\collect_files.bat") -Raw
+    Assert-True `
+        ($classicCollectionSource.Contains("Invoke-ClassicRelease.ps1") -and
+            -not $classicCollectionSource.Contains(
+                "Collect-ClassicArtifacts.ps1") -and
+            $classicCollectionSource.IndexOf(
+                "xcopy",
+                [StringComparison]::OrdinalIgnoreCase) -lt 0) `
+        "collect_files.bat does not exclusively delegate to the classic release orchestrator."
+    $classicCollectionPlan = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "classic-win.collection.json") -Raw |
+        ConvertFrom-Json
+    Assert-True `
+        (@($classicCollectionPlan.files |
+            Where-Object {
+                $_.source -eq "eng/release/Install-CUEToolsPlugin.ps1" -and
+                $_.destination -eq "Install-CUEToolsPlugin.ps1"
+            }).Count -eq 1) `
+        "The classic collection plan does not copy the supported user plugin installer."
+    foreach ($contractName in @(
+        "wpf-win-x64.manifest.json",
+        "classic-win.manifest.json")) {
+        $contract = Get-Content -LiteralPath (
+            Join-Path $PSScriptRoot $contractName) -Raw | ConvertFrom-Json
+        Assert-True `
+            (@($contract.requiredFiles.path) -contains "THIRD-PARTY-NOTICES.txt") `
+            "$contractName does not require the generated third-party notices."
+        Assert-True `
+            (@($contract.requiredFiles.path) -contains "Install-CUEToolsPlugin.ps1") `
+            "$contractName does not require the supported user plugin installer."
+    }
+
+    & (Join-Path $PSScriptRoot "Test-Install-CUEToolsPlugin.ps1")
+    & (Join-Path $PSScriptRoot "Test-ClassicArtifactCollection.ps1")
+    & (Join-Path $PSScriptRoot "Test-ArtifactValidatorExactFiles.ps1")
+
     $provenanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "New-Provenance.ps1") -Raw
     Assert-True `
         ($provenanceSource.Contains("Test-SameOrDescendantPath")) `

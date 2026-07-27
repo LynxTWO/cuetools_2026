@@ -21,12 +21,19 @@ public sealed class AlbumOutputTransaction : IDisposable
     internal const string ReservationMagic = "CUETOOLS_OUTPUT_RESERVATION_V1";
     internal const string CompletionMarkerName = ".cuetools-complete";
     internal const string OwnershipMarkerName = ".cuetools-stage-owner";
+    internal const string ProofPendingMarkerName =
+        ".cuetools-output-proof-pending";
+    internal const string ProofFailureMarkerName =
+        ".cuetools-output-proof-failed";
     internal const string StageOwnershipMagic = "CUETOOLS_OUTPUT_STAGE_V1";
+    internal const string ProofPendingMagic =
+        "CUETOOLS_OUTPUT_PROOF_PENDING_V1";
 
     private FileStream? _reservation;
     private readonly string _baseDirectory;
     private readonly string _ownerToken;
     private bool _published;
+    private bool _publicationFinalized;
     private bool _preserveStaging;
     private bool _disposed;
 
@@ -48,7 +55,7 @@ public sealed class AlbumOutputTransaction : IDisposable
     public string DestinationDirectory { get; }
     public string StagingDirectory { get; private set; }
     internal string ReservationPath { get; }
-    public bool IsPublished => _published;
+    public bool IsPublished => _publicationFinalized;
 
     /// <summary>
     /// Atomically reserve the requested relative album directory, or a numbered sibling when that
@@ -81,9 +88,6 @@ public sealed class AlbumOutputTransaction : IDisposable
             // the selected output tree, and a concurrently replaced parent fails closed.
             RequireSafeDirectoryAncestry(baseFull, parent);
 
-            if (Directory.Exists(destination) || File.Exists(destination))
-                continue;
-
             string id = ReservationId(destination);
             string reservationPath = Path.Combine(parent, ".cuetools-reserve-" + id);
             FileStream? reservation = TryAcquireReservation(reservationPath);
@@ -92,12 +96,17 @@ public sealed class AlbumOutputTransaction : IDisposable
 
             try
             {
-                // A non-participating writer may have created the destination between our probe and
-                // lock acquisition. Recheck while holding the reservation and choose another name.
+                // A crashed proof-bound publication retains both its owner and pending markers.
+                // Recover it only while holding the matching destination reservation. A normal
+                // completed album or a lookalike remains untouched and selects a numbered sibling.
                 if (Directory.Exists(destination) || File.Exists(destination))
                 {
-                    ReleaseReservation(ref reservation);
-                    continue;
+                    if (!TryQuarantinePendingPublication(destination, parent, id) ||
+                        Directory.Exists(destination) || File.Exists(destination))
+                    {
+                        ReleaseReservation(ref reservation);
+                        continue;
+                    }
                 }
 
                 // A normal process exit removes its reservation with DeleteOnClose. Any matching
@@ -155,6 +164,17 @@ public sealed class AlbumOutputTransaction : IDisposable
     /// </summary>
     public string Publish()
     {
+        string destination = PublishPendingValidation();
+        CompletePublication();
+        return destination;
+    }
+
+    /// <summary>
+    /// Moves the complete stage into place but retains the reservation and ownership marker while
+    /// the caller validates proof handles against the destination name.
+    /// </summary>
+    internal string PublishPendingValidation()
+    {
         ThrowIfDisposed();
         if (_published)
             throw new InvalidOperationException("This album transaction has already been published.");
@@ -184,8 +204,50 @@ public sealed class AlbumOutputTransaction : IDisposable
             stream.Flush(true);
         }
 
+        string pendingMarker = Path.Combine(
+            StagingDirectory,
+            ProofPendingMarkerName);
+        using (var stream = new FileStream(
+            pendingMarker,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.Read))
+        using (var writer = new StreamWriter(
+            stream,
+            new UTF8Encoding(false),
+            1024,
+            leaveOpen: true))
+        {
+            writer.Write(ProofPendingText(
+                ReservationId(DestinationDirectory),
+                _ownerToken));
+            writer.Flush();
+            stream.Flush(true);
+        }
+
         Directory.Move(StagingDirectory, DestinationDirectory);
         _published = true;
+        StagingDirectory = DestinationDirectory;
+        return DestinationDirectory;
+    }
+
+    /// <summary>Commits a pending publication only after its destination-bound checks pass.</summary>
+    internal void CompletePublication()
+    {
+        ThrowIfDisposed();
+        if (!_published)
+            throw new InvalidOperationException(
+                "This album transaction has not been moved into place.");
+        if (_publicationFinalized)
+            return;
+
+        _publicationFinalized = true;
+        try { File.Delete(Path.Combine(DestinationDirectory, ProofPendingMarkerName)); }
+        catch
+        {
+            // Removing either transaction marker prevents crash recovery from mistaking this
+            // already validated publication for a pending one.
+        }
         try { File.Delete(Path.Combine(DestinationDirectory, OwnershipMarkerName)); }
         catch
         {
@@ -201,7 +263,75 @@ public sealed class AlbumOutputTransaction : IDisposable
             // after that point must not make callers report a failed rip or invite a duplicate
             // retry when the complete album is already visible.
         }
-        return DestinationDirectory;
+    }
+
+    /// <summary>
+    /// Marks and moves a publication whose destination-bound proof failed into an explicit
+    /// incomplete sibling. Failure to move still leaves the failure marker at the destination and
+    /// never turns the operation into a reported success.
+    /// </summary>
+    internal string QuarantinePublishedProofFailure()
+    {
+        ThrowIfDisposed();
+        if (!_published || _publicationFinalized)
+            throw new InvalidOperationException(
+                "Only a pending publication can be quarantined.");
+
+        string retained = DestinationDirectory;
+        try
+        {
+            string marker = Path.Combine(
+                DestinationDirectory,
+                ProofFailureMarkerName);
+            using (var stream = new FileStream(
+                marker,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.Read))
+            using (var writer = new StreamWriter(
+                stream,
+                new UTF8Encoding(false),
+                1024,
+                leaveOpen: true))
+            {
+                writer.WriteLine("CUETOOLS_OUTPUT_PROOF_FAILED_V1");
+                writer.Flush();
+                stream.Flush(true);
+            }
+        }
+        catch
+        {
+            // The caller still reports failure. The same-volume rename below is the stronger
+            // quarantine signal when another process did not lock the destination.
+        }
+
+        string? parent = Path.GetDirectoryName(DestinationDirectory);
+        if (!string.IsNullOrEmpty(parent))
+        {
+            string incomplete = Path.Combine(
+                parent,
+                ".cuetools-incomplete-published-" +
+                DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" +
+                Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.Move(DestinationDirectory, incomplete);
+                retained = incomplete;
+                StagingDirectory = incomplete;
+            }
+            catch
+            {
+                StagingDirectory = DestinationDirectory;
+            }
+        }
+
+        _preserveStaging = true;
+        try { ReleaseReservation(); }
+        catch
+        {
+            // The retained directory is already explicitly failed or incomplete.
+        }
+        return retained;
     }
 
     /// <summary>
@@ -213,7 +343,9 @@ public sealed class AlbumOutputTransaction : IDisposable
     {
         ThrowIfDisposed();
         if (_published)
-            return DestinationDirectory;
+            return _preserveStaging
+                ? StagingDirectory
+                : DestinationDirectory;
         RequireSafeDirectoryAncestry(_baseDirectory, StagingDirectory);
         RequireOwnership();
         if (!HasPayloadFiles())
@@ -423,6 +555,33 @@ public sealed class AlbumOutputTransaction : IDisposable
         }
     }
 
+    private static bool TryQuarantinePendingPublication(
+        string destination,
+        string parent,
+        string reservationId)
+    {
+        if (!HasRecoverableStageMarker(destination, reservationId) ||
+            !HasMatchingProofPendingMarker(destination, reservationId))
+            return false;
+
+        string incomplete = Path.Combine(
+            parent,
+            ".cuetools-incomplete-published-recovered-" +
+            DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" +
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.Move(destination, incomplete);
+            return true;
+        }
+        catch
+        {
+            // Leave the pending destination and choose another name. It is safer than moving or
+            // deleting a directory whose ownership can no longer be proven at the operation.
+            return false;
+        }
+    }
+
     private static bool HasRecoverableStageMarker(string stage, string reservationId)
     {
         try
@@ -445,9 +604,45 @@ public sealed class AlbumOutputTransaction : IDisposable
         }
     }
 
+    private static bool HasMatchingProofPendingMarker(
+        string stage,
+        string reservationId)
+    {
+        try
+        {
+            string ownerPath = Path.Combine(stage, OwnershipMarkerName);
+            string pendingPath = Path.Combine(stage, ProofPendingMarkerName);
+            if (!File.Exists(pendingPath) ||
+                (File.GetAttributes(pendingPath) & FileAttributes.ReparsePoint) != 0)
+                return false;
+
+            string[] ownerLines = File.ReadAllLines(ownerPath);
+            string[] pendingLines = File.ReadAllLines(pendingPath);
+            return ownerLines.Length == 3
+                && pendingLines.Length == 3
+                && string.Equals(pendingLines[0], ProofPendingMagic,
+                    StringComparison.Ordinal)
+                && string.Equals(pendingLines[1], reservationId,
+                    StringComparison.Ordinal)
+                && string.Equals(pendingLines[2], ownerLines[2],
+                    StringComparison.Ordinal)
+                && Guid.TryParseExact(pendingLines[2], "N", out _);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string StageOwnershipText(string reservationId, string ownerToken)
     {
         return StageOwnershipMagic + Environment.NewLine + reservationId +
+            Environment.NewLine + ownerToken;
+    }
+
+    private static string ProofPendingText(string reservationId, string ownerToken)
+    {
+        return ProofPendingMagic + Environment.NewLine + reservationId +
             Environment.NewLine + ownerToken;
     }
 

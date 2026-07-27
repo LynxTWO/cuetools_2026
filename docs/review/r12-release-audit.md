@@ -95,8 +95,9 @@ and reports `ProductVersion 2026.1.0+<commit>`.
 - `ReportStore` is session-only by design; the persistent record is `history.json`.
 - `DriveCalibration`'s JSON store shares the old silent-overwrite pattern; it is not yet on a
   shipping path (hardware calibration lands with the rip-accuracy program). Flagged for that work.
-- unrar 6.11 (D3) stays deferred: hygiene-only per the adversarial pass, swap needs a RAR
-  round-trip harness.
+- UnRAR D3 is now closed: official signed 7.23.0 x86/x64 DLLs expose the required
+  ABI and the production provider/stream passed RARLAB's real test archive under
+  both process architectures. The historical 6.11 import evidence is retained.
 
 ## Next phase (owner-requested, after this release)
 

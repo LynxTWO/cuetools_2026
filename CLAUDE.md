@@ -11,12 +11,31 @@ progress documents for it belong here, under `docs/review/`.
 
 ## Build and test
 
-- .NET Framework 4.7 solution built with VS 2022 Build Tools plus the net47 reference
-  assembly package; no full Visual Studio on this machine. MSTest v2 for the migrated test
-  projects. See `docs/review/` for the recorded green baseline and per-project quirks
-  (CUEControls resgen, AccurateRip net20 flavor).
-- Prefer `dotnet build` per project; some legacy GUI projects only build under full MSBuild
-  and are deferred.
+- .NET Framework 4.7 solution builds use VS 2022 Build Tools 17.14 or Visual Studio
+  Community 2026 18.8, both installed on this workstation. Record the exact host,
+  toolset, target framework, configuration, and platform for each receipt; do not
+  infer them from whichever `MSBuild.exe` happens to resolve first.
+- MSTest v2 is used for the migrated test projects. See `docs/review/` for the
+  recorded green baseline and per-project quirks (CUEControls resgen, AccurateRip
+  net20 flavor).
+- Prefer `dotnet build` per project. Use explicit full-MSBuild or `devenv.com` paths
+  for legacy GUI, C++/CLI, and installer targets, and record any target not exercised.
+- Run classic release clean/build/receipt/collect/validate through
+  `eng/release/Invoke-ClassicRelease.ps1`. A clean staging directory does not prove
+  fresh compiled inputs. The orchestrator holds one repo-wide lease across recovery,
+  exact-leaf cleanup, build, receipt, collection, and publication. Do not bypass it
+  through the receipt or collector helpers.
+- Classic receipts must account for every consumed native binary and ignored source
+  input. They bind the expanded Monkey's Audio tree to its archive, and bind the exact
+  Release|x64 and Release|Win32 command logs plus warning-baseline hash before
+  collection. A new warning retains the intent and logs and must not publish.
+- Monkey's Audio is pinned to the official 13.20 SDK archive. Prepare and build it
+  through `eng/ci/Build-NativeDependencies.ps1`; the script byte-validates all 423
+  archive files plus four hash-pinned CUETools wrapper overrides before building
+  the Win32 and x64 outputs.
+- Do not assume that a Windows file handle opened with delete sharing permits its
+  parent directory to move. Assurance-bearing publication must revalidate the exact
+  destination before releasing its reservation or reporting success.
 
 ## Writing rules for all human-facing text
 

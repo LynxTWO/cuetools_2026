@@ -70,7 +70,7 @@
                        TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"/>
             </Border>
 
-            <!-- tamper-evident footer -->
+            <!-- reproducible report checksum (not a signature) -->
             <Border Background="{DynamicResource Glass}" BorderBrush="{StaticResource Teal}" BorderThickness="1" CornerRadius="8" Padding="14,11" Margin="0,14,0,0">
               <StackPanel>
                 <DockPanel>

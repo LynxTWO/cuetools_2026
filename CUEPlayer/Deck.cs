@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Threading;
@@ -16,7 +15,7 @@ namespace CUEPlayer
 	{
 		IAudioSource playingSource = null;
 		CUESheet playingCue = null;
-		int playingRow = -1;
+		PlaylistEntry playingEntry = null;
 		long playingStart = 0;
 		long playingFinish = 0;
 		Thread playThread;
@@ -65,19 +64,26 @@ namespace CUEPlayer
 			{
 				needUpdate = false;
 
-				DataSet1 dataSet = (MdiParent as frmCUEPlayer).DataSet;
+				PlaylistModel playlist =
+					(MdiParent as frmCUEPlayer).PlaylistModel;
 
 				mediaSlider.Maximum = (int)(playingFinish - playingStart);
 				mediaSlider.Value = 0;
-				textBoxArtist.Text = playingRow < 0 ? "" : dataSet.Playlist[playingRow].artist;
-				textBoxAlbum.Text = playingRow < 0 ? "" : dataSet.Playlist[playingRow].album;
-				textBoxTitle.Text = playingRow < 0 ? "" : dataSet.Playlist[playingRow].title;
+				textBoxArtist.Text =
+					playingEntry == null ? "" : playingEntry.Artist;
+				textBoxAlbum.Text =
+					playingEntry == null ? "" : playingEntry.Album;
+				textBoxTitle.Text =
+					playingEntry == null ? "" : playingEntry.Title;
 				textBoxDuration.Text = "";
 				pictureBox.Image = playingCue != null && playingCue.Cover != null ? playingCue.Cover : pictureBox.InitialImage;
 
-				if (nextDeck != null && nextDeck.playingSource == null && playingRow >= 0 && playingRow < dataSet.Playlist.Rows.Count - 1)
+				PlaylistEntry nextEntry = playlist.GetNext(playingEntry);
+				if (nextDeck != null &&
+					nextDeck.playingSource == null &&
+					nextEntry != null)
 				{
-					nextDeck.LoadDeck(playingRow + 1);
+					nextDeck.LoadDeck(nextEntry);
 				}
 
 				if (playThread != null)
@@ -130,7 +136,7 @@ namespace CUEPlayer
 							}
 							playingFinish = 0;
 							playingStart = 0;
-							playingRow = -1;
+							playingEntry = null;
 							if (stopNow || nextDeck == null || nextDeck.playingSource == null)
 							{
 								writer.Flush();
@@ -144,13 +150,13 @@ namespace CUEPlayer
 							playingCue = nextDeck.playingCue;
 							playingStart = nextDeck.playingStart;
 							playingFinish = nextDeck.playingFinish;
-							playingRow = nextDeck.playingRow;
+							playingEntry = nextDeck.playingEntry;
 							needUpdate = true;
 							nextDeck.playingSource = null;
 							nextDeck.playingCue = null;
 							nextDeck.playingStart = 0;
 							nextDeck.playingFinish = 0;
-							nextDeck.playingRow = -1;
+							nextDeck.playingEntry = null;
 							nextDeck.needUpdate = true;
 						}
 						if (buff == null || buff.PCM.SampleRate != playingSource.PCM.SampleRate || buff.PCM.ChannelCount != playingSource.PCM.ChannelCount || buff.PCM.BitsPerSample != playingSource.PCM.BitsPerSample)
@@ -176,13 +182,13 @@ namespace CUEPlayer
 			playThread = null;
 		}
 
-		internal void LoadDeck(int row)
+		internal void LoadDeck(PlaylistEntry entry)
 		{
+			if (entry == null)
+				throw new ArgumentNullException("entry");
 			CUEConfig _config = (MdiParent as frmCUEPlayer).Config;
-			DataSet1 dataSet = (MdiParent as frmCUEPlayer).DataSet;
-			Playlist playlist = (MdiParent as frmCUEPlayer).wndPlaylist;
-			string path = dataSet.Playlist[row].path;
-			int track = dataSet.Playlist[row].track;
+			string path = entry.Path;
+			int track = entry.TrackNumber;
 
 			try
 			{
@@ -193,8 +199,7 @@ namespace CUEPlayer
 				playingSource = new AudioPipe(playingSource, 0x2000);
 				playingStart = playingSource.Position;
 				playingFinish = playingStart + (long)playingCue.TOC[track].Length * 588;
-				playingRow = row;
-				//playlist.List.Items[playingRow].BackColor = Color.AliceBlue;
+				playingEntry = entry;
 				needUpdate = true;
 				UpdateDeck();
 			}
@@ -203,12 +208,26 @@ namespace CUEPlayer
 				playingStart = playingFinish = 0;
 				playingCue = null;
 				playingSource = null;
+				playingEntry = null;
 				return;
 			}
 		}
 
 		private void buttonPlay_Click(object sender, EventArgs e)
 		{
+			if (playingSource == null)
+			{
+				Playlist playlist = (MdiParent as frmCUEPlayer).wndPlaylist;
+				if (playlist.List.SelectedItems.Count == 0)
+					return;
+				PlaylistEntry selectedEntry =
+					playlist.List.SelectedItems[0].Tag as PlaylistEntry;
+				if (selectedEntry == null)
+					return;
+				LoadDeck(selectedEntry);
+				if (playingSource == null)
+					return;
+			}
 			if (playThread == null)
 			{
 				playThread = new Thread(PlayThread);
@@ -216,11 +235,6 @@ namespace CUEPlayer
 				playThread.IsBackground = true;
 				playThread.Name = Text;
 				playThread.Start();
-			}
-			if (playingSource == null)
-			{
-				Playlist playlist = (MdiParent as frmCUEPlayer).wndPlaylist;
-				LoadDeck(playlist.List.SelectedIndices[0]);
 			}
 			mixer.BufferPlaying(iSource, true);
 		}
@@ -246,7 +260,7 @@ namespace CUEPlayer
 				}
 				playingFinish = 0;
 				playingStart = 0;
-				playingRow = -1;
+				playingEntry = null;
 				needUpdate = true;
 				UpdateDeck();
 			}
@@ -282,7 +296,7 @@ namespace CUEPlayer
 
 		private void Deck_DragOver(object sender, DragEventArgs e)
 		{
-			if (e.Data.GetDataPresent(DataFormats.Serializable))
+			if (e.Data.GetDataPresent(Playlist.EntryDragFormat))
 			{
 				e.Effect = DragDropEffects.Copy;
 			}
@@ -290,13 +304,13 @@ namespace CUEPlayer
 
 		private void Deck_DragDrop(object sender, DragEventArgs e)
 		{
-			if (e.Data.GetDataPresent(DataFormats.Serializable))
+			if (e.Data.GetDataPresent(Playlist.EntryDragFormat))
 			{
-				ListView.SelectedIndexCollection indexes = 
-					e.Data.GetData(DataFormats.Serializable) as ListView.SelectedIndexCollection;
-				if (playThread == null && indexes != null)
+				PlaylistEntry entry =
+					e.Data.GetData(Playlist.EntryDragFormat) as PlaylistEntry;
+				if (playThread == null && entry != null)
 				{
-					LoadDeck(indexes[0]);
+					LoadDeck(entry);
 				}
 			}
 		}

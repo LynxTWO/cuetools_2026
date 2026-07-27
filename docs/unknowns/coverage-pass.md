@@ -6,47 +6,41 @@ as covered.
 
 ## Entries
 
-### Legacy TestRipper is non-hermetic and excluded
-
-- **Area or file:** `CUETools/TestRipper/TestRipper.csproj`,
-  `CUETools/TestRipper/CDDriveReaderTest.cs`
-- **Concern:** the only test initializes from 64 raw audio/C2 captures under
-  hardcoded `Y:\Temp\dbg\960` paths and uses the retired VS2010 QualityTools
-  adapter.
-- **Why it matters:** the historical C2 voting experiment cannot run from a
-  clean checkout and must not be confused with current automated ripper
-  coverage.
-- **Evidence found so far:** source and
-  `eng/ci/test-suites.json` were inspected. The project is explicitly excluded
-  with the same reason. The separate modern `CUETools.Ripper.Tests` suite
-  discovered and passed 8/8 tests locally, but does not load these captures or
-  exercise a physical drive.
-- **Confidence:** verified
-- **Likely owner:** upstream/repo maintainer
-- **Next best check:** replace the capture dependency with deterministic
-  generated fixtures and a current test adapter, or remove the experiment with
-  an explicit owner decision.
-- **Risk level:** medium
-- **Status:** open
-
-### Hardware and availability-gated runtime matrix
+### Residual hardware and availability-gated runtime matrix
 
 - **Area or file:** `CUETools.Ripper.SCSI/`, `CUETools.Codecs.WMA/`,
   `CUETools.Codecs.Icecast/`, `CUETools.Codecs.FLACCL/`,
   `CUETools.Wpf/`
-- **Concern:** local automated tests cannot cover physical optical drives, every
-  Windows Media codec installation, real Icecast TLS/auth servers, Mono's
-  private `HttpWebRequest` behavior, or OpenCL devices.
+- **Concern:** one host/device/service success path cannot cover optical-drive failure
+  behavior, every Windows Media installation, Icecast TLS/certificate and Mono
+  behavior, or every OpenCL vendor/driver.
 - **Why it matters:** these are live product paths whose correctness depends on
   hardware, installed codecs, service behavior, or runtime internals.
-- **Evidence found so far:** service-level tests and source contracts pass. The
-  real WMA round trip was one of two expected codec skips; Icecast integration,
-  physical Test & Copy/repair, and OpenCL matrices were not available locally.
-- **Confidence:** unknown
+- **Evidence found so far:** availability is no longer the broad blocker. A real net8
+  WMA Lossless encode/finalize/independent-decode/PCM verification passed. Disposable
+  Icecast 2.5.0 passed auth rejection, source streaming, exact metadata, listener
+  bytes, flush/close, and teardown. FLACCL passed on an RTX 3060 across OpenCL modes
+  0-8, two CPU workers, 24-bit input, and the exact 4096-sample boundary. H: and K:
+  completed full-disc read-only verification with zero read errors, H: completed a
+  full 11-track FLAC rip, and both drives answered simultaneous SCSI inquiry/TOC. H:
+  also passed same-drive Test & Copy with a confirmed 786,432-byte flush, two
+  independent full reads, matching AR 107/424 and CTDB 114/544, zero reread/failed
+  windows, 11 FLAC outputs, and result/`rip.verify` proof that lossless output
+  verification decoded and compared the encoded files.
+  A deliberately damaged known image also passed opt-in CTDB repair, independent
+  post-verification, and source-hash preservation. Remaining gaps are failure
+  injection/cancellation/disagreement, cross-vendor OpenCL, Icecast HTTPS/certificate
+  and Mono, and release-lane repeatability. A first H: attempt's transient SCSI
+  ASC/ASCQ 08/0A during an overlapping build is retained as diagnostic evidence; the
+  isolated rerun crossed the same Copy phase and passed. Because the
+  behavior-preserving extraction of the same shipping vote into `SecureSectorVote`
+  landed afterward, a final-source no-build H: rerun remains pending.
+- **Confidence:** medium
 - **Likely owner:** release/test maintainer
-- **Next best check:** maintain a named manual/integration matrix with a known
-  disc/image, WMA-capable Windows host, controlled Icecast TLS/auth endpoint,
-  supported Mono target if retained, and representative OpenCL hardware.
+- **Next best check:** complete the final-source H: rerun, retain the observed fixtures
+  in a named repeatable matrix, then add optical cancellation/disagreement/error media,
+  a second OpenCL vendor, Icecast HTTPS/certificate cases, and the supported Mono
+  target if retained.
 - **Risk level:** high
 - **Status:** open
 
@@ -59,9 +53,13 @@ as covered.
   classic artifact.
 - **Why it matters:** tool/image drift can leave a documented gate unreachable
   or produce a different artifact than local checks.
-- **Evidence found so far:** local results discovered 388 tests, passed 381,
-  failed 0, and skipped 7 expected. Workflow steps and discovery/skip gates are
-  present. A current successful hosted run has not been supplied.
+- **Evidence found so far:** workflow steps and discovery/skip gates are present.
+  All four workflows parse and pass official `actionlint` v1.7.12 locally. Aggregate
+  suite totals are being refreshed by the final canonical gate. A current successful
+  hosted run has not been supplied. Local classic evidence now includes AnyCPU 53/0,
+  x64 and Win32 2/0 with 59 skipped configuration entries each, TTA compiled/linked
+  for both, and a targeted Installer Projects 8/0 pass that produced a
+  929,792-byte MSI. That local resolver/toolset combination is not the hosted image.
 - **Confidence:** unknown
 - **Likely owner:** CI/release maintainer
 - **Next best check:** run both workflows from the intended branch and retain
@@ -69,24 +67,34 @@ as covered.
 - **Risk level:** high
 - **Status:** open
 
-### ProgressODoom and ttalib provenance
+### ProgressODoom and residual ttalib provenance
 
 - **Area or file:** `ProgressODoom/`, `ttalib-1.1/`
 - **Concern:** both appear to be mirrored third-party source, but the upstream
   version and local modifications are not recorded.
 - **Why it matters:** mirrored code should follow upstream security/correctness
   fixes and should not be treated as fully first-party reviewed.
-- **Evidence found so far:** directory/project shape and TTA version suffix;
-  no authoritative upstream diff is recorded.
-- **Confidence:** inferred
+- **Evidence found so far:** TTA 1.1 is traced to the official SourceForge archive
+  and its exact reviewable 2009 import delta. The remaining TTA gap is a checksum
+  captured contemporaneously with that import. ProgressODoom still lacks an
+  authoritative upstream revision/diff record. Separate x64/Win32 TTA C++/CLI builds
+  pass, but runtime round-trip/corpus coverage is still needed before changing the
+  observed packing-state and sample-count-narrowing warnings.
+- **Confidence:** medium
 - **Likely owner:** dependency/release maintainer
-- **Next best check:** identify authoritative upstream revisions, diff local
-  changes, and record mirror-versus-owned classification and artifact reach.
+- **Next best check:** preserve the recovered TTA evidence and resolve the remaining
+  historical checksum gap if an immutable source can be found; identify
+  ProgressODoom's authoritative upstream revision and diff local changes.
 - **Risk level:** low
 - **Status:** open
 
 ## Closed items
 
+- **TestRipper production-vote fixture:** closed 2026-07-26. The old private
+  `Y:\Temp` captures and stale copied C2 algorithm were replaced by SDK net47 tests
+  against the same production `SecureSectorVote.CorrectSector` helper as `SCSIDrive`.
+  The canonical run passed all 3 deterministic recovery/confidence/C2-plane tests
+  with 0 failures and 0 skips.
 - **CUEPlayer and eac3ui internals unscanned:** closed 2026-07-02. Their main
   forms/entrypoints, settings, Icecast threading, typed DataSet, and eac3to
   process boundary were inventoried. Later credential and endpoint hardening is
@@ -95,11 +103,10 @@ as covered.
   now part of the project. The suite discovered eight tests, passed seven, and
   skipped only the deliberately ignored `CTDBResponseTest` tied to
   `Z:\ctdb.xml`.
-- **Do current automated suites pass locally?:** closed for the recorded
-  2026-07-26 run. Codecs 107/109 with 2 skips, parity 18/22 with 4 skips,
-  Processor 7/8 with 1 skip, modern ripper 8/8, and WPF 241/241. Aggregate: 388
-  discovered, 381 passed, 0 failed, 7 expected skipped. This dated result is not
-  a claim about future commits or excluded environments.
+- **Do current automated suites pass locally?:** the earlier 2026-07-26
+  388/381/7 run is retained only as historical evidence. Current aggregate counts
+  are refreshed by the final canonical gate after all changes land; no stale total is
+  promoted to current evidence.
 - **FlaCuda/CUDA.NET release reachability:** closed 2026-07-23. FlaCuda projects
   and their CUDA.NET dependency were deleted in commit `4e1b02d`; they have no
   current scope or release reachability.

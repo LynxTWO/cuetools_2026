@@ -8,6 +8,15 @@ namespace CUETools.Wpf.Accuracy;
 /// <summary>Per-feature confidence label from calibration (spec: honest degradation).</summary>
 public enum CalConfidence { Unconfirmed, Estimated, Confirmed }
 
+/// <summary>The hardware probes completed, but their result could not be persisted.</summary>
+public sealed class DriveCalibrationPersistenceException : IOException
+{
+    public DriveCalibrationPersistenceException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
 /// <summary>
 /// One drive's calibration record (spec: the hybrid per-drive model). Keyed by the drive's
 /// AccurateRip signature so a drive is characterized once and never re-probed on a normal rip.
@@ -51,13 +60,34 @@ public sealed class DriveCalibrationStore
 
     public void Save(DriveCalibration cal)
     {
-        var all = Load();
-        all[Key(cal.DriveSignature)] = cal;
-        GzJson.Save(_path, all);
+        GzJson.Update<Dictionary<string, DriveCalibration>, bool>(
+            _path,
+            loaded =>
+            {
+                Dictionary<string, DriveCalibration> all = Load(loaded);
+                all[Key(cal.DriveSignature)] = cal;
+                return (all, true);
+            });
     }
 
     private Dictionary<string, DriveCalibration> Load()
-        => GzJson.Load<Dictionary<string, DriveCalibration>>(_path) ?? new Dictionary<string, DriveCalibration>();
+    {
+        GzJsonLoadResult<Dictionary<string, DriveCalibration>> loaded =
+            GzJson.TryLoad<Dictionary<string, DriveCalibration>>(_path);
+        return Load(loaded);
+    }
+
+    private static Dictionary<string, DriveCalibration> Load(
+        GzJsonLoadResult<Dictionary<string, DriveCalibration>> loaded)
+    {
+        if (loaded.Status == GzJsonLoadStatus.Failed)
+            throw new InvalidDataException(
+                "The drive-calibration store exists but could not be read; it was left unchanged.",
+                loaded.Error);
+        return loaded.Status == GzJsonLoadStatus.Loaded
+            ? loaded.Value!
+            : new Dictionary<string, DriveCalibration>();
+    }
 
     private static string Key(string signature) => (signature ?? "").Trim();
 }

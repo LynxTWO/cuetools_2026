@@ -89,6 +89,15 @@ public sealed class SettingsStore
             // a corrupt file must not stop the app from launching; defaults stand
             _log.Warn("settings", "settings load failed - using defaults: " + ex.GetType().Name);
         }
+        finally
+        {
+            // CopyAlbumArt is a legacy engine switch with no WPF control. Every engine art path
+            // treats it as an alternative to the visible embed/extract choices, so allowing the
+            // engine's true default (or a persisted true value) to survive would silently defeat
+            // those choices. Keep this WPF-only invariant after every load outcome, including an
+            // old profile with no CopyAlbumArt key and a corrupt/partially loaded profile.
+            config.CopyAlbumArt = false;
+        }
     }
 
     private void LoadProxyCredential(SettingsReader reader, CUEConfig config)

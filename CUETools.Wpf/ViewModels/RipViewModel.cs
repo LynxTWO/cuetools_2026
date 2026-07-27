@@ -20,6 +20,7 @@ public sealed class RipViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
     private readonly IRipService _rip;
+    private readonly IVerifyService _verify;
     private readonly IReportStore _reports;
     private readonly IHistoryStore _history;
     private readonly CUEConfig _config;
@@ -104,6 +105,26 @@ public sealed class RipViewModel : PageViewModel
 
     private string _ripSummary = "";
     public string RipSummary { get => _ripSummary; private set => Set(ref _ripSummary, value); }
+
+    private bool _canRepairLastRip;
+    public bool CanRepairLastRip
+    {
+        get => _canRepairLastRip;
+        private set
+        {
+            if (Set(ref _canRepairLastRip, value))
+                CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    private string _repairLastRipText = "";
+    public string RepairLastRipText
+    {
+        get => _repairLastRipText;
+        private set => Set(ref _repairLastRipText, value);
+    }
+
+    private string _lastRepairSource = "";
 
     private char _selectedDrive;
     public char SelectedDrive
@@ -207,7 +228,7 @@ public sealed class RipViewModel : PageViewModel
     private string _speedText = "";
     public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
 
-    // real per-channel peak levels for the VU meter (0..1), tapped from the disc audio
+    // real per-channel RMS levels for the VU meter (0..1), tapped from the disc audio
     private double _levelL;
     public double LevelL { get => _levelL; private set => Set(ref _levelL, value); }
 
@@ -216,8 +237,13 @@ public sealed class RipViewModel : PageViewModel
 
     // a window of real consecutive PCM samples, fed to the codec scope so it runs the real
     // predictor math on the actual audio being ripped
-    private float[]? _sampleWindow;
-    public float[]? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
+    private RipTelemetryDisplayFrame? _sampleWindow;
+    public RipTelemetryDisplayFrame? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
+    private readonly RipTelemetryDisplayFrame _telemetryDisplayA = new();
+    private readonly RipTelemetryDisplayFrame _telemetryDisplayB = new();
+    private RipTelemetryMailbox? _telemetryMailbox;
+    private DispatcherTimer? _telemetryTimer;
+    private bool _useTelemetryDisplayB;
 
     // Re-read state, driven by the drive's real retry loop. RereadVisible governs the box (it lingers
     // ~1.4s after the last re-read so the "recovered" state and fade-out are seen); RereadActive
@@ -315,17 +341,19 @@ public sealed class RipViewModel : PageViewModel
     public ICommand BrowseOutputCommand { get; }
     public ICommand OpenFolderCommand { get; }
     public ICommand DismissDoneCommand { get; }
+    public ICommand RepairLastRipCommand { get; }
     public ICommand TestCopyCommand { get; }
     public ICommand AcceptCopyAnywayCommand { get; }
     public ICommand DiscardHeldCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog, AppStatusService status)
+    public RipViewModel(IDriveService drives, IRipService rip, IVerifyService verify, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog, AppStatusService status)
     {
         Title = "Rip";
         Group = "Work";
         Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB.";
         _drives = drives;
         _rip = rip;
+        _verify = verify;
         _reports = reports;
         _history = history;
         _config = config;
@@ -370,7 +398,16 @@ public sealed class RipViewModel : PageViewModel
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
-        DismissDoneCommand = new RelayCommand(_ => { RipDone = false; _status.Report(AppActivity.Idle); });
+        DismissDoneCommand = new RelayCommand(_ =>
+        {
+            RipDone = false;
+            CanRepairLastRip = false;
+            _lastRepairSource = "";
+            _status.Report(AppActivity.Idle);
+        });
+        RepairLastRipCommand = new RelayCommand(
+            _ => { _ = RepairLastRipAsync(); },
+            _ => CanRepairLastRip && !IsBusy && !IsRipping);
         TestCopyCommand = new RelayCommand(_ => { _ = RunTestCopyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         AcceptCopyAnywayCommand = new RelayCommand(_ => AcceptCopyAnyway(), _ => _heldResult != null);
         DiscardHeldCommand = new RelayCommand(_ => DiscardHeld(), _ => _heldResult != null);
@@ -636,6 +673,78 @@ public sealed class RipViewModel : PageViewModel
         Task.Run(() => { try { _rip.Stop(); } catch { } });
     }
 
+    private RipTelemetryMailbox StartTelemetry()
+    {
+        var mailbox = new RipTelemetryMailbox();
+        _telemetryMailbox = mailbox;
+        _useTelemetryDisplayB = false;
+        SampleWindow = null;
+        LevelL = 0;
+        LevelR = 0;
+
+        _telemetryTimer ??= new DispatcherTimer(
+            DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _telemetryTimer.Tick -= TelemetryTick;
+        _telemetryTimer.Tick += TelemetryTick;
+        _telemetryTimer.Start();
+        return mailbox;
+    }
+
+    private void StopTelemetry(RipTelemetryMailbox mailbox)
+    {
+        if (!ReferenceEquals(_telemetryMailbox, mailbox))
+            return;
+        _telemetryTimer?.Stop();
+        _telemetryMailbox = null;
+        SampleWindow = null;
+        LevelL = 0;
+        LevelR = 0;
+    }
+
+    private void TelemetryTick(object? sender, EventArgs e)
+    {
+        RipTelemetryMailbox? mailbox = _telemetryMailbox;
+        if (mailbox == null)
+            return;
+
+        RipTelemetryDisplayFrame display =
+            _useTelemetryDisplayB
+                ? _telemetryDisplayB
+                : _telemetryDisplayA;
+        bool consumed = false;
+        double levelL = 0;
+        double levelR = 0;
+        // Drain at most one full ring per UI tick. That discards stale presentation age while
+        // keeping the UI callback bounded even if the producer publishes concurrently.
+        for (int remaining = mailbox.SlotCount;
+             remaining > 0 &&
+             mailbox.TryAcquire(out RipTelemetryFrame frame);
+             remaining--)
+        {
+            try
+            {
+                display.CopyFrom(frame);
+                levelL = frame.LevelL;
+                levelR = frame.LevelR;
+                consumed = true;
+            }
+            finally
+            {
+                mailbox.Release(frame);
+            }
+        }
+        if (!consumed)
+            return;
+
+        _useTelemetryDisplayB = !_useTelemetryDisplayB;
+        LevelL = levelL;
+        LevelR = levelR;
+        SampleWindow = display;
+    }
+
     // The re-read box lingers briefly after the last re-read so the "recovered"/fade-out is seen and
     // the box does not flicker between adjacent bad spots. This UI-thread timer does the hiding.
     private void StartRereadTimer()
@@ -674,7 +783,12 @@ public sealed class RipViewModel : PageViewModel
         int cq = CorrectionQuality;
         IsRipping = true;
         RipDone = false;
+        CanRepairLastRip = false;
+        RepairLastRipText = "";
+        _lastRepairSource = "";
         RipProgress = 0;
+        HistoryText = "";
+        HistoryIsWarning = false;
         _baseActivity = encode ? AppActivity.Ripping : AppActivity.Verifying;
         _status.Report(_baseActivity, 0);
         StatusText = encode ? "Starting rip..." : "Starting verify...";
@@ -699,7 +813,8 @@ public sealed class RipViewModel : PageViewModel
 
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
+        // ReadProgress and re-read events fire on the ripper's thread; marshal those to the UI.
+        // RMS and scope samples use the bounded mailbox drained by the UI timer.
         void Report(double frac, string status)
             => dispatcher?.BeginInvoke(new Action(() =>
             {
@@ -708,10 +823,6 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        void Levels(double l, double r)
-            => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
-        void Samples(float[] win)
-            => dispatcher?.BeginInvoke(new Action(() => SampleWindow = win));
         // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
         // n == 0 means the window cleared; the linger timer then hides the box.
         void Reread(int n, int max, int errs, double frac)
@@ -756,26 +867,56 @@ public sealed class RipViewModel : PageViewModel
         string outBase = OutputBaseDir;
         byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
         void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
-        var result = await Task.Run(() => encode ? _rip.RunEncode(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover, onEncodeStart: LockCodec) : _rip.RunVerify(drive, cq, meta, Report, Levels, Samples, Reread));
+        RipTelemetryMailbox telemetry = StartTelemetry();
+        VerifyResult result;
+        try
+        {
+            result = await Task.Run(() => encode
+                ? _rip.RunEncode(
+                    drive, cq, fmt, meta, outBase, Report,
+                    telemetry, Reread, cover,
+                    onEncodeStart: LockCodec)
+                : _rip.RunVerify(
+                    drive, cq, meta, Report, telemetry, Reread));
+        }
+        finally
+        {
+            StopTelemetry(telemetry);
+        }
 
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
         {
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
-            CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+            CtdbText = result.CtdbConfidence > 0
+                ? $"match . conf {result.CtdbConfidence}"
+                : result.CtdbCanRecover
+                    ? $"recoverable damage . {result.CtdbRepairSectors} sector(s)"
+                    : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
-            if (!result.HistoryKnown)
-            { HistoryText = "First read of this disc - recorded to your verify history."; HistoryIsWarning = false; }
-            else if (result.HistoryMatches)
-            { HistoryText = $"Consistent with your {result.HistoryPriorReads} earlier read(s) - bytes match."; HistoryIsWarning = false; }
-            else
-            { HistoryText = $"DIFFERS from your earlier read on {result.HistoryDiffTracks} track(s) - investigate."; HistoryIsWarning = true; }
+            ApplyHistoryStatus(result.HistoryRecorded, result.HistoryKnown,
+                result.HistoryMatches, result.HistoryPriorReads, result.HistoryDiffTracks);
             StatusText = encode ? $"Ripped {result.FileCount} files -> {result.OutputDir}" : result.Status;
             if (encode)
             {
+                SetPostRipRepair(result);
+                string outputAssurance = !result.OutputVerificationKnown
+                    ? ""
+                    : result.LosslessOutput
+                        ? result.OutputVerificationPerformed
+                            ? "  .  final output PCM verified after metadata"
+                            : "  .  WARNING: final output not verified"
+                        : "  .  lossy output";
                 RipSummary = $"Ripped {result.FileCount} {fmt} files"
                     + (result.Accurate ? $"  .  AccurateRip verified (confidence {result.ArConfidence})" : "  .  not found in AccurateRip")
-                    + (result.CtdbConfidence > 0 ? $"  .  CTDB confidence {result.CtdbConfidence}" : "");
+                    + (result.CtdbConfidence > 0 ? $"  .  CTDB confidence {result.CtdbConfidence}" : "")
+                    + (CanRepairLastRip
+                        ? $"  .  CTDB can repair {result.CtdbRepairSectors} damaged sector(s)"
+                        : "")
+                    + outputAssurance;
+                if (result.LosslessOutput &&
+                    !result.OutputVerificationPerformed)
+                    StatusText += "  WARNING: final output verification was not performed.";
                 await FinishRipAsync(result.OutputDir, drive);   // shared tail: RipDone + eject
             }
             ApplyPerTrack(result);
@@ -814,6 +955,8 @@ public sealed class RipViewModel : PageViewModel
         RipDone = false;
         TestCopyHeld = false;
         RipProgress = 0;
+        HistoryText = "";
+        HistoryIsWarning = false;
         _baseActivity = AppActivity.Ripping;
         _status.Report(_baseActivity, 0);
         StatusText = "Starting Test & Copy...";
@@ -838,7 +981,8 @@ public sealed class RipViewModel : PageViewModel
 
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
-        // ReadProgress + level metering fire on the ripper's thread; marshal to the UI.
+        // ReadProgress and re-read events fire on the ripper's thread; marshal those to the UI.
+        // RMS and scope samples use the bounded mailbox drained by the UI timer.
         void Report(double frac, string status)
             => dispatcher?.BeginInvoke(new Action(() =>
             {
@@ -847,10 +991,6 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        void Levels(double l, double r)
-            => dispatcher?.BeginInvoke(new Action(() => { LevelL = l; LevelR = r; }));
-        void Samples(float[] win)
-            => dispatcher?.BeginInvoke(new Action(() => SampleWindow = win));
         // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
         // n == 0 means the window cleared; the linger timer then hides the box.
         void Reread(int n, int max, int errs, double frac)
@@ -897,7 +1037,19 @@ public sealed class RipViewModel : PageViewModel
         void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
         // liveFormat is polled just before each encode read (Copy, and the third read on a mismatch),
         // so a codec change made while the Test read is still running is honored.
-        var result = await Task.Run(() => _rip.RunTestAndCopy(drive, cq, fmt, meta, outBase, Report, Levels, Samples, Reread, cover, liveFormat: () => SelectedFormat, onEncodeStart: LockCodec));
+        RipTelemetryMailbox telemetry = StartTelemetry();
+        TestCopyRunResult result;
+        try
+        {
+            result = await Task.Run(() => _rip.RunTestAndCopy(
+                drive, cq, fmt, meta, outBase, Report, telemetry,
+                Reread, cover, liveFormat: () => SelectedFormat,
+                onEncodeStart: LockCodec));
+        }
+        finally
+        {
+            StopTelemetry(telemetry);
+        }
 
         // The re-run has finished, so the PREVIOUS held staging is either superseded (this run produced
         // a real outcome) or still the best copy the user has (this run failed before producing
@@ -914,17 +1066,31 @@ public sealed class RipViewModel : PageViewModel
         {
             LastOutputDir = result.OutputDir;
             TestCopyHeld = false; _heldResult = null;
-            TestCopyText = $"Test & Copy verified by {result.ReadsUsed} independent reads."
-                + (result.Accurate ? $"  Also AccurateRip-accurate (confidence {result.ArConfidence})." : "  Not in AccurateRip - proven by the two reads.");
+            TestCopyText = $"Test & Copy verified after {result.ReadsUsed} reads; "
+                + "at least two agreed per track."
+                + (result.Accurate ? $"  Also AccurateRip-accurate (confidence {result.ArConfidence})." : "  Not in AccurateRip.")
+                + (result.LosslessOutput
+                    ? result.OutputVerificationPerformed
+                        ? "  Final output PCM was decoded and verified after metadata finalization."
+                        : "  WARNING: final output was not independently verified."
+                    : "");
             TestCopyIsWarning = false;
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
+            ApplyHistoryStatus(result.HistoryRecorded, result.HistoryKnown,
+                result.HistoryMatches, result.HistoryPriorReads, result.HistoryDiffTracks);
             // report the format that was ACTUALLY encoded (polled at encode start), not the one that
             // was selected when the button was pressed - otherwise a mid-verify codec switch makes
             // this summary name the wrong format
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
-            RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified by {result.ReadsUsed} reads";
+            RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified after "
+                + $"{result.ReadsUsed} reads (at least 2 agreed per track)"
+                + (result.LosslessOutput
+                    ? result.OutputVerificationPerformed
+                        ? "; final output PCM verified after metadata"
+                        : "; WARNING: final output not verified"
+                    : "");
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
@@ -935,8 +1101,10 @@ public sealed class RipViewModel : PageViewModel
             PublishReport($"Test & Copy ({result.ReadsUsed} reads)", result.CorrectionQuality,
                 result.ArConfidence, result.ArTotal,
                 result.CtdbConfidence, result.CtdbTotal, result.Accurate,
-                $"verified by {result.ReadsUsed} independent reads", result.OutputDir, result.FileCount,
-                result.Format);
+                $"verified after {result.ReadsUsed} optical reads; at least 2 agreed per track",
+                result.OutputDir, result.FileCount, result.Format, result.ReadsUsed, 2,
+                result.OutputVerificationKnown, result.LosslessOutput,
+                result.OutputVerificationPerformed, result.OutputVerificationDetail);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -960,6 +1128,122 @@ public sealed class RipViewModel : PageViewModel
         CodecLocked = false;
         _baseActivity = AppActivity.Idle;
         _status.Report(AppActivity.Idle);
+    }
+
+    private void ApplyHistoryStatus(
+        bool recorded,
+        bool known,
+        bool matches,
+        int priorReads,
+        int diffTracks)
+    {
+        if (!recorded)
+        {
+            HistoryText = "This job completed, but verify history could not be saved.";
+            HistoryIsWarning = true;
+        }
+        else if (!known)
+        {
+            HistoryText = "First read of this disc - recorded to your verify history.";
+            HistoryIsWarning = false;
+        }
+        else if (matches)
+        {
+            HistoryText = $"Consistent with your {priorReads} earlier read(s) - bytes match.";
+            HistoryIsWarning = false;
+        }
+        else
+        {
+            HistoryText = $"DIFFERS from your earlier read on {diffTracks} track(s) - investigate.";
+            HistoryIsWarning = true;
+        }
+    }
+
+    private void SetPostRipRepair(VerifyResult result)
+    {
+        CanRepairLastRip = false;
+        RepairLastRipText = "";
+        _lastRepairSource = "";
+        if (!result.CtdbHasErrors || !result.CtdbCanRecover)
+            return;
+
+        if (string.IsNullOrWhiteSpace(result.RepairSourcePath))
+        {
+            RepairLastRipText =
+                "CTDB parity can recover this lossless rip, but the output has no unambiguous " +
+                "album input. Keep album.cue enabled for multi-track repair.";
+            StatusText += "  CTDB repair is available, but this multi-track output has no album.cue.";
+            return;
+        }
+
+        _lastRepairSource = result.RepairSourcePath;
+        CanRepairLastRip = true;
+        RepairLastRipText =
+            $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
+            "Repair creates and independently verifies a sibling copy; this rip stays unchanged.";
+    }
+
+    private async Task RepairLastRipAsync()
+    {
+        if (!CanRepairLastRip || IsBusy || IsRipping ||
+            string.IsNullOrWhiteSpace(_lastRepairSource))
+            return;
+        if (System.Windows.MessageBox.Show(
+                "CTDB repair will build a new sibling folder, independently verify the repaired " +
+                "audio, and publish it only if verification succeeds. The completed rip will not " +
+                "be changed.\n\nProceed with repair?",
+                "Repair completed rip from CTDB parity",
+                System.Windows.MessageBoxButton.OKCancel,
+                System.Windows.MessageBoxImage.Question) !=
+            System.Windows.MessageBoxResult.OK)
+            return;
+
+        string source = _lastRepairSource;
+        IsBusy = true;
+        CommandManager.InvalidateRequerySuggested();
+        StatusText = "Repairing completed rip from CTDB parity...";
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        void Report(double fraction, string status)
+        {
+            if (dispatcher != null)
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    RipProgress = fraction;
+                    StatusText = status;
+                }));
+        }
+
+        try
+        {
+            VerifyFilesResult repaired = await Task.Run(
+                () => _verify.Repair(source, Report));
+            if (!repaired.Ok || !repaired.RepairApplied ||
+                string.IsNullOrWhiteSpace(repaired.OutputPath))
+            {
+                StatusText = "CTDB repair failed: " + repaired.Error;
+                return;
+            }
+
+            CanRepairLastRip = false;
+            _lastRepairSource = "";
+            LastOutputDir = repaired.OutputPath;
+            RepairLastRipText =
+                "CTDB repaired copy independently verified and published. The original rip remains unchanged.";
+            RipSummary += "  .  CTDB repaired copy independently verified";
+            StatusText = "CTDB repaired copy verified -> " + repaired.OutputPath;
+            RipProgress = 1;
+            _status.Report(AppActivity.Done);
+        }
+        catch (Exception ex)
+        {
+            StatusText = "CTDB repair failed: " + ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     /// <summary>The ONE tail every finished rip goes through, whichever button started it: the Rip
@@ -1005,7 +1289,11 @@ public sealed class RipViewModel : PageViewModel
                 held.CorrectionQuality, held.ArConfidence,
                 held.ArTotal, held.CtdbConfidence, held.CtdbTotal, held.Accurate,
                 $"accepted without agreement after {held.ReadsUsed} reads - NOT test-verified",
-                dir, OutputLayout.CountAudioFiles(dir, held.Format), held.Format);
+                dir, OutputLayout.CountAudioFiles(dir, held.Format), held.Format,
+                outputVerificationKnown: held.OutputVerificationKnown,
+                losslessOutput: held.LosslessOutput,
+                outputVerificationPerformed: held.OutputVerificationPerformed,
+                outputVerificationDetail: held.OutputVerificationDetail);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
@@ -1171,7 +1459,11 @@ public sealed class RipViewModel : PageViewModel
     private void PublishReport(bool encode, VerifyResult result, int correctionQualityUsed)
         => PublishReport(encode ? "Rip" : "Verify", correctionQualityUsed, result.ArConfidence, result.ArTotal,
             result.CtdbConfidence, result.CtdbTotal, result.Accurate, result.Status, result.OutputDir,
-            result.FileCount, encode ? result.Format : "");
+            result.FileCount, encode ? result.Format : "",
+            outputVerificationKnown: result.OutputVerificationKnown,
+            losslessOutput: result.LosslessOutput,
+            outputVerificationPerformed: result.OutputVerificationPerformed,
+            outputVerificationDetail: result.OutputVerificationDetail);
 
     /// <summary>Record a finished job in the report page and the history list. Every completed operation
     /// belongs here - a Test &amp; Copy most of all, since it is the highest-assurance mode and used to be
@@ -1179,7 +1471,10 @@ public sealed class RipViewModel : PageViewModel
     /// most carefully verified rips had ever happened.</summary>
     private void PublishReport(string mode, int correctionQualityUsed, int arConf, int arTotal,
         int ctConf, int ctTotal, bool accurate, string status, string outputDir, int fileCount,
-        string format = "")
+        string format = "", int opticalReadsUsed = 0, int minimumAgreeingReads = 0,
+        bool outputVerificationKnown = false, bool losslessOutput = false,
+        bool outputVerificationPerformed = false,
+        string outputVerificationDetail = "")
     {
         var d = _lastDisc;
         var report = new RipReport
@@ -1197,10 +1492,16 @@ public sealed class RipViewModel : PageViewModel
             CtdbConfidence = ctConf,
             CtdbTotal = ctTotal,
             Accurate = accurate,
+            OpticalReadsUsed = opticalReadsUsed,
+            MinimumAgreeingReads = minimumAgreeingReads,
             Status = status,
             OutputDir = outputDir,
             FileCount = fileCount,
             Format = format,
+            OutputVerificationKnown = outputVerificationKnown,
+            LosslessOutput = losslessOutput,
+            OutputVerificationPerformed = outputVerificationPerformed,
+            OutputVerificationDetail = outputVerificationDetail,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
             TocId = d?.TocId ?? ""
         };

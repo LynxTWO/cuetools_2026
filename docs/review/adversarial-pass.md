@@ -22,10 +22,17 @@ claims were re-tested during the 2026-07-26 audit:
   release proof. Those are remediated locally and detailed in
   `2026-07-26-autonomous-audit.md`.
 
-Remaining adversarial checks require external environments: hostile replacement of
-an external encoder's shared work file, FLACCL's exact-length OpenCL buffer, real
-Icecast/CTDB/WMA services, classic artifact production, and optical-drive failure
-injection.
+Later live evidence closed the broad availability gaps: FLACCL's exact-length path
+passed on an RTX 3060, WMA Lossless completed a real independent-decode round trip,
+Icecast 2.5.0 completed source/auth/metadata/listener/teardown smoke, two optical drives
+completed full-disc reads, H: completed a full FLAC rip and a two-read Test & Copy with
+committed output-assurance proof, and staged CTDB repair successfully repaired and
+post-verified a deliberately damaged image without changing the source.
+
+Remaining adversarial checks are narrower: hostile replacement of an external
+encoder's shared work file, cross-vendor OpenCL behavior, Icecast TLS/certificate and
+Mono behavior, CTDB server authentication/TLS, frozen classic artifact receipts and
+hosted parity, and optical-drive cancellation/disagreement/failure injection.
 
 Pass 07, 2026-07-02. Purpose: attack the current picture of the repo, not extend it. Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
@@ -36,7 +43,11 @@ Everything the loop claimed this session: the coverage ledger (S1-S14), the comm
 ## What earlier passes got right
 
 - **The CRC self-check on repair (S5) is real and load-bearing.** The claim that plain-HTTP parity is safe holds because `AccurateRip\CDRepair.cs` rejects any fix whose corrections do not reproduce the local rip's CRC. This is genuine defense, not an overclaim - verified at the code.
-- **Test suites are honestly scoped.** TestParity/TestCodecs are green and CI-gated; TestProcessor/TestRipper are correctly marked blocked-on-fixtures rather than passing. No green-wash.
+- **Test suites are honestly scoped.** TestParity/TestCodecs are green and CI-gated;
+  TestProcessor's fixtures were restored, and TestRipper's private capture/stale copied
+  vote algorithm has been replaced by SDK net47 tests against the same production
+  `SecureSectorVote` helper used by `SCSIDrive`. Its canonical result is now 3 passed,
+  0 failed, and 0 skipped, matching the enrolled three-test/zero-skip contract.
 - **Out-of-repo surfaces are named, not flattened:** CTDB/AccurateRip/gnudb/MusicBrainz servers, the EAC host, GitHub runners, cue.tools. Good.
 
 ## What earlier passes overstated or missed
@@ -45,7 +56,17 @@ Everything the loop claimed this session: the coverage ledger (S1-S14), the comm
 
 The ledger marks S4 `mapped` and defers it to a "07 focused review" - which is now. The concrete gap: **whether the RAR/Zip input path ever extracts to attacker-controlled paths on disk was never read.** CUETools advertises "use a RAR archive as input without unpacking," which suggests streamed reads (`RarStream`, `SeekableZipStream`) rather than extraction - but that was assumed, not verified. Combined with unrar 6.11 (pre-CVE-2022-30333), this is the single most important unreviewed path. **Raising S4 to high-priority for a real read** (does `RarStream` ever hit `RARProcessFile` with an extract-to-path, or only in-memory?). This directly gates decision D3.
 
-**RESOLVED same pass (2026-07-02):** read `RarStream.Decompress`. The input path opens the archive in Extract mode but reads the target entry via `_unrar.Test()` with a `DataAvailable` callback (`unrar_DataAvailable`), i.e. it streams the decompressed bytes into memory and never calls `RARProcessFile(Operation.Extract, destinationPath, ...)`. The `Extract`/`ExtractToDirectory` methods on the `Unrar` wrapper exist but are not on the input path (`RarCompressionProvider` -> `RarStream` -> Test). So the CVE-2022-30333 extract-to-path traversal vector is not reachable through normal CUETools use. The D3 unrar upgrade remains worthwhile as hygiene (the DLL still decompresses attacker data in memory) but is not urgent.
+**RESOLVED same pass (2026-07-02):** read `RarStream.Decompress`. The input path opens the archive in Extract mode but reads the target entry via `_unrar.Test()` with a `DataAvailable` callback (`unrar_DataAvailable`), i.e. it streams the decompressed bytes into memory and never calls `RARProcessFile(Operation.Extract, destinationPath, ...)`. The `Extract`/`ExtractToDirectory` methods on the `Unrar` wrapper exist but are not on the input path (`RarCompressionProvider` -> `RarStream` -> Test). So the CVE-2022-30333 extract-to-path traversal vector is not reachable through normal CUETools use.
+
+**D3 CLOSED 2026-07-26:** official signed UnRAR 7.23.0 x86/x64 DLLs replaced
+6.11. Both expose the required ABI, and the production
+`RarCompressionProvider`/`RarStream` path passed RARLAB's real test archive,
+including exact full reads and backward seeks, under both process architectures.
+Turning that manual oracle into a committed TestCodecs RAR5 fixture exposed a
+backward-seek/stale-EOF race: replay could return zero before the worker
+acknowledged rewind. `Read` now waits while rewind is pending; the focused case
+and 20/20 repeated full-read/seek runs pass. The historical 6.11 provenance
+remains recorded.
 
 ### A2. "S1 commented" is true but uneven
 

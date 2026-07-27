@@ -185,7 +185,8 @@ namespace TTALib
 			frame_crc32 ^= 0xFFFFFFFFUL;
 			frame_crc32 = ENDSWAP_INT32(frame_crc32);
 			CopyMemory(bitpos, &frame_crc32, 4);
-			bytes_to_write = bitpos + sizeof(long) - bit_buffer;
+			bytes_to_write = static_cast<unsigned long>(
+				bitpos + sizeof(long) - bit_buffer);
 			
 			if (!WriteFile(hOutFile, bit_buffer, bytes_to_write, &res, NULL) || 
 				res != bytes_to_write)

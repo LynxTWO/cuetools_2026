@@ -44,6 +44,8 @@ namespace CUETools.Codecs.libmp3lame
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern int lame_set_brate(IntPtr handle, int bitrate);
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
+        internal static extern int lame_set_mode(IntPtr handle, int mode);
+        [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern int lame_set_bWriteVbrTag(IntPtr handle, int writeVbrTag);
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern int lame_set_write_id3tag_automatic(IntPtr handle, int automaticWriteId3Tag);

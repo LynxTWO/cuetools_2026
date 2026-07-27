@@ -14,6 +14,12 @@ namespace CUETools.Processor
 {
     public class CUEConfig
     {
+        internal const string LosslessVerificationDefaultsVersionSetting =
+            "LosslessVerificationDefaultsVersion";
+        internal const int CurrentLosslessVerificationDefaultsVersion = 1;
+
+        private int losslessVerificationDefaultsVersion;
+
         public uint fixOffsetMinimumConfidence;
         public uint fixOffsetMinimumTracksPercent;
         public uint encodeWhenConfidence;
@@ -87,6 +93,9 @@ namespace CUETools.Processor
         public CUEConfig()
             : base()
         {
+            losslessVerificationDefaultsVersion =
+                CurrentLosslessVerificationDefaultsVersion;
+
             fixOffsetMinimumConfidence = 2;
             fixOffsetMinimumTracksPercent = 51;
             encodeWhenConfidence = 2;
@@ -154,6 +163,9 @@ namespace CUETools.Processor
 
             advanced = new CUEConfigAdvanced();
             advanced.Init();
+            // The app's archival defaults are stronger than the standalone FLACCL CLI
+            // contract. Apply them after plugin discovery has populated this fresh profile.
+            EnableLosslessVerificationDefaults(advanced);
 
             language = Thread.CurrentThread.CurrentUICulture.Name;
 
@@ -176,6 +188,9 @@ namespace CUETools.Processor
 
         public CUEConfig(CUEConfig src)
         {
+            losslessVerificationDefaultsVersion =
+                src.losslessVerificationDefaultsVersion;
+
             fixOffsetMinimumConfidence = src.fixOffsetMinimumConfidence;
             fixOffsetMinimumTracksPercent = src.fixOffsetMinimumTracksPercent;
             encodeWhenConfidence = src.encodeWhenConfidence;
@@ -271,6 +286,14 @@ namespace CUETools.Processor
         internal void Save(SettingsWriter sw, bool canProtectCurrentUser)
         {
             sw.Save("Version", 226);
+            // Keep this independent of the broad settings Version. This marker records a
+            // completed, one-time policy migration; it must survive future format-version
+            // changes so a user's later explicit Verify=false choice is not migrated again.
+            sw.Save(
+                LosslessVerificationDefaultsVersionSetting,
+                Math.Max(
+                    losslessVerificationDefaultsVersion,
+                    CurrentLosslessVerificationDefaultsVersion));
             sw.Save("ArFixWhenConfidence", fixOffsetMinimumConfidence);
             sw.Save("ArFixWhenPercent", fixOffsetMinimumTracksPercent);
             sw.Save("ArEncodeWhenConfidence", encodeWhenConfidence);
@@ -390,6 +413,11 @@ namespace CUETools.Processor
             AdvancedSettingsRejected = false;
             ProxyCredentialRejected = false;
             int version = sr.LoadInt32("Version", null, null) ?? 202;
+            int persistedLosslessVerificationDefaultsVersion =
+                sr.LoadInt32(
+                    LosslessVerificationDefaultsVersionSetting,
+                    0,
+                    null) ?? 0;
 
             fixOffsetMinimumConfidence = sr.LoadUInt32("ArFixWhenConfidence", 1, 1000) ?? 2;
             fixOffsetMinimumTracksPercent = sr.LoadUInt32("ArFixWhenPercent", 1, 100) ?? 51;
@@ -505,6 +533,17 @@ namespace CUETools.Processor
                 }
             }
 
+            if (persistedLosslessVerificationDefaultsVersion <
+                CurrentLosslessVerificationDefaultsVersion)
+            {
+                EnableLosslessVerificationDefaults(advanced);
+            }
+            // Preserve a marker written by a newer CUETools build instead of downgrading it
+            // when this build saves the profile.
+            losslessVerificationDefaultsVersion = Math.Max(
+                persistedLosslessVerificationDefaultsVersion,
+                CurrentLosslessVerificationDefaultsVersion);
+
             string protectedProxyPassword =
                 sr.Load(ProxyCredentialStore.SettingsKey);
             if (!string.IsNullOrEmpty(protectedProxyPassword))
@@ -576,6 +615,48 @@ namespace CUETools.Processor
                 trackFilenameFormat = "%tracknumber%. %title%";
         }
 
+        private static void EnableLosslessVerificationDefaults(
+            CUEConfigAdvanced settings)
+        {
+            foreach (IAudioEncoderSettings encoder in settings.encoders)
+            {
+                string verifyPropertyName;
+                switch (encoder.GetType().FullName)
+                {
+                    case "CUETools.Codecs.ALAC.EncoderSettings":
+                    case "CUETools.Codecs.FLACCL.EncoderSettings":
+                        verifyPropertyName = "DoVerify";
+                        break;
+
+                    case "CUETools.Codecs.libFLAC.EncoderSettings":
+                        verifyPropertyName = "Verify";
+                        break;
+
+                    // Flake, WMA Lossless, MACLib, and WavPack use a true serialization
+                    // default: omission loads as true while an explicit false is written and
+                    // survives. ALAC and libFLAC retain a false serialization default, so only
+                    // they and app-hosted FLACCL need this one-time marker. FLACCL keeps its
+                    // standalone constructor default false because its CLI exposes --verify as
+                    // an explicit opt-in; CUEConfig owns the stronger archival-app policy.
+                    default:
+                        continue;
+                }
+
+                var verifyProperty = encoder.GetType().GetProperty(
+                    verifyPropertyName);
+                if (verifyProperty == null ||
+                    verifyProperty.PropertyType != typeof(bool) ||
+                    !verifyProperty.CanWrite)
+                {
+                    throw new InvalidOperationException(
+                        "The lossless verification migration does not recognize " +
+                        encoder.GetType().FullName + "." + verifyPropertyName + ".");
+                }
+
+                verifyProperty.SetValue(encoder, true, null);
+            }
+        }
+
         private static JsonSerializerSettings CreateAdvancedJsonSettings(CUEConfigAdvanced source)
         {
             IEnumerable<Type> knownTypes = source.encoders
@@ -586,7 +667,9 @@ namespace CUETools.Processor
             {
                 DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate,
                 TypeNameHandling = TypeNameHandling.Auto,
-                MissingMemberHandling = MissingMemberHandling.Error,
+                // Preserve settings written by newer builds while the binder below still
+                // rejects type metadata for anything outside the discovered codec allowlist.
+                MissingMemberHandling = MissingMemberHandling.Ignore,
                 SerializationBinder = new KnownSettingsSerializationBinder(knownTypes),
             };
         }

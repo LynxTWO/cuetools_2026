@@ -127,6 +127,7 @@ namespace CUETools.Wpf.Tests
             int[,] samples = MakeSamples(pcm, 4097);
             string path = Path.Combine(root, "roundtrip.ape");
             var settings = new MacEncoderSettings { PCM = pcm, EncoderMode = "high", Verify = true };
+            Assert.AreEqual("13.20", settings.Version);
             var encoder = new MacEncoder(settings, path);
             encoder.FinalSampleCount = samples.GetLength(0);
             var input = new AudioBuffer(pcm, samples, samples.GetLength(0));

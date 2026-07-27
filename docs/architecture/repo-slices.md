@@ -48,12 +48,15 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Reachability:** CUERipper, ConsoleRipper, and CUETools 2026 ripping/Test &
   Copy flows.
 - **Verified controls:** C2 accumulation/voting invariants were reviewed; the
-  modern ripper suite passed 8/8 locally.
+  modern ripper suite passed 8/8 locally. H: and K: completed full-disc reads
+  with zero read errors and simultaneous inquiry/TOC, H: completed a full
+  11-track FLAC rip, and H: passed a two-read Test & Copy with matching
+  full-track/AR/CTDB evidence and decoded-and-compared output assurance.
 - **Residual boundary:** no test suite can establish behavior for every drive,
   firmware, media defect, or SCSI transport.
 - **Risk / status:** high; commented and partially tested.
-- **Next evidence:** known-disc optical-drive smoke including Test & Copy and
-  recoverable read errors.
+- **Next evidence:** final-source H: Test & Copy repeat plus deliberate
+  cancellation, disagreement, and recoverable/unrecoverable read errors.
 
 ### S3: Processor engine, settings, and plugin discovery
 
@@ -84,12 +87,14 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   RAR/Zip containers.
 - **Verified controls:** the RAR path calls `Unrar.Test()` and consumes
   `DataAvailable` into memory; it does not extract archive-controlled names to
-  disk in the reviewed input flow.
-- **Residual boundary:** parser CVE/provenance inventory and malformed-input
-  coverage are incomplete.
-- **Risk / status:** high; reviewed.
-- **Next evidence:** replace/upgrade decisions and fuzz/integration cases for
-  both archive formats.
+  disk in the reviewed input flow. Official signed UnRAR 7.23.0 x86/x64 DLLs
+  expose the required ABI and passed the production provider/stream round trip
+  against RARLAB's real archive under both process architectures. A committed
+  RAR5 fixture exposed a backward-seek/stale-EOF race; `Read` now waits while
+  rewind is pending, and the regression passed 20/20 repeated runs.
+- **Residual boundary:** broad malformed-input coverage remains incomplete.
+- **Risk / status:** high; reviewed and integration-tested.
+- **Next evidence:** expand fuzz/integration cases for both archive formats.
 
 ### S5: Parity and repair math
 
@@ -100,10 +105,12 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Verified controls:** the reachable repair flow applies corrections to the
   current-rip CRC and rejects a nonzero residual. The parity suite discovered
   22 tests, passed 18, and deliberately skipped four long/speed tests.
-- **Residual boundary:** CRC32 is a corruption check, not a server signature;
-  real damaged-media repair remains an external scenario.
+- **Residual boundary:** CRC32 is a corruption check, not a server signature.
+  A deliberately damaged known image passed staged repair and independent
+  post-verification without changing the source; physical damaged-media and
+  server-authentication/TLS behavior remain external.
 - **Risk / status:** high; commented and tested at the math boundary.
-- **Next evidence:** known-image/known-disc end-to-end repair.
+- **Next evidence:** known-disc damaged-media repair and CTDB server TLS/auth.
 
 ### S6: Codec core and managed codecs
 
@@ -117,11 +124,13 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   encoders need an independent decoder verification contract, and managed
   imports are hash/size lease-bound at launch. Flake still
   writes the requested path directly, and WAV/TTA do not have the same
-  whole-output oracle. Local codec results were 97 passed, 2 expected skipped.
-- **Residual boundary:** the real Windows WMA codec test was unavailable, and
-  per-codec malformed-input coverage is not exhaustive.
+  whole-output oracle. A real Windows net8 WMA Lossless encode/finalize/
+  independent-decode/PCM comparison passed.
+- **Residual boundary:** one Windows Media installation does not cover every
+  host/runtime, and per-codec malformed-input coverage is not exhaustive.
 - **Risk / status:** high; reviewed, commented, and tested.
-- **Next evidence:** WMA-capable host and continued fuzz corpus growth.
+- **Next evidence:** repeat WMA across supported hosts and continue fuzz corpus
+  growth.
 
 ### S7: Native and mixed-mode codec wrappers
 
@@ -153,11 +162,13 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   the CUDA trees can be confused with shipped functionality.
 - **Reachability:** FLACCL and CLParity are optional current paths. Historical
   FlaCuda projects were deleted in commit `4e1b02d`.
-- **Verified controls:** solution/release membership is mapped.
-- **Residual boundary:** supported OpenCL matrices and performance/correctness on
-  real devices are unknown.
-- **Risk / status:** medium; mapped.
-- **Next evidence:** OpenCL smoke on representative devices.
+- **Verified controls:** solution/release membership is mapped. Corrected FLACCL
+  per-frame verification passed on an RTX 3060 across OpenCL modes 0-8, two CPU
+  workers, 24-bit input, and the exact 4096-sample boundary.
+- **Residual boundary:** one NVIDIA device/driver does not establish every
+  OpenCL implementation, device, or performance profile.
+- **Risk / status:** medium; mapped and locally exercised.
+- **Next evidence:** repeat the correctness matrix on another OpenCL vendor.
 
 ### S9: Classic GUI applications
 
@@ -200,11 +211,14 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Reachability:** CUEPlayer and shared audio-output code.
 - **Verified controls:** Icecast endpoint parsing binds source and metadata to
   one authority, defaults to HTTPS, requires explicit insecure-HTTP opt-in, and
-  disposes rejected 4xx responses. CUEPlayer stores its secret with DPAPI.
-- **Residual boundary:** real TLS/auth servers and the Mono/private
+  disposes rejected 4xx responses. CUEPlayer stores its secret with DPAPI. A
+  disposable Icecast 2.5.0 instance passed source/auth rejection, metadata,
+  listener-byte, flush/close, and teardown smoke.
+- **Residual boundary:** HTTPS certificate/interoperability and the Mono/private
   `HttpWebRequest` hook are unobserved.
 - **Risk / status:** medium; reviewed and commented.
-- **Next evidence:** live Icecast matrix and supported-output-device smoke.
+- **Next evidence:** Icecast HTTPS/certificate and Mono cases plus
+  supported-output-device smoke.
 
 ### S12: EAC plugin and installer
 
@@ -235,7 +249,10 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   gates, net20 probe, warning gates, fuzz smoke, classic/WPF artifact contracts,
   plugin manifests, native probes, provenance, and SBOM scripts.
 - **Residual boundary:** static/local verification is not a completed hosted
-  workflow. The classic release still needs full devenv/legacy tooling.
+  workflow. Local classic AnyCPU is 53/0; x64 and Win32 are each 2/0 with
+  59 skipped configuration entries; TTA builds both; Installer Projects is 8/0
+  and produced a 929,792-byte MSI. Frozen 97-path receipts and parity on the
+  pinned hosted VS2022 image remain.
 - **Risk / status:** high; reviewed and locally tested.
 - **Next evidence:** first current hosted CI/release run and signed artifact
   decision.
@@ -244,21 +261,22 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 
 - **Scope:** `CUETools/CUETools.TestCodecs/`,
   `CUETools/CUETools.TestParity/`, `CUETools/CUETools.TestProcessor/`,
-  `CUETools.Ripper.Tests/`, `CUETools.Wpf.Tests/`, and the excluded
+  `CUETools.Ripper.Tests/`, `CUETools.Wpf.Tests/`, and
   `CUETools/TestRipper/`.
 - **Why it matters:** suite counts and skip budgets are the regression contract
   for shared and modern code.
 - **Reachability:** codecs, parity, Processor, modern ripper services, and WPF
   services/contracts.
-- **Verified controls:** local TRX on 2026-07-26: 388 discovered, 381 passed, 0
-  failed, 7 expected skipped. CI records minimum discovery and maximum skip
-  counts.
-- **Residual boundary:** skipped tests and excluded `TestRipper` are not
-  coverage. The latter still reads hardcoded `Y:\Temp\dbg\960` fixtures and uses
-  the retired VS2010 adapter.
+- **Verified controls:** CI records minimum discovery and maximum skip counts.
+  The prior 388/381/7 aggregate is historical pending the final canonical total.
+  TestRipper is now SDK net47, calls the shipping `SecureSectorVote` helper,
+  has no private-capture dependency, and passed its enrolled 3-test/zero-skip
+  contract.
+- **Residual boundary:** declared skips and availability-gated behavior remain
+  visible gaps; focused fixtures do not replace hosted or hardware integration.
 - **Risk / status:** medium; tested with explicit exclusions.
-- **Next evidence:** replace or remove the non-hermetic legacy TestRipper
-  experiment; run availability-gated cases on suitable hosts.
+- **Next evidence:** retain TestRipper in the canonical selection and run
+  availability-gated cases on suitable hosts.
 
 ### S15: CUETools 2026 WPF runtime
 
@@ -293,10 +311,12 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 
 ## Prioritized remaining passes
 
-1. Hosted CI/release and full classic artifact evidence (S13).
-2. Physical optical-drive and end-to-end repair evidence (S2, S5, S15).
-3. WMA, Icecast, Mono, and OpenCL integration matrices (S6, S8, S11).
+1. Hosted CI/release and frozen classic artifact receipts (S13).
+2. Final-source optical repeat and deliberate drive/repair failure cases (S2,
+   S5, S15).
+3. Cross-host WMA, Icecast HTTPS/certificate/Mono, and cross-vendor OpenCL
+   matrices (S6, S8, S11).
 4. Third-party binary provenance, signing, and dependency locking (S4, S7,
    S13).
-5. Remove or replace the excluded legacy TestRipper experiment and deferred
-   CUERipper.WPF stub after owner decisions (S9, S14).
+5. Decide the deferred `CUERipper.WPF` stub's future after owner review (S9,
+   S14).

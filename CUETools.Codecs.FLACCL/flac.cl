@@ -994,7 +994,7 @@ void clEstimateResidual(
 {
     __local float data[GROUP_SIZE * 2 + 32];
 #if !defined(AMD)
-    __local volatile uint idata[GROUP_SIZE + 16];
+    __local volatile uint idata[GROUP_SIZE];
 #endif
     __local FLACCLSubframeTask task;
     __local uint psum[MAX_BLOCKSIZE >> ESTPARTLOG];
@@ -1075,20 +1075,19 @@ void clEstimateResidual(
 	atomic_add(&psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG], t);
 #else
 	idata[tid] = t;
-#if WARP_SIZE <= (1 << (ESTPARTLOG - 1))
+        // OpenCL does not guarantee lock-step execution within a hardware warp.
+        // Reduce each 32-sample estimate partition with explicit work-group
+        // barriers so modern GPUs with independent thread scheduling cannot
+        // observe partially updated local memory.
         barrier(CLK_LOCAL_MEM_FENCE);
-	for (int l = 1 << (ESTPARTLOG - 1); l >= WARP_SIZE; l >>= 1) {
-            if (!(tid & l)) idata[tid] += idata[tid + l];
+	for (int l = 1 << (ESTPARTLOG - 1); l > 0; l >>= 1)
+        {
+            if ((tid & ((1 << ESTPARTLOG) - 1)) < l)
+                idata[tid] += idata[tid + l];
             barrier(CLK_LOCAL_MEM_FENCE);
         }
-	for (int l = WARP_SIZE / 2; l > 1; l >>= 1)
-	    idata[tid] += idata[tid + l];
-#else
-	for (int l = 1 << (ESTPARTLOG - 1); l > 1; l >>= 1)
-	    idata[tid] += idata[tid + l];
-#endif
-	if ((tid & (1 << ESTPARTLOG) - 1) == 0)
-            psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG] = idata[tid] + idata[tid + 1];
+	if ((tid & ((1 << ESTPARTLOG) - 1)) == 0)
+            psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG] = idata[tid];
 #endif
     }
     if (pos < bs)
@@ -1131,20 +1130,15 @@ void clEstimateResidual(
 	atomic_add(&psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG], t);
 #else
 	idata[tid] = t;
-#if WARP_SIZE <= (1 << (ESTPARTLOG - 1))
         barrier(CLK_LOCAL_MEM_FENCE);
-	for (int l = 1 << (ESTPARTLOG - 1); l >= WARP_SIZE; l >>= 1) {
-            if (!(tid & l)) idata[tid] += idata[tid + l];
+	for (int l = 1 << (ESTPARTLOG - 1); l > 0; l >>= 1)
+        {
+            if ((tid & ((1 << ESTPARTLOG) - 1)) < l)
+                idata[tid] += idata[tid + l];
             barrier(CLK_LOCAL_MEM_FENCE);
         }
-	for (int l = WARP_SIZE / 2; l > 1; l >>= 1)
-	    idata[tid] += idata[tid + l];
-#else
-	for (int l = 1 << (ESTPARTLOG - 1); l > 1; l >>= 1)
-	    idata[tid] += idata[tid + l];
-#endif
-	if ((tid & (1 << ESTPARTLOG) - 1) == 0)
-	    psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG] = idata[tid] + idata[tid + 1];
+	if ((tid & ((1 << ESTPARTLOG) - 1)) == 0)
+	    psum[min(MAX_BLOCKSIZE - 1, offs) >> ESTPARTLOG] = idata[tid];
 #endif
     }
 

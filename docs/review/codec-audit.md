@@ -37,7 +37,7 @@ Status terms:
 
 The WPF product has a curated in-process plugin set. Its project copies exactly nine
 managed codec plugins and five x64 native codec libraries. The release contract requires
-34 paths, hash-binds 14 runtime files, expects nine plugin files to register 19 types, and
+36 paths, hash-binds 14 runtime files, expects nine plugin files to register 19 types, and
 runs five native probes. The 19 registrations are nine encoders, nine decoders, and the
 HDCD filter. WAV contributes one encoder and one decoder from the base codec assembly and
 is not part of that plugin count.
@@ -68,7 +68,7 @@ Observed on 2026-07-26:
 ### Classic / .NET Framework 4.7
 
 Classic is broader. `collect_files.bat` and the classic release contract include the WPF
-codec families plus FLACCL/OpenCL and architecture-specific TTA. The contract requires 63
+codec families plus FLACCL/OpenCL and architecture-specific TTA. The contract requires 97
 paths. Its trust manifest contains 34 entries, of which 26 are applicable to an x64
 runtime. The remaining entries include the Win32 TTA/RAR/native variants used by the x86
 build.
@@ -77,25 +77,35 @@ Classic TTA is not C#. It is a C++/CLI `.vcxproj` over vendored `ttalib-1.1`, bu
 separately for Win32 and x64. See the
 [TTA wrapper project](../../CUETools.Codecs.TTA/CUETools.Codecs.TTA.vcxproj).
 
-The classic package graph is `configured-not-observed` in this local audit. The full
-AnyCPU/x64/Win32 release matrix requires the hosted Visual Studio toolchain. The net47
-codec test assembly did run locally, but that does not exercise every classic packaged
-plugin.
+The complete classic package graph remains `configured-not-observed` pending its final
+artifact gate. The native x64 dependency build passes. After the two
+declared-net20 source fixes, the redirected-output classic AnyCPU solution completed
+with 53 succeeded and 0 failed. The x64 and Win32 configurations each completed with
+2 succeeded, 0 failed, and 59 skipped configuration entries. TTA compiled and linked
+in both configurations into valid CLR PE files. Installer Projects 3.0.0, using its
+required `DisableOutOfProcBuild` integration, passed 8 projects with 0 failures and
+produced a 929,792-byte MSI.
+
+Those local results used the Visual Studio 18 resolver with the VS2022 v143 toolset,
+not the exact pinned hosted VS2022 image. The net47 codec tests and FLACCL/OpenCL
+integration also ran locally, but final frozen-output receipts, complete 97-path
+artifact validation, and a hosted repeat remain necessary before promoting the whole
+classic package graph to observed.
 
 ## Primary codec matrix
 
 | Format or function | WPF x64 | Classic | Engine and current status |
 | --- | --- | --- | --- |
 | WAV / PCM | base encode + decode registered | same | Managed base codec; its net47 codec tests passed. This audit did not run a WPF-specific WAV codec probe. |
-| FLAC | Flake + libFLAC encode/decode registered | Flake + libFLAC plus FLACCL/OpenCL | The libFLAC round trip ran on net8; managed Flake ran in the net47 suite. libFLAC uses source-built 1.5.0. FLACCL is classic-only and has the residual defect below. |
+| FLAC | Flake + libFLAC encode/decode registered | Flake + libFLAC plus FLACCL/OpenCL | The libFLAC round trip ran on net8; managed Flake ran in the net47 suite. libFLAC uses source-built 1.5.0. FLACCL is classic-only; its corrected verifier ran on an RTX 3060 across OpenCL modes 0-8, CPU workers, 24-bit input, and the exact-frame boundary. |
 | ALAC / M4A | managed encode/decode registered | same | Its net47 codec tests passed. Verify defaults on. Path output is staged and published after finalization; this audit did not run a WPF-specific ALAC round trip. |
 | WavPack | native wrapper encode/decode, observed on net8 | packaged | Source-built WavPack 5.8.1; finalized output is independently decoded and compared when verify is on. Upstream 5.9.0 is pending compatibility work. |
-| Monkey's Audio / APE | native wrapper encode/decode, observed on net8 | packaged | Source-built MAC 10.86; finalized output is independently decoded and compared when verify is on. Upstream 13.20 is pending wrapper/corpus work. |
-| WMA | lossless/lossy encode + decode registered | same | Uses the Windows Media runtime. The lossless verification harness passed; the real round trip was skipped because this host lacks the lossless codec capability. |
+| Monkey's Audio / APE | native wrapper encode/decode, observed on net8 x64 and x86 | packaged | Source-built MAC 13.20; the adapted `IAPEIO` wrapper passed Win32/x64 builds and real 16/24-bit finalized-output decode and PCM comparison. |
+| WMA | lossless/lossy encode + decode registered | same | Uses the Windows Media runtime. A real net8 WMA Lossless encode, finalize, independent decode, and PCM comparison passed on this host; lossy WMA remains correctly outside the bit-equality contract. |
 | MP3 | LAME VBR/CBR encode registered | same | Vendored LAME 3.100 x64/x86 DLLs; a real current-wrapper encode passed. Upstream released 4.0 in July 2026. Neither primary package registers an MP3 decoder, and 4.0 ABI/quality/decode compatibility remains unobserved, so the major bump is not safe to infer. |
-| TTA | not shipped | encode + decode configured | C++/CLI wrapper over `ttalib-1.1`; configured for Win32/x64, not observed in this audit. |
+| TTA | not shipped | encode + decode configured | C++/CLI wrapper over `ttalib-1.1`; x64 and Win32 builds and runtime workers passed 16-bit stereo and 24-bit six-channel encodes, managed and ffmpeg PCM-equality decodes, cross-architecture bitstream identity, and failure-preserving publication checks. The wrapper now independently decodes finalized output before publication. Complete artifact packaging remains unobserved. |
 | DVD-A / Blu-ray LPCM | ATSI, BDLPCM, MPLS decoders registered | same | Managed MPEG plugin. Synthetic BDLPCM decode passed on net8. |
-| HDCD | native decode filter registered and observed | packaged | Managed wrapper plus vendored native `hdcd.dll`; original source/build provenance remains unknown. |
+| HDCD | native decode filter registered and observed | packaged | Managed wrapper plus Christopher Key's vendored native decoder. Discovery requires the complete usable filter contract: `HDCDDotNet`, `IAudioDest`, `IAudioFilter`, `IFormattable`, and a public `(int,int,int,bool)` constructor; valid and constructor-only impostor types are tested. Repository history and `License.txt` establish attribution and redistribution terms; the exact source revision, original download URL, and build recipe remain unknown. |
 | TAK | optional external executable | optional external executable | `takc.exe` encode/decode contract. Lossless output cannot be used without its self-decoder verification contract. |
 | Ogg Vorbis / Opus | optional external encode | optional external encode | `oggenc.exe` and `opusenc.exe`; no in-process implementation or primary-package decoder. |
 | Musepack | optional WPF import | user-configurable external path | WPF registers `mpcenc.exe` output only when usable; no bundled executable or decoder. |
@@ -126,10 +136,10 @@ Verification is an assurance contract, not one Boolean shared by all lossless fo
 
 | Tier | Codecs | What is actually checked |
 | --- | --- | --- |
-| A: finalized-file independent decode | WavPack, Monkey's Audio, WMA Lossless, lossless command encoders | Finalize the staged output, reopen or independently decode it, compare PCM format, exact sample count, and SHA-256 of the accepted PCM, then publish. Command encoders also require a successful verifier process and final output drain. |
+| A: finalized-file independent decode | WavPack, Monkey's Audio, WMA Lossless, TTA, lossless command encoders | Finalize the staged output, reopen or independently decode it, compare PCM format, exact sample count, and SHA-256 of the accepted PCM, then publish. Command encoders also require a successful verifier process and final output drain. |
 | B: encoder-integrated stream verification | libFLAC | libFLAC verifies encoded audio internally; `finish()` is checked so a final-block mismatch cannot close as success. The work file publishes only after finish succeeds. This is not an independent reopen of the final container. |
-| C: per-frame decode and compare | Flake, ALAC | Each encoded frame is decoded and every sample is compared. Verify defaults on. This catches frame corruption but does not independently reopen and validate the complete container. ALAC now stages path output before publication; Flake still writes its requested file directly. |
-| D: no current whole-output oracle | WAV, TTA, FLACCL | WAV and TTA have no independent post-output PCM proof. FLACCL has an optional per-frame verifier, but it defaults off and has the exact-length defect below. |
+| C: per-frame decode and compare | Flake, ALAC, FLACCL | Each encoded frame is decoded and every sample is compared. This catches frame corruption but does not independently reopen and validate the complete container. ALAC now stages path output before publication; Flake still writes its requested file directly. FLACCL's app-hosted one-time settings migration enables verify, while the standalone CLI remains explicitly opt-in through `--verify`. |
+| D: no current whole-output oracle | WAV | Raw WAV output has no independent post-output PCM proof. |
 
 Lossy formats are not bit-exact contracts. Their gates should check process/finalization
 success, output existence, decodability, duration, and format rather than PCM equality.
@@ -142,35 +152,32 @@ Relevant implementation evidence:
 - [libFLAC writer](../../CUETools.Codecs.libFLAC/Writer.cs)
 - [WavPack writer](../../CUETools.Codecs.libwavpack/Writer.cs)
 - [Monkey's Audio writer](../../CUETools.Codecs.MACLib/AudioEncoder.cs)
+- [TTA wrapper](../../CUETools.Codecs.TTA/CUETools.Codecs.TTA.cpp)
 - [Flake writer](../../CUETools.Codecs.Flake/AudioEncoder.cs)
 - [ALAC writer](../../CUETools.Codecs.ALAC/ALACWriter.cs)
+- [FLACCL writer](../../CUETools.Codecs.FLACCL/FLACCLWriter.cs)
 
 ## Test evidence
 
-The net47 codec suite was run on 2026-07-26:
+The final aggregate suite counts are intentionally refreshed only by the canonical
+gate after all changes land; the older 99-test snapshot is historical, not current
+release evidence. Evidence-specific runs on 2026-07-26 established:
 
-```text
-Total: 99
-Passed: 97
-Skipped: 2
-Failed: 0
-```
+- real WMA Lossless encode/finalize/independent-decode/PCM verification on net8;
+- real FLACCL verification on an RTX 3060 for OpenCL modes 0-8, CPU worker count 2,
+  24-bit input, and an exact 4096-sample boundary; verify-on and verify-off results
+  were byte-identical and the decoded PCM MD5 matched;
+- TTA x64 and x86 runtime workers passed short 16-bit stereo and 24-bit six-channel
+  encodes, managed and ffmpeg PCM-equality decodes, cross-architecture identity,
+  terminal-state checks, and failure-preserving publication checks;
+- focused WPF codec/trust tests passed 16/16, while focused manifest trust
+  selection passed 13/13.
 
-The two skips are expected and bounded by `eng/ci/test-suites.json`:
-
-- `AccurateRipVerifyTest.asdaTest` is explicitly ignored and contains a hard-coded
-  developer LocalDB scratch path.
-- `RealLosslessRoundTripVerifiesWhenWindowsCodecIsAvailable` reports inconclusive when
-  the host does not expose Windows Media Lossless.
-
-The suite now covers WAV primitives, managed FLAC and ALAC behavior, libFLAC,
+The canonical suite covers WAV primitives, managed FLAC and ALAC behavior, libFLAC,
 finalization and publication failures, external-process watchdogs, real FFmpeg ALAC
 self-verification when available, WMA verification logic, and output race handling. It
-does not turn TTA, FLACCL, MP3, or every external executable into
-`reachable-observed`.
-
-Focused WPF codec/trust tests also passed 16/16 on net8, while the focused
-manifest trust selection passed 13/13. The source is in:
+does not turn MP3 or every external executable into `reachable-observed`. The
+source is in:
 
 - [codec import integration tests](../../CUETools.Wpf.Tests/CodecImportIntegrationTests.cs)
 - [runtime trust tests](../../CUETools.Wpf.Tests/RuntimeTrustTests.cs)
@@ -179,33 +186,29 @@ manifest trust selection passed 13/13. The source is in:
 
 ## Open codec risks
 
-### FLACCL exact-length verification defect
+### FLACCL exact-length verification closure
 
-FLACCL is reachable only through the classic net47/OpenCL package. Its verify setting is
-`[DefaultValue(false)]`. When enabled, it passes the exact encoded frame length to the
-managed FLAC decoder:
+FLACCL remains reachable only through the classic net47/OpenCL package. The exact-length
+failure was fixed without relying on shared GPU-pipeline slack: each verification task
+gets a zero-lookahead buffer sized to `max_frame_size + 16`. The fix was exercised on an
+RTX 3060 across OpenCL modes 0-8, with two CPU workers, 24-bit input, and an exact
+4096-sample boundary. Verify-on and verify-off output was byte-identical and decoded PCM
+MD5 matched.
 
-```csharp
-task.verify.DecodeFrame(task.frame.writer.Buffer, task.frame.writer_offset, fs)
-```
-
-It did not receive Flake's bounded verify lookahead or the decoder end bound that fixed
-the managed FLAC exact-length failure. The shared GPU task buffer can have very little
-trailing slack on a one-compute-unit device, so this must be fixed and run on an OpenCL
-host rather than patched by analogy. Until then, do not enable FLACCL verification by
-default or claim its verify path is safe. Evidence:
-[FLACCL settings and writer](../../CUETools.Codecs.FLACCL/FLACCLWriter.cs).
+For serialized-settings compatibility, the codec type retains its historical false
+default. The application policy performs a versioned one-time migration that enables
+FLACCL verification; afterward the persisted user choice wins. The standalone FLACCL
+CLI deliberately remains opt-in because it exposes an explicit `--verify` switch.
+Evidence: [FLACCL settings and writer](../../CUETools.Codecs.FLACCL/FLACCLWriter.cs).
 
 ### Remaining evidence gaps
 
-- Run the full classic Release AnyCPU, x64, and Win32 artifact gates on hosted Visual
-  Studio, including TTA selection and invocation.
-- Run FLACCL exact-length and final-frame tests on real OpenCL hardware before changing
-  its default.
+- Retain the green local AnyCPU/x64/Win32/TTA/MSI evidence; finish the frozen 97-path
+  artifact/receipt validation and repeat the gates on the pinned hosted Visual Studio
+  image, including TTA selection and invocation.
 - Add real MP3 encode/decode-duration coverage. The primary packages currently encode
   MP3 but do not register an MP3 decoder.
-- Run the WMA Lossless real round trip on a Windows image that exposes that codec.
-- Decide whether WAV and TTA need finalized-file independent verification or a narrower
+- Decide whether raw WAV needs finalized-file independent verification or a narrower
   UI claim.
 - Treat the standalone FFmpeg workflow as a separate optional distribution unless a
   primary release deliberately imports and validates the complete native family.
@@ -215,8 +218,8 @@ default or claim its verify path is safe. Evidence:
 The 2026-07-02 audit remains useful as a record of the questions asked, but these claims
 are superseded:
 
-- `34/34` is no longer the codec-suite result; the current result is 97 passed and 2
-  expected skips out of 99.
+- `34/34` and the later 97/99 snapshot are historical codec-suite results; current
+  aggregate counts come only from the final canonical gate.
 - TTA is C++/CLI, not managed C#.
 - FlaCuda is deleted, not merely orphaned.
 - WPF and classic do not have the same codec set.

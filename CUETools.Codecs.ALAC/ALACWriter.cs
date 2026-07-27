@@ -83,6 +83,10 @@ namespace CUETools.Codecs.ALAC
         public EncoderSettings()
         {
             this.Init();
+            // New profiles verify by default. The false serialization default is retained so a
+            // later explicit opt-out remains omitted; CUEConfig's one-time versioned migration
+            // enables historical omissions once without re-enabling that later opt-out.
+            DoVerify = true;
         }
 
         public void Validate()
@@ -93,14 +97,14 @@ namespace CUETools.Codecs.ALAC
                 throw new Exception("unsupported encoder settings");
         }
 
-        // On by default, to match FLAC. A rip's whole value is bit-exactness, and an encoder bug is the
+        // On by default for new settings, to match FLAC. A rip's whole value is bit-exactness, and an encoder bug is the
         // one failure a verified read cannot catch: the audio off the disc was right and the file on
         // disk is wrong. Verify decodes each frame back and compares, so that fails loudly instead of
         // silently. ALAC does not share FLAC's lookahead bug - its decoder has no read_rice_block path -
         // and AlacVerifyOnEncodeTests proves transient-heavy content encodes clean at the app's mode 10
-        // with verify on, and that verify does not change the output. Only the default changed - a user
-        // who turned Verify off keeps that choice, since [JsonProperty] persists it.
-		[DefaultValue(true)]
+        // with verify on, and that verify does not change the output. CUEConfig owns the explicit,
+        // versioned migration needed to distinguish historical omissions from later opt-outs.
+		[DefaultValue(false)]
 		[DisplayName("Verify")]
 		[Description("Decode each frame and compare with original")]
         [JsonProperty]
