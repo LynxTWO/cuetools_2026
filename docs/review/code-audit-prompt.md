@@ -92,6 +92,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     honor a measured bounded settle when required, and retry only the exact observed transient while
     the transition is pending. Repeated or unrelated failures remain fatal. Log enough scrubbed
     command shape and transition state to locate intermittent failures without logging payload data.
+14. BATCH FAILURE IS NOT ITEM FAILURE. A rejected batch, archive, page, or bulk transfer does not
+    prove its members are corrupt. Decompose only where items have independent, trustworthy read
+    semantics, and continue only from successful item results. Do not recast command-shape,
+    transport, or container failures as damaged-subject evidence. Any required item that still fails
+    keeps its exact identity and fatal failure class. Bound and count compatibility fallbacks.
 
 ### How to choose the extraction
 

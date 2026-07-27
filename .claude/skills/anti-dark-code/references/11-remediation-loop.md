@@ -189,6 +189,13 @@ device cache, boundary read, media property, or persisted calibration.
   retry only the exact observed transient while the transition is pending. A repeat
   or unrelated failure stays fatal. Preserve transition and payload shape in the
   failure context so intermittent state bugs can be distinguished from bad ranges.
+- A rejected batch, archive, page, or bulk operation does not prove that every
+  contained item is bad. When the operation's semantics allow independent reads,
+  decompose it at the trust boundary and continue only from independently successful
+  item results. Do not turn a command-shape, transport, or container failure into
+  damaged-subject evidence. If any required item still fails, preserve that item's
+  exact identity and failure class and stop under the existing fatal policy. Bound
+  the fallback and record successful use so compatibility recovery remains visible.
 - Size an edge or range probe from the real configured offset or requirement. Proving
   the nearest block does not prove a larger correction range.
 - Persist semantic evidence roles, not only interchangeable values. Test, Copy,

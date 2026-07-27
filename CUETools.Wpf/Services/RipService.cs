@@ -899,6 +899,7 @@ public sealed class RipService : IRipService
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
+                    $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch
