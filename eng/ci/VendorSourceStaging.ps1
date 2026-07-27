@@ -319,7 +319,7 @@ function Read-CUEToolsVendorStageManifest([string]$StageRoot) {
         $info.Length -lt 2 -or $info.Length -gt 16MB) {
         throw "Vendor stage ownership manifest is not a bounded regular file."
     }
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 |
         ConvertFrom-Json
     if ([int]$manifest.schemaVersion -ne 1 -or
         [string]$manifest.kind -cne "cuetools-vendor-source-stage" -or

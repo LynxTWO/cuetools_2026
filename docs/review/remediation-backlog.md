@@ -1411,6 +1411,70 @@ does not relax evidence, rollback, or verification requirements.
   Codec tests pass 112/113 with one pre-existing skip, WPF tests pass 358/358,
   and the three net8 command-line outputs start with complete dependency closures.
 
+### R64. Native libFLAC conversions hide one truncating repair path - bucket A, risk high
+
+- **Area or slice:** staged libFLAC 1.5.0 bit writing, fixed and LPC residuals,
+  metadata size checks, stream decoding, channel decorrelation, and encoder
+  apodization parsing.
+- **Why it matters:** the checked native allowance contains arithmetic in the
+  lossless codec path. Most warnings represent intentional narrowing after a
+  local bound, but the missing-frame silence calculation narrows an untrusted
+  64-bit sample-number gap before its safety cap. Large gaps can wrap and bypass
+  the intended repair length.
+- **Evidence found:** 61 warning emissions across Win32 and x64 builds map to 31
+  exact source sites and eight normalized fingerprints in seven libFLAC files.
+  Current upstream master replaces the bit-writer byte multiplication with a
+  word-capacity check. The fixed-predictor selector rejects any residual above
+  `INT32_MAX`; LPC limit paths check the same bound; constant and warm-up decoder
+  branches require at most 32 bits. The decoder gap is a `FLAC__uint64`
+  subtraction assigned directly to `uint32_t` before the five-second and
+  50-frame caps. Windows PowerShell 5.1 also reads the UTF-8 staging manifest
+  with its legacy default encoding, corrupting a non-ASCII libFLAC test path.
+- **Confidence:** verified from both native build logs, bounded source searches,
+  the pinned 1.5.0 source, and current upstream source.
+- **Approval needed:** no; the user explicitly requested the native correctness
+  pass.
+- **Smallest safe next step:** carry the gap through its cap in 64 bits, validate
+  33-bit decorrelation before narrowing, apply the upstream bit-writer fix, and
+  make only range-proven conversions explicit. Empty the native warning baseline
+  only after both architectures emit zero warnings. Pin manifest reads to UTF-8
+  and exercise staging under both installed PowerShell engines.
+- **Verification plan:** Win32/x64 native rebuilds and warning gate, native FLAC
+  round trips and verify-on-encode tests, available upstream libFLAC tests,
+  vendor-clean gate, then refreshed release receipts after the active rip ends.
+- **Owner:** repo owner.
+- **Status:** fixed and locally verified 2026-07-27. All six native dependency
+  builds emit zero warnings against an empty baseline. Native-backed FLAC tests
+  pass 25/25, upstream libFLAC tests pass 2/2, classic codec tests pass 112/113
+  with one established skip, and WPF tests pass 358/358. Staging passes 15
+  checks under PowerShell 7, the final stage validates under Windows PowerShell
+  5.1, and all five submodules remain clean. The source-bound classic receipt
+  remains pending until the active rip ends.
+
+### R65. Core MSBuild cannot resolve legacy Visual Studio rulesets - bucket A, risk low
+
+- **Area or slice:** old-style managed projects built through `dotnet`, first
+  observed in `CUETools.TestHelpers`.
+- **Why it matters:** a clean native verification run still emits MSB3884 while
+  building its managed test harness, which makes the repository's zero managed
+  warning claim false for that supported command.
+- **Evidence found:** 10 projects name `AllRules.ruleset`; no ruleset is tracked
+  in the repository. Full Visual Studio installs the named file in its static
+  analysis directory, while Core MSBuild does not search that directory and
+  reports that the file cannot be found.
+- **Confidence:** verified from the build diagnostic, bounded project search,
+  and installed Visual Studio paths.
+- **Approval needed:** no; the user requested autonomous warning cleanup.
+- **Smallest safe next step:** clear only the unresolved Core MSBuild property
+  while preserving the declaration and full Visual Studio behavior.
+- **Verification plan:** rerun the net47 codec suite with no MSB3884, then
+  confirm the full Visual Studio solution still rebuilds with zero managed
+  warnings.
+- **Owner:** repo owner.
+- **Status:** fixed and locally verified 2026-07-27. The direct Core MSBuild
+  rebuild completes with zero warnings. Full Visual Studio receipt verification
+  remains paired with the post-rip classic release run.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1482,3 +1546,7 @@ dependency:
 - 2026-07-27 - closed R63 with zero managed warnings across the classic
   Any CPU, x64, and Win32 rebuilds, an RTX 3060 FLACCL verification run, and
   working net8 command-line dependency closures.
+- 2026-07-27 - added R64 after the checked native warning allowance exposed a
+  64-bit missing-frame gap narrowed before its repair cap.
+- 2026-07-27 - added R65 after the native verification lane exposed a dead
+  `AllRules.ruleset` reference under Core MSBuild.

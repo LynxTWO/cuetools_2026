@@ -9,16 +9,7 @@
     "x64|obj/vendor-sources/current/ThirdParty/WavPack/wavpackdll/wavpackdll.vcxproj",
     "x64|ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj"
   ],
-  "fingerprints": [
-    "ThirdParty/flac/src/libFLAC/bitwriter.c|C4334|'<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
-    "ThirdParty/flac/src/libFLAC/fixed.c|C4244|'=': conversion from 'const FLAC__int64' to 'FLAC__int32', possible loss of data",
-    "ThirdParty/flac/src/libFLAC/format.c|C4334|'<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
-    "ThirdParty/flac/src/libFLAC/lpc.c|C4244|'=': conversion from 'FLAC__int64' to 'FLAC__int32', possible loss of data",
-    "ThirdParty/flac/src/libFLAC/metadata_object.c|C4334|'<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)",
-    "ThirdParty/flac/src/libFLAC/stream_decoder.c|C4244|'=': conversion from 'FLAC__int64' to 'FLAC__int32', possible loss of data",
-    "ThirdParty/flac/src/libFLAC/stream_decoder.c|C4244|'initializing': conversion from 'FLAC__uint64' to 'uint32_t', possible loss of data",
-    "ThirdParty/flac/src/libFLAC/stream_encoder.c|C4244|'initializing': conversion from 'double' to 'FLAC__real', possible loss of data"
-  ],
+  "fingerprints": [],
   "limitations": [
     "This checked baseline covers the three native dependency DLLs in both Win32 and x64 builds. The complete classic solution warning surface and hosted-image parity use separate release receipts."
   ]
