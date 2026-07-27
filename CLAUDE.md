@@ -63,6 +63,9 @@ progress documents for it belong here, under `docs/review/`.
   lock selection while an operation owns the hardware. UI observers and progress
   listeners are ancillary; their exceptions must not change calibration, rip, or
   cleanup outcomes.
+- Publish immutable named evidence at the end of each completed phase. In Test &
+  Copy, Test CRC appears before Copy starts and Copy CRC appears before any
+  tie-break; a later phase must not erase a prior role it did not replace.
 
 ## Writing rules for all human-facing text
 

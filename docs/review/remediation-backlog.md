@@ -1069,12 +1069,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed and software/H:-hardware verified 2026-07-27. H: completed 25
   Paranoid cache-defeat windows twice; the final-source run used the real offset,
   consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF suite
-  passes 349/349, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
+  passes 350/350, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
   net8/net47/net20. After an elevated device restart and tray cycle, K: reopened
   and started a real Paranoid Test & Copy. Its first read found a stuck window with
   two errors at 60 percent, slowed, and converged to zero remaining errors on pass
   9 while the measured 786,432-byte flush was active. Final Test/Copy agreement and
-  CTDB repair remain pending until that live job completes.
+  CTDB repair remain pending until that live job completes. The live run also proved
+  that named Test CRC evidence was held inside the synchronous composite result
+  throughout Copy; the next build now publishes immutable Test and Copy snapshots
+  immediately after their respective reads.
 
 ### R54. Multiple drives cannot rip concurrently under one safe job controller - bucket B, risk high
 

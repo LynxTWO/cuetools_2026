@@ -181,6 +181,11 @@ device cache, boundary read, media property, or persisted calibration.
 - Persist semantic evidence roles, not only interchangeable values. Test, Copy,
   baseline, confirmation, and tie-break reads must keep their names; a third read
   must not silently replace or be mislabeled as one of the first two.
+- Publish immutable evidence when its producing phase completes. In a long
+  multi-pass operation, do not hide a completed Test, scan, validation, or receipt
+  until a later Copy, publication, or tie-break finishes. Label phase evidence
+  separately from the final composite outcome, preserve prior roles not replaced by
+  the new phase, and isolate presentation callbacks from the producer.
 - Bind every displayed or persisted hardware result to the exact physical device
   that produced it. On multi-device systems, make selection explicit, invalidate
   stale identity and evidence immediately when it changes, and prevent a settings

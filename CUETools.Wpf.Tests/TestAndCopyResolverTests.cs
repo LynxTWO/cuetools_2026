@@ -208,5 +208,25 @@ namespace CUETools.Wpf.Tests
             Assert.AreEqual(0x11111111u, evidence[0].TestCrc32);
             Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
         }
+
+        [TestMethod]
+        public void CompletedTestReadCanPublishBeforeCopyAndPreservesPriorCopy()
+        {
+            var reads = new[]
+            {
+                Record(new TrackCrc
+                {
+                    Crc32 = 0xAAAAAAAA,
+                    TestCrc32 = 0xAAAAAAAA,
+                    CopyCrc32 = 0x22222222,
+                }),
+            };
+
+            TrackCrc[] evidence =
+                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 0);
+
+            Assert.AreEqual(0xAAAAAAAAu, evidence[0].TestCrc32);
+            Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
+        }
     }
 }
