@@ -453,36 +453,40 @@ also records the count of transition-bound retries.
 ripper suite passes 14/14, the full WPF suite passes 352/352, and the SCSI project
 builds for net8, net47, and net20 under its required full-MSBuild host. K: later
 completed Test and advanced Copy to relative sector 283328 without another
-transition-bound failure. The ordinary-batch failure there is tracked under R58.
+transition-bound failure. The nested pinpoint failure there is tracked under R58.
 
-### Decompose a rejected payload batch without inventing damaged-media evidence
+### Preserve and recover a corroborated nested pinpoint failure
 
 **Exact files:** `CUETools.Ripper.SCSI/SCSIDrive.cs`,
 `CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
 `CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
 `CUETools.Wpf/Services/RipService.cs`, and the R58 review record.
 
-**Safety and unchanged behavior:** only a multi-sector `DeviceFailed`,
-`IllegalRequest`, ASC/ASCQ `24/00` payload may use the compatibility fallback.
-Read the rejected range one sector at a time and return success only when every
-independent payload succeeds. A single-sector `24/00` cannot recurse. Medium
-errors in this path do not become damaged-sector evidence because the originating
-failure established only a rejected transfer shape; every individual failure
-remains fatal with its exact sector context. All other payload policy is unchanged.
+**Safety and unchanged behavior:** retain the exact multi-sector `24/00`
+decomposition rule, which accepts only independently successful child payloads.
+For the separately observed path, first require a parent multi-sector medium error.
+Snapshot every child failure with its exact sector and sense before another command
+can overwrite device state. Retry a child `24/00` once after 80 ms. Consume only a
+successful retry. A repeated identical `24/00`, or a medium error on retry, marks
+only that sector untrusted for the existing vote and CTDB path. A different command,
+transport, readiness, removal, or hardware failure remains fatal.
 
 **Checks:** pure batch-policy positives and negatives; modern ripper tests; full
-WPF tests; net8/net47/net20 SCSI builds; then repeat K: Test & Copy beyond relative
+WPF tests; net8/net47/net20 SCSI builds; opt-in reads at relative sector 283328 and
+the 283200 window boundary at 4224 kB/s; then repeat K: Test & Copy beyond relative
 sector 283328.
 
 **Rollback:** revert the policy method, isolated fallback branch, counter, and log
 field together. Do not merge this with the medium-error split, whose trust
 semantics deliberately differ.
 
-**Observability:** each fatal individual fallback carries its exact relative
-sector, transfer count of one, command, applied speed, transition flags, and a
-batch-fallback marker without audio bytes. Completed phases record
-`payload_batch_fallbacks`.
+**Observability:** each child failure carries its exact relative sector, transfer
+count of one, parent batch location/count/sense, command, applied speed, and
+transition flags without audio bytes. Completed phases record
+`payload_batch_fallbacks`, `pinpoint_retries`, and
+`corroborated_unreadable_pinpoints`.
 
-**Status:** implemented and deterministic-test verified on 2026-07-27. The modern
-ripper suite passes 16/16, the full WPF suite passes 352/352, and the SCSI project
-builds for net8, net47, and net20 under full MSBuild. The real K: rerun remains.
+**Status:** implemented and bounded-test verified on 2026-07-27. The modern ripper
+policy suite passes 18/18, the full WPF suite passes 352/352, and SCSI builds pass
+for net8/net47/net20. The bounded K: probes pass at the exact relative sector and
+at the real window boundary/speed. The end-to-end rerun remains.

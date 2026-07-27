@@ -70,9 +70,14 @@ namespace CUETools.Ripper.SCSI
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _payloadBatchFallbackCount;
+		private int _pinpointRetryCount;
+		private int _corroboratedUnreadablePinpointCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
+		public int PinpointRetryCount => _pinpointRetryCount;
+		public int CorroboratedUnreadablePinpointCount =>
+			_corroboratedUnreadablePinpointCount;
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -1539,25 +1544,93 @@ namespace CUETools.Ripper.SCSI
 						FetchSectors(sector + iSector, 1, false);
 					if (singleStatus != Device.CommandStatus.Success)
 					{
-						Device.SenseKeyType singleSense =
-							singleStatus == Device.CommandStatus.DeviceFailed
-								? m_device.GetSenseKey()
-								: Device.SenseKeyType.NoSense;
+						int singleSector = sector + iSector;
+						string singleContext = string.Format(
+							"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, parent-batch-sector={6}, parent-batch-sectors={7}, parent-batch-sense={8}]",
+							Resource1.ReadCDError,
+							singleSector,
+							_readCDCommand,
+							_appliedSpeedKbps,
+							_speedChangeJustApplied,
+							_cacheDefeatJustFlushed,
+							sector,
+							Sectors2Read,
+							senseKey);
+						// Snapshot sense immediately. The next SCSI command overwrites the
+						// device's shared sense buffer, and the exact pinpoint failure decides
+						// whether this is damaged media or a fatal device/command failure.
+						SCSIException singleFailure =
+							new SCSIException(singleContext, m_device, singleStatus);
+						if (PayloadReadFailurePolicy.ShouldRetryPinpointAfterMediumBatch(
+							mediumError,
+							Sectors2Read,
+							singleFailure.Status,
+							singleFailure.SenseKey,
+							singleFailure.Asc,
+							singleFailure.Ascq))
+						{
+							// The batch established media trouble, while this one-sector
+							// command succeeds elsewhere in the same valid TOC range. Retry
+							// once after a bounded settle and use only successful payload.
+							Thread.Sleep(80);
+							_pinpointRetryCount++;
+							Device.CommandStatus repeatedStatus =
+								FetchSectors(singleSector, 1, false);
+							if (repeatedStatus == Device.CommandStatus.Success)
+								continue;
+
+							string repeatedContext = string.Format(
+								"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, parent-batch-sector={6}, parent-batch-sectors={7}, parent-batch-sense={8}, pinpoint-retry=True]",
+								Resource1.ReadCDError,
+								singleSector,
+								_readCDCommand,
+								_appliedSpeedKbps,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								sector,
+								Sectors2Read,
+								senseKey);
+							SCSIException repeatedFailure =
+								new SCSIException(
+									repeatedContext,
+									m_device,
+									repeatedStatus);
+							if (PayloadReadFailurePolicy.IsMediumError(
+									repeatedFailure.Status,
+									repeatedFailure.SenseKey) ||
+								PayloadReadFailurePolicy.IsCorroboratedUnreadablePinpoint(
+									mediumError,
+									Sectors2Read,
+									singleFailure.Status,
+									singleFailure.SenseKey,
+									singleFailure.Asc,
+									singleFailure.Ascq,
+									repeatedFailure.Status,
+									repeatedFailure.SenseKey,
+									repeatedFailure.Asc,
+									repeatedFailure.Ascq))
+							{
+								// Neither failed command supplied trusted bytes. Feed this
+								// exact sector into the normal vote/retry/CTDB path.
+								_corroboratedUnreadablePinpointCount++;
+								iErrors++;
+								MarkSectorUnreadable(singleSector);
+								continue;
+							}
+							throw repeatedFailure;
+						}
 						if (mediumError &&
 							!PayloadReadFailurePolicy.IsMediumError(
 								singleStatus,
-								singleSense))
+								singleFailure.SenseKey))
 						{
 							// A batch-level media fault may expose a different failure on the
 							// pinpoint read. Do not mislabel device removal, transport, readiness,
 							// command, or hardware failures as damage that CTDB can repair.
-							throw new SCSIException(
-								readContext,
-								m_device,
-								singleStatus);
+							throw singleFailure;
 						}
 						iErrors ++;
-						MarkSectorUnreadable(sector + iSector);
+						MarkSectorUnreadable(singleSector);
 						if (_debugMessages)
 							System.Console.WriteLine("\nSector lost");
 					}

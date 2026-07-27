@@ -900,6 +900,8 @@ public sealed class RipService : IRipService
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
                     $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
+                    $"pinpoint_retries={reader.PinpointRetryCount} " +
+                    $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch

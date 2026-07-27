@@ -99,6 +99,81 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void PinpointInvalidFieldRetriesOnlyAfterParentMediumError()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryPinpointAfterMediumBatch(
+                true,
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryPinpointAfterMediumBatch(
+                false,
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryPinpointAfterMediumBatch(
+                true,
+                1,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
+        public void RepeatedCorroboratedPinpointCanBecomeUnreadableEvidence()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.IsCorroboratedUnreadablePinpoint(
+                true,
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.IsCorroboratedUnreadablePinpoint(
+                false,
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.IsCorroboratedUnreadablePinpoint(
+                true,
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x44,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.IsCorroboratedUnreadablePinpoint(
+                true,
+                1,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
         public void InvalidFieldCanRetryOnceOnlyAfterAControlTransition()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(

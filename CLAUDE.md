@@ -83,6 +83,12 @@ progress documents for it belong here, under `docs/review/`.
   single-sector payload reads only when every sector succeeds independently. Any
   single-sector failure remains fatal with its exact sector and sense context; do
   not feed it into CTDB or the damaged-sector vote. Count successful batch fallbacks.
+- Preserve nested SCSI identity. When a batch reports medium error, snapshot each
+  failed pinpoint sector before another command overwrites device sense. A pinpoint
+  `IllegalRequest / 24/00` may retry once only with that parent medium-error
+  corroboration. Use only a successful retry; a repeated identical rejection may
+  mark that exact sector untrusted, while every different repeat remains fatal.
+  Never report a child failure using its parent's sector count or range.
 - Keep the Rip page operable at the 1200-pixel default width. Primary actions,
   Test/Copy CRC evidence, and drive selection must remain reachable. Use bounded
   proportional layout and wrapping at supported widths, vertical scrolling for
