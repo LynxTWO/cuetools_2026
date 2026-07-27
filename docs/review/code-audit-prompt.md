@@ -73,6 +73,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
    human metadata, custom fields, artwork, and disc identity. AccurateRip/CTDB confidence and CRC
    tags describe the old payload; after samples change they must be independently recomputed or
    deliberately removed, never copied as if they still proved the repaired bytes.
+10. MULTI-DRIVE EVIDENCE MUST NAME ITS DEVICE. A page must not retain drive H:'s identity or
+    calibration while Rip operates on K:. Make selection explicit and synchronized, clear stale
+    device evidence immediately on selection changes, and lock selectors while a hardware-owning
+    operation is active. UI/event listeners are ancillary: marshal them to the UI thread and contain
+    their failures so they cannot abort calibration, ripping, or ownership-scope cleanup.
 
 ### How to choose the extraction
 

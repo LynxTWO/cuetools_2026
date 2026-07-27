@@ -1,5 +1,8 @@
 using System.Globalization;
+using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using CUETools.Wpf.Accuracy;
 using CUETools.Wpf.Models;
@@ -17,6 +20,7 @@ public sealed class DriveViewModel : PageViewModel
     private readonly IDriveService _drives;
     private readonly DriveCalibrationService _calibration;
     private bool _busy;
+    private bool _selectionRefreshPending;
 
     public DriveViewModel(IDriveService drives, DriveCalibrationService calibration)
         : this(drives, calibration, autoDetect: true)
@@ -33,8 +37,14 @@ public sealed class DriveViewModel : PageViewModel
         Subtitle = "Everything this drive reports about itself. Detect reads it live over SCSI - no disc needed.";
         _drives = drives;
         _calibration = calibration;
+        _drives.SelectedDriveChanged += OnSelectedDriveChanged;
+        _drives.RipInProgressChanged += OnRipInProgressChanged;
+        _calibration.CalibrationSaved += OnCalibrationSaved;
         var d = drives.GetDrives();
-        DriveLetter = d.Count > 0 ? d[0] + ":" : "no optical drive";
+        foreach (char drive in d)
+            Drives.Add(drive);
+        _selectedDrive = d.Count > 0 ? TargetDrive(d) : '\0';
+        DriveLetter = d.Count > 0 ? _selectedDrive + ":" : "no optical drive";
         DetectCommand = new RelayCommand(_ => { _ = DetectAsync(); }, _ => !_busy && !drives.RipInProgress);
         CalibrateCommand = new RelayCommand(_ => { _ = CalibrateAsync(); }, _ => !_busy && HasDetails && !drives.RipInProgress);
         if (autoDetect && d.Count > 0) _ = DetectAsync();   // populate on open so the page is never empty
@@ -42,6 +52,31 @@ public sealed class DriveViewModel : PageViewModel
 
     private string _driveLetter = "";
     public string DriveLetter { get => _driveLetter; private set => Set(ref _driveLetter, value); }
+
+    public ObservableCollection<char> Drives { get; } = new();
+
+    private char _selectedDrive;
+    public char SelectedDrive
+    {
+        get => _selectedDrive;
+        set
+        {
+            if (_selectedDrive == value)
+                return;
+            if (_drives.RipInProgress)
+            {
+                Status = "The active drive cannot be changed while a rip, verify, Test & Copy, or calibration is running.";
+                OnPropertyChanged();
+                return;
+            }
+            if (!Drives.Contains(value))
+                return;
+            Set(ref _selectedDrive, value);
+            _drives.SelectedDrive = value;
+        }
+    }
+
+    public bool IsDriveSelectionEnabled => !_busy && !_drives.RipInProgress;
 
     private DriveDetails? _details;
     public DriveDetails? Details { get => _details; private set { if (Set(ref _details, value)) OnPropertyChanged(nameof(HasDetails)); } }
@@ -79,6 +114,77 @@ public sealed class DriveViewModel : PageViewModel
         return drives[0];
     }
 
+    private void OnSelectedDriveChanged(object? sender, EventArgs e)
+    {
+        // Remove stale identity/calibration immediately. A fast drive switch must never leave H:'s
+        // evidence visible under a session that is now operating on K:, even while the asynchronous
+        // SCSI refresh waits behind another drive operation.
+        var drives = _drives.GetDrives();
+        if (drives.Count == 0)
+            return;
+        char selected = TargetDrive(drives);
+        Set(ref _selectedDrive, selected, nameof(SelectedDrive));
+        DriveLetter = selected + ":";
+        Details = null;
+        Cal = null;
+
+        if (_busy || _drives.RipInProgress)
+        {
+            _selectionRefreshPending = true;
+            Status = _drives.RipInProgress
+                ? $"Drive {selected}: is in use. Details will refresh when the job finishes."
+                : $"Switching to drive {selected}:...";
+            return;
+        }
+        _ = DetectAsync();
+    }
+
+    private void OnRipInProgressChanged(object? sender, EventArgs e)
+    {
+        void Apply()
+        {
+            OnPropertyChanged(nameof(IsDriveSelectionEnabled));
+            CommandManager.InvalidateRequerySuggested();
+            if (!_drives.RipInProgress && _selectionRefreshPending)
+            {
+                _selectionRefreshPending = false;
+                _ = DetectAsync();
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+            _ = dispatcher.BeginInvoke((Action)Apply);
+        else
+            Apply();
+    }
+
+    private void OnCalibrationSaved(DriveCalibration calibration)
+    {
+        // Calibrate runs on a worker thread. Marshal only the in-memory UI update; do not issue a
+        // Detect here because the active rip owns the drive handle.
+        void Apply()
+        {
+            if (Details?.ARName != null &&
+                string.Equals(
+                    Details.ARName.Trim(),
+                    calibration.DriveSignature.Trim(),
+                    StringComparison.Ordinal))
+            {
+                Cal = calibration;
+                Status = $"Calibration saved for {DriveLetter}: cache {calibration.CacheDefeat}; " +
+                    $"overread lead-in {(calibration.OverreadLeadIn ? "yes" : "no")}, " +
+                    $"lead-out {(calibration.OverreadLeadOut ? "yes" : "no")}.";
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+            _ = dispatcher.BeginInvoke((Action)Apply);
+        else
+            Apply();
+    }
+
     private async Task DetectAsync()
     {
         if (_busy || _drives.RipInProgress)
@@ -86,6 +192,7 @@ public sealed class DriveViewModel : PageViewModel
         var d = _drives.GetDrives();
         if (d.Count == 0) { Status = "No optical drive found."; return; }
         _busy = true;
+        OnPropertyChanged(nameof(IsDriveSelectionEnabled));
         CommandManager.InvalidateRequerySuggested();
         Status = "Reading the drive over SCSI...";
         char drive = TargetDrive(d);
@@ -93,6 +200,11 @@ public sealed class DriveViewModel : PageViewModel
         try
         {
             var det = await Task.Run(() => _drives.GetDriveDetails(drive));
+            if (TargetDrive(_drives.GetDrives()) != drive)
+            {
+                _selectionRefreshPending = true;
+                return;
+            }
             Details = det;
             if (det.Valid)
             {
@@ -103,7 +215,14 @@ public sealed class DriveViewModel : PageViewModel
                 // fire-and-forget detect task fault or leave the page permanently busy.
                 try
                 {
-                    Cal = await Task.Run(() => _calibration.Get(det.ARName ?? ""));
+                    var loadedCalibration =
+                        await Task.Run(() => _calibration.Get(det.ARName ?? ""));
+                    if (TargetDrive(_drives.GetDrives()) != drive)
+                    {
+                        _selectionRefreshPending = true;
+                        return;
+                    }
+                    Cal = loadedCalibration;
                 }
                 catch (System.IO.InvalidDataException)
                 {
@@ -126,7 +245,13 @@ public sealed class DriveViewModel : PageViewModel
         finally
         {
             _busy = false;
+            OnPropertyChanged(nameof(IsDriveSelectionEnabled));
             CommandManager.InvalidateRequerySuggested();
+            if (_selectionRefreshPending && !_drives.RipInProgress)
+            {
+                _selectionRefreshPending = false;
+                _ = DetectAsync();
+            }
         }
     }
 
@@ -147,6 +272,7 @@ public sealed class DriveViewModel : PageViewModel
         if (_drives.RipInProgress) { Status = "A rip is running on this drive - calibration has to wait."; return; }
         char drive = TargetDrive(d);
         _busy = true;
+        OnPropertyChanged(nameof(IsDriveSelectionEnabled));
         CommandManager.InvalidateRequerySuggested();
         Status = "Calibrating " + drive + ": (probing cache, overread, and speed - needs a disc)...";
         try
@@ -175,6 +301,7 @@ public sealed class DriveViewModel : PageViewModel
         finally
         {
             _busy = false;
+            OnPropertyChanged(nameof(IsDriveSelectionEnabled));
             CommandManager.InvalidateRequerySuggested();
         }
     }

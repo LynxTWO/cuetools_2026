@@ -58,6 +58,11 @@ progress documents for it belong here, under `docs/review/`.
   demonstrated caching, retain the largest proven safe flush size across noisy later
   calibrations. Lead-in/out flags are valid only when the exact offset-sized boundary
   range was probed and the SCSI reader consumes it.
+- Multi-drive UI evidence must remain bound to its physical drive. Keep Drive & Read
+  selection synchronized with Rip, clear stale identity/calibration on changes, and
+  lock selection while an operation owns the hardware. UI observers and progress
+  listeners are ancillary; their exceptions must not change calibration, rip, or
+  cleanup outcomes.
 
 ## Writing rules for all human-facing text
 

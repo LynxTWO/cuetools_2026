@@ -30,21 +30,68 @@ public sealed class DriveService : IDriveService
     public DriveService(CUEConfig config, IDiagnosticLog log) { _config = config; _log = log; }
 
     /// <summary>Session-shared drive selection - see IDriveService.SelectedDrive.</summary>
-    public char SelectedDrive { get; set; }
+    private char _selectedDrive;
+    public char SelectedDrive
+    {
+        get => _selectedDrive;
+        set
+        {
+            if (_selectedDrive == value)
+                return;
+            _selectedDrive = value;
+            try { SelectedDriveChanged?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex)
+            {
+                // A page refresh is advisory. It must never prevent the caller from selecting and
+                // reading the requested physical drive.
+                try { _log.Warn("drive", "selected-drive UI notification failed: " + ex.GetType().Name); }
+                catch { }
+            }
+        }
+    }
+
+    public event EventHandler? SelectedDriveChanged;
 
     /// <summary>See IDriveService.RipInProgress. Ref-counted because one user-visible operation can
     /// open the drive several times - a Test &amp; Copy is a calibration probe plus 2-3 reads.</summary>
     public bool RipInProgress => System.Threading.Volatile.Read(ref _ripDepth) > 0;
 
     private static int _ripDepth;
+    private static event EventHandler? SharedRipInProgressChanged;
+    public event EventHandler? RipInProgressChanged
+    {
+        add => SharedRipInProgressChanged += value;
+        remove => SharedRipInProgressChanged -= value;
+    }
 
     /// <summary>Marks the drive as in use by a rip for as long as the returned token is undisposed.</summary>
     internal static IDisposable EnterRip() => new RipScope();
 
+    private static void NotifyRipInProgressChanged()
+    {
+        // UI observers are outside the audio correctness path. A broken listener must not abort
+        // scope acquisition, skip cleanup, or strand the global ref-count above zero.
+        try { SharedRipInProgressChanged?.Invoke(null, EventArgs.Empty); }
+        catch { }
+    }
+
     private sealed class RipScope : IDisposable
     {
-        public RipScope() { System.Threading.Interlocked.Increment(ref _ripDepth); }
-        public void Dispose() { System.Threading.Interlocked.Decrement(ref _ripDepth); }
+        private int _disposed;
+
+        public RipScope()
+        {
+            if (System.Threading.Interlocked.Increment(ref _ripDepth) == 1)
+                NotifyRipInProgressChanged();
+        }
+
+        public void Dispose()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+            if (System.Threading.Interlocked.Decrement(ref _ripDepth) == 0)
+                NotifyRipInProgressChanged();
+        }
     }
 
     public IReadOnlyList<char> GetDrives()

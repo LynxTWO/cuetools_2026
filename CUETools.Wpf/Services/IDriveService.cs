@@ -10,6 +10,11 @@ public interface IDriveService
 {
     IReadOnlyList<char> GetDrives();
 
+    /// <summary>Raised when the session's selected drive changes so other pages cannot keep showing
+    /// stale details for a different physical drive. The notification carries no hardware data and
+    /// does not touch the drive.</summary>
+    event EventHandler? SelectedDriveChanged;
+
     /// <summary>The drive the user is working with, shared across pages for this session (not persisted).
     /// '\0' until a page sets it. The Rip page sets it from its own picker; the Drive &amp; Read page
     /// detects and CALIBRATES this drive. Both used to act on GetDrives()[0] independently, so on a
@@ -24,6 +29,11 @@ public interface IDriveService
     /// the user to open the tray DURING a rip, which the rip code itself warns can crash the drive layer.
     /// The mirror case is just as bad: starting a rip during a calibration makes the rip throw.</summary>
     bool RipInProgress { get; }
+
+    /// <summary>Raised only when the first drive-owning operation starts or the last one ends.
+    /// Drive selectors use it to lock themselves for the exact lifetime of Rip, Verify,
+    /// Test &amp; Copy, or calibration.</summary>
+    event EventHandler? RipInProgressChanged;
 
     /// <summary>Open the drive and read its table of contents, or null if there is no
     /// readable audio disc (empty tray, data disc, or drive not ready). <paramref name="onStatus"/>

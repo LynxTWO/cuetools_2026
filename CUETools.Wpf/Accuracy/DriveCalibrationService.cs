@@ -26,6 +26,11 @@ public sealed class DriveCalibrationService
         _store = store;
     }
 
+    /// <summary>Raised after a complete calibration has been durably saved. Drive-facing views use
+    /// this to refresh the displayed evidence after first-use calibration performed by Rip/Verify/
+    /// Test &amp; Copy, without opening or otherwise disturbing the drive held by that job.</summary>
+    public event Action<DriveCalibration>? CalibrationSaved;
+
     /// <summary>The saved calibration for a drive signature, or null if it has never been run.</summary>
     public DriveCalibration Get(string signature) => _store.Get(signature);
 
@@ -115,6 +120,14 @@ public sealed class DriveCalibrationService
                 $"offset={(cal.ReadOffsetKnown ? cal.ReadOffsetSamples.ToString() : "unknown")} " +
                 $"overreadIn={(cal.OverreadLeadIn ? 1 : 0)} overreadOut={(cal.OverreadLeadOut ? 1 : 0)} " +
                 $"read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
+            try { CalibrationSaved?.Invoke(cal); }
+            catch (Exception ex)
+            {
+                // Persistence is already complete. A stale or faulty view must not make the
+                // calibration gate report failure after its evidence was safely saved.
+                try { _log.Warn("calibrate", "saved-calibration UI notification failed: " + ex.GetType().Name); }
+                catch { }
+            }
             return cal;
         }
         catch (DriveCalibrationPersistenceException)

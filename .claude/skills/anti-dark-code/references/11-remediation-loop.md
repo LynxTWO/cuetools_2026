@@ -181,6 +181,12 @@ device cache, boundary read, media property, or persisted calibration.
 - Persist semantic evidence roles, not only interchangeable values. Test, Copy,
   baseline, confirmation, and tie-break reads must keep their names; a third read
   must not silently replace or be mislabeled as one of the first two.
+- Bind every displayed or persisted hardware result to the exact physical device
+  that produced it. On multi-device systems, make selection explicit, invalidate
+  stale identity and evidence immediately when it changes, and prevent a settings
+  view from showing device A's calibration while an operation uses device B.
+  Lock device selection for the lifetime of a hardware-owning operation or prove
+  that the operation uses an immutable selection snapshot.
 - Exercise the real device beyond the prior failure time, window, or state
   transition. A quick open/TOC smoke does not prove repeated flush, seek, reread, or
   end-of-media behavior.
@@ -411,6 +417,11 @@ surfaces, network connection code, or UI claims about side effects:
   operation's result. Clear the prior job's status when a new job starts, and never
   display "saved", "recorded", "calibrated", or "published" after that side effect
   failed or was not attempted.
+- Treat UI notifications, progress callbacks, and observer events as untrusted
+  ancillary consumers. Marshal UI mutation to the correct thread and contain
+  listener exceptions after the durable state transition. A broken display
+  subscriber must not turn a successful calibration into failure, abort a rip, or
+  skip cleanup of a correctness-critical ownership scope.
 - When a formerly swallowed failure becomes an exception or explicit error, inspect
   every reachable consumer. Ancillary failures must be contained at the boundary
   where product policy says the primary operation should continue.
