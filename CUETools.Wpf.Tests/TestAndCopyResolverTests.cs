@@ -1,4 +1,5 @@
 using CUETools.Wpf.Accuracy;
+using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CUETools.Wpf.Tests
@@ -172,6 +173,40 @@ namespace CUETools.Wpf.Tests
             // Read1 fails track 2, read2 fails track 1 - no staged read is clean on both tracks.
             var reads = new[] { Read(1, 50), Read(1, 60), Read(2, 50) };
             Assert.AreEqual(-1, TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(3)));
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidenceKeepsTestAndCopyWhenThirdReadIsCommitted()
+        {
+            var reads = new[]
+            {
+                Record(T(10, c32: 0x11111111)),
+                Record(T(20, c32: 0x22222222)),
+                Record(T(10, c32: 0x33333333)),
+            };
+
+            TrackCrc[] evidence =
+                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 2);
+
+            Assert.AreEqual(0x33333333u, evidence[0].Crc32);
+            Assert.AreEqual(0x11111111u, evidence[0].TestCrc32);
+            Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
+        }
+
+        [TestMethod]
+        public void NamedCrcFallbackSurvivesRecordsWithoutCurrentReadCrc()
+        {
+            var reads = new[]
+            {
+                Record(new TrackCrc { TestCrc32 = 0x11111111 }),
+                Record(new TrackCrc { CopyCrc32 = 0x22222222 }),
+            };
+
+            TrackCrc[] evidence =
+                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 1);
+
+            Assert.AreEqual(0x11111111u, evidence[0].TestCrc32);
+            Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
         }
     }
 }

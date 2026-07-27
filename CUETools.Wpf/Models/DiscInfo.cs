@@ -16,6 +16,8 @@ public sealed class DiscInfo
     public IReadOnlyList<TrackItem> Tracks { get; init; } = Array.Empty<TrackItem>();
     public TimeSpan TotalLength { get; init; }
     public string TocId { get; init; } = "";
+    /// <summary>Stable CUETools/CTDB disc identity used by verify history.</summary>
+    public string DiscId { get; init; } = "";
     public IReadOnlyList<string> ReleaseMatches { get; init; } = Array.Empty<string>();
 
     /// <summary>The matched releases, ranked best-first with source + why. Empty when offline or

@@ -59,12 +59,12 @@ public sealed class RepairPreservationIntegrationTests
             "TITLE \"Preserved Album\"" + Environment.NewLine +
             "FILE \"" + firstName + "\" WAVE" + Environment.NewLine +
             "  TRACK 01 AUDIO" + Environment.NewLine +
-            "    TITLE \"First Source Title\"" + Environment.NewLine +
+            "    TITLE \"Cue Title Must Not Replace First Source\"" + Environment.NewLine +
             "    PERFORMER \"Preserved Artist\"" + Environment.NewLine +
             "    INDEX 01 00:00:00" + Environment.NewLine +
             "FILE \"" + secondName + "\" WAVE" + Environment.NewLine +
             "  TRACK 02 AUDIO" + Environment.NewLine +
-            "    TITLE \"Second Source Title\"" + Environment.NewLine +
+            "    TITLE \"Cue Title Must Not Replace Second Source\"" + Environment.NewLine +
             "    PERFORMER \"Preserved Artist\"" + Environment.NewLine +
             "    INDEX 01 00:00:00" + Environment.NewLine);
 
@@ -89,12 +89,14 @@ public sealed class RepairPreservationIntegrationTests
                 sheet.DestPaths[0],
                 "First Source Title",
                 1,
-                "custom-first");
+                "custom-first",
+                "source-cdtoc-1");
             AssertPreservedTags(
                 sheet.DestPaths[1],
                 "Second Source Title",
                 2,
-                "custom-second");
+                "custom-second",
+                "source-cdtoc-2");
             Assert.AreEqual(firstHash, HashFile(first));
             Assert.AreEqual(secondHash, HashFile(second));
         }
@@ -140,9 +142,10 @@ public sealed class RepairPreservationIntegrationTests
             Assert.AreEqual(1, sheet.FinalOutputProofs.Count);
             AssertPreservedTags(
                 sheet.DestPaths[0],
-                expectedTitle: null,
+                expectedTitle: "Image Source Title",
                 expectedTrack: 0,
-                expectedCustom: "custom-image");
+                expectedCustom: "custom-image",
+                expectedCdtoc: "source-cdtoc-0");
             Assert.AreEqual(sourceHash, HashFile(image));
         }
         finally
@@ -274,6 +277,9 @@ public sealed class RepairPreservationIntegrationTests
             TagLib.TagTypes.Xiph,
             create: true);
         xiph.SetField("CUETOOLS_PRESERVATION_TEST", new[] { custom });
+        xiph.SetField("CDTOC", new[] { "source-cdtoc-" + track });
+        xiph.SetField("ACCURATERIPCRC", new[] { "stale-ar-proof" });
+        xiph.SetField("CTDBTRACKCONFIDENCE", new[] { "stale-ctdb-proof" });
         file.Save();
     }
 
@@ -281,7 +287,8 @@ public sealed class RepairPreservationIntegrationTests
         string path,
         string expectedTitle,
         uint expectedTrack,
-        string expectedCustom)
+        string expectedCustom,
+        string expectedCdtoc)
     {
         using TagLib.File file = TagLib.File.Create(path);
         if (expectedTitle != null)
@@ -311,6 +318,17 @@ public sealed class RepairPreservationIntegrationTests
         CollectionAssert.AreEqual(
             new[] { expectedCustom },
             xiph.GetField("CUETOOLS_PRESERVATION_TEST"));
+        CollectionAssert.AreEqual(
+            new[] { expectedCdtoc },
+            xiph.GetField("CDTOC"));
+        Assert.AreEqual(
+            0,
+            xiph.GetField("ACCURATERIPCRC").Length,
+            "A repaired payload must not inherit stale AccurateRip proof tags.");
+        Assert.AreEqual(
+            0,
+            xiph.GetField("CTDBTRACKCONFIDENCE").Length,
+            "A repaired payload must not inherit stale CTDB proof tags.");
     }
 
     private static string HashFile(string path)

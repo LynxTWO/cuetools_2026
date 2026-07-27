@@ -155,6 +155,39 @@ oracle. Revalidate that proof at the new boundary or explicitly clear/downgrade 
 claim. Prevent time-of-check/time-of-use gaps by holding an appropriate read lease
 while hashing, copying, or reopening the bytes that the proof names.
 
+### Measurement-driven hardware and calibration checklist
+
+Use this when correctness depends on a measured hardware capability, timing result,
+device cache, boundary read, media property, or persisted calibration.
+
+- Treat newly required calibration as a state migration, not an optional settings
+  screen. Trigger it before the first operation whose assurance depends on it, version
+  the record, and refuse the operation when the required probe cannot complete.
+- Distinguish positive evidence from failure to observe. Once hardware has
+  demonstrated a safety-relevant behavior such as caching, a later noisy timing run
+  that does not observe it does not prove the behavior disappeared.
+- For safety quantities where oversizing costs only performance and undersizing can
+  invalidate evidence, retain a conservative high-water measurement. Record why that
+  direction is conservative; do not apply this rule blindly to quantities whose
+  larger value can damage hardware or data.
+- Make proof-establishing side effects complete or explicit. A partial cache flush,
+  incomplete seek-away read, shortened scrub, or ignored device status must not be
+  reported as an independent reread.
+- Probe the exact command, transfer shape, flags, and range the runtime will consume.
+  A multi-block boundary probe can falsely reject a valid one-block overread; a
+  successful capability flag is useless if the read path still pads or bypasses it.
+- Size an edge or range probe from the real configured offset or requirement. Proving
+  the nearest block does not prove a larger correction range.
+- Persist semantic evidence roles, not only interchangeable values. Test, Copy,
+  baseline, confirmation, and tie-break reads must keep their names; a third read
+  must not silently replace or be mislabeled as one of the first two.
+- Exercise the real device beyond the prior failure time, window, or state
+  transition. A quick open/TOC smoke does not prove repeated flush, seek, reread, or
+  end-of-media behavior.
+- Report unavailable hardware, wedged device handles, access-denied resets, and
+  incomplete probes as explicit evidence gaps. Do not convert them into a negative
+  capability result or a passing software test.
+
 ### Transaction and atomic-publication checklist
 
 Use this checklist for repair, import, output publication, multi-file encoding, migration artifacts, or any operation advertised as atomic:
@@ -171,6 +204,10 @@ Use this checklist for repair, import, output publication, multi-file encoding, 
   filenames, tags or properties, artwork, sidecars, ordering, timestamps when
   promised, and any format-specific fields. A repaired payload with synthetic names
   or dropped metadata is not a complete preserved result.
+- Separate user-authored or identity metadata from payload-dependent verification
+  claims. Preserve representable human/custom fields exactly, but recompute or
+  deliberately remove stale checksums, confidence values, signatures, and proof tags
+  after the payload changes. Never copy old proof merely to make raw tag sets match.
 - Give preservation and recovery operations their own policy. Do not let a user's
   ordinary conversion preferences silently disable source names or metadata that the
   preservation contract requires. Apply metadata before the final independent

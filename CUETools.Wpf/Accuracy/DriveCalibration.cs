@@ -28,6 +28,10 @@ public sealed class DriveCalibration
     public string DriveSignature { get; set; } = "";
     public string CacheDefeat { get; set; } = "Unconfirmed";   // "FUA" | "Flush:<bytes>" | "Unconfirmed"
     public CalConfidence CacheConfidence { get; set; } = CalConfidence.Unconfirmed;
+    /// <summary>The AccurateRip read offset whose full edge range was probed.</summary>
+    public int ReadOffsetSamples { get; set; }
+    /// <summary>False when offset lookup was unavailable; overread must then remain disabled.</summary>
+    public bool ReadOffsetKnown { get; set; }
     public bool OverreadLeadIn { get; set; }
     public bool OverreadLeadOut { get; set; }
     public int MaxSpeedKbps { get; set; }

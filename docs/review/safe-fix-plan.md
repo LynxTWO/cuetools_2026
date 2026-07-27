@@ -313,7 +313,44 @@ repair directory. Tests compare metadata in temporary fixtures without logging t
 contents or user paths.
 
 **Status:** complete locally on 2026-07-27. Real managed-FLAC track-set and
-disc-image tests preserve punctuation-bearing basenames, standard tags, custom
-Xiph fields, and embedded artwork while proving the source bytes unchanged.
-Focused repair tests pass 14/14 and the full WPF suite passes 339/339. The opt-in
-live K: damaged-disc check remains external evidence, not an inferred pass.
+disc-image tests preserve punctuation-bearing basenames, source-authoritative
+standard tags, custom Xiph fields, exact CDTOC values, and embedded artwork while
+proving the source bytes unchanged. Stale AccurateRip/CTDB proof tags are
+deliberately absent from repaired payloads. Focused repair tests pass 14/14. The
+opt-in live K: damaged-disc check remains external evidence, not an inferred pass.
+
+### First-use cache calibration, overread, and named CRC evidence
+
+**Exact files:** `CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Wpf/Accuracy/DriveCalibrationService.cs`,
+`CUETools.Wpf/Services/RipService.cs`, Rip/Drive view models and views, persistence
+models, and focused calibration/history/Test & Copy tests.
+
+**Safety and unchanged behavior:** calibrate before the first read that depends on
+the drive record. Require a confirmed independent-reread strategy for Secure and
+Paranoid. Retain the largest proven flush across timing noise and require every
+flush read to complete. Probe lead-in/out with the same read command and only the
+offset-sized one-sector range; retain zero-padding when the drive rejects an edge.
+Store Test and Copy as named CRC roles without changing the existing agreement
+oracle or labeling the third confirmation as Copy.
+
+**Checks:** cache-policy tests for smaller and apparently uncached later probes;
+history persistence across roles/restarts/drives; third-read labeling; net8 and
+net47 SCSI builds; full WPF tests; isolated live H: 25-window Paranoid
+cache-defeat run; final damaged K: Test & Copy and lead-out pass after device reset.
+
+**Rollback:** revert the calibration schema version and reader edge-range changes
+together. A partial rollback could trust new flags without consuming them or consume
+unprobed flags.
+
+**Observability:** calibration logs the measured strategy, size, offset edge
+capabilities, timing, and scrubbed exception/SCSI evidence. CRC evidence contains
+audio checksums and disc identity, not user paths or tags.
+
+**Status:** implemented and deterministic-test verified on 2026-07-27. H: passed
+25 Paranoid cache-defeat windows twice; the final-source run used the real read
+offset, consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF
+suite passes 347/347, the ripper suites pass net8 8/8 and net47 17/17, and the SCSI
+project builds for net8, net47, and net20 under its required full-MSBuild host. K:
+remains an explicit hardware evidence gap until Windows releases its wedged device
+handle.

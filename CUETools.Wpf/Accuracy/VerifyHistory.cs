@@ -12,7 +12,12 @@ namespace CUETools.Wpf.Accuracy
     {
         public uint ArV1 { get; set; }
         public uint ArV2 { get; set; }
+        /// <summary>The checksum from this particular optical read.</summary>
         public uint Crc32 { get; set; }
+        /// <summary>Most recent verify/Test-pass full-range CRC for this disc track.</summary>
+        public uint TestCrc32 { get; set; }
+        /// <summary>Most recent rip/Copy-pass full-range CRC for this disc track.</summary>
+        public uint CopyCrc32 { get; set; }
     }
 
     /// <summary>One read of one disc: its identity, the per-track checksums, and the context of the read.
@@ -68,6 +73,8 @@ namespace CUETools.Wpf.Accuracy
 
         public VerifyOutcome CompareAndUpsert(VerifyRecord r)
         {
+            if (r == null)
+                throw new ArgumentNullException(nameof(r));
             return GzJson.Update<
                 Dictionary<string, List<VerifyRecord>>,
                 VerifyOutcome>(
@@ -93,10 +100,13 @@ namespace CUETools.Wpf.Accuracy
                     if (outcome.KnownDisc)
                     {
                         var prev = reads[reads.Count - 1];   // newest stored read
+                        MergePersistentCrcEvidence(
+                            r.Tracks ?? Array.Empty<TrackCrc>(),
+                            prev?.Tracks ?? Array.Empty<TrackCrc>());
                         // A corrupt-but-valid-gzip history file can deserialize a record whose
                         // Tracks is null (JSON "Tracks":null); treat that as an empty track list
                         // rather than crash.
-                        var pt = prev.Tracks ?? Array.Empty<TrackCrc>();
+                        var pt = prev?.Tracks ?? Array.Empty<TrackCrc>();
                         var rt = r.Tracks ?? Array.Empty<TrackCrc>();
                         int diff = 0;
                         int n = Math.Min(pt.Length, rt.Length);
@@ -113,6 +123,57 @@ namespace CUETools.Wpf.Accuracy
                     all[key] = reads;
                     return (all, outcome);
                 });
+        }
+
+        /// <summary>
+        /// Return the newest persisted Test/Copy CRC evidence for a disc. The UI uses this when a
+        /// known disc is inserted so the two columns survive restarts and drive changes.
+        /// </summary>
+        public TrackCrc[] GetLatestCrcEvidence(string discId)
+        {
+            GzJsonLoadResult<Dictionary<string, List<VerifyRecord>>> loaded =
+                GzJson.TryLoad<Dictionary<string, List<VerifyRecord>>>(_path);
+            if (loaded.Status == GzJsonLoadStatus.Failed)
+                throw new InvalidDataException(
+                    "The verify-history store exists but could not be read; it was left unchanged.",
+                    loaded.Error);
+            if (loaded.Status != GzJsonLoadStatus.Loaded ||
+                !loaded.Value!.TryGetValue((discId ?? "").Trim(), out var reads) ||
+                reads == null ||
+                reads.Count == 0)
+                return Array.Empty<TrackCrc>();
+            TrackCrc[] source = reads[reads.Count - 1]?.Tracks ?? Array.Empty<TrackCrc>();
+            var copy = new TrackCrc[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                TrackCrc? track = source[i];
+                copy[i] = track == null
+                    ? new TrackCrc()
+                    : new TrackCrc
+                    {
+                        ArV1 = track.ArV1,
+                        ArV2 = track.ArV2,
+                        Crc32 = track.Crc32,
+                        TestCrc32 = track.TestCrc32,
+                        CopyCrc32 = track.CopyCrc32,
+                    };
+            }
+            return copy;
+        }
+
+        internal static void MergePersistentCrcEvidence(
+            TrackCrc[] now,
+            IReadOnlyList<TrackCrc> before)
+        {
+            int count = Math.Min(now.Length, before.Count);
+            for (int i = 0; i < count; i++)
+            {
+                if (now[i] == null || before[i] == null) continue;
+                if (now[i].TestCrc32 == 0)
+                    now[i].TestCrc32 = before[i].TestCrc32;
+                if (now[i].CopyCrc32 == 0)
+                    now[i].CopyCrc32 = before[i].CopyCrc32;
+            }
         }
 
         // History must remain comparable across drives and offsets. Prefer v2, then use v1 for older

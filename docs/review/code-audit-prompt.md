@@ -63,6 +63,16 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
    intent before cleanup. Validate archive expansion against the pinned archive instead of a partial
    tracked-tree sentinel, hash ignored expanded sources explicitly, and evaluate warning baselines
    from the exact rebuild logs that produced the collected bytes.
+8. HARDWARE CALIBRATION IS PART OF THE PROOF. A newly required drive capability is a versioned
+   prerequisite for the first Rip, Verify, or Test & Copy that depends on it, not a manual
+   optimization. Preserve the conservative high-water for cache sizes: observing cache is positive
+   evidence, while a later noisy timing run that misses it cannot un-prove it. Cache eviction must
+   complete or fail explicitly. Probe the exact command and one-sector edge geometry that the reader
+   consumes, then prove the runtime uses the capability instead of continuing to zero-pad.
+9. METADATA AND PROOF TAGS HAVE DIFFERENT PRESERVATION RULES. A repair retains source filenames,
+   human metadata, custom fields, artwork, and disc identity. AccurateRip/CTDB confidence and CRC
+   tags describe the old payload; after samples change they must be independently recomputed or
+   deliberately removed, never copied as if they still proved the repaired bytes.
 
 ### How to choose the extraction
 

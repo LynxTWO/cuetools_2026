@@ -1034,13 +1034,45 @@ does not relax evidence, rollback, or verification requirements.
   rollback/publication tests, and the opt-in live damaged-disc CTDB probe.
 - **Owner:** repo owner.
 - **Status:** fixed and deterministic-test verified 2026-07-27. Repair now retains
-  source-derived audio basenames and forces basic tags, representable unknown tags,
-  and embedded artwork into the sibling copy without enabling source or sidecar
-  writes. Duplicate final paths are rejected before any write. The real managed-FLAC
-  track and disc-image preservation fixtures, transaction tests, and focused repair
-  set pass 14/14; the full WPF suite passes 339/339. The canonical managed total is
-  503 passed with six declared fixture skips. The opt-in test also asserts live
-  repaired basenames; the K: damaged-disc run remains the final external check.
+  source-derived audio basenames, source-authoritative basic tags, representable
+  unknown tags, exact CDTOC values, and embedded artwork into the sibling copy
+  without enabling source or sidecar writes. Stale AccurateRip/CTDB proof tags are
+  deliberately removed after payload repair. Duplicate final paths are rejected
+  before any write. Real managed-FLAC track and disc-image preservation fixtures and
+  transaction tests pass 14/14. The opt-in test also asserts live repaired
+  basenames; the K: damaged-disc run remains the final external check.
+
+### R53. Calibration noise can disable cache defeat and edge probes were not consumed - bucket A, risk high
+
+- **Area or slice:** WPF first-use drive calibration, SCSI secure rereads, overread,
+  Test & Copy evidence, and Rip track UI.
+- **Why it matters:** the same caching drive produced different timing buckets.
+  Replacing a larger proven flush, or accepting a later apparent "no cache" result,
+  makes repeated reads non-independent and can under-report damaged sectors. The
+  existing overread fields were always false and the reader always zero-padded disc
+  edges. Test/Copy CRC roles were not visible or durable.
+- **Evidence found:** repeated ASUS calibration alternated between 786,432 and
+  1,048,576 bytes. Paranoid Test & Copy then failed after 19 seconds at the
+  flush/seek/payload CDB boundary with `INVALID FIELD IN CDB`. Calibration wrote
+  hardcoded false overread flags. The Rip grid had no named Test/Copy CRC fields.
+- **Confidence:** verified.
+- **Approval needed:** no; the user explicitly requested these corrections on
+  2026-07-27.
+- **Smallest safe next step:** make calibration a versioned first-read gate, retain
+  positive cache evidence and the largest proven flush, make eviction
+  complete-or-explicit, probe and consume exact offset-sized edges, and persist named
+  Test/Copy CRC roles.
+- **Verification plan:** deterministic policy/history/third-read tests; net47/net8
+  SCSI builds; full WPF suite; an isolated H: Paranoid run beyond the former failure;
+  final damaged K: Test & Copy and end-of-disc overread after device reset.
+- **Owner:** repo owner.
+- **Status:** fixed and software/H:-hardware verified 2026-07-27. H: completed 25
+  Paranoid cache-defeat windows twice; the final-source run used the real offset,
+  consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF suite
+  passes 347/347, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
+  net8/net47/net20. The final K: damaged-disc pass is pending because Windows
+  currently refuses to open that device handle; this is retained as an external
+  hardware state, not converted into a software pass.
 
 ## Ordering
 
@@ -1050,8 +1082,8 @@ dependency:
 1. Finish and adversarially review any open R44-R49 follow-ups.
 2. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Run the final-source K: damaged-disc CTDB repair lane and repeat the H: optical
-   Test & Copy gate. Retain the passing WMA,
+3. Run the final-source K: damaged-disc CTDB repair/Test & Copy lane after its device
+   reset. Retain the passing H: cache-defeat, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 4. Run the pinned hosted workflows and compare them with the local receipts.
 5. Choose and implement a publisher signing/attestation identity and policy.
@@ -1080,6 +1112,7 @@ dependency:
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
-- 2026-07-27 - closed R51 with immutable vendor staging and R52 with filename/tag/art
-  preservation. The exact classic release then rebuilt, receipted, and published all
-  three configurations locally.
+- 2026-07-27 - closed R51 with immutable vendor staging, R52 with filename/tag/art
+  preservation, and R53 with first-use calibration, monotonic cache defeat,
+  offset-sized overread, and named CRC evidence. The exact classic release then
+  rebuilt, receipted, and published all three configurations locally.

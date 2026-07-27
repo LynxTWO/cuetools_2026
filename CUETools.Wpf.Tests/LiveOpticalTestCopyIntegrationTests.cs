@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using CUETools.Codecs;
 using CUETools.Processor;
+using CUETools.Ripper.SCSI;
 using CUETools.Wpf.Accuracy;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -26,6 +27,103 @@ namespace CUETools.Wpf.Tests
         private const string OutputEnvironmentVariable =
             "CUETOOLS_OPTICAL_TESTCOPY_OUTPUT_BASE";
         private const string OwnershipMarker = ".cuetools-live-testcopy-owner";
+
+        [TestMethod]
+        [TestCategory("Hardware")]
+        public void LoadedDriveCalibratesAndSustainsParanoidCacheDefeat()
+        {
+            char drive = ReadDrive();
+            string outputRoot = ReadUniqueOutputRoot();
+            string markerPath = Path.Combine(outputRoot, OwnershipMarker);
+            string markerToken = Guid.NewGuid().ToString("N");
+            Directory.CreateDirectory(outputRoot);
+            File.WriteAllText(markerPath, markerToken);
+
+            var log = new ProbeLog(TestContext);
+            string calibrationPath =
+                Path.Combine(outputRoot, "drive-calibration.json");
+            var calibrationStore = new DriveCalibrationStore(calibrationPath);
+            var calibrationService =
+                new DriveCalibrationService(log, calibrationStore);
+
+            DriveCalibration calibration = calibrationService.Calibrate(drive);
+            Assert.IsNotNull(calibration, "The loaded drive did not calibrate.");
+            Assert.IsTrue(
+                DriveCalibrationService.IsCurrent(calibration),
+                "Calibration did not use the current capability schema.");
+            Assert.IsTrue(
+                calibration.CacheDefeat == "Media re-reads (no cache)" ||
+                DriveCalibrationService.ParseFlushBytes(
+                    calibration.CacheDefeat) > 0,
+                "Calibration did not establish an independent re-read strategy.");
+
+            using (var reader = new CDDriveReader())
+            {
+                Assert.IsTrue(reader.Open(drive), "The loaded audio disc could not be opened.");
+                int driveOffset = 0;
+                bool driveOffsetKnown = false;
+                try
+                {
+                    driveOffsetKnown =
+                        CUETools.AccurateRip.AccurateRipVerify.FindDriveReadOffset(
+                        reader.ARName,
+                        out driveOffset);
+                }
+                catch
+                {
+                    // Calibration uses the same safe fallback. The cache-defeat proof
+                    // still runs; edge consumption remains unavailable evidence.
+                }
+                reader.DriveOffset = driveOffset;
+                reader.CorrectionQuality = 2;
+                reader.DeepRecovery = false;
+                bool applyOverread = DriveCalibrationService.CanApplyOverread(
+                    calibration,
+                    driveOffsetKnown,
+                    driveOffset);
+                reader.SetOverread(
+                    applyOverread && calibration.OverreadLeadIn,
+                    applyOverread && calibration.OverreadLeadOut);
+                int flushBytes = DriveCalibrationService.ParseFlushBytes(
+                    calibration.CacheDefeat);
+                if (flushBytes > 0)
+                    reader.SetCacheDefeat(flushBytes);
+
+                // The reported regression failed 19 seconds into Paranoid Test & Copy. Exercise
+                // twenty-five complete 2400-sector secure windows (~20% of a 70-minute disc),
+                // including every cache-flush/long-seek/payload-read boundary, without writing.
+                const int WindowSamples = 2400 * 588;
+                long target = Math.Min(reader.Length, 25L * WindowSamples);
+                var buffer = new AudioBuffer(AudioPCMConfig.RedBook, WindowSamples);
+                while (reader.Position < target)
+                {
+                    int read = reader.Read(buffer, WindowSamples);
+                    Assert.IsTrue(read > 0, "The optical reader ended before the smoke range.");
+                }
+
+                // Seek to the real end and consume the final offset-corrected samples.
+                // This reaches calibrated lead-out for positive offsets; negative
+                // offsets already reached calibrated lead-in at Position 0 above.
+                reader.Position = Math.Max(0, reader.Length - 2L * 588);
+                while (reader.Position < reader.Length)
+                {
+                    int read = reader.Read(buffer, WindowSamples);
+                    Assert.IsTrue(
+                        read > 0,
+                        "The offset-corrected optical reader ended before the disc edge.");
+                }
+                TestContext.WriteLine(
+                    $"PASS drive={drive}: paranoid cache-defeat smoke " +
+                    $"samples={reader.Position} offset=" +
+                    $"{(driveOffsetKnown ? driveOffset.ToString() : "unknown")} " +
+                    $"flush={flushBytes} applyOverread={applyOverread} " +
+                    $"overreadIn={calibration.OverreadLeadIn} " +
+                    $"overreadOut={calibration.OverreadLeadOut}");
+            }
+
+            DeleteOwnedOutputRoot(outputRoot, markerPath, markerToken);
+            Assert.IsFalse(Directory.Exists(outputRoot));
+        }
 
         [TestMethod]
         [TestCategory("Hardware")]

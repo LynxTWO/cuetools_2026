@@ -211,7 +211,7 @@
         <ListView.View>
           <GridView>
             <GridViewColumn Header="#" Width="32" DisplayMemberBinding="{Binding Number}"/>
-            <GridViewColumn Header="Title" Width="238">
+            <GridViewColumn Header="Title" Width="174">
               <GridViewColumn.CellTemplate>
                 <DataTemplate>
                   <Grid>
@@ -225,6 +225,8 @@
               </GridViewColumn.CellTemplate>
             </GridViewColumn>
             <GridViewColumn Header="Len" Width="52" DisplayMemberBinding="{Binding LengthText}"/>
+            <GridViewColumn Header="Test CRC" Width="76" DisplayMemberBinding="{Binding TestCrc}"/>
+            <GridViewColumn Header="Copy CRC" Width="76" DisplayMemberBinding="{Binding CopyCrc}"/>
             <GridViewColumn Header="AR" Width="48" DisplayMemberBinding="{Binding ArResult}"/>
             <GridViewColumn Header="CTDB" Width="52" DisplayMemberBinding="{Binding CtdbResult}"/>
           </GridView>
@@ -275,7 +277,7 @@
                   Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
           <Button DockPanel.Dock="Right" Content="Test &amp; Copy" Command="{Binding TestCopyCommand}" Padding="18,9" Margin="0,0,10,0"
                   Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"
-                  ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. Slower (2-3x reads). Best for discs not in AccurateRip."/>
+                  ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. First use calibrates the drive automatically; cached re-reads are flushed. Slower (2-3x reads). Best for discs not in AccurateRip."/>
           <Button DockPanel.Dock="Right" Content="tune" FontFamily="{StaticResource Mono}" FontSize="11" Padding="9,6" Margin="0,0,10,0" VerticalAlignment="Center"
                   Click="EncoderSettings_Click"
                   ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
@@ -291,7 +293,7 @@
           </ComboBox>
           <CheckBox DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center"
                     Content="Deep recovery" IsChecked="{Binding DeepRecovery, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"
-                    ToolTip="On by default. On damaged discs / caching drives: re-read while still improving, slow the drive on stuck spots, and flush the drive cache before each secure re-read so the check is genuine. Slower, recovers more. It engages only when needed, so a clean disc pays nothing. The audio is always agreement-checked, so it can only recover - never corrupt."/>
+                    ToolTip="On by default. On damaged discs: keep re-reading while results improve, classify slips, and slow the drive on stuck spots. Cache defeat is a separate Secure/Paranoid correctness rule and remains active even when this recovery extension is off. Slower only where damage needs it."/>
           <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
             <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="440"/>
             <ProgressBar Height="4" Width="240" Minimum="0" Maximum="1" Value="{Binding RipProgress, Mode=OneWay}" Margin="0,5,0,0" HorizontalAlignment="Left"

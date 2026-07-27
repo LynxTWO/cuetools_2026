@@ -66,7 +66,20 @@ namespace CUETools.Ripper.SCSI
 		// (a real second read) instead of the cached first read. 0 = off. Scratch-only, cannot corrupt.
 		private int _cacheDefeatBytes;
 		private byte[] _flushScratch;
+		private bool _cacheDefeatJustFlushed;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
+		// Offset correction needs samples just outside the nominal audio program. These switches are
+		// enabled only after calibration has proved that this exact drive accepts the corresponding
+		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
+		private bool _overreadLeadIn;
+		private bool _overreadLeadOut;
+		private int _retrySectorBase;
+		public void SetOverread(bool leadIn, bool leadOut)
+		{
+			_overreadLeadIn = leadIn;
+			_overreadLeadOut = leadOut;
+			ResetRetryState();
+		}
 		const int CB_AUDIO = 4 * 588 + 2 + 294 + 16;
 		const int NSECTORS = 16;
 		//const int MSECTORS = 5*1024*1024 / (4 * 588);
@@ -153,9 +166,14 @@ namespace CUETools.Ripper.SCSI
                         // A sector is "failed" only when it exhausted the retry budget without the
                         // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
                         // the +1 marking give-up rather than "resolved on the last allowed pass".
-                        int n = Math.Min(m_failedSectors.Length, m_retryCount.Length);
+                        int n = m_failedSectors.Length;
                         for (int i = 0; i < n; i++)
-                            m_failedSectors[i] = m_retryCount[i] == (16 << _correctionQuality) + 1;
+                        {
+                            int retryIndex = i - _retrySectorBase;
+                            if (retryIndex >= 0 && retryIndex < m_retryCount.Length)
+                                m_failedSectors[i] =
+                                    m_retryCount[retryIndex] == (16 << _correctionQuality) + 1;
+                        }
                     }
                 }
                 return m_failedSectors;
@@ -746,6 +764,8 @@ namespace CUETools.Ripper.SCSI
             public double ReReadMs;          // time to read the SAME region again
             public bool CachesReReads;       // re-read much faster => the drive cached it
             public int FlushEvictBytes;      // smallest flush (bytes) that evicts the cache (0 = not caching / not found / flush not tolerated)
+            public bool OverreadLeadIn;      // READ CD accepted the sector immediately before track 1
+            public bool OverreadLeadOut;     // READ CD accepted the sector immediately after the audio program
         }
 
         /// <summary>Read-only cache-behaviour probe. Read a mid-disc audio region to warm any cache,
@@ -755,7 +775,7 @@ namespace CUETools.Ripper.SCSI
         /// cache - so a secure re-read must defeat it. Runs OUTSIDE a rip, synchronously; every
         /// ReadCDDA status is checked (a failure => Probed false, honest "Unconfirmed"). Reads audio
         /// sectors only - never writes rip output, cannot corrupt anything.</summary>
-        public unsafe DriveProbe Probe()
+        public unsafe DriveProbe Probe(int driveOffsetSamples = 0)
         {
             var r = new DriveProbe { SupportedSpeeds = GetSupportedSpeeds() };
             try
@@ -774,18 +794,20 @@ namespace CUETools.Ripper.SCSI
                 uint flushBase = firstStart + (uint)(len / 5);       // ~20%, far from the target
 
                 // one read command via the autodetected path (same dispatch the rip uses)
-                bool ReadOne(uint lba, out double ms)
+                bool ReadAt(uint lba, uint sectors, out double ms)
                 {
                     fixed (byte* p = buf)
                     {
                         var sw = System.Diagnostics.Stopwatch.StartNew();
                         Device.CommandStatus st = _readCDCommand == ReadCDCommand.ReadCdBEh
-                            ? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
-                            : m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+                            ? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, sectors, (IntPtr)p, _timeout)
+                            : m_device.ReadCDDA(Device.SubChannelMode.None, lba, sectors, (IntPtr)p, _timeout);
                         ms = sw.Elapsed.TotalMilliseconds;
                         return st == Device.CommandStatus.Success;
                     }
                 }
+                bool ReadOne(uint lba, out double ms) =>
+                    ReadAt(lba, (uint)chunk, out ms);
 
                 // warm the cache, then time an immediate re-read (fast if the drive caches)
                 if (!ReadOne(target, out _)) return r;
@@ -868,6 +890,36 @@ namespace CUETools.Ripper.SCSI
                     r.FlushEvictBytes = maxFlush;
                     try { if (r.SupportedSpeeds != null && r.SupportedSpeeds.Length > 0) { ushort sv = (ushort)Math.Min(0xFFFE, r.SupportedSpeeds[r.SupportedSpeeds.Length - 1]); m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, sv, sv); } } catch { }
                 }
+
+                // Probe with the exact command/C2 shape the ripper will use. Boundary probes MUST
+                // request one sector: using the normal multi-sector chunk at lead-out asks mostly
+                // beyond the readable edge and falsely reports that an overreading drive cannot
+                // supply the single sector offset correction needs. Prove the entire offset-derived
+                // range (at least one sector for capability display), not merely the nearest sector.
+                // Run after the timing-sensitive search so rejected edge addresses cannot perturb it.
+                bool ReadBoundaryRange(uint start, int sectors)
+                {
+                    for (int i = 0; i < sectors; i++)
+                        if (!ReadAt(unchecked(start + (uint)i), 1, out _))
+                            return false;
+                    return true;
+                }
+                int requiredLeadIn = Math.Max(
+                    1,
+                    driveOffsetSamples < 0
+                        ? (-driveOffsetSamples + 587) / 588
+                        : 1);
+                int requiredLeadOut = Math.Max(
+                    1,
+                    driveOffsetSamples > 0
+                        ? (driveOffsetSamples + 587) / 588
+                        : 1);
+                r.OverreadLeadIn = ReadBoundaryRange(
+                    unchecked(firstStart - (uint)requiredLeadIn),
+                    requiredLeadIn);
+                r.OverreadLeadOut = ReadBoundaryRange(
+                    firstStart + (uint)len,
+                    requiredLeadOut);
 
                 r.Probed = true;
             }
@@ -1440,6 +1492,7 @@ namespace CUETools.Ripper.SCSI
 			for (int iSector = 0; iSector < Sectors2Read; iSector++)
 			{
 				int pos = sector - _currentStart + iSector;
+				int retryIndex = sector + iSector - _retrySectorBase;
 				// avg - pass + 1
 				// p  a  l  o
 				// 0  1  1  2
@@ -1462,10 +1515,10 @@ namespace CUETools.Ripper.SCSI
 
                 if (pass > _correctionQuality || fError)
                 {
-                    int olderr = pass > _correctionQuality && m_retryCount[sector + iSector] == pass + 1 ? 1 : 0;
+                    int olderr = pass > _correctionQuality && m_retryCount[retryIndex] == pass + 1 ? 1 : 0;
                     int newerr = fError ? 1 : 0;
                     _currentErrorsCount += newerr - olderr;
-                    if (fError) m_retryCount[sector + iSector] = (byte)(pass + 2);
+                    if (fError) m_retryCount[retryIndex] = (byte)(pass + 2);
                 }
 			}
 		}
@@ -1473,11 +1526,12 @@ namespace CUETools.Ripper.SCSI
 		// Cache defeat: read _cacheDefeatBytes of an unrelated in-program region into scratch to evict
 		// the current window from the drive cache before a secure re-read, so the re-read hits media (a
 		// genuine second read) instead of the cached first read. Bounded strictly inside the audio
-		// program (a past-end read is what throws INVALID FIELD IN CDB). Best-effort - a failed flush
-		// just means the re-read may still be cached. Scratch-only; never touches rip output.
-		private unsafe void FlushCache()
+		// program (a past-end read is what throws INVALID FIELD IN CDB). The operation is complete or
+		// explicit: silently accepting a partial flush would let Test & Copy claim two independent
+		// reads without proving that the second reached the disc. Scratch-only; never touches output.
+		private unsafe bool FlushCache()
 		{
-			if (_cacheDefeatBytes <= 0 || _toc == null) return;
+			if (_cacheDefeatBytes <= 0 || _toc == null) return true;
 			try
 			{
 				int chunk = Math.Max(1, m_max_sectors);
@@ -1486,25 +1540,58 @@ namespace CUETools.Ripper.SCSI
 				if (_flushScratch == null || _flushScratch.Length < chunk * perSector) _flushScratch = new byte[chunk * perSector];
 				uint firstStart = (uint)_toc[_toc.FirstAudio][0].Start;
 				uint len = (uint)_toc.AudioLength;
-				// a region far from the current window (opposite half) so the flush fills the cache with
-				// OTHER data and pushes the current window out
-				uint rel = (uint)_currentStart > len / 2 ? len / 10 : (len * 8) / 10;
-				uint flushBase = firstStart + rel;
-				int fc = Math.Max(1, _cacheDefeatBytes / (chunk * 2352));
+				int sectorsNeeded = Math.Max(1, (_cacheDefeatBytes + 2351) / 2352);
+				int chunksNeeded = Math.Max(1, (sectorsNeeded + chunk - 1) / chunk);
+				int currentMiddle = _currentStart + Math.Max(0, _currentEnd - _currentStart) / 2;
+				// Try several well-separated regions, farthest first. A scratch/read defect in one
+				// part of a damaged disc must not make cache defeat unusable when another clean region
+				// can evict the same cache. Every candidate remains wholly inside the audio program.
+				int[] candidates = { (int)(len / 10), (int)(len / 2), (int)(len * 8 / 10) };
+				for (int i = 0; i < candidates.Length - 1; i++)
+					for (int j = i + 1; j < candidates.Length; j++)
+						if (Math.Abs(candidates[j] - currentMiddle) >
+							Math.Abs(candidates[i] - currentMiddle))
+						{
+							int swap = candidates[i];
+							candidates[i] = candidates[j];
+							candidates[j] = swap;
+						}
 				fixed (byte* p = _flushScratch)
 				{
-					for (int i = 0; i < fc; i++)
+					foreach (int candidate in candidates)
 					{
-						uint lba = flushBase + (uint)(i * chunk);
-						if (lba + (uint)chunk > firstStart + len) break;   // stay in-program (no past-end read)
-						var st = _readCDCommand == ReadCDCommand.ReadCdBEh
-							? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
-							: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
-						if (st != Device.CommandStatus.Success) break;   // best-effort
+						int relBase = Math.Max(0, Math.Min((int)len - chunksNeeded * chunk, candidate));
+						int relEnd = relBase + chunksNeeded * chunk;
+						bool overlapsCurrent = relBase < _currentEnd && relEnd > _currentStart;
+						if (overlapsCurrent) continue;
+						bool complete = true;
+						for (int i = 0; i < chunksNeeded; i++)
+						{
+							uint lba = firstStart + (uint)(relBase + i * chunk);
+							if (lba + (uint)chunk > firstStart + len)
+							{
+								complete = false;
+								break;
+							}
+							var st = _readCDCommand == ReadCDCommand.ReadCdBEh
+								? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+								: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+							if (st != Device.CommandStatus.Success)
+							{
+								complete = false;
+								break;
+							}
+						}
+						if (complete)
+						{
+							_cacheDefeatJustFlushed = true;
+							return true;
+						}
 					}
 				}
 			}
 			catch { }
+			return false;
 		}
 
 		public unsafe void PrefetchSector(int iSector)
@@ -1515,12 +1602,23 @@ namespace CUETools.Ripper.SCSI
 			if (!TestReadCommand())
 				throw new ReadCDException(Resource1.AutodetectReadCommandFailed + "\n" + _autodetectResult);
 
+			int leadInSectors = _overreadLeadIn && _driveOffset < 0
+				? (-_driveOffset + 587) / 588
+				: 0;
+			int leadOutSectors = _overreadLeadOut && _driveOffset > 0
+				? (_driveOffset + 587) / 588
+				: 0;
+			int minSector = -leadInSectors;
+			int maxSector = (int)_toc.AudioLength + leadOutSectors;
+			if (iSector < minSector || iSector >= maxSector)
+				throw new ReadCDException("Read requested outside the calibrated overread range.");
+
 			_currentStart = iSector;
 			_currentEnd = _currentStart + MSECTORS;
-			if (_currentEnd > (int)_toc.AudioLength)
+			if (_currentEnd > maxSector)
 			{
-				_currentEnd = (int)_toc.AudioLength;
-				_currentStart = Math.Max(0, _currentEnd - MSECTORS);
+				_currentEnd = maxSector;
+				_currentStart = Math.Max(minSector, _currentEnd - MSECTORS);
 			}
 
 			int neededSize = (_currentEnd - _currentStart) * 588;
@@ -1575,7 +1673,9 @@ namespace CUETools.Ripper.SCSI
 				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
 				// cache defeat: on pass >= 1 (a re-read), evict the window first so this read hits media,
 				// not the cached copy of pass 0 (which would make the secure comparison meaningless)
-				if (_cacheDefeatBytes > 0 && pass >= 1) FlushCache();
+				if (_cacheDefeatBytes > 0 && pass >= 1 && !FlushCache())
+					throw new ReadCDException(
+						"Drive-cache flush failed; the secure re-read could not be proven independent.");
 				DateTime PassTime = DateTime.Now, LastFetch = DateTime.Now;
 
 				for (int sector = _currentStart; sector < _currentEnd; sector += m_max_sectors)
@@ -1589,7 +1689,21 @@ namespace CUETools.Ripper.SCSI
 					LastFetch = DateTime.Now;
 					if (pass == 0) 
 						ClearSectors(sector, Sectors2Read);
-					FetchSectors(sector, Sectors2Read, true);
+					try
+					{
+						FetchSectors(sector, Sectors2Read, true);
+					}
+					catch (SCSIException) when (_cacheDefeatJustFlushed)
+					{
+						// Some optical firmware briefly rejects the first payload CDB after the long
+						// seek used to evict its cache. One bounded retry after a short settle preserves
+						// independence (the cache is already evicted) without masking persistent CDB
+						// errors or looping forever.
+						Thread.Sleep(40);
+						_cacheDefeatJustFlushed = false;
+						FetchSectors(sector, Sectors2Read, true);
+					}
+					_cacheDefeatJustFlushed = false;
 					//TimeSpan delay1 = DateTime.Now - LastFetch;
 					//DateTime LastFetched = DateTime.Now;
 					if (pass >= _correctionQuality)
@@ -1655,14 +1769,14 @@ namespace CUETools.Ripper.SCSI
 			buff.Prepare(this, maxLength);
 			if (Position >= Length)
 				return 0;
-			if (_sampleOffset >= Length)
+			if (_sampleOffset >= Length && !_overreadLeadOut)
 			{
 				for (int i = 0; i < buff.ByteLength; i++)
 					buff.Bytes[i] = 0;
 				_sampleOffset += buff.Length;
 				return buff.Length; // == Remaining
 			}
-			if (_sampleOffset < 0)
+			if (_sampleOffset < 0 && !_overreadLeadIn)
 			{
 				buff.Length = Math.Min(buff.Length, -_sampleOffset);
 				for (int i = 0; i < buff.ByteLength; i++)
@@ -1670,8 +1784,14 @@ namespace CUETools.Ripper.SCSI
 				_sampleOffset += buff.Length;
 				return buff.Length;
 			}
-			PrefetchSector(/*(int)_toc[_toc.FirstAudio][0].Start +*/ (_sampleOffset / 588));
-			buff.Length = Math.Min(buff.Length, (int)Length - _sampleOffset);
+			// C# integer division truncates toward zero; overread sample -1 belongs to sector -1,
+			// not sector 0.
+			int sampleSector = _sampleOffset >= 0
+				? _sampleOffset / 588
+				: (_sampleOffset - 587) / 588;
+			PrefetchSector(sampleSector);
+			if (!_overreadLeadOut)
+				buff.Length = Math.Min(buff.Length, (int)Length - _sampleOffset);
 			buff.Length = Math.Min(buff.Length, _currentEnd * 588 - _sampleOffset);
 			if ((_sampleOffset - _currentStart * 588) == 0 && (maxLength < 0 || (_currentEnd - _currentStart) * 588 <= buff.Length))
 			{
@@ -1749,10 +1869,7 @@ namespace CUETools.Ripper.SCSI
 					throw new ReadCDException(Resource1.NoAudio);
 				_currentStart = -1;
 				_currentEnd = -1;
-                m_retryCount = new byte[(int)_toc.AudioLength];
-                for (int i = 0; i < m_retryCount.Length; i++)
-                    m_retryCount[i] = (byte)(_correctionQuality + 1);
-                m_failedSectors = null;
+				ResetRetryState();
 				_sampleOffset = (int)value + _driveOffset;
 			}
 		}
@@ -1775,6 +1892,7 @@ namespace CUETools.Ripper.SCSI
 			{
 				_driveOffset = value;
 				_sampleOffset = value;
+				ResetRetryState();
 			}
 		}
 
@@ -1801,10 +1919,31 @@ namespace CUETools.Ripper.SCSI
 				if (value < 0 || value > 3)
 					throw new Exception("invalid CorrectionQuality");
 				_correctionQuality = value;
-                for (int i = 0; i < m_retryCount.Length; i++)
-                    m_retryCount[i] = (byte)(_correctionQuality + 1);
+				ResetRetryState();
             }
-		}		
+		}
+
+		private void ResetRetryState()
+		{
+			if (_toc == null || _toc.AudioLength <= 0)
+			{
+				m_retryCount = new byte[0];
+				_retrySectorBase = 0;
+				m_failedSectors = null;
+				return;
+			}
+			int leadInSectors = _overreadLeadIn && _driveOffset < 0
+				? (-_driveOffset + 587) / 588
+				: 0;
+			int leadOutSectors = _overreadLeadOut && _driveOffset > 0
+				? (_driveOffset + 587) / 588
+				: 0;
+			_retrySectorBase = -leadInSectors;
+			m_retryCount = new byte[(int)_toc.AudioLength + leadInSectors + leadOutSectors];
+			for (int i = 0; i < m_retryCount.Length; i++)
+				m_retryCount[i] = (byte)(_correctionQuality + 1);
+			m_failedSectors = null;
+		}
 
 		public string RipperVersion
 		{

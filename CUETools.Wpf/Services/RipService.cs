@@ -130,10 +130,15 @@ public sealed class TestCopyRunResult
     /// caller must report THIS when it later commits a held result: by then the dropdown may say
     /// something else entirely, and the archived report would claim a mode the disc was never read at.</summary>
     public int CorrectionQuality { get; init; }
+    /// <summary>Per-track Test/Copy CRCs for immediate UI display and persisted history.</summary>
+    public TrackCrc[] CrcEvidence { get; init; } = Array.Empty<TrackCrc>();
 }
 
 public interface IRipService
 {
+    /// <summary>Newest persisted per-track Test/Copy CRC evidence for an inserted disc.</summary>
+    TrackCrc[] GetLatestCrcEvidence(string discId) => Array.Empty<TrackCrc>();
+
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
     /// <paramref name="telemetry"/> receives best-effort RMS and scope samples through a bounded
     /// mailbox; a stalled UI drops visualization instead of delaying the disc read.
@@ -206,6 +211,21 @@ public sealed class RipService : IRipService
         catch (Exception ex) { _log.Warn("rip", "stop request failed: " + ex.GetType().Name); }
     }
 
+    public TrackCrc[] GetLatestCrcEvidence(string discId)
+    {
+        try
+        {
+            return _history.GetLatestCrcEvidence(discId);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(
+                "verify.history",
+                "CRC evidence load failed: " + ex.GetType().Name);
+            return Array.Empty<TrackCrc>();
+        }
+    }
+
     /// <summary>Throw if a stop was requested. Called at every point where no CUESheet is running and
     /// Stop() would therefore have nowhere to land.</summary>
     private void ThrowIfStopRequested()
@@ -225,8 +245,29 @@ public sealed class RipService : IRipService
             _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
     }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null) { _stopRequested = false; return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, telemetry, onReread); }
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null) { _stopRequested = false; return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart); }
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null)
+    {
+        _stopRequested = false;
+        if (!EnsureCalibration(
+                drive,
+                onProgress,
+                requireIndependentReads: cq > 0,
+                out string error))
+            return new VerifyResult { Error = error };
+        return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, telemetry, onReread);
+    }
+
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null)
+    {
+        _stopRequested = false;
+        if (!EnsureCalibration(
+                drive,
+                onProgress,
+                requireIndependentReads: cq > 0,
+                out string error))
+            return new VerifyResult { Error = error };
+        return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart);
+    }
 
     private void RedactOutputRoot(string? outputBaseDir)
     {
@@ -281,7 +322,12 @@ public sealed class RipService : IRipService
             if (!opened) { _log.Warn("rip", "no disc / not ready"); return new VerifyResult { Error = "No disc." }; }
 
             int offset = 0;
-            try { AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset); }
+            bool offsetKnown = false;
+            try
+            {
+                offsetKnown =
+                    AccurateRipVerify.FindDriveReadOffset(reader.ARName, out offset);
+            }
             catch (Exception ex) { _log.Warn("rip", "read-offset lookup failed - ripping with offset 0: " + ex.GetType().Name); }
             reader.DriveOffset = offset;
             reader.CorrectionQuality = Math.Max(0, Math.Min(2, cq));
@@ -308,17 +354,40 @@ public sealed class RipService : IRipService
             }
             catch (InvalidDataException ex)
             {
-                // Calibration is an optimization for a normal rip, not evidence about the audio.
-                // Keep the corrupt store untouched, surface the degraded mode, and continue without
-                // applying values we could not prove came from a valid record. Test & Copy has a
-                // stricter path in EnsureIndependence and will refuse when it cannot establish cache
-                // defeat.
-                _log.Warn("rip",
-                    "drive calibration store unreadable; using uncalibrated drive settings: " +
-                    ex.GetType().Name);
-                onProgress(0,
-                    "Warning: saved drive calibration is unreadable; using safe uncalibrated settings.");
+                // EnsureCalibration read this same record immediately before Run. If it
+                // changed or became corrupt in between, do not turn a successful gate
+                // into an uncalibrated secure read.
+                _log.Error(
+                    "rip",
+                    "drive calibration became unreadable before the optical read",
+                    ex);
+                return new VerifyResult
+                {
+                    Error =
+                        "Saved drive calibration became unreadable before the optical read.",
+                };
             }
+            if (!DriveCalibrationService.IsCurrent(cal))
+                return new VerifyResult
+                {
+                    Error =
+                        "Drive calibration changed before the optical read; retry the operation.",
+                };
+
+            // Offset correction formerly zero-padded both disc edges unconditionally. Calibration now
+            // probes the exact READ CD boundary capability; enable only the edges this drive proved.
+            bool applyOverread = DriveCalibrationService.CanApplyOverread(
+                cal,
+                offsetKnown,
+                offset);
+            reader.SetOverread(
+                applyOverread && cal?.OverreadLeadIn == true,
+                applyOverread && cal?.OverreadLeadOut == true);
+            if (!applyOverread &&
+                (cal?.OverreadLeadIn == true || cal?.OverreadLeadOut == true))
+                _log.Warn(
+                    "rip",
+                    "calibrated overread range does not match the current known read offset; using edge zero-padding");
 
             AdaptiveSpeedController speedCtl = null;
             int lastRequested = 0;
@@ -357,12 +426,13 @@ public sealed class RipService : IRipService
                 if (deepFloor > 0) _log.Info("rip", $"deep recovery floor {deepFloor} kB/s ({deepFloor / 176}x)");
             }
 
-            // Cache defeat (opt-in under Deep recovery for the proving phase): on a caching drive the
+            // Cache defeat: on a caching drive the
             // secure re-read returns the cached FIRST read, so Secure cannot catch a read error during
             // the rip (AccurateRip still catches it at the end, but not on a non-AR disc). When the drive
             // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
-            // hits media. Scratch-only - it can recover error detection but can never corrupt the audio.
-            if ((deepRecovery || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
+            // hits media. Secure and Paranoid therefore always use it; Deep recovery is no longer an
+            // unrelated gate. Scratch-only - it can recover error detection but cannot alter the audio.
+            if ((cq > 0 || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
                 && int.TryParse(cal.CacheDefeat.Substring(6), out int flushBytes) && flushBytes > 0)
             {
                 reader.SetCacheDefeat(flushBytes);
@@ -716,11 +786,14 @@ public sealed class RipService : IRipService
                 {
                     // CRC32 is 1-indexed unlike CRC/CRCV2: CRC32(0) is the whole-disc row, CRC32(N) is
                     // track N, so track t needs CRC32(t + 1).
+                    uint crc32 = cue.ArVerify.CRC32(t + 1);
                     tracks[t] = new CUETools.Wpf.Accuracy.TrackCrc
                     {
                         ArV1 = cue.ArVerify.CRC(t),
                         ArV2 = cue.ArVerify.CRCV2(t),
-                        Crc32 = cue.ArVerify.CRC32(t + 1),
+                        Crc32 = crc32,
+                        TestCrc32 = encode ? 0U : crc32,
+                        CopyCrc32 = encode ? crc32 : 0U,
                     };
                 }
                 built = new CUETools.Wpf.Accuracy.VerifyRecord
@@ -747,6 +820,21 @@ public sealed class RipService : IRipService
                     OutputVerificationDetail =
                         encode ? outputAssurance.Detail : "",
                 };
+                // Carry the other named CRC role into this read's sidecar as well as the local
+                // history. A Verify updates Test without erasing Copy; a Rip updates Copy without
+                // erasing Test.
+                try
+                {
+                    VerifyHistoryStore.MergePersistentCrcEvidence(
+                        built.Tracks,
+                        _history.GetLatestCrcEvidence(built.DiscId));
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn(
+                        "verify.history",
+                        "prior CRC evidence load failed: " + ex.GetType().Name);
+                }
             }
             catch (Exception ex)
             {
@@ -1007,8 +1095,12 @@ public sealed class RipService : IRipService
         try
         {
             ThrowIfStopRequested();   // Stop pressed during the calibration prologue
-            if (!EnsureIndependence(drive, onProgress))
-                return new TestCopyRunResult { Error = "Calibration failed - cannot guarantee two independent reads." };
+            if (!EnsureCalibration(
+                    drive,
+                    onProgress,
+                    requireIndependentReads: true,
+                    out string calibrationError))
+                return new TestCopyRunResult { Error = calibrationError };
 
             stagingWorkspace = TestCopyStagingWorkspace.Create();
             stage1 = stagingWorkspace.CopyBaseDirectory;
@@ -1099,6 +1191,7 @@ public sealed class RipService : IRipService
                     OutputVerificationDetail =
                         copyResult.OutputVerificationDetail,
                     OutputProofs = copyResult.OutputProofs,
+                    CrcEvidence = BuildTestCopyCrcEvidence(reads, 1),
                 };
             }
 
@@ -1182,6 +1275,7 @@ public sealed class RipService : IRipService
                     OutputVerificationDetail =
                         committedEncoded.OutputVerificationDetail,
                     OutputProofs = committedEncoded.OutputProofs,
+                    CrcEvidence = BuildTestCopyCrcEvidence(reads, whole),
                 };
             }
             else
@@ -1227,12 +1321,19 @@ public sealed class RipService : IRipService
         }
     }
 
-    /// <summary>Make sure the next reads on this drive are genuinely independent: a caching drive
-    /// must have a sized cache-defeat flush before Test &amp; Copy can trust two "different" reads
-    /// are not just the same cached bytes served twice. Calibrates once, then the result is reused
-    /// (persisted) on every later Test &amp; Copy for the same drive.</summary>
-    private bool EnsureIndependence(char drive, Action<double, string> onProgress)
+    /// <summary>
+    /// First-use calibration gate shared by Rip, Verify, and Test &amp; Copy. The drive signature is
+    /// discovered without changing output, an absent/stale record is calibrated once, and the current
+    /// record is then reused. Test &amp; Copy additionally requires a proven sized flush (or proof that
+    /// the drive does not cache) because its two-read claim depends on physical independence.
+    /// </summary>
+    private bool EnsureCalibration(
+        char drive,
+        Action<double, string> onProgress,
+        bool requireIndependentReads,
+        out string error)
     {
+        error = "";
         string sig = "";
         var reader = new CDDriveReader();
         try
@@ -1241,17 +1342,66 @@ public sealed class RipService : IRipService
             lock (DriveService.ScsiGate) opened = reader.Open(drive);
             if (opened) sig = (reader.ARName ?? "").Trim();
         }
-        catch (Exception ex) { _log.Warn("rip", "test&copy drive signature read failed: " + ex.GetType().Name); }
+        catch (Exception ex)
+        {
+            _log.Error("rip", "drive signature read failed", ex);
+        }
         finally { try { reader.Close(); } catch { } }
 
-        var cal = _calStore.Get(sig);
-        bool sized = cal != null && ((cal.CacheDefeat ?? "").StartsWith("Flush:") || cal.CacheDefeat == "Media re-reads (no cache)");
-        if (sized) return true;
+        if (string.IsNullOrWhiteSpace(sig))
+        {
+            error = "No audio disc was ready for drive calibration.";
+            return false;
+        }
 
-        onProgress(0, "Calibrating drive...");
-        var newCal = _calService.Calibrate(drive);
-        bool newSized = newCal != null && ((newCal.CacheDefeat ?? "").StartsWith("Flush:") || newCal.CacheDefeat == "Media re-reads (no cache)");
-        return newSized;
+        DriveCalibration? cal;
+        try
+        {
+            cal = _calStore.Get(sig);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("rip", "drive calibration load failed: " + ex.GetType().Name);
+            error = "Saved drive calibration is unreadable; repair or remove it before reading.";
+            return false;
+        }
+
+        if (!DriveCalibrationService.IsCurrent(cal))
+        {
+            onProgress(0, cal == null
+                ? "Calibrating drive before its first read..."
+                : "Refreshing drive calibration...");
+            if (_stopRequested)
+            {
+                error = "Stopped.";
+                return false;
+            }
+            cal = _calService.Calibrate(drive);
+            if (_stopRequested)
+            {
+                error = "Stopped.";
+                return false;
+            }
+            if (cal == null)
+            {
+                error = "Drive calibration failed; no rip or verify was started.";
+                return false;
+            }
+        }
+
+        bool independent =
+            (cal.CacheDefeat ?? "").StartsWith("Flush:", StringComparison.Ordinal) ||
+            string.Equals(
+                cal.CacheDefeat,
+                "Media re-reads (no cache)",
+                StringComparison.Ordinal);
+        if (requireIndependentReads && !independent)
+        {
+            error =
+                "Calibration could not prove an independent re-read strategy, so Secure/Paranoid reading cannot start.";
+            return false;
+        }
+        return true;
     }
 
     /// <summary>Assemble the committed album folder and write the Test &amp; Copy proof. Always
@@ -1298,7 +1448,7 @@ public sealed class RipService : IRipService
         var committedRecord = new VerifyRecord
         {
             DiscId = discId,
-            Tracks = source?.Tracks ?? Array.Empty<TrackCrc>(),
+            Tracks = BuildTestCopyCrcEvidence(reads, sourceReadIndex),
             ArConfidence = newest?.ArConfidence ?? 0,
             ArTotal = newest?.ArTotal ?? 0,
             CtdbConfidence = newest?.CtdbConfidence ?? 0,
@@ -1352,6 +1502,53 @@ public sealed class RipService : IRipService
         catch (Exception ex) { _log.Warn("verify.history", "test&copy upsert failed: " + ex.GetType().Name); }
 
         return (outDir, sourceFileCount, historyRecorded, history);
+    }
+
+    /// <summary>
+    /// Preserve the full-range checksum from the committed read while also carrying the named
+    /// Test (R1) and Copy (R2) evidence. A confirming R3 may be the committed source, but it does
+    /// not silently rename itself "Copy" in the UI.
+    /// </summary>
+    internal static TrackCrc[] BuildTestCopyCrcEvidence(
+        IReadOnlyList<VerifyRecord> reads,
+        int sourceReadIndex)
+    {
+        TrackCrc[] source =
+            sourceReadIndex >= 0 &&
+            sourceReadIndex < reads.Count
+                ? reads[sourceReadIndex]?.Tracks ?? Array.Empty<TrackCrc>()
+                : Array.Empty<TrackCrc>();
+        TrackCrc[] test =
+            reads.Count > 0
+                ? reads[0]?.Tracks ?? Array.Empty<TrackCrc>()
+                : Array.Empty<TrackCrc>();
+        TrackCrc[] copy =
+            reads.Count > 1
+                ? reads[1]?.Tracks ?? Array.Empty<TrackCrc>()
+                : Array.Empty<TrackCrc>();
+        int count = Math.Max(source.Length, Math.Max(test.Length, copy.Length));
+        var result = new TrackCrc[count];
+        for (int i = 0; i < count; i++)
+        {
+            TrackCrc? selected = i < source.Length ? source[i] : null;
+            TrackCrc? testTrack = i < test.Length ? test[i] : null;
+            TrackCrc? copyTrack = i < copy.Length ? copy[i] : null;
+            result[i] = new TrackCrc
+            {
+                ArV1 = selected?.ArV1 ?? 0,
+                ArV2 = selected?.ArV2 ?? 0,
+                Crc32 = selected?.Crc32 ?? 0,
+                TestCrc32 =
+                    testTrack != null && testTrack.Crc32 != 0
+                        ? testTrack.Crc32
+                        : testTrack?.TestCrc32 ?? 0,
+                CopyCrc32 =
+                    copyTrack != null && copyTrack.Crc32 != 0
+                        ? copyTrack.Crc32
+                        : copyTrack?.CopyCrc32 ?? 0,
+            };
+        }
+        return result;
     }
 
     /// <summary>Accept a held Test &amp; Copy's Copy read into the output folder anyway, flagged not

@@ -149,6 +149,7 @@ public sealed class DriveService : IDriveService
                 Tracks = tracks,
                 TotalLength = TimeSpan.FromSeconds(toc.AudioLength / 75.0),
                 TocId = toc.ToString() ?? "",
+                DiscId = toc.TOCID ?? "",
                 ReleaseMatches = matches.ConvertAll(m => m.Header),
                 Releases = matches
             };
