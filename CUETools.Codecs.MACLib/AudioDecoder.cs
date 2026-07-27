@@ -22,13 +22,33 @@ namespace CUETools.Codecs.MACLib
 			}
 
 			pcm = new AudioPCMConfig(
-                MACLibDll.c_APEDecompress_GetInfo(pAPEDecompress, APE_DECOMPRESS_FIELDS.APE_INFO_BITS_PER_SAMPLE, 0, 0).ToInt32(),
-                MACLibDll.c_APEDecompress_GetInfo(pAPEDecompress, APE_DECOMPRESS_FIELDS.APE_INFO_CHANNELS, 0, 0).ToInt32(),
-                MACLibDll.c_APEDecompress_GetInfo(pAPEDecompress, APE_DECOMPRESS_FIELDS.APE_INFO_SAMPLE_RATE, 0, 0).ToInt32(),
+                GetIntInfo(APE_DECOMPRESS_FIELDS.APE_INFO_BITS_PER_SAMPLE),
+                GetIntInfo(APE_DECOMPRESS_FIELDS.APE_INFO_CHANNELS),
+                GetIntInfo(APE_DECOMPRESS_FIELDS.APE_INFO_SAMPLE_RATE),
 				(AudioPCMConfig.SpeakerConfig)0);
             _samplesBuffer = new byte[16384 * pcm.BlockAlign];
-            _sampleCount = MACLibDll.c_APEDecompress_GetInfo(pAPEDecompress, APE_DECOMPRESS_FIELDS.APE_DECOMPRESS_TOTAL_BLOCKS, 0, 0).ToInt64();
+            _sampleCount = MACLibDll.c_APEDecompress_GetInfo(
+                pAPEDecompress,
+                APE_DECOMPRESS_FIELDS.APE_DECOMPRESS_TOTAL_BLOCKS,
+                0,
+                0);
+            if (_sampleCount < 0)
+                throw new InvalidDataException(
+                    "Monkey's Audio decoder reported a negative sample count.");
             _sampleOffset = 0;
+        }
+
+        private int GetIntInfo(APE_DECOMPRESS_FIELDS field)
+        {
+            long value = MACLibDll.c_APEDecompress_GetInfo(
+                pAPEDecompress,
+                field,
+                0,
+                0);
+            if (value < int.MinValue || value > int.MaxValue)
+                throw new InvalidDataException(
+                    "Monkey's Audio decoder reported an out-of-range format field.");
+            return checked((int)value);
         }
 
         public void Dispose()

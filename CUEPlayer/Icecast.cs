@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -15,12 +15,14 @@ namespace CUEPlayer
 {
 	public partial class Icecast : Form
 	{
-		private IcecastWriter _icecastWriter;
+		private volatile IcecastWriter _icecastWriter;
 		private IcecastSettingsData _icecastSettings;
 		private CUETools.DSP.Mixer.MixingSource _mixer;
 		private Thread flushThread;
 		private AudioPipe buffer;
-		private bool close = false;
+		private volatile bool close = false;
+		private volatile bool abortClose = false;
+		private bool updatingTransmitState = false;
 		private int latency = 0;
 
 		public Icecast()
@@ -55,7 +57,21 @@ namespace CUEPlayer
 		void parent_updateMetadata(object sender, UpdateMetadataEvent e)
 		{
 			if (_icecastWriter != null)
-				_icecastWriter.UpdateMetadata(e.artist, e.title);
+			{
+				try
+				{
+					_icecastWriter.UpdateMetadata(e.artist, e.title);
+				}
+				catch (Exception metadataException)
+				{
+					// Metadata is ancillary to the audio stream. Keep playback and
+					// broadcasting alive, and never log the credential-bearing
+					// request or an exception message.
+					Trace.WriteLine(
+						"Icecast metadata update failed: " +
+						metadataException.GetType().Name);
+				}
+			}
 		}
 
 		private void FlushThread()
@@ -64,22 +80,42 @@ namespace CUEPlayer
 			while (true)
 			{
 				buffer.Read(result, -1);
-				if (_icecastWriter != null && !close)
+				IcecastWriter writer = _icecastWriter;
+				IcecastWriter failedWriter = null;
+				if (writer != null && !close)
 				{
 					try
 					{
-						_icecastWriter.Write(result);
+						writer.Write(result);
 					}
-					catch (Exception)
+					catch (Exception writeException)
 					{
+						Trace.WriteLine(
+							"Icecast streaming write failed: " +
+							writeException.GetType().Name);
+						abortClose = true;
 						close = true;
+						failedWriter = writer;
 					}
 				}
-				if (_icecastWriter != null && close)
+				if (_icecastWriter != null && (close || failedWriter != null))
 				{
+					writer = _icecastWriter;
+					bool abort = abortClose;
+					// Publish the stopped state before network finalization. A metadata event or
+					// timer must not race the encoder while its final MP3 bytes are being flushed.
+					_icecastWriter = null;
+					if (failedWriter != null)
+						SetTransmitStoppedState(
+							failedWriter,
+							"Streaming stopped",
+							"The Icecast stream stopped after a network or encoder write failure.");
 					try
 					{
-						_icecastWriter.Delete();
+						if (abort)
+							writer.Delete();
+						else
+							writer.Close();
 					}
 					catch (Exception cleanupException)
 					{
@@ -89,7 +125,7 @@ namespace CUEPlayer
 					}
 					finally
 					{
-						_icecastWriter = null;
+						abortClose = false;
 					}
 				}
 			}
@@ -113,6 +149,9 @@ namespace CUEPlayer
 
 		private void checkBoxTransmit_CheckedChanged(object sender, EventArgs e)
 		{
+			if (updatingTransmitState)
+				return;
+
 			close = !checkBoxTransmit.Checked;
 			this.toolTip1.SetToolTip(this.checkBoxTransmit, "");
 			if (!close && _icecastWriter == null)
@@ -123,12 +162,17 @@ namespace CUEPlayer
 					icecastWriter = new IcecastWriter(
 						_mixer.PCM, _icecastSettings);
 					icecastWriter.Connect();
-					if (icecastWriter.Response.StatusCode == HttpStatusCode.OK)
+					int sourceStatus =
+						(int)icecastWriter.ProtocolResponse.StatusCode;
+					if (sourceStatus >= 200 && sourceStatus < 300)
+					{
+						abortClose = false;
 						_icecastWriter = icecastWriter;
+					}
 					else
 					{
-						HttpStatusCode statusCode = icecastWriter.Response.StatusCode;
-						string statusDescription = icecastWriter.Response.StatusDescription;
+						HttpStatusCode statusCode = icecastWriter.ProtocolResponse.StatusCode;
+						string statusDescription = icecastWriter.ProtocolResponse.StatusDescription;
 						try
 						{
 							icecastWriter.Delete();
@@ -139,11 +183,10 @@ namespace CUEPlayer
 								"Icecast rejected-connection cleanup failed: " +
 								cleanupException.GetType().Name);
 						}
-						toolTip1.ToolTipIcon = ToolTipIcon.Error;
-						toolTip1.ToolTipTitle = statusCode.ToString();
-						toolTip1.IsBalloon = true;
-						//toolTip1.Show(resp.StatusDescription, checkBoxTransmit, 0, 0, 2000);
-						toolTip1.SetToolTip(checkBoxTransmit, statusDescription);
+						SetTransmitStoppedState(
+							null,
+							statusCode.ToString(),
+							statusDescription);
 					}
 				}
 				catch (Exception ex)
@@ -162,16 +205,84 @@ namespace CUEPlayer
 								cleanupException.GetType().Name);
 						}
 					}
-					toolTip1.ToolTipIcon = ToolTipIcon.Error;
-					toolTip1.ToolTipTitle = "Exception";
-					toolTip1.IsBalloon = true;
-					toolTip1.SetToolTip(checkBoxTransmit, "Connection failed. Check the server and credential settings.");
+					SetTransmitStoppedState(
+						null,
+						"Connection failed",
+						"Connection failed. Check the server and credential settings.");
 				}
 			}
 		}
 
+		private void SetTransmitStoppedState(
+			IcecastWriter expectedWriter,
+			string title,
+			string description)
+		{
+			if (IsDisposed || Disposing || !IsHandleCreated)
+				return;
+
+			if (InvokeRequired)
+			{
+				try
+				{
+					BeginInvoke((MethodInvoker)delegate
+					{
+						ApplyTransmitStoppedState(
+							expectedWriter,
+							title,
+							description);
+					});
+				}
+				catch (ObjectDisposedException)
+				{
+					// The form was closed between the handle check and BeginInvoke.
+				}
+				catch (InvalidOperationException)
+				{
+					// The form was closed between the handle check and BeginInvoke.
+				}
+				return;
+			}
+
+			ApplyTransmitStoppedState(expectedWriter, title, description);
+		}
+
+		private void ApplyTransmitStoppedState(
+			IcecastWriter expectedWriter,
+			string title,
+			string description)
+		{
+			if (IsDisposed || Disposing)
+				return;
+
+			// Ignore a delayed worker callback if the user has already established a different
+			// stream. Otherwise a stale failure could turn off the replacement connection.
+			if (expectedWriter != null &&
+				_icecastWriter != null &&
+				!Object.ReferenceEquals(_icecastWriter, expectedWriter))
+				return;
+
+			close = true;
+			updatingTransmitState = true;
+			try
+			{
+				checkBoxTransmit.Checked = false;
+			}
+			finally
+			{
+				updatingTransmitState = false;
+			}
+
+			toolTip1.ToolTipIcon = ToolTipIcon.Error;
+			toolTip1.ToolTipTitle = title;
+			toolTip1.IsBalloon = true;
+			toolTip1.SetToolTip(checkBoxTransmit, description);
+		}
+
 		private void buttonSettings_Click(object sender, EventArgs e)
 		{
+			IcecastSettingsData original =
+				IcecastSettings.Copy(_icecastSettings);
 			IcecastSettings frm = new IcecastSettings(_icecastSettings);
 			if (frm.ShowDialog(this) == DialogResult.OK)
 			{
@@ -181,6 +292,10 @@ namespace CUEPlayer
 				}
 				catch (Exception ex)
 				{
+					// The dialog applies its draft before returning OK so the settings serializer
+					// can see it. Restore the live object if durable credential/settings storage
+					// fails; otherwise "not saved" would still change the active stream settings.
+					IcecastSettings.Apply(original, _icecastSettings);
 					Trace.WriteLine("Icecast settings save failed: " + ex.GetType().Name);
 					MessageBox.Show(this,
 						"The Icecast credential could not be protected for this Windows user. Settings were not saved.",

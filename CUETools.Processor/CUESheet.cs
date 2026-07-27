@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Drawing;
 #if NET47 || NET20
@@ -8,6 +9,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using CUETools.AccurateRip;
@@ -83,6 +85,13 @@ namespace CUETools.Processor
         private bool _useLocalDB;
         private CUEToolsLocalDB _localDB;
         private bool _gapsDetected = false;
+        private readonly List<FinalizedLosslessOutputReceipt> _finalOutputReceipts =
+            new List<FinalizedLosslessOutputReceipt>();
+        private static readonly ReadOnlyCollection<LosslessOutputProof>
+            EmptyFinalOutputProofs = new ReadOnlyCollection<LosslessOutputProof>(
+                new List<LosslessOutputProof>());
+        private ReadOnlyCollection<LosslessOutputProof> _finalOutputProofs =
+            EmptyFinalOutputProofs;
 
         #endregion
 
@@ -172,6 +181,33 @@ namespace CUETools.Processor
         {
             get { return this._destPaths; }
         }
+
+        /// <summary>
+        /// Requests a second lossless-output decode after all metadata writes. The caller must set
+        /// this only for an encoder whose own lossless verification contract is trusted and enabled.
+        /// </summary>
+        public bool VerifyFinalOutputAfterMetadata { get; set; }
+
+        /// <summary>
+        /// True only after every requested output has been decoded after TagLib finalization and
+        /// matched against the PCM that was delivered to its encoder.
+        /// </summary>
+        public bool FinalOutputVerifiedAfterMetadata { get; private set; }
+
+        /// <summary>
+        /// Completed, non-persisted proofs for the exact output set. This collection remains empty
+        /// unless every requested output completed post-metadata PCM and encoded-byte validation.
+        /// </summary>
+        public ReadOnlyCollection<LosslessOutputProof> FinalOutputProofs
+        {
+            get { return _finalOutputProofs; }
+        }
+
+        // Narrow internal seams for deterministic failure injection around the otherwise real
+        // CUESheet/TagLib integration tests. Production callers leave both null.
+        internal Action<string[]> FinalOutputPostMetadataTestHook { get; set; }
+        internal LosslessAudioStreamSourceFactory
+            FinalOutputDecoderFactoryOverride { get; set; }
 
         public IAudioDest HDCDDecoder
         {
@@ -2798,6 +2834,9 @@ namespace CUETools.Processor
         public string Go()
         {
             int[] destLengths;
+            _finalOutputReceipts.Clear();
+            _finalOutputProofs = EmptyFinalOutputProofs;
+            FinalOutputVerifiedAfterMetadata = false;
             bool htoaToFile = ((OutputStyle == CUEStyle.GapsAppended) && _config.preserveHTOA &&
                 (_toc.Pregap > 75 * (_config.useHTOALengthThreshold ? 5 : 0)));
 
@@ -3081,6 +3120,19 @@ namespace CUETools.Processor
                                 fileInfo.Save();
                             }
                         }
+                }
+
+                // Encoder Close() verification happens in WriteAudioFilesPass, before the TagLib
+                // Save() calls above can rewrite the container. Keep this check after every output
+                // metadata mutation: it independently decodes the final files and binds the
+                // user-visible assurance to the bytes that will actually leave CUESheet.Go().
+                if (VerifyFinalOutputAfterMetadata)
+                {
+                    Action<string[]> postMetadataHook =
+                        FinalOutputPostMetadataTestHook;
+                    if (postMetadataHook != null)
+                        postMetadataHook((string[])_destPaths.Clone());
+                    VerifyFinalizedLosslessOutputs();
                 }
             }
 
@@ -4248,7 +4300,106 @@ namespace CUETools.Processor
         {
             var pcm = new AudioPCMConfig(bps, 2, 44100);
             string extension = Path.GetExtension(path).ToLower();
-            return AudioReadWrite.GetAudioDest(noOutput ? AudioEncoderType.NoAudio : _audioEncoderType, path, pcm, finalSampleCount, padding, extension, _config);
+            IAudioDest destination = AudioReadWrite.GetAudioDest(
+                noOutput ? AudioEncoderType.NoAudio : _audioEncoderType,
+                path,
+                pcm,
+                finalSampleCount,
+                padding,
+                extension,
+                _config);
+            if (noOutput || !VerifyFinalOutputAfterMetadata)
+                return destination;
+
+            var receipt = new FinalizedLosslessOutputReceipt(
+                destination,
+                pcm,
+                finalSampleCount);
+            _finalOutputReceipts.Add(receipt);
+            return receipt;
+        }
+
+        private void VerifyFinalizedLosslessOutputs()
+        {
+            if (_finalOutputReceipts.Count == 0)
+                throw new InvalidDataException(
+                    "Final lossless-output verification was requested, but no output was encoded.");
+            if (_destPaths == null || _destPaths.Length == 0)
+                throw new InvalidDataException(
+                    "Final lossless-output verification has no declared output set.");
+            if (_finalOutputReceipts.Count != _destPaths.Length)
+                throw new InvalidDataException(
+                    "Final lossless-output verification did not capture the complete output set.");
+
+            StringComparer pathComparer = Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            var receiptByPath =
+                new Dictionary<string, FinalizedLosslessOutputReceipt>(
+                    pathComparer);
+            foreach (FinalizedLosslessOutputReceipt receipt in
+                _finalOutputReceipts)
+            {
+                if (String.IsNullOrEmpty(receipt.Path))
+                    throw new InvalidDataException(
+                        "A finalized lossless output has no path identity.");
+                string receiptPath = Path.GetFullPath(receipt.Path);
+                if (receiptByPath.ContainsKey(receiptPath))
+                    throw new InvalidDataException(
+                        "Final lossless-output verification captured a duplicate output.");
+                receiptByPath.Add(receiptPath, receipt);
+            }
+
+            var expectedPaths = new HashSet<string>(pathComparer);
+            var orderedReceipts =
+                new List<FinalizedLosslessOutputReceipt>(_destPaths.Length);
+            for (int i = 0; i < _destPaths.Length; i++)
+            {
+                if (String.IsNullOrEmpty(_destPaths[i]))
+                    throw new InvalidDataException(
+                        "The declared lossless output set contains an empty path.");
+                string expectedPath = Path.GetFullPath(_destPaths[i]);
+                if (!expectedPaths.Add(expectedPath))
+                    throw new InvalidDataException(
+                        "The declared lossless output set contains a duplicate path.");
+
+                FinalizedLosslessOutputReceipt receipt;
+                if (!receiptByPath.TryGetValue(expectedPath, out receipt))
+                    throw new InvalidDataException(
+                        "Final lossless-output verification missed a declared output.");
+                orderedReceipts.Add(receipt);
+            }
+            if (receiptByPath.Count != expectedPaths.Count)
+                throw new InvalidDataException(
+                    "Final lossless-output verification captured an undeclared output.");
+
+            LosslessAudioStreamSourceFactory decoderFactory =
+                FinalOutputDecoderFactoryOverride;
+            if (decoderFactory == null)
+            {
+                decoderFactory = delegate(string path, Stream input)
+                {
+                    return AudioReadWrite.GetAudioSource(
+                        path,
+                        input,
+                        _config);
+                };
+            }
+
+            // Build locally and publish once. A failure on any output leaves callers with no
+            // partially completed proof set and no positive Boolean assurance.
+            var completed =
+                new List<LosslessOutputProof>(orderedReceipts.Count);
+            foreach (FinalizedLosslessOutputReceipt receipt in orderedReceipts)
+            {
+                completed.Add(receipt.Verify(
+                    OutputDir,
+                    decoderFactory));
+            }
+
+            _finalOutputProofs =
+                new ReadOnlyCollection<LosslessOutputProof>(completed);
+            FinalOutputVerifiedAfterMetadata = true;
         }
 
         internal IAudioSource GetAudioSource(int sourceIndex, bool pipe)
@@ -4666,5 +4817,114 @@ namespace CUETools.Processor
         public event EventHandler<CUEToolsSelectionEventArgs> CUEToolsSelection;
 
         #endregion
+    }
+
+    /// <summary>
+    /// Captures the exact PCM accepted by one lossless destination, then verifies a separately
+    /// opened decoder after the container's metadata has been finalized.
+    /// </summary>
+    internal sealed class FinalizedLosslessOutputReceipt : IAudioDest
+    {
+        private readonly IAudioDest _destination;
+        private readonly AudioPCMConfig _pcm;
+        private readonly LosslessPcmFingerprint _fingerprint =
+            new LosslessPcmFingerprint();
+        private long _expectedSampleCount;
+        private byte[] _digest;
+        private bool _closed;
+
+        internal FinalizedLosslessOutputReceipt(
+            IAudioDest destination,
+            AudioPCMConfig pcm,
+            long expectedSampleCount)
+        {
+            if (destination == null)
+                throw new ArgumentNullException("destination");
+            if (pcm == null)
+                throw new ArgumentNullException("pcm");
+            if (expectedSampleCount < 0)
+                throw new ArgumentOutOfRangeException("expectedSampleCount");
+
+            _destination = destination;
+            _pcm = pcm;
+            _expectedSampleCount = expectedSampleCount;
+        }
+
+        public IAudioEncoderSettings Settings
+        {
+            get { return _destination.Settings; }
+        }
+
+        public string Path
+        {
+            get { return _destination.Path; }
+        }
+
+        public long FinalSampleCount
+        {
+            set
+            {
+                if (value < 0)
+                    throw new ArgumentOutOfRangeException("value");
+                _expectedSampleCount = value;
+                _destination.FinalSampleCount = value;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Write(AudioBuffer buffer)
+        {
+            if (_closed)
+                throw new InvalidOperationException(
+                    "Cannot write after the lossless output receipt is closed.");
+            _fingerprint.Append(buffer);
+            _destination.Write(buffer);
+        }
+
+        public void Close()
+        {
+            if (_closed)
+                return;
+            try
+            {
+                _destination.Close();
+                _digest = _fingerprint.Complete();
+                _closed = true;
+            }
+            finally
+            {
+                _fingerprint.Dispose();
+            }
+        }
+
+        public void Delete()
+        {
+            try
+            {
+                _destination.Delete();
+            }
+            finally
+            {
+                _fingerprint.Dispose();
+            }
+        }
+
+        internal LosslessOutputProof Verify(
+            string outputRoot,
+            LosslessAudioStreamSourceFactory decoderFactory)
+        {
+            if (!_closed || _digest == null)
+                throw new InvalidOperationException(
+                    "The lossless output must close before final verification.");
+
+            return LosslessOutputProof.CreateVerified(
+                outputRoot,
+                Path,
+                "Finalized lossless output",
+                _pcm,
+                _expectedSampleCount,
+                _digest,
+                decoderFactory);
+        }
     }
 }

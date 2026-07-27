@@ -24,7 +24,6 @@ jobs:
       # yamllint disable-line rule:line-length
       DEVENV_PATH: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\devenv.com
       MSBUILD_PATH: C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe
-      SLN_PATH: CUETools.sln
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -37,21 +36,20 @@ jobs:
         run: |
           git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose
           git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose
-      - name: Rebuild required x64 native codec DLLs from pinned source
+      - name: Test release-control contracts
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Build-NativeDependencies.ps1 -Configuration Release
-      - name: MSBuild NuGet restore
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-NativeWarningBaseline.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-NativeDependencyPreparation.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicBuildReceipt.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicReleaseOrchestrator.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicArtifactCollection.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ReleaseSafety.ps1
+      - name: Prepare pinned native dependency sources
         run: |
-          "%MSBUILD_PATH%" "%SLN_PATH%" -t:restore -p:Configuration=Release
-      - name: Build Release|Any CPU
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Build-NativeDependencies.ps1 -Configuration Release -ApplyPatchesOnly
+      - name: Rebuild, receipt, collect, and publish the classic artifact
         run: |
-          "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|Any CPU"
-      - name: Build Release|x64
-        run: |
-          "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|x64"
-      - name: Build Release|Win32
-        run: |
-          "%DEVENV_PATH%" "%SLN_PATH%" /Build "Release|Win32"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Invoke-ClassicRelease.ps1 -DevenvPath "%DEVENV_PATH%" -MSBuildPath "%MSBUILD_PATH%"
       - name: Build modern closure with checked warning budget
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Invoke-BuildWithWarningGate.ps1 -Configuration Release
@@ -62,9 +60,6 @@ jobs:
       - name: Fuzz smoke - properties and parser/decoder corpora
         run: |
           dotnet run --project CUETools.Fuzz\CUETools.Fuzz.csproj -c Release --no-build -- 20260712 20000
-      - name: Collect and bind classic package plugins
-        run: |
-          collect_files.bat
       - name: Validate classic artifact contract and architecture-specific trust manifest
         run: |
           dotnet run --project eng\release\ArtifactValidator\ArtifactValidator.csproj --configuration Release -- bin\Release\CUETools_2.2.6 eng\release\classic-win.manifest.json

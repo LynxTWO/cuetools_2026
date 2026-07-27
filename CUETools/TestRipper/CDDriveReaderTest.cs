@@ -1,182 +1,197 @@
-﻿using System;
-using System.Text;
-using System.IO;
-using System.Collections.Generic;
-using CUETools.Codecs;
-using CUETools.Ripper;
+using System;
 using CUETools.Ripper.SCSI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+
 namespace TestRipper
 {
-    
-    
-    /// <summary>
-    ///This is a test class for CDDriveReaderTest and is intended
-    ///to contain all CDDriveReaderTest Unit Tests
-    ///</summary>
-	[TestClass()]
-	public class CDDriveReaderTest
-	{
+    [TestClass]
+    public sealed class CDDriveReaderTest
+    {
+        private const int PassCount = 64;
+        private const int SectorCount = 32;
 
+        [TestMethod]
+        public void DeterministicC2WeightedCorpusRecoversReferenceSectors()
+        {
+            byte[] reference =
+                new byte[SectorCount * SecureSectorVote.BytesPerSector];
+            new Random(2314).NextBytes(reference);
+            var userData = new long[
+                SectorCount,
+                2,
+                SecureSectorVote.BytesPerSector];
+            var c2Count = new byte[
+                SectorCount,
+                SecureSectorVote.C2GroupsPerSector];
+            ulong[] byteToBitLanes = CreateByteToBitLanes();
+            int flaggedCorruptBlocks = 0;
+            int unflaggedCorruptBlocks = 0;
 
-		private TestContext testContextInstance;
+            for (int pass = 0; pass < PassCount; pass++)
+            {
+                for (int sector = 0; sector < SectorCount; sector++)
+                {
+                    for (int group = 0;
+                        group < SecureSectorVote.C2GroupsPerSector;
+                        group++)
+                    {
+                        int blockOrdinal =
+                            sector * SecureSectorVote.C2GroupsPerSector +
+                            group;
+                        bool corrupt =
+                            ((pass + blockOrdinal * 7) % 23) == 0;
+                        bool c2 =
+                            corrupt && ((pass + blockOrdinal) & 1) == 0;
+                        if (corrupt)
+                        {
+                            if (c2)
+                                flaggedCorruptBlocks++;
+                            else
+                                unflaggedCorruptBlocks++;
+                        }
 
-		/// <summary>
-		///Gets or sets the test context which provides
-		///information about and functionality for the current test run.
-		///</summary>
-		public TestContext TestContext
-		{
-			get
-			{
-				return testContextInstance;
-			}
-			set
-			{
-				testContextInstance = value;
-			}
-		}
+                        int plane = c2 ? 1 : 0;
+                        if (c2)
+                            c2Count[sector, group]++;
+                        int firstByte = group * 8;
+                        for (int withinGroup = 0;
+                            withinGroup < 8;
+                            withinGroup++)
+                        {
+                            int byteIndex = firstByte + withinGroup;
+                            int referenceOffset =
+                                sector * SecureSectorVote.BytesPerSector +
+                                byteIndex;
+                            byte value = reference[referenceOffset];
+                            if (corrupt)
+                            {
+                                value ^= (byte)(
+                                    1 << ((pass + referenceOffset) & 7));
+                            }
+                            userData[sector, plane, byteIndex] +=
+                                (long)byteToBitLanes[value];
+                        }
+                    }
+                }
+            }
 
-		const int max_pass = 64;
-		const int Sectors2Read = 2400;
+            Assert.IsTrue(
+                flaggedCorruptBlocks > 0,
+                "the corpus must include C2-flagged corruption");
+            Assert.IsTrue(
+                unflaggedCorruptBlocks > 0,
+                "the corpus must include undetected corruption");
 
-		bool markErrors = true;
-		int _currentStart = 0, _realErrors = 0;
-		byte[] _currentData = new byte[Sectors2Read * 4 * 588];
+            var recovered = new byte[reference.Length];
+            for (int sector = 0; sector < SectorCount; sector++)
+            {
+                bool lowConfidence = SecureSectorVote.CorrectSector(
+                    userData,
+                    c2Count,
+                    recovered,
+                    sector,
+                    PassCount,
+                    correctionQuality: 2);
+                Assert.IsFalse(
+                    lowConfidence,
+                    "the deterministic majority should be conclusive");
+            }
 
-		static ulong[,,] UserData = new ulong[Sectors2Read, 2, 4 * 588];
-		static byte[,] C2Count = new byte[Sectors2Read, 4 * 588];
-		static byte[] _realData = new byte[Sectors2Read * 4 * 588];
-		static ulong[] byte2long = new ulong[256];
+            CollectionAssert.AreEqual(
+                reference,
+                recovered,
+                "the production C2-weighted vote did not recover the reference sectors");
+        }
 
-		#region Additional test attributes
-		// 
-		//You can use the following additional attributes as you write your tests:
-		//
-		//Use ClassInitialize to run code before running the first test in the class
-		[ClassInitialize()]
-		public static void MyClassInitialize(TestContext testContext)
-		{
-			for (ulong i = 0; i < 256; i++)
-			{
-				ulong bl = 0;
-				for (int b = 0; b < 8; b++)
-					bl += ((i >> b) & 1) << (b << 3);
-				byte2long[i] = bl;
-			}
+        [TestMethod]
+        public void OneCleanPassDoesNotSatisfyTwoPassConfidencePolicy()
+        {
+            var userData = new long[
+                1,
+                2,
+                SecureSectorVote.BytesPerSector];
+            var c2Count = new byte[
+                1,
+                SecureSectorVote.C2GroupsPerSector];
+            var destination =
+                new byte[SecureSectorVote.BytesPerSector];
+            ulong[] byteToBitLanes = CreateByteToBitLanes();
+            for (int i = 0; i < SecureSectorVote.BytesPerSector; i++)
+                userData[0, 0, i] = (long)byteToBitLanes[0xA5];
 
-			//Random rnd = new Random(2314);
-			//rnd.NextBytes(_realData);
+            bool lowConfidence = SecureSectorVote.CorrectSector(
+                userData,
+                c2Count,
+                destination,
+                sectorPosition: 0,
+                passCount: 1,
+                correctionQuality: 1);
 
-			byte [] c2data = new byte[Sectors2Read * 296];
-			for (int p = 0; p < max_pass; p++)
-			{
-				//    string nm_d = string.Format("Y:\\Temp\\dbg\\{0:x}-{1:00}.bin", _currentStart, dbg_pass);
-				using (FileStream fs = new FileStream(string.Format("Y:\\Temp\\dbg\\960\\960-{0:00}.bin", p), FileMode.Open))
-				using (FileStream fs2 = new FileStream(string.Format("Y:\\Temp\\dbg\\960\\960-{0:00}.c2", p), FileMode.Open))
-				{
-					fs.Read(_realData, 0, Sectors2Read * 4 * 588);
-					fs2.Read(c2data, 0, Sectors2Read * 296);
-					for (int iSector = 0; iSector < Sectors2Read; iSector++)
-					{
-						for (int pos = 0; pos < 294; pos++)
-						{
-							int c2d = c2data[iSector * 296 + pos];
-							for (int sample = (pos << 3); sample < (pos << 3) + 8; sample++)
-							{
-								//int c2 = (c2d >> (7 - (sample & 7))) & 1;
-								//int c2 = (c2d >> ((sample & 7))) & 1;
-								//int c2 = ((c2d >> ((sample & 7))) | (c2d >> (7 - (sample & 7)))) & 1;
-								int c2 = ((-c2d) >> 31) & 1;
-								C2Count[iSector, sample] += (byte)c2;
-								UserData[iSector, c2, sample] += byte2long[_realData[iSector * 4 * 588 + sample]];
-							}
-						}
-					}
-				}
-				//for (int iSector = 0; iSector < Sectors2Read; iSector++)
-				//    for (int iPar = 0; iPar < 4 * 588; iPar++)
-				//    {
-				//        bool error = rnd.NextDouble() < 0.2;
-				//        byte val = error ? (byte)rnd.Next(255) : _realData[iSector * 4 * 588 + iPar];
-				//        UserData[iSector, iPar] += byte2long[val] * bit_weight;
-				//        if (error && rnd.NextDouble() < 0.5)
-				//        {
-				//            C2Data[iSector, iPar >> 3] += (iPar & 7) * 8;
-				//            UserData[iSector, iPar] += 0x0101010101010101 * (bit_weight / 2) + byte2long[val] * (c2_weight - bit_weight);
-				//        }
-				//    }
-			}
-			using (FileStream fs = new FileStream(string.Format("Y:\\Temp\\dbg\\960\\960.bin", 0), FileMode.Open))
-				fs.Read(_realData, 0, Sectors2Read * 4 * 588);
-		}
-		//
-		//Use ClassCleanup to run code after all tests in a class have run
-		//[ClassCleanup()]
-		//public static void MyClassCleanup()
-		//{
-		//}
-		//
-		//Use TestInitialize to run code before running each test
-		[TestInitialize()]
-		public void MyTestInitialize()
-		{
-		}
-		//
-		//Use TestCleanup to run code after each test has run
-		//[TestCleanup()]
-		//public void MyTestCleanup()
-		//{
-		//}
-		//
-		#endregion
+            Assert.IsTrue(
+                lowConfidence,
+                "one clean read must not be declared secure when two are required");
+            foreach (byte value in destination)
+                Assert.AreEqual(
+                    (byte)0xA5,
+                    value,
+                    "the best available byte should still be reconstructed");
+        }
 
+        [TestMethod]
+        public void C2PlaneDeterminesBestByteWithoutClaimingSecureConfidence()
+        {
+            var userData = new long[
+                1,
+                2,
+                SecureSectorVote.BytesPerSector];
+            var c2Count = new byte[
+                1,
+                SecureSectorVote.C2GroupsPerSector];
+            var destination =
+                new byte[SecureSectorVote.BytesPerSector];
+            ulong[] byteToBitLanes = CreateByteToBitLanes();
+            for (int group = 0;
+                group < SecureSectorVote.C2GroupsPerSector;
+                group++)
+                c2Count[0, group] = 3;
+            for (int i = 0; i < SecureSectorVote.BytesPerSector; i++)
+            {
+                // Three C2-flagged observations, with a 2:1 majority for A5.
+                userData[0, 1, i] =
+                    (long)(
+                        byteToBitLanes[0xA5] * 2 +
+                        byteToBitLanes[0x5A]);
+            }
 
-		/// <summary>
-		///A test for CorrectSectors
-		///</summary>
-		[TestMethod()]
-		[DeploymentItem("CUETools.Ripper.SCSI.dll")]
-		public void CorrectSectorsTest()
-		{
-			int _currentErrorsCount = 0;
-			int sector = 0;
-			_realErrors = 0;
-			const byte c2div = 128;
-			const int er_limit = c2div * 3;
-			int fErrCnt = 0;
-			for (int iSector = 0; iSector < Sectors2Read; iSector++)
-			{
-				int pos = sector - _currentStart + iSector;
-				for (int iPar = 0; iPar < 4 * 588; iPar++)
-				{
-					ulong val = UserData[pos, 0, iPar];
-					ulong val1 = 0;// UserData[pos, 1, iPar];
-					byte c2 = C2Count[pos, iPar];
-					int ave = (max_pass - c2) * c2div + c2;
-					int bestValue = 0;
-					bool fError = false;
-					for (int i = 0; i < 8; i++)
-					{
-						int sum = ave - 2 * (int)((val & 0xff) * c2div + (val1 & 0xff));
-						int sig = sum >> 31;
-						fError |= (sum ^ sig) < er_limit;
-						bestValue += sig & (1 << i);
-						val >>= 8;
-					}
-					if (fError)
-						fErrCnt++;
-					//if (c2 > c2_limit)
-						//_currentErrorsCount++;
-					_currentData[pos * 4 * 588 + iPar] = (byte)bestValue;
-					if (_realData[iSector * 4 * 588 + iPar] != bestValue)
-						_realErrors++;
-				}
-			}
-			//Assert.AreEqual<int>(0, fErrCnt);
-			Assert.AreEqual<int>(0, _realErrors, "0 != _realErrors; _currentErrorsCount == " + _currentErrorsCount.ToString());
-			//CollectionAssert.AreEqual(_realData, _currentData, "_realData != _currentData");
-			Assert.AreEqual<int>(0, _currentErrorsCount, "_currentErrorsCount != 0");
-		}
-	}
+            bool lowConfidence = SecureSectorVote.CorrectSector(
+                userData,
+                c2Count,
+                destination,
+                sectorPosition: 0,
+                passCount: 3,
+                correctionQuality: 0);
+
+            Assert.IsTrue(
+                lowConfidence,
+                "C2-only evidence may select a byte but must not be called secure");
+            foreach (byte value in destination)
+                Assert.AreEqual(
+                    (byte)0xA5,
+                    value,
+                    "the C2 vote plane must participate in reconstruction");
+        }
+
+        private static ulong[] CreateByteToBitLanes()
+        {
+            var byteToBitLanes = new ulong[256];
+            for (ulong value = 0; value < 256; value++)
+            {
+                ulong lanes = 0;
+                for (int bit = 0; bit < 8; bit++)
+                    lanes += ((value >> bit) & 1) << (bit << 3);
+                byteToBitLanes[value] = lanes;
+            }
+            return byteToBitLanes;
+        }
+    }
 }

@@ -1,0 +1,35 @@
+CUETools UnRAR streaming fixture
+Line 2: 0123456789
+Line 3: seek and replay must remain byte-exact
+Repeated payload 01: CUETools verifies decoded archive bytes.
+Repeated payload 02: CUETools verifies decoded archive bytes.
+Repeated payload 03: CUETools verifies decoded archive bytes.
+Repeated payload 04: CUETools verifies decoded archive bytes.
+Repeated payload 05: CUETools verifies decoded archive bytes.
+Repeated payload 06: CUETools verifies decoded archive bytes.
+Repeated payload 07: CUETools verifies decoded archive bytes.
+Repeated payload 08: CUETools verifies decoded archive bytes.
+Repeated payload 09: CUETools verifies decoded archive bytes.
+Repeated payload 10: CUETools verifies decoded archive bytes.
+Repeated payload 11: CUETools verifies decoded archive bytes.
+Repeated payload 12: CUETools verifies decoded archive bytes.
+Repeated payload 13: CUETools verifies decoded archive bytes.
+Repeated payload 14: CUETools verifies decoded archive bytes.
+Repeated payload 15: CUETools verifies decoded archive bytes.
+Repeated payload 16: CUETools verifies decoded archive bytes.
+Repeated payload 17: CUETools verifies decoded archive bytes.
+Repeated payload 18: CUETools verifies decoded archive bytes.
+Repeated payload 19: CUETools verifies decoded archive bytes.
+Repeated payload 20: CUETools verifies decoded archive bytes.
+Repeated payload 21: CUETools verifies decoded archive bytes.
+Repeated payload 22: CUETools verifies decoded archive bytes.
+Repeated payload 23: CUETools verifies decoded archive bytes.
+Repeated payload 24: CUETools verifies decoded archive bytes.
+Repeated payload 25: CUETools verifies decoded archive bytes.
+Repeated payload 26: CUETools verifies decoded archive bytes.
+Repeated payload 27: CUETools verifies decoded archive bytes.
+Repeated payload 28: CUETools verifies decoded archive bytes.
+Repeated payload 29: CUETools verifies decoded archive bytes.
+Repeated payload 30: CUETools verifies decoded archive bytes.
+Repeated payload 31: CUETools verifies decoded archive bytes.
+Repeated payload 32: CUETools verifies decoded archive bytes.

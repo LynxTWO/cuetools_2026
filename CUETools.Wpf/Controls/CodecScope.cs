@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using CUETools.Wpf.Services;
 using Pred = CUETools.Wpf.Controls.CodecMath.Pred;
 using Pack = CUETools.Wpf.Controls.CodecMath.Pack;
 
@@ -34,13 +35,13 @@ public sealed class CodecScope : FrameworkElement
     public static readonly DependencyProperty ActiveProperty = DependencyProperty.Register(
         nameof(Active), typeof(bool), typeof(CodecScope), new PropertyMetadata(false));
     public static readonly DependencyProperty SamplesProperty = DependencyProperty.Register(
-        nameof(Samples), typeof(float[]), typeof(CodecScope), new PropertyMetadata(null, OnSamplesChanged));
+        nameof(Samples), typeof(RipTelemetryDisplayFrame), typeof(CodecScope), new PropertyMetadata(null, OnSamplesChanged));
 
     public string Codec { get => (string)GetValue(CodecProperty); set => SetValue(CodecProperty, value); }
     public string Mode { get => (string)GetValue(ModeProperty); set => SetValue(ModeProperty, value); }
     public bool Recovering { get => (bool)GetValue(RecoveringProperty); set => SetValue(RecoveringProperty, value); }
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
-    public float[]? Samples { get => (float[]?)GetValue(SamplesProperty); set => SetValue(SamplesProperty, value); }
+    public RipTelemetryDisplayFrame? Samples { get => (RipTelemetryDisplayFrame?)GetValue(SamplesProperty); set => SetValue(SamplesProperty, value); }
 
     private static readonly Color Teal = Color.FromRgb(0x34, 0xCF, 0xC0);
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
@@ -82,14 +83,42 @@ public sealed class CodecScope : FrameworkElement
 
     private static void OnSamplesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is float[] win && win.Length > 0) ((CodecScope)d).Push(win);
+        var scope = (CodecScope)d;
+        if (e.NewValue is RipTelemetryDisplayFrame frame &&
+            frame.SampleCount > 0)
+        {
+            scope.Push(frame.Samples, frame.SampleCount);
+        }
+        else if (e.NewValue == null)
+        {
+            scope.ResetTelemetrySession();
+        }
+    }
+
+    private void ResetTelemetrySession()
+    {
+        Array.Clear(_ring, 0, _ring.Length);
+        Array.Clear(_view, 0, _view.Length);
+        Array.Clear(_pred, 0, _pred.Length);
+        Array.Clear(_resid, 0, _resid.Length);
+        Array.Clear(_fftWin, 0, _fftWin.Length);
+        _ringWrite = 0;
+        _readPos = 0;
+        _show = _view;
+        _bitsEma = 16;
+        _ratioEma = 1;
+        _kbpsEma = 192;
+        _discEma = 50;
+        _last = default;
+        InvalidateVisual();
     }
 
     // append the new real window to the ring (producer); the render loop consumes it steadily
-    private void Push(float[] win)
+    private void Push(float[] win, int count)
     {
-        for (int i = 0; i < win.Length; i++) _ring[(int)((_ringWrite + i) % RingSize)] = win[i];
-        _ringWrite += win.Length;
+        for (int i = 0; i < count; i++)
+            _ring[(int)((_ringWrite + i) % RingSize)] = win[i];
+        _ringWrite += count;
     }
 
     private void OnRendering(object? sender, EventArgs e)

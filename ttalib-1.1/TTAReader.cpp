@@ -167,8 +167,9 @@ namespace TTALib
 		*buf = data;
 
 		input_byte_count = bitReader->input_byte_count;
-		output_byte_count += (p - data) * byte_size;  
+		output_byte_count += static_cast<unsigned long>(
+			(p - data) * byte_size);
 
-		return (p - data) / num_chan;
+		return static_cast<long>((p - data) / num_chan);
 	}
 };

@@ -4,23 +4,32 @@ param(
     [string]$Configuration = "Release",
     [string]$MSBuildPath,
     [string]$WarningBaselinePath,
-    [switch]$UpdateWarningBaseline
+    [switch]$UpdateWarningBaseline,
+    [switch]$ApplyPatchesOnly,
+    [string]$RepositoryRoot,
+    [switch]$ExpandMacSdkOnly
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
-$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$repoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+} else {
+    [IO.Path]::GetFullPath($RepositoryRoot)
+}
 $repoPrefix = $repoRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
     [IO.Path]::DirectorySeparatorChar
 if ([string]::IsNullOrWhiteSpace($WarningBaselinePath)) {
     $WarningBaselinePath = Join-Path $PSScriptRoot "native-warning-baseline.json"
 }
 $WarningBaselinePath = [IO.Path]::GetFullPath($WarningBaselinePath)
-$warningBaseline = Get-Content -LiteralPath $WarningBaselinePath -Raw | ConvertFrom-Json
-if ([int]$warningBaseline.schemaVersion -ne 1) {
-    throw "Unsupported native warning baseline schema '$($warningBaseline.schemaVersion)'."
+. (Join-Path $PSScriptRoot "NativeWarningBaseline.ps1")
+$nativeInventoryScript = Join-Path $PSScriptRoot "..\release\NativeDependencyInventory.ps1"
+if (-not (Test-Path -LiteralPath $nativeInventoryScript -PathType Leaf)) {
+    throw "Native dependency inventory helper does not exist: $nativeInventoryScript"
 }
+. $nativeInventoryScript
 
 function Resolve-RepoPath([string]$RelativePath) {
     $path = [IO.Path]::GetFullPath((Join-Path $repoRoot $RelativePath))
@@ -72,29 +81,99 @@ function Invoke-IdempotentPatch(
 function Expand-MacSdkIfRequired {
     $macRoot = Resolve-RepoPath "ThirdParty\MAC_SDK"
     $macProject = Resolve-RepoPath (
-        "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLibDll\MACLibDll.vcxproj")
-    if (Test-Path -LiteralPath $macProject -PathType Leaf) {
-        Write-Host "Monkey's Audio SDK is already expanded."
-        return
-    }
-
-    $sourceRoot = Join-Path $macRoot "Source"
-    if (Test-Path -LiteralPath $sourceRoot) {
-        throw "Monkey's Audio SDK Source exists but its VS2022 project is missing; refusing to overwrite a partial tree."
-    }
-    $zipPath = Join-Path $macRoot "MAC_1086_SDK.zip"
+        "ThirdParty\MAC_SDK\Source\Projects\Visual Studio - 2022\MACLib\MACLib.vcxproj")
+    $archiveRelativePath = "ThirdParty/MAC_SDK/MAC_1320_SDK.zip"
+    $zipPath = Resolve-RepoPath $archiveRelativePath
     if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
         throw "Monkey's Audio SDK archive is missing: $zipPath"
     }
-    if ((Get-Item -LiteralPath $macRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    $macRootInfo = Get-Item -LiteralPath $macRoot -Force
+    if (($macRootInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw "Monkey's Audio SDK destination must not be a reparse point."
+    }
+
+    $nativeManifestPath = Resolve-RepoPath "eng\release\native-dependencies.json"
+    $nativeManifest = Get-Content -LiteralPath $nativeManifestPath -Raw |
+        ConvertFrom-Json
+    Assert-PinnedSourceArchiveBinding `
+        -Inventory $nativeManifest `
+        -RepositoryRoot $repoRoot `
+        -ArtifactId "monkeys-audio" `
+        -PinnedRelativePath $archiveRelativePath
+    $archivePins = @(
+        $nativeManifest.pinnedFiles |
+            Where-Object {
+                ([string]$_.path).Replace("\", "/") -eq
+                    $archiveRelativePath
+            })
+    if ($archivePins.Count -ne 1 -or
+        [string]::IsNullOrWhiteSpace([string]$archivePins[0].sha256)) {
+        throw "The native dependency manifest must contain exactly one Monkey's Audio SDK archive hash."
+    }
+    $actualArchiveHash = (
+        Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualArchiveHash -ne
+        ([string]$archivePins[0].sha256).ToLowerInvariant()) {
+        throw "The Monkey's Audio SDK archive does not match its pinned SHA-256."
+    }
+
+    # These stream-wrapper files are maintained directly by CUETools and do not occur in
+    # the upstream archive. Every archive member and every override is hash-bound below.
+    $localOverridePaths = @(
+        "Source/MACLibDll/MACLibDll.cpp",
+        "Source/MACLibDll/MACLibDll.def",
+        "Source/MACLibDll/MACLibDll.h",
+        "Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj")
+    $localOverrides = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    foreach ($relativePath in $localOverridePaths) {
+        [void]$localOverrides.Add($relativePath)
+    }
+
+    function Assert-MacDestinationParents([string]$DestinationPath) {
+        $relative = $DestinationPath.Substring($macRoot.Length).TrimStart(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar)
+        $parts = $relative.Split(
+            @([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+            [StringSplitOptions]::RemoveEmptyEntries)
+        $current = $macRoot
+        for ($index = 0; $index -lt $parts.Length - 1; $index++) {
+            $current = Join-Path $current $parts[$index]
+            if (Test-Path -LiteralPath $current) {
+                $info = Get-Item -LiteralPath $current -Force
+                if (-not $info.PSIsContainer -or
+                    ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Monkey's Audio SDK archive destination has an unsafe parent: $current"
+                }
+            }
+            else {
+                [void][IO.Directory]::CreateDirectory($current)
+            }
+        }
+    }
+
+    function Get-StreamSha256([IO.Stream]$Stream) {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString(
+                $sha.ComputeHash($Stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally { $sha.Dispose() }
     }
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    $repairedCount = 0
+    $archiveFiles = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    $archiveHashes = [Collections.Generic.Dictionary[string,string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
     try {
         $destinationPrefix = $macRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
             [IO.Path]::DirectorySeparatorChar
+        $destinations = [Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase)
         foreach ($entry in $archive.Entries) {
             $entryPath = $entry.FullName.Replace("/", [IO.Path]::DirectorySeparatorChar)
             if ([IO.Path]::IsPathRooted($entryPath)) {
@@ -106,15 +185,146 @@ function Expand-MacSdkIfRequired {
                 [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Monkey's Audio SDK archive contains a path traversal entry."
             }
+            if (-not $destinations.Add($destination)) {
+                throw "Monkey's Audio SDK archive contains duplicate destination paths."
+            }
+            if ([string]::IsNullOrEmpty($entry.Name)) {
+                continue
+            }
+
+            $normalizedEntryPath = $entry.FullName.Replace("\", "/").TrimStart("/")
+            if (-not $archiveFiles.Add($normalizedEntryPath)) {
+                throw "Monkey's Audio SDK archive contains a duplicate file path."
+            }
+            if ($localOverrides.Contains($normalizedEntryPath)) {
+                throw (
+                    "Monkey's Audio SDK archive now collides with a CUETools override: " +
+                    $normalizedEntryPath)
+            }
+            $entryStream = $entry.Open()
+            try { $entryHash = Get-StreamSha256 $entryStream }
+            finally { $entryStream.Dispose() }
+            $archiveHashes.Add($normalizedEntryPath, $entryHash)
+
+            Assert-MacDestinationParents $destination
+            if (Test-Path -LiteralPath $destination) {
+                $destinationInfo = Get-Item -LiteralPath $destination -Force
+                if ($destinationInfo.PSIsContainer -or
+                    ($destinationInfo.Attributes -band
+                        [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Monkey's Audio SDK archive destination is unsafe: $destination"
+                }
+                $fileStream = [IO.File]::Open(
+                    $destination,
+                    [IO.FileMode]::Open,
+                    [IO.FileAccess]::Read,
+                    [IO.FileShare]::Read)
+                try {
+                    $fileHash = Get-StreamSha256 $fileStream
+                }
+                finally {
+                    $fileStream.Dispose()
+                }
+                if ($entryHash -ne $fileHash) {
+                    throw "Expanded Monkey's Audio SDK file differs from the pinned archive: $normalizedEntryPath"
+                }
+                continue
+            }
+
+            $entryStream = $entry.Open()
+            $fileStream = [IO.File]::Open(
+                $destination,
+                [IO.FileMode]::CreateNew,
+                [IO.FileAccess]::Write,
+                [IO.FileShare]::None)
+            try { $entryStream.CopyTo($fileStream) }
+            finally {
+                $fileStream.Dispose()
+                $entryStream.Dispose()
+            }
+            $fileStream = [IO.File]::Open(
+                $destination,
+                [IO.FileMode]::Open,
+                [IO.FileAccess]::Read,
+                [IO.FileShare]::Read)
+            try { $fileHash = Get-StreamSha256 $fileStream }
+            finally { $fileStream.Dispose() }
+            if ($entryHash -ne $fileHash) {
+                throw "Expanded Monkey's Audio SDK file differs after extraction: $normalizedEntryPath"
+            }
+            $repairedCount++
         }
     }
     finally { $archive.Dispose() }
 
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $macRoot
+    foreach ($relativePath in $localOverridePaths) {
+        $manifestPath = "ThirdParty/MAC_SDK/$relativePath"
+        $overridePath = Resolve-RepoPath $manifestPath
+        if (-not (Test-Path -LiteralPath $overridePath -PathType Leaf)) {
+            throw "Required CUETools Monkey's Audio SDK override is missing: $relativePath"
+        }
+        $overrideInfo = Get-Item -LiteralPath $overridePath -Force
+        if (($overrideInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "CUETools Monkey's Audio SDK override must not be a reparse point: $relativePath"
+        }
+        $overridePins = @(
+            $nativeManifest.pinnedFiles |
+                Where-Object {
+                    ([string]$_.path).Replace("\", "/") -eq $manifestPath
+                })
+        if ($overridePins.Count -ne 1 -or
+            [string]::IsNullOrWhiteSpace([string]$overridePins[0].sha256)) {
+            throw (
+                "The native dependency manifest must contain exactly one hash for " +
+                "the CUETools Monkey's Audio SDK override: $relativePath")
+        }
+        $overrideHash = (
+            Get-FileHash -LiteralPath $overridePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($overrideHash -ne
+            ([string]$overridePins[0].sha256).ToLowerInvariant()) {
+            throw "CUETools Monkey's Audio SDK override hash mismatch: $relativePath"
+        }
+    }
+
+    $generatedPrefixPattern =
+        "^Source/Projects/Visual Studio - 2022/MACLib/(?:x64/)?(?:Debug|Release)/"
+    $generatedCount = 0
+    foreach ($item in (Get-ChildItem -LiteralPath $macRoot -Force -Recurse)) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Monkey's Audio SDK tree must not contain reparse points: $($item.FullName)"
+        }
+        if ($item.PSIsContainer) {
+            continue
+        }
+        $relativePath = $item.FullName.Substring($macRoot.Length).TrimStart(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar).Replace("\", "/")
+        if ($archiveFiles.Contains($relativePath) -or
+            $localOverrides.Contains($relativePath) -or
+            $relativePath -eq "MAC_1320_SDK.zip") {
+            continue
+        }
+        if ($relativePath -match $generatedPrefixPattern) {
+            $generatedCount++
+            continue
+        }
+        throw (
+            "Monkey's Audio SDK tree contains a file not bound to the archive or " +
+            "CUETools override manifest: $relativePath")
+    }
+
     if (-not (Test-Path -LiteralPath $macProject -PathType Leaf)) {
         throw "Monkey's Audio SDK expansion did not produce the expected VS2022 project."
     }
-    Write-Host "Expanded pinned Monkey's Audio SDK."
+    if ($repairedCount -gt 0) {
+        Write-Host "Expanded or repaired $repairedCount pinned Monkey's Audio SDK files."
+    }
+    else {
+        Write-Host "Pinned Monkey's Audio SDK expansion is complete and byte-validated."
+    }
+    Write-Host (
+        "Monkey's Audio SDK source closure PASS: $($archiveFiles.Count) archive files, " +
+        "$($localOverridePaths.Count) CUETools overrides, $generatedCount generated files.")
 }
 
 function Resolve-MSBuild {
@@ -141,7 +351,9 @@ function Resolve-MSBuild {
     return [IO.Path]::GetFullPath($candidate)
 }
 
-function Assert-X64Pe([string]$RelativePath) {
+function Assert-NativePe(
+    [string]$RelativePath,
+    [string]$Platform) {
     $path = Resolve-RepoPath $RelativePath
     $info = New-Object IO.FileInfo($path)
     if (-not $info.Exists -or $info.Length -le 0) {
@@ -172,134 +384,92 @@ function Assert-X64Pe([string]$RelativePath) {
             throw "Native dependency output has no PE signature: $RelativePath"
         }
         $machine = $reader.ReadUInt16()
-        if ($machine -ne 0x8664) {
-            throw ("Native dependency output is machine 0x{0:X4}, not AMD64: {1}" -f
-                $machine, $RelativePath)
+        $expectedMachine = $(if ($Platform -eq "x64") {
+            0x8664
+        } else {
+            0x014c
+        })
+        if ($machine -ne $expectedMachine) {
+            throw ("Native dependency output is machine 0x{0:X4}, not {1}: {2}" -f
+                $machine, $Platform, $RelativePath)
         }
     }
     finally {
         $reader.Dispose()
         $stream.Dispose()
     }
-    Write-Host "Native output PASS: $RelativePath ($($info.Length) bytes, AMD64 PE)"
+    Write-Host "Native output PASS: $RelativePath ($($info.Length) bytes, $Platform PE)"
 }
 
 Expand-MacSdkIfRequired
+if ($ExpandMacSdkOnly) {
+    Write-Host "Pinned Monkey's Audio SDK expansion check passed. No patch or build was requested."
+    exit 0
+}
 Invoke-IdempotentPatch `
     "ThirdParty/flac" `
     "ThirdParty/submodule_flac_CUETools.patch"
 Invoke-IdempotentPatch `
     "ThirdParty/WavPack" `
     "ThirdParty/submodule_WavPack_CUETools.patch"
-Invoke-IdempotentPatch `
-    "ThirdParty/MAC_SDK" `
-    "ThirdParty/ThirdParty_MAC_SDK_CUETools.patch"
+if ($ApplyPatchesOnly) {
+    Write-Host "Pinned native sources are expanded and patched. No build was requested."
+    exit 0
+}
 
 $msbuild = Resolve-MSBuild
 $solutionDirectory = $repoRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
     [IO.Path]::DirectorySeparatorChar
-$builds = @(
-    [pscustomobject]@{
-        project = "ThirdParty\flac\src\libFLAC\libFLAC_dynamic.vcxproj"
-        output = "ThirdParty\x64\libFLAC_dynamic.dll"
-    },
-    [pscustomobject]@{
-        project = "ThirdParty\WavPack\wavpackdll\wavpackdll.vcxproj"
-        output = "ThirdParty\x64\wavpackdll.dll"
-    },
-    [pscustomobject]@{
-        project = "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLibDll\MACLibDll.vcxproj"
-        output = "ThirdParty\x64\MACLibDll.dll"
+$builds = New-Object "Collections.Generic.List[object]"
+foreach ($platform in @("Win32", "x64")) {
+    foreach ($definition in @(
+        @(
+            "ThirdParty\flac\src\libFLAC\libFLAC_dynamic.vcxproj",
+            "libFLAC_dynamic.dll"),
+        @(
+            "ThirdParty\WavPack\wavpackdll\wavpackdll.vcxproj",
+            "wavpackdll.dll"),
+        @(
+            "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLibDll\MACLibDll.vcxproj",
+            "MACLibDll.dll"))) {
+        $builds.Add([pscustomobject]@{
+            project = $definition[0]
+            platform = $platform
+            output = "ThirdParty\$platform\$($definition[1])"
+        })
     }
-)
+}
 
-$warningLines = [Collections.Generic.List[string]]::new()
+$buildOutputLines = [Collections.Generic.List[string]]::new()
 foreach ($build in $builds) {
     $project = Resolve-RepoPath $build.project
     if (-not (Test-Path -LiteralPath $project -PathType Leaf)) {
         throw "Native dependency project is missing: $($build.project)"
     }
     $output = @(
-        & $msbuild $project /t:Rebuild "/p:Configuration=$Configuration" /p:Platform=x64 `
+        & $msbuild $project /t:Rebuild "/p:Configuration=$Configuration" `
+            "/p:Platform=$($build.platform)" `
             "/p:SolutionDir=$solutionDirectory" /nologo 2>&1
     )
     $exitCode = $LASTEXITCODE
     foreach ($item in $output) {
         $line = [string]$item
         Write-Host $line
-        if ($line -match ":\s*warning\s+[A-Za-z]+\d+\s*:") {
-            $warningLines.Add($line)
-        }
+        $buildOutputLines.Add($line)
     }
     if ($exitCode -ne 0) {
         throw "Native dependency build failed: $($build.project)"
     }
-    Assert-X64Pe $build.output
+    Assert-NativePe $build.output $build.platform
 }
 
-$fingerprints = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-$warningPattern = '^(?<source>.*?)(?:\(\d+(?:,\d+){0,3}\))?\s*:\s*warning\s+(?<code>[A-Za-z]+\d+)\s*:\s*(?<message>.*?)(?:\s+\[[^\]]+\])?$'
-foreach ($line in $warningLines) {
-    $match = [Text.RegularExpressions.Regex]::Match($line, $warningPattern)
-    if (-not $match.Success) {
-        throw "A native warning line could not be normalized for the checked baseline: $line"
-    }
-    $source = $match.Groups["source"].Value.Trim()
-    if ($source.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        $source = $source.Substring($repoPrefix.Length)
-    }
-    $source = $source.Replace("\", "/")
-    $message = [Text.RegularExpressions.Regex]::Replace(
-        $match.Groups["message"].Value.Trim(),
-        "\s+",
-        " ")
-    $message = $message.Replace($repoRoot, "<repo>")
-    $null = $fingerprints.Add(
-        "$source|$($match.Groups["code"].Value.ToUpperInvariant())|$message")
-}
-
-$actual = [string[]]@($fingerprints)
-[Array]::Sort($actual, [StringComparer]::Ordinal)
-if ($UpdateWarningBaseline) {
-    $warningBaseline.fingerprints = $actual
-    $utf8 = New-Object Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText(
-        $WarningBaselinePath,
-        (($warningBaseline | ConvertTo-Json -Depth 8) + "`n"),
-        $utf8)
-    Write-Host (
-        "Updated native warning baseline with $($actual.Count) distinct fingerprints " +
-        "from $($warningLines.Count) emitted warning lines.")
-    exit 0
-}
-
-$expected = [string[]]@($warningBaseline.fingerprints)
-[Array]::Sort($expected, [StringComparer]::Ordinal)
-$newWarnings = @(
-    $actual |
-        Where-Object {
-            [Array]::BinarySearch($expected, $_, [StringComparer]::Ordinal) -lt 0
-        })
-$resolvedWarnings = @(
-    $expected |
-        Where-Object {
-            [Array]::BinarySearch($actual, $_, [StringComparer]::Ordinal) -lt 0
-        })
-
-Write-Host ""
-Write-Host "=== Native x64 warning budget ==="
-Write-Host "Emitted warning lines: $($warningLines.Count)"
-Write-Host "Distinct current fingerprints: $($actual.Count)"
-Write-Host "Checked baseline fingerprints: $($expected.Count)"
-if ($resolvedWarnings.Count -gt 0) {
-    Write-Host "Resolved since baseline ($($resolvedWarnings.Count)); baseline may be pruned:"
-    $resolvedWarnings | ForEach-Object { Write-Host "  - $_" }
-}
-if ($newWarnings.Count -gt 0) {
-    Write-Host "New warnings ($($newWarnings.Count)):"
-    $newWarnings | ForEach-Object { Write-Host "  + $_" }
-    throw "Native x64 warning budget failed: new warning fingerprints were emitted."
-}
-
-Write-Host "Native x64 warning budget PASS: no new warning fingerprints."
-Write-Host "All required x64 native dependencies were rebuilt from pinned, patched source."
+$warningResult = Get-NativeWarningBaselineResult `
+    -RepositoryRoot $repoRoot `
+    -WarningBaselinePath $WarningBaselinePath `
+    -WarningLines $buildOutputLines.ToArray() `
+    -CoverageIds @($builds | ForEach-Object {
+        "$($_.platform)|$($_.project.Replace('\', '/'))"
+    }) `
+    -UpdateWarningBaseline:$UpdateWarningBaseline
+Write-NativeWarningBaselineSummary -Result $warningResult
+Write-Host "All six required native dependencies were rebuilt from pinned source."

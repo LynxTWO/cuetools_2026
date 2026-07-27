@@ -167,7 +167,7 @@ namespace TTALib
 
 	  		next_frame_pos += *st++;
 
-			rbytes = bit_buffer_end - bitpos;
+			rbytes = static_cast<unsigned long>(bit_buffer_end - bitpos);
 			if (rbytes < sizeof(long)) {
 				CopyMemory(bit_buffer, bitpos, 4);
 				if (!ReadFile(hInFile, bit_buffer + rbytes,

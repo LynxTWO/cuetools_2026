@@ -5,6 +5,16 @@
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(RunCtdbLiveProbe)' == 'true'">
+    <!-- Opt-in only: this test contacts CTDB, consumes a known damaged lossless image, and
+         publishes a repaired sibling. It is deliberately absent from ordinary discovery. -->
+    <DefineConstants>$(DefineConstants);CTDB_LIVE_PROBE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RunOpticalTestCopyProbe)' == 'true'">
+    <!-- Opt-in only: this test calibrates a real drive, reads a loaded audio CD at least twice,
+         and temporarily publishes a verified FLAC album under a caller-owned unique root. -->
+    <DefineConstants>$(DefineConstants);OPTICAL_TESTCOPY_LIVE_PROBE</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.6.1" />
@@ -12,6 +22,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CUETools.Wpf\CUETools.Wpf.csproj" />
+    <ProjectReference
+      Include="..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj"
+      SetTargetFramework="TargetFramework=netstandard2.0" />
     <ProjectReference Include="..\CUETools.Codecs.Icecast\CUETools.Codecs.Icecast.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.HDCD\CUETools.Codecs.HDCD.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />

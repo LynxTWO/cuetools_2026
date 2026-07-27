@@ -2,7 +2,17 @@
 
   <PropertyGroup>
     <TargetFrameworks>net47;net20;netstandard2.0</TargetFrameworks>
-    <Version>2.2.6.0</Version>
+    <!-- 3.0 is intentional: the raw full-duplex SOURCE transport cannot manufacture the
+         HttpWebResponse returned by the legacy API. Keep the public member shape as a source
+         migration bridge, but signal the binding/behavior break instead of hiding it in a minor
+         version. -->
+    <Version>3.0.0.0</Version>
+    <PackageReleaseNotes>
+      Version 3 replaces the private-reflection HttpWebRequest SOURCE transport with a supported
+      raw full-duplex connection. IcecastWriter.Response remains for source compatibility but
+      throws after connection because no HttpWebResponse exists; use ProtocolResponse. Connect
+      now throws IcecastProtocolException for rejected authentication or source requests.
+    </PackageReleaseNotes>
     <AssemblyName>CUETools.Codecs.Icecast</AssemblyName>
     <RootNamespace>CUETools.Codecs.Icecast</RootNamespace>
     <Product>CUETools</Product>

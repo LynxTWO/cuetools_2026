@@ -1,9 +1,9 @@
 #include "MACLibDll.h"
-#include "IO.h"
+#include "IAPEIO.h"
 
 using namespace APE;
 
-class CallbackCIO : public CIO
+class CallbackCIO : public IAPEIO
 {
 public:
     // construction / destruction
@@ -25,7 +25,7 @@ public:
     ~CallbackCIO() {}
 
     // open / close
-    int Open(const wchar_t * pName, bool bOpenReadOnly = false)
+    int Open(const str_utfn * pName, bool bOpenReadOnly = false)
     {
         return -1;
     }
@@ -35,13 +35,35 @@ public:
     }
 
     // read / write
-    int Read(void * pBuffer, unsigned int nBytesToRead, unsigned int * pBytesRead)
+    int Read(void * pBuffer, int64 nBytesToRead, int64 * pBytesRead)
     {
-        return m_CIO_Read(m_pUserData, pBuffer, nBytesToRead, pBytesRead);
+        if ((nBytesToRead < 0) || (nBytesToRead > INT_MAX))
+            return ERROR_BAD_PARAMETER;
+
+        unsigned int nBytesRead = 0;
+        const int nResult = m_CIO_Read(
+            m_pUserData,
+            pBuffer,
+            static_cast<unsigned int>(nBytesToRead),
+            &nBytesRead);
+        if (pBytesRead)
+            *pBytesRead = nBytesRead;
+        return nResult;
     }
-    int Write(const void * pBuffer, unsigned int nBytesToWrite, unsigned int * pBytesWritten)
+    int Write(const void * pBuffer, int64 nBytesToWrite, int64 * pBytesWritten)
     {
-        return m_CIO_Write(m_pUserData, pBuffer, nBytesToWrite, pBytesWritten);
+        if ((nBytesToWrite < 0) || (nBytesToWrite > INT_MAX))
+            return ERROR_BAD_PARAMETER;
+
+        unsigned int nBytesWritten = 0;
+        const int nResult = m_CIO_Write(
+            m_pUserData,
+            pBuffer,
+            static_cast<unsigned int>(nBytesToWrite),
+            &nBytesWritten);
+        if (pBytesWritten)
+            *pBytesWritten = nBytesWritten;
+        return nResult;
     }
 
     // seek
@@ -61,7 +83,7 @@ public:
     }
 
     // creation / destruction
-    int Create(const wchar_t * pName)
+    int Create(const str_utfn * pName)
     {
         return -1;
     }
@@ -79,11 +101,6 @@ public:
     {
         return m_CIO_GetSize(m_pUserData);
     }
-    int GetName(wchar_t * pBuffer)
-    {
-        return -1;
-    }
-
 private:
     void * m_pUserData;
     proc_APECIO_Read m_CIO_Read;
@@ -100,7 +117,7 @@ int __stdcall GetVersionNumber()
 
 const wchar_t *__stdcall GetVersionString()
 {
-    return APE_VERSION_STRING;
+    return APE_VER_FILE_VERSION_STR_WIDE;
 }
 
 APE_CIO_HANDLE __stdcall c_APECIO_Create(void* pUserData,
@@ -158,9 +175,12 @@ int __stdcall c_APEDecompress_Seek(APE_DECOMPRESS_HANDLE hAPEDecompress, APE::in
     return (static_cast<IAPEDecompress *>(hAPEDecompress))->Seek(nBlockOffset);
 }
 
-APE::int64 __stdcall c_APEDecompress_GetInfo(APE_DECOMPRESS_HANDLE hAPEDecompress, IAPEDecompress::APE_DECOMPRESS_FIELDS Field, APE::int64 nParam1, APE::int64 nParam2)
+APE::int64 __stdcall c_APEDecompress_GetInfo(APE_DECOMPRESS_HANDLE hAPEDecompress, int Field, APE::int64 nParam1, APE::int64 nParam2)
 {
-    return (static_cast<IAPEDecompress *>(hAPEDecompress))->GetInfo(Field, nParam1, nParam2);
+    return (static_cast<IAPEDecompress *>(hAPEDecompress))->GetInfo(
+        static_cast<IAPEInfo::APE_INFO_FIELDS>(Field),
+        nParam1,
+        nParam2);
 }
 
 /**************************************************************************************************

@@ -1698,7 +1698,16 @@ namespace CUETools.Codecs.FLACCL
 
                 if (task.verify != null)
                 {
-                    int decoded = task.verify.DecodeFrame(task.frame.writer.Buffer, task.frame.writer_offset, fs);
+                    // Decode one frame from task-local scratch with the same zero lookahead contract
+                    // as the managed Flake encoder. Passing the exact frame length makes BitReader's
+                    // bounded speculative refill reject valid long Rice runs. The aggregate writer
+                    // buffer cannot be padded in place: its next bytes may belong to the next frame,
+                    // and the final task has only one byte of global slack.
+                    Buffer.BlockCopy(task.frame.writer.Buffer, task.frame.writer_offset,
+                        task.verifyFrameBuffer, 0, fs);
+                    Array.Clear(task.verifyFrameBuffer, fs, FLACCLTask.VerifyLookaheadPad);
+                    int decoded = task.verify.DecodeFrame(task.verifyFrameBuffer, 0,
+                        fs + FLACCLTask.VerifyLookaheadPad);
                     if (decoded != fs || task.verify.Remaining != task.frameSize)
                         throw new Exception(string.Format("validation failed! frame size mismatch, iFrame={0}, decoded=={1}, fs=={2}", fn, decoded, fs));
                     fixed (int* r = task.verify.Samples)
@@ -2436,6 +2445,7 @@ namespace CUETools.Codecs.FLACCL
 
     internal class FLACCLTask
     {
+        internal const int VerifyLookaheadPad = 16;
         CLProgram openCLProgram;
         public CommandQueue openCLCQ;
         public Kernel clStereoDecorr;
@@ -2495,6 +2505,7 @@ namespace CUETools.Codecs.FLACCL
 
         public int[] samplesBuffer;
         public byte[] outputBuffer;
+        public byte[] verifyFrameBuffer;
         public int outputSize = 0;
         public int channelSize = 0;
         public int frameSize = 0;
@@ -2652,7 +2663,12 @@ namespace CUETools.Codecs.FLACCL
             frame.writer = new BitWriter(outputBuffer, 0, outputBuffer.Length);
 
             if (writer.m_settings.DoVerify)
+            {
                 verify = new Flake.AudioDecoder(writer.Settings.PCM);
+                // One scratch buffer per task: GPU tasks and optional CPU worker tasks can verify
+                // concurrently, so sharing this mutable lookahead area would race.
+                verifyFrameBuffer = new byte[max_frame_size + VerifyLookaheadPad];
+            }
         }
 
         public void Dispose()

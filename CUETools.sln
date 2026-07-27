@@ -116,7 +116,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUETools.Compression.Zip", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUETools.Ripper", "CUETools.Ripper\CUETools.Ripper.csproj", "{D2700165-3E77-4B28-928D-551F5FC11954}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestRipper", "CUETools\TestRipper\TestRipper.csproj", "{5C8B61C0-BC3D-4316-B8A7-419D55BB5796}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestRipper", "CUETools\TestRipper\TestRipper.csproj", "{5C8B61C0-BC3D-4316-B8A7-419D55BB5796}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUETools.Parity", "CUETools.Parity\CUETools.Parity.csproj", "{ECEB839C-171B-4535-958F-9899310A0342}"
 EndProject
@@ -180,7 +180,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaglibSharp", "ThirdParty\t
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libFLAC_dynamic", "ThirdParty\flac\src\libFLAC\libFLAC_dynamic.vcxproj", "{4CEFBC83-C215-11DB-8314-0800200C9A66}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MACLib", "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLib\MACLib.vcxproj", "{21BF980F-C022-4DCC-9250-7C73528E422B}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MACLib", "ThirdParty\MAC_SDK\Source\Projects\Visual Studio - 2022\MACLib\MACLib.vcxproj", "{21BF980F-C022-4DCC-9250-7C73528E422B}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenCLNet", "ThirdParty\openclnet\source\OpenCLNet.csproj", "{8373E3B2-16F0-4FD3-A13B-0B0248FFC228}"
 EndProject
@@ -493,9 +493,11 @@ Global
 		{8DD1E84B-0B03-4C0B-9B42-1E49F75E7CB1}.Release|Win32.ActiveCfg = Release|Any CPU
 		{8DD1E84B-0B03-4C0B-9B42-1E49F75E7CB1}.Release|x64.ActiveCfg = Release|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04E59836-0C5A-4B9B-8899-848D56911758}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Debug|Win32.ActiveCfg = Debug|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04E59836-0C5A-4B9B-8899-848D56911758}.Release|Any CPU.Build.0 = Release|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Release|Win32.ActiveCfg = Release|Any CPU
 		{04E59836-0C5A-4B9B-8899-848D56911758}.Release|x64.ActiveCfg = Release|Any CPU
 		{FAD09EE2-D6B2-4A8E-9F1C-2A9FB293661A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU

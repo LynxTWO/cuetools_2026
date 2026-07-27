@@ -2,6 +2,20 @@ using System;
 
 namespace CUETools.Ripper.SCSI
 {
+    /// <summary>Legacy-runtime-compatible result for <see cref="SlipCorrelator.FindOffset"/>.
+    /// A named struct keeps the net20 target free of System.ValueTuple.</summary>
+    public struct SlipCorrelationResult
+    {
+        public SlipCorrelationResult(int offset, double strength)
+        {
+            Offset = offset;
+            Strength = strength;
+        }
+
+        public readonly int Offset;
+        public readonly double Strength;
+    }
+
     /// <summary>Pure cross-correlation to detect read misalignment (jitter) in a persistent-slip
     /// window. Given a reference read and a candidate read of the same window, finds the sample
     /// shift that best aligns the candidate and how strong that alignment is. No SCSI - unit-tested
@@ -14,10 +28,13 @@ namespace CUETools.Ripper.SCSI
         /// <summary>Best shift of candidate against reference within +/-maxShift, and its normalized
         /// correlation in [0,1]. The returned offset s is the value where candidate[i+s] best matches
         /// reference[i], so shifting the candidate LEFT by s realigns it onto the reference.</summary>
-        public static (int offset, double strength) FindOffset(short[] reference, short[] candidate, int maxShift)
+        public static SlipCorrelationResult FindOffset(
+            short[] reference,
+            short[] candidate,
+            int maxShift)
         {
             int n = Math.Min(reference.Length, candidate.Length);
-            if (n == 0) return (0, 0);
+            if (n == 0) return new SlipCorrelationResult(0, 0);
             double bestCorr = double.NegativeInfinity; int bestOff = 0;
             for (int shift = -maxShift; shift <= maxShift; shift++)
             {
@@ -34,7 +51,9 @@ namespace CUETools.Ripper.SCSI
                 double corr = denom > 0 ? dot / denom : 0;     // normalized [-1,1]
                 if (corr > bestCorr) { bestCorr = corr; bestOff = shift; }
             }
-            return (bestOff, Math.Max(0, bestCorr));
+            return new SlipCorrelationResult(
+                bestOff,
+                Math.Max(0, bestCorr));
         }
     }
 }

@@ -58,9 +58,13 @@ namespace CUETools.Codecs.libFLAC
         public EncoderSettings()
         {
             this.Init();
+            // New profiles verify by default. The false serialization default is retained so a
+            // later explicit opt-out remains omitted; CUEConfig's one-time versioned migration
+            // enables historical omissions once without re-enabling that later opt-out.
+            Verify = true;
         }
 
-        [DefaultValue(true)]
+        [DefaultValue(false)]
         [DisplayName("Verify")]
         [Description("Decode each frame and compare with original")]
         [JsonProperty]

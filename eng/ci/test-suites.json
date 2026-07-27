@@ -26,6 +26,14 @@
       "maximumSkipped": 1
     },
     {
+      "id": "test-ripper",
+      "lane": "legacy",
+      "project": "CUETools/TestRipper/TestRipper.csproj",
+      "framework": "net47",
+      "minimumDiscovered": 3,
+      "maximumSkipped": 0
+    },
+    {
       "id": "ripper",
       "lane": "modern",
       "project": "CUETools.Ripper.Tests/CUETools.Ripper.Tests.csproj",
@@ -42,10 +50,5 @@
       "maximumSkipped": 0
     }
   ],
-  "excludedSuites": [
-    {
-      "project": "CUETools/TestRipper/TestRipper.csproj",
-      "reason": "Non-hermetic hardware/fixture experiment: its only test reads 64 captures from the hard-coded Y:\\Temp\\dbg\\960 path during class initialization and uses the retired VS2010 QualityTools adapter."
-    }
-  ]
+  "excludedSuites": []
 }

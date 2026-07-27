@@ -5,14 +5,13 @@ using System.Text;
 namespace CUETools.Wpf.Services;
 
 /// <summary>
-/// Model B, layer 1 of the rip-log tamper-evidence scheme (see the rip-accuracy +
-/// log-integrity design spec): a local self-checksum over a rip log's canonical text.
+/// A local checksum over a rip log's canonical text.
 /// Canonical form is UTF-8 with LF line endings and no trailing blank lines, with the
 /// integrity footer line itself excluded from the hash. Pure and offline.
 ///
-/// This is the algorithm the engine's CUESheetLogWriter will eventually own; it lives here
-/// so the Report page can seal and verify a log without waiting on that engine work. Keep it
-/// pure (no I/O, no UI) so it stays unit-testable.
+/// A checksum can detect a change only when its previously recorded value is retained and
+/// compared; it is not a signature or proof of origin. Keep this pure (no I/O, no UI) so it
+/// stays unit-testable.
 /// </summary>
 public static class LogIntegrity
 {
@@ -42,17 +41,20 @@ public static class LogIntegrity
         recomputed = "";
         string[] lines = Canonicalize(sealedLog).Split('\n');
         int footerIdx = -1;
-        for (int i = lines.Length - 1; i >= 0; i--)
+        for (int i = 0; i < lines.Length; i++)
         {
             string t = lines[i].Trim();
             if (t.StartsWith(FooterPrefix, StringComparison.Ordinal) && t.EndsWith(FooterSuffix, StringComparison.Ordinal))
             {
+                // More than one footer is ambiguous and can hide an appended second document.
+                if (footerIdx >= 0) return false;
                 footerIdx = i;
                 embedded = t.Substring(FooterPrefix.Length, t.Length - FooterPrefix.Length - FooterSuffix.Length).Trim();
-                break;
             }
         }
-        if (footerIdx < 0) return false;
+        // The footer must be the final canonical line. A valid prefix followed by appended text
+        // is a modified log, not a valid sealed log.
+        if (footerIdx < 0 || footerIdx != lines.Length - 1) return false;
 
         string body = string.Join("\n", lines, 0, footerIdx);
         recomputed = ComputeDigest(body);

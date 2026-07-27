@@ -10,17 +10,24 @@ Current-state refresh: 2026-07-26.
   `CUEPlayer/Properties/Settings.settings`
 - **Concern:** source ordering requests a protected DPAPI save before clearing a
   legacy plaintext password, but real `ApplicationSettingsBase.Save()`
-  persistence, failure, and migration have not been exercised.
+  persistence/reopen and migration have not been exercised against an isolated
+  user-config file.
 - **Why it matters:** source ordering alone cannot prove the protected blob
   reaches disk or that a failed save leaves the previous on-disk configuration
   recoverable.
 - **Evidence found so far:** DPAPI bounds and call ordering were inspected;
   source handlers report failure and avoid redisplaying a stored password.
+  Failure injection now proves a rejected save restores both the live settings
+  object and the prior in-memory DPAPI blob, so active stream configuration does
+  not drift after "not saved."
+  The separate Icecast 2.5.0 source/auth/metadata smoke passed, but it did not
+  exercise `ApplicationSettingsBase` migration and therefore does not close
+  this persistence-specific entry.
 - **Confidence:** unknown
 - **Likely owner:** CUEPlayer maintainer
 - **Next best check:** run migration against an isolated real user-config file,
-  reopen the application, verify plaintext removal and DPAPI recovery, and
-  inject a save failure to observe disk and UI state.
+  reopen the application, and verify plaintext removal plus DPAPI recovery from
+  the persisted file.
 - **Risk level:** medium
 - **Status:** open
 
@@ -64,8 +71,9 @@ Current-state refresh: 2026-07-26.
 - **CUEPlayer Icecast plaintext settings:** closed 2026-07-26.
   `IcecastCredentialStore` implements a bounded DPAPI CurrentUser blob and
   source-level ordering that requests protected save before clearing legacy
-  plaintext. Real `ApplicationSettingsBase.Save()` persistence/failure and
-  migration behavior remain an integration gap, so this closure is limited to
-  the former source-level plaintext design.
+  plaintext. Failed-save tests restore both live settings and the prior
+  in-memory protected blob. Real `ApplicationSettingsBase.Save()` persistence/
+  reopen and migration remain an integration gap, so this closure is limited to
+  the former source-level plaintext design and in-process rollback behavior.
 - **Classic MOTD disk cache:** closed 2026-07-26. The live path displays bounded
   HTTPS text; the remote image/text cache path was removed.

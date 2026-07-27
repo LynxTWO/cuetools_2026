@@ -6,6 +6,15 @@ using Newtonsoft.Json;
 
 namespace CUETools.Codecs.libmp3lame
 {
+    public enum LameStereoMode
+    {
+        Auto = -1,
+        Stereo = 0,
+        JointStereo = 1,
+        DualChannel = 2,
+        Mono = 3,
+    }
+
     [JsonObject(MemberSerialization.OptIn)]
     public class CBREncoderSettings : LameEncoderSettings
     {
@@ -23,6 +32,10 @@ namespace CUETools.Codecs.libmp3lame
         [DefaultValue(LameQuality.High)]
         public LameQuality Quality { get; set; }
 
+        [JsonProperty]
+        [DefaultValue(LameStereoMode.Auto)]
+        public LameStereoMode StereoMode { get; set; }
+
         public CBREncoderSettings()
             : base()
         {
@@ -32,6 +45,8 @@ namespace CUETools.Codecs.libmp3lame
         {
             libmp3lamedll.lame_set_VBR(lame, (int)LameVbrMode.Off);
             libmp3lamedll.lame_set_brate(lame, CBREncoderSettings.bps_table[this.GetEncoderModeIndex()]);
+            if (StereoMode != LameStereoMode.Auto)
+                libmp3lamedll.lame_set_mode(lame, (int)StereoMode);
             libmp3lamedll.lame_set_quality(lame, (int)this.Quality);
         }
     }

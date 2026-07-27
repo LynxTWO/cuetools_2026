@@ -40,21 +40,33 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Residual:** live service behavior remains external and should stay in a release
   smoke test.
 
-### R4. CTDB HTTPS - file upstream (decision D2) - bucket B, approved
+### R4. CTDB HTTPS - upstream request filed (decision D2) - external boundary
 
-- **Next step:** open a tracking issue on LynxTWO/cuetools_2026 for the db.cuetools.net TLS request; revisit `CUEToolsDB.cs:74` when the server answers TLS. No client change now.
+- **Done:** filed LynxTWO/cuetools_2026 issue #1 requesting TLS for
+  `db.cuetools.net`. Revisit `CUEToolsDB.cs` when the server answers HTTPS; no
+  insecure client-side inference or forced switch is appropriate before then.
 
-### R5. unrar.dll upgrade (decision D3) - SCOPED, DEFERRED 2026-07-02 (hygiene)
+### R5. unrar.dll upgrade (decision D3) - DONE 2026-07-26
 
-- Current: both DLLs 6.11.0. rarlab's old direct download URL 404s (now versioned). Hygiene-only (CVE vector not reachable, pass 07) and can't be functionally verified headless (no RAR encoder for a test archive), so not swapped blind. Full plan + verification steps in `decisions-needed.md` (D3). Pick up with the codec refresh (R13) when a test RAR is available.
+- Replaced both 6.11 DLLs with official RARLAB UnRAR 7.23.0 from the versioned
+  signed SFX. The SFX and both architecture DLLs have valid win.rar GmbH
+  signatures; exact bytes and SHA-256 values are pinned in the native provenance
+  inventory. The wrapper's six required exports are present. Production
+  `RarCompressionProvider`/`RarStream` passed RARLAB's real `test.rar` on x64 and
+  x86: 14 entries, exact full payload, and independent backward-seek SHA-256.
+  A committed 280-byte RAR5 fixture then exposed and locked down a backward-seek
+  race where stale EOF could end replay before rewind was acknowledged.
+  `RarStream.Read` now waits while rewind is pending; the focused TestCodecs case
+  and 20/20 repeated no-build full-read/seek runs pass. The old 6.11 import
+  evidence is retained as history.
 
 ### R6. SharpZipLib upgrade (decision D4) - DONE 2026-07-02
 
 - SharpZipLib 1.4.2 via NuGet for net47/netstandard2.0 (net20 keeps vendored 0.85.5). Password path adapted for the modern API (up-front password for AES). Packaging scripts fixed. Verified with a net8 round-trip harness (6/6 checks incl. AES).
 
-### R7. MusicBrainz client replacement (decision D6) - SCOPED; STOPPED FOR USER DECISION 2026-07-02
+### R7. MusicBrainz client replacement (decision D6) - DONE 2026-07-02
 
-- **Finding:** no live MusicBrainz client exists to replace - the `MusicBrainz/` library is dead (unbuilt, unreferenced) and CUERipper's direct query is commented out; MB metadata comes via CTDB's proxy + Freedb fallback. Full scope + MB v2/CoverArtArchive reference + options in `docs/review/musicbrainz-replacement-scope.md`. Awaiting the user's choice: (A) rely on CTDB, delete dead lib [recommended]; (B) add a new direct MB v2 provider; (C) leave as-is.
+- **Finding:** no live MusicBrainz client existed to replace - the `MusicBrainz/` library was dead (unbuilt, unreferenced) and CUERipper's direct query was commented out; MB metadata comes via CTDB's proxy + Freedb fallback. The user chose option A: retain the CTDB-proxied path and remove the dead mirror/binary and stale references. Full scope and the optional future direct-provider design remain in `docs/review/musicbrainz-replacement-scope.md`.
 
 ### R8. CUEControls resgen under dotnet build (decision D7) - PARTIAL, 2026-07-02
 
@@ -90,21 +102,24 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Result (measured):** TestProcessor 7 passed, 0 failed, 1 skipped
   (`CTDBResponseTest` is `[Ignore]` and needs an out-of-repo `Z:\ctdb.xml`).
 
-### R10b. TestRipper synthetic multi-pass dumps - bucket A, risk medium - PENDING
+### R10b. TestRipper synthetic multi-pass dumps - bucket A, risk medium - DONE (2026-07-26)
 
-- **What blocks it (verified):** `TestRipper/CDDriveReaderTest.MyTestInitialize` reads
-  hardcoded machine-specific dumps `Y:\Temp\dbg\960\960-{00..63}.bin` and `.c2` (64
-  passes) plus `960.bin`. Those files were never in the repo, are ~5.6 MB each
-  (~360 MB total), and are drive-specific, so committing them is not an option. The
-  single test (`CorrectSectorsTest`) then asserts the C2-weighted majority vote across
-  the 64 passes recovers `_realData` exactly (`_realErrors == 0`).
-- **Next step:** replace the file-replay init with in-memory synthesis - generate a
-  deterministic `_realData`, model each pass as that data with a minority of
-  C2-flagged byte errors, and feed `UserData`/`C2Count` directly (the original author
-  already sketched this in the commented-out `Random` block). Keep it purely in memory
-  so it runs in CI with no hardware and no committed dumps. Note: TestRipper is an
-  old-style (non-SDK) project and is absent from the buildable set today; sequence it
-  with R8.
+- **Original blocker (verified):** `TestRipper/CDDriveReaderTest.MyTestInitialize`
+  read hardcoded machine-specific dumps under `Y:\Temp\dbg\960` (64 passes, roughly
+  360 MB total). Those private, drive-specific files were never valid checkout/CI
+  fixtures.
+- **Additional finding:** the old test carried a stale copy of the algorithm: it
+  ignored the C2 vote plane and indexed C2 differently from shipping `SCSIDrive`, so
+  merely replacing its files would not have tested production behavior.
+- **Implemented 2026-07-26:** the shipping vote is extracted as
+  `SecureSectorVote.CorrectSector`; `SCSIDrive` and the SDK net47 test call that same
+  helper. The test creates deterministic in-memory truth data for 64 passes over 32
+  sectors, injects minority byte corruption with both C2-flagged and unflagged cases,
+  verifies exact recovery, and separately verifies that one clean pass does not satisfy
+  a two-pass confidence policy. A third case verifies C2-plane reconstruction without
+  granting false secure assurance. It is enrolled in the canonical suite manifest
+  with minimum discovery 3 and zero skips.
+- **Result:** the canonical run passed all 3 tests with 0 failures and 0 skips.
 
 ### R11. CleanseString: reserved names + trailing dots (SC4) - bucket A, risk low - DONE (2026-07-10)
 
@@ -122,14 +137,21 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Scope (user):** upgrade all codecs to their latest versions/builds, add any missing/wanted ones, and note that FlaCuda has effectively been superseded by FLACCL (OpenCL), which confirms the CUDA path is a dead ancestor rather than a parallel feature.
 - **What this touches:**
- - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0, current upstream), `WavPack` (5.8.1 vs upstream 5.9.0), MAC_SDK (10.86 vs upstream 13.20), taglib-sharp (the current 2.3.0.0 release with local changes), `libmp3lame` (3.100 vs the July 2026 upstream 4.0 release), and ffmpeg (standalone/unshipped 7.1.1 path vs upstream 8.1.2). Each bump means re-checking local patches, ABI, packaging, and audio behavior.
+ - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0, current upstream), `WavPack` (5.8.1 vs upstream 5.9.0), MAC_SDK (13.20, current upstream, with an adapted CUETools `IAPEIO` wrapper), taglib-sharp (the current 2.3.0.0 release with local changes), `libmp3lame` (3.100 vs the July 2026 upstream 4.0 release), and ffmpeg (standalone/unshipped 7.1.1 path vs upstream 8.1.2). Each bump means re-checking local patches, ABI, packaging, and audio behavior.
  - Managed wrappers in S6/S7 that must match new native ABIs (P/Invoke signatures, struct layouts).
  - FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`): DELETED 2026-07-23 (decision D5).
    Confirmed dead first: absent from the sln, referenced by no csproj/cs/sln outside its own two
    dirs, and superseded by FLACCL (OpenCL, live in the sln). 12 tracked files removed via git rm
-   (recoverable from history). Still open under R13: verify FLACCL builds/runs on current OpenCL
-   runtimes, and consider managed-SIMD modernization (idea 14).
+   (recoverable from history). FLACCL's corrected exact-length verifier now builds and
+   runs on an RTX 3060 across OpenCL modes 0-8, CPU workers, 24-bit input, and an exact
+   frame boundary. Cross-vendor coverage and managed-SIMD modernization (idea 14)
+   remain future work.
  - Missing/desired codecs: enumerate against current CUETools upstream and user wants (e.g. Opus, newer ALAC, DSD?) - needs a requirements list from the user before implementation.
+- **TTA build evidence:** redirected x64 and Win32 C++/CLI builds pass. Runtime
+  workers encode 16-bit stereo and 24-bit six-channel PCM, reproduce every PCM byte
+  through both the managed decoder and ffmpeg, and produce identical x64/Win32
+  bitstreams. The wrapper independently verifies finalized output before publication.
+  The tests also found and fixed `ttalib`'s short-file final-frame length bug.
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
 - **Next step:** preserve and reconcile existing submodule work, then upgrade one
   codec at a time with native rebuild, ABI/package probes, and round-trip/corpus
@@ -138,9 +160,11 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Status 2026-07-26:** reachability and verification claims are refreshed in
   `docs/review/codec-audit.md`, and the upstream version table is refreshed in
   `codec-refresh-scope.md`. libFLAC and taglib-sharp match current releases.
-  WavPack, Monkey's Audio, and LAME have known version drift; the unshipped FFmpeg
+  WavPack and LAME have known version drift; the unshipped FFmpeg
   path is also behind. Upgrades remain per-codec integration work, not binary
-  swaps. FlaCuda is deleted. Format additions still require a product decision.
+  swaps. Monkey's Audio 13.20 is upgraded and verified on Win32 and x64. FlaCuda
+  is deleted. FLACCL has real RTX 3060/OpenCL verification evidence.
+  Format additions still require a product decision.
 
 ### R14. LAME v4 modernization initiative (user request 2026-07-02) - bucket B, large, separate project
 
@@ -239,8 +263,13 @@ does not relax evidence, rollback, or verification requirements.
   CRC, held verdict, and full-read selection; full WPF test suite.
 - **Owner:** repo owner.
 - **Status:** fixed 2026-07-26. The history and Test & Copy comparators are separate.
-  Test & Copy requires matching nonzero full CRC32 and matching AR CRC. Focused tests passed
-  25/25 during the focused pass; the final Release WPF gate passed 241/241.
+  Test & Copy requires matching nonzero full CRC32 and matching AR CRC. Focused
+  comparison tests passed; aggregate totals are refreshed by the final canonical gate.
+  A live H: run then passed two independent full reads (413s/410s), published 11
+  verified FLAC files with matching AR 107/424 and CTDB 114/544, recorded zero
+  reread/failed windows, and round-tripped decoded-and-compared output assurance through
+  `rip.verify`. That proves the mechanism; a final-source no-build H: rerun is pending
+  because the behavior-preserving `SecureSectorVote` extraction landed afterward.
 
 ### R20. Modern WPF CTDB Repair fails before writing - bucket B, risk high
 
@@ -266,7 +295,13 @@ does not relax evidence, rollback, or verification requirements.
   and verifies every nonempty staged output, rejects escaping/reparse paths, and
   atomically publishes a unique `- repaired` sibling without modifying the source.
   Success, no-fix, write/verify failure, collision, traversal, reparse, and cleanup
-  cases are covered by `VerifyRepairTransactionTests`.
+  cases are covered by `VerifyRepairTransactionTests`. A live opt-in run also repaired
+  a deliberately damaged known image, independently post-verified the published
+  sibling, and confirmed that source hashes were unchanged. Completed WPF lossless
+  rips now gather CTDB status immediately and offer the same repair transaction when
+  recoverable errors remain. Track sets resolve through their album cue, image rips
+  use their sole audio file, and ambiguous or escaping paths fail closed. Fifteen
+  focused transaction and post-rip routing tests pass.
 
 ### R21. Modern WPF exposes known-dead safety controls - bucket A, risk high
 
@@ -286,7 +321,7 @@ does not relax evidence, rollback, or verification requirements.
 - **Owner:** repo owner.
 - **Status:** fixed and verified on 2026-07-26. The five WPF-only controls and their
   pass-throughs are gone, shared settings still round-trip, classic CTDB consumers remain, and
-  the final Release WPF suite passes 241/241 with zero skips.
+  the canonical WPF gate covers the resulting settings/runtime surface.
 
 ### R22. Rip publication is not album-transactional or concurrency-safe - bucket B, risk high
 
@@ -329,13 +364,25 @@ does not relax evidence, rollback, or verification requirements.
   publish manifest check, and first hosted workflow run.
 - **Owner:** repo owner.
 - **Status:** implemented and locally verified 2026-07-26. A versioned suite manifest
-  asserts discovery/skip floors; local Release execution discovered 388 tests,
-  passed 381, and produced 7 expected environment/fixture skips. Warning and native
-  warning baselines reject new fingerprints. Clean WPF publication validates 34
+  asserts discovery/skip floors; aggregate counts are refreshed by the final canonical
+  gate and declared skips remain visible. Warning and native warning baselines reject
+  new fingerprints. Clean WPF publication validates 36
   required files, 14 trust-manifest/runtime entries, 19 registrations, and 5 native
   probes, then emits receipts, hashes, native inventory, and SBOMs. The first hosted
-  workflow run and full classic Visual Studio artifact build remain required because
-  this machine lacks the complete legacy toolchain.
+  workflow run remains required. The native x64 dependency gate passes. A classic
+  AnyCPU pass found and fixed a declared-net20
+  blocker by replacing the slip-correlation tuple API with a named result/out-parameter
+  contract. The next pass found net35-only `SortedSet<T>` in the adaptive-speed ladder;
+  its ordered `List<T>` replacement preserves semantics because rungs are strictly
+  ascending and the 97% cutoff keeps them below the appended real maximum. The
+  redirected-output classic AnyCPU solution build then completed with 53 succeeded and
+  0 failed. The x64 and Win32 configurations each completed with 2 succeeded,
+  0 failed, and 59 skipped configuration entries. TTA compiled and linked for both
+  into valid CLR PE files. Installer Projects 3.0.0, using
+  `DisableOutOfProcBuild`, passed 8 projects with 0 failures and produced a
+  929,792-byte MSI. The local route used the Visual Studio 18 resolver with the
+  VS2022 v143 toolset. Frozen classic artifact receipts and parity on the pinned
+  hosted VS2022 image remain.
 
 ### R24. External encoder process lifecycle can hang or accept bad output - bucket B, risk high
 
@@ -376,9 +423,9 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed and verified 2026-07-26. WMA Lossless writes to a staged file,
   closes the Windows Media writer, independently decodes the completed stream, and
   compares every sample and the total count before publication. Deterministic
-  mismatch/truncation/count tests pass. The real Windows Media encode/decode case is
-  availability-gated and was one of the locally expected skips; a dedicated
-  release-machine run must make that integration mandatory.
+  mismatch/truncation/count tests pass. A real net8 Windows Media Lossless encode,
+  finalize, independent decode, and PCM verification also passed on this host; retain
+  that integration as non-skippable release-machine evidence.
 
 ### R26. Settings expose credentials and deserialize unrestricted type metadata - bucket B, risk high
 
@@ -399,7 +446,9 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed and verified 2026-07-26; see R9. Both classic and WPF settings
   use current-user DPAPI and atomic publication. Legacy plaintext migrates only after
   successful protection/write, unsupported protection fails the whole save, and
-  `KnownSettingsSerializationBinder` rejects unregistered `$type` values.
+  `KnownSettingsSerializationBinder` rejects unregistered `$type` values. The WPF
+  settings UI edits a detached draft; Cancel discards it instead of mutating persisted
+  configuration before Save.
 
 ### R27. Plugin and imported executable trust is filename-based - bucket B, risk medium
 
@@ -416,13 +465,28 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** known manifest, modified binary, missing plugin, wrong architecture,
   user-approved external plugin, and migration from current installs.
 - **Owner:** repo owner.
-- **Status:** fixed for packaged WPF plugins and imported executables, verified
-  2026-07-26. The packaged plugin set is bound to a versioned manifest containing
-  normalized relative path, size, SHA-256, managed identity/architecture, and
-  deterministic order. Loading rejects missing, modified, wrong-path, wrong-identity,
-  or preloaded lookalike assemblies and rehashes the actual loaded location. Imported
+- **Status:** fixed for packaged WPF plugins, explicit per-user plugins, and imported
+  executables, verified 2026-07-26. The packaged plugin set is bound to a versioned
+  manifest containing normalized relative path, size, SHA-256, managed
+  identity/architecture, and deterministic order. Loading rejects missing, modified,
+  wrong-path, wrong-identity, or preloaded lookalike assemblies and rehashes the actual
+  loaded location. Encoder, decoder, and ripper discovery now uses exact
+  `IsAssignableFrom` contract identity rather than interface short-name matching
+  followed by a nullable `as` cast; a regression invariant rejects incompatible
+  lookalikes. Compression types carrying the plugin attribute must also implement the
+  real `ICompressionProvider` contract. HDCD types must implement `IAudioDest`,
+  `IAudioFilter`, and `IFormattable`, carry the `HDCDDotNet` name, and expose the
+  public `(int,int,int,bool)` constructor. Valid and impostor cases are tested. The
+  release includes a strict DLL-only user enrollment script that
+  publishes a separate exact-hash manifest under `%AppData%\CUETools2026\plugins`;
+  replacement is opt-in and preserves the prior set as a timestamped backup. Imported
   executables retain origin/integrity metadata and require reapproval after change.
-  This is an integrity allowlist, not a code-signing policy.
+  These are integrity allowlists, not a code-signing policy.
+- **Migration boundary:** legacy loose DLLs are not automatically approved or moved.
+  Releases must be extracted to a clean directory; an extra legacy DLL beside the
+  packaged manifest remains a visible integrity failure. The user guide describes how
+  to prepare and enroll a separate set while retaining the old installation for
+  rollback.
 
 ### R28. Icecast sends credentials over cleartext HTTP - bucket B, risk high
 
@@ -440,9 +504,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed at the policy and credential-storage boundary 2026-07-26.
   HTTPS is the default for source and metadata requests; cleartext is rejected unless
   the user explicitly enables insecure transport. Passwords use current-user DPAPI,
-  legacy plaintext migrates proactively, and rejected connections are disposed.
-  A real Icecast TLS/auth integration and the private `HttpWebRequest` behavior on
-  Mono remain unobserved external/runtime checks.
+  legacy plaintext migrates proactively, and rejected connections are disposed. A
+  disposable Icecast 2.5.0 instance passed authentication rejection, source streaming,
+  exact metadata, listener bytes, flush/close, and teardown. A real HTTPS/certificate
+  endpoint and supported Mono behavior remain unobserved external/runtime checks.
+  Configured MP3 bitrate and joint-stereo values are now propagated into the LAME
+  writer rather than silently using its defaults. Unsupported bitrates are rejected
+  before any network connection or credential transmission. If persistence fails,
+  CUEPlayer restores both the active settings object and the prior in-memory DPAPI
+  blob, so a "not saved" result cannot silently alter the live stream configuration.
 
 ### R29. Fuzz gate reports parser success without checking parser correctness - bucket A, risk medium
 
@@ -522,14 +592,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Owner:** repo owner.
 - **Status:** partially closed 2026-07-26. All four actions workflows use immutable
   action SHAs; release inputs have native source/build/hash inventory; clean WPF
-  artifacts receive a 539-file SHA-256 manifest, build receipt, contract snapshot,
-  CycloneDX SBOM, and SPDX file inventory. CycloneDX emitted 38 dependency/library
-  components plus the application root. The Microsoft artifact scan detected zero
-  dependency packages but emitted one product package and 539 file records, so the
-  SPDX result must be read as file inventory rather than a complete dependency
-  graph. Remaining: signing, NuGet lock-file rollout, classic-artifact
-  generation on full Visual Studio, and provenance gaps for vendored HDCD, LAME,
-  UnRAR, and TTA upstream history.
+  artifacts receive a SHA-256 manifest, build receipt, contract snapshot, CycloneDX
+  SBOM, and SPDX file inventory. The Microsoft SPDX result must be read as a file
+  inventory rather than a complete dependency graph. Provenance now records
+  byte-identical RareWares LAME archives, official signed/runtime-tested RARLAB
+  UnRAR 7.23 plus the import-era 6.11 evidence, and the official TTA
+  archive/import delta. Remaining: signing, NuGet lock-file rollout, frozen
+  classic-artifact receipts and hosted parity, HDCD's exact
+  source/revision/recipe, RareWares' exact LAME build flags/revision, the historical
+  TTA archive checksum, and reconciliation of the dirty detached submodules.
 
 ### R33. Custom WPF job paths can leak through exception diagnostics - bucket A, risk medium
 
@@ -550,7 +621,7 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** fixed and verified 2026-07-26. Job and staging boundaries register
   their paths before diagnostic-producing work. Redaction is case-insensitive,
   chooses the longest overlapping value, and scans original text only. The focused
-  real-file test passed, and the final Release WPF suite passed 241/241.
+  real-file test passed, and the canonical WPF gate covers the integration.
 
 ### R34. Managed encoder approval was not bound to process launch - bucket A, risk medium
 
@@ -694,8 +765,10 @@ does not relax evidence, rollback, or verification requirements.
   hosted legacy CUEPlayer build/service smoke.
 - **Owner:** repo owner.
 - **Status:** fixed and locally verified 2026-07-26. The focused regression passed and
-  the final WPF suite includes the new invariant. Full CUEPlayer compilation remains a
-  named Visual Studio/legacy-resource-toolchain boundary.
+  the canonical WPF suite includes the new invariant. Disposable Icecast 2.5.0 also
+  passed source/auth/metadata/listener/teardown smoke, and focused tests prove that
+  bitrate/joint-stereo settings reach LAME. The classic AnyCPU solution lane is green;
+  a direct frozen-output CUEPlayer compilation receipt is still pending.
 
 ### R41. Album reservation cleanup could report failure after publication committed - bucket A, risk high
 
@@ -751,37 +824,185 @@ does not relax evidence, rollback, or verification requirements.
   the canonical codec/full test gates.
 - **Owner:** repo owner.
 - **Status:** fixed and verified 2026-07-26. The focused lifetime suite passed 10/10;
-  the codec suite passed 107/109 with two declared skips; libFLAC, WavPack, HDCD,
-  and LAME built across all declared target frameworks; and an independent static
-  ownership review found no remaining blocker in these paths.
+  libFLAC, WavPack, HDCD, and LAME built across all declared target frameworks; and
+  an independent static ownership review found no remaining blocker in these paths.
+  Aggregate suite totals are refreshed by the final canonical gate.
+
+### R44. Test & Copy can detach final-output assurance from its proof - bucket A, risk high
+
+- **Area or slice:** CUESheet final-output verification and WPF Test & Copy
+  publication.
+- **Why it matters:** the source stage can change after its PCM decode. A later copy
+  can faithfully reproduce the changed bytes while carrying the earlier Boolean
+  assurance claim.
+- **Evidence found:** `CUESheet` retains the PCM receipt only through finalization;
+  `VerifyResult` carries Boolean/text fields; `CopyDirectoryRecursiveVerified`
+  compares source and destination only at copy time.
+- **Confidence:** verified.
+- **Approval needed:** no; the user approved verification and publication hardening.
+- **Smallest safe next step:** expose immutable completed per-output proofs, hold a
+  source lease through transfer, and revalidate the exact proof set at the
+  destination. Clear the claim when a transform cannot carry the proof.
+- **Verification plan:** mutation, path-set, multi-file/HTOA, held acceptance, and
+  concurrent-writer tests, followed by WPF and live optical gates.
+- **Owner:** repo owner.
+- **Status:** fixed and adversarially verified 2026-07-26. `CUESheet` now emits
+  immutable exact-output proofs, all three proof-bearing publication paths use one
+  destination-bound handoff, cross-format audio and path-order mismatches fail
+  closed, and a coordinated replacement after the directory move is quarantined
+  without success/history. The focused publication/proof suite passed 33/33 after
+  crash recovery hardening. Final canonical and H: optical gates remain in the
+  release matrix rather than in the implementation status.
+
+### R45. Classic collection can replace an unowned directory without crash recovery - bucket A, risk high
+
+- **Area or slice:** classic release artifact publication.
+- **Why it matters:** a matching versioned path is treated as disposable without an
+  ownership receipt. Concurrent collectors or a crash between backup and publish can
+  delete or strand a valid artifact.
+- **Evidence found:** the collector moves any regular destination to backup, has no
+  interprocess lease or recovery journal, and cleans stages by prefix rather than an
+  exact ownership token.
+- **Confidence:** verified.
+- **Approval needed:** no; the user approved release-tooling hardening.
+- **Smallest safe next step:** add a cross-session lease, token/tree-bound receipts,
+  foreign-destination refusal, journal-before-backup recovery, destination
+  revalidation, and exact-token cleanup.
+- **Verification plan:** owned/foreign replacement, contention, mismatched token,
+  injected move/rollback failures, retained recovery state, restart recovery, and
+  reparse tests.
+- **Owner:** repo owner.
+- **Status:** implemented; real orchestrated build, receipt, and collection pending
+  source freeze.
+
+### R46. A fresh classic stage does not prove fresh compiled inputs - bucket A, risk medium
+
+- **Area or slice:** classic build-to-collection provenance.
+- **Why it matters:** same-version binaries left in `bin/Release` can pass the
+  collector and artifact validator even when they were built from different source.
+- **Evidence found:** collection hashes prove source-to-stage copy equality, while
+  the current provenance receipt is generated only after collection.
+- **Confidence:** verified.
+- **Approval needed:** no; the user approved release-tooling hardening.
+- **Smallest safe next step:** generate a pre-collection build receipt binding the
+  source commit or dirty-worktree fingerprint, configuration, platform/toolchain, and
+  every compiled input hash/length.
+- **Verification plan:** reject a prior same-version binary, mismatched dirty-source
+  receipt, and modified/missing source before the prior artifact moves.
+- **Owner:** repo owner.
+- **Status:** implemented; real orchestrated build, receipt, and collection pending
+  source freeze.
+
+### R47. Optical visualization allocates and dispatches from the read loop - bucket A, risk medium
+
+- **Area or slice:** `LevelMeteringRipper`, rip view model, and codec scope telemetry.
+- **Why it matters:** a new sample array and captured dispatcher callbacks are
+  created during optical reads. Reusing one array is unsafe because the UI consumes
+  it later.
+- **Evidence found:** `LevelMeteringRipper.Read` creates `float[]` windows about every
+  20 ms; `RipViewModel` queues captured `BeginInvoke` callbacks; `CodecScope` copies
+  only when the UI callback runs.
+- **Confidence:** verified.
+- **Approval needed:** no; the user approved optical and telemetry hardening.
+- **Smallest safe next step:** preallocate a bounded SPSC mailbox before reading.
+  Drop presentation windows when full; never block or alter the audio path.
+- **Verification plan:** producer allocation, stalled consumer, slot lifetime,
+  ordering/scaling, reuse, and queue-full tests, then WPF and live optical gates.
+- **Owner:** repo owner.
+- **Status:** fixed and focused-test verified 2026-07-26. The optical producer now
+  publishes into a bounded preallocated SPSC mailbox, the UI drains a bounded latest
+  sample, and codec-scope reset clears stale state. Tests cover the cold
+  allocation-free producer, byte decoding, slot lifetime, ordering, reset,
+  concurrency, and a stalled/full consumer. The final H: run remains a hardware
+  release gate.
+
+### R48. Final-metadata proof lacks real CUESheet output-style coverage - bucket A, risk medium
+
+- **Area or slice:** CUESheet/TagLib/final-output integration tests.
+- **Why it matters:** fake receipt tests do not exercise metadata saves, multi-file
+  routing, gap styles, HTOA, or one bad output within a set.
+- **Evidence found:** current focused tests construct fake audio sources and
+  destinations without executing `CUESheet.Go`.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** add tiny real lossless fixtures for all output styles
+  and a narrow post-TagLib mutation seam.
+- **Verification plan:** metadata-only rewrites, one-sample mutation, one bad track,
+  and decoder/finalization failure cases.
+- **Owner:** repo owner.
+- **Status:** fixed and focused-test verified 2026-07-26. Real managed-Flake
+  `CUESheet.Go` tests cover all five output styles, HTOA, final TagLib writes,
+  one-sample mutation, one bad track in a set, decoder lifecycle, and finalization
+  failure.
+
+### R49. FLACCL verification trust is based on spoofable names - bucket A, risk medium
+
+- **Area or slice:** packaged plugin registration and output-assurance evaluation.
+- **Why it matters:** matching an assembly simple name and type full name does not
+  identify one runtime `Type`; another load context can present both names.
+- **Evidence found:** referenced codecs use direct `Type` equality, while FLACCL used
+  string comparisons because WPF does not reference the classic plugin.
+- **Confidence:** verified.
+- **Approval needed:** no; the user approved plugin and verification hardening.
+- **Smallest safe next step:** let the manifest-validated package loader register the
+  exact FLACCL settings `Type` as a runtime-only capability.
+- **Verification plan:** two distinct runtime types with identical assembly/type
+  names, packaged FLACCL acceptance, and unrelated/subclass rejection.
+- **Owner:** repo owner.
+- **Status:** fixed and focused-test verified 2026-07-26. Packaged plugin
+  registration enrolls the exact runtime settings `Type`; user/development
+  registration does not. Identically named types from another assembly or load
+  context, subclasses, and a malformed `DoVerify` property are rejected.
+
+### R50. A crash during destination-bound proof validation leaves an ambiguous album - bucket A, risk medium
+
+- **Area or slice:** proof-bearing album publication and restart recovery.
+- **Why it matters:** the process can stop after the same-volume stage move but
+  before destination revalidation and final reservation release. The bytes had
+  passed the pre-move proof, but the visible directory still represented an
+  unfinished transaction and had no explicit restart policy.
+- **Evidence found:** adversarial review of `PublishPendingValidation` and
+  `CompletePublication`.
+- **Confidence:** verified.
+- **Approval needed:** no; this is fail-closed publication hardening.
+- **Smallest safe next step:** persist a token-bound proof-pending marker before the
+  move and recover it only while holding the matching destination reservation.
+- **Verification plan:** simulate process loss by disposing a pending publication,
+  require exact-token quarantine before name reuse, and prove that an ownership
+  marker without the pending receipt is never moved.
+- **Owner:** repo owner.
+- **Status:** fixed and focused-test verified 2026-07-26. A matching owner/pending
+  pair is quarantined under an explicit recovered-incomplete name before reuse.
+  Missing or mismatched pending evidence leaves the existing directory untouched.
 
 ## Ordering
 
-The 2026-07-26 implementation wave is locally complete. Remaining work is ordered by
-the evidence that cannot be produced on this machine:
+The post-restart assurance batch is active. Remaining work is ordered by evidence
+dependency:
 
-1. Run the pinned hosted workflows, including full Visual Studio classic builds,
-   classic artifact validation, real WMA verification, and actionlint.
-2. Run real WPF rip/Test & Copy and CTDB repair smoke tests with an optical drive and
-   a known repairable disc/image; keep publication output disposable.
-3. Exercise Icecast HTTPS/auth and plaintext migration against a disposable server,
-   including the supported Mono/runtime matrix.
-4. Fix and run the non-hermetic TestRipper synthetic fixture (R10b).
-5. Address the FLACCL exact-length verify buffer in an OpenCL-capable environment;
-   do not patch its shared GPU pipeline blind.
-6. Continue R5/R8/R12/R13 modernization, signing/lock files, and vendored provenance.
+1. Finish and adversarially review R44-R49.
+2. Run the canonical managed suites, classic AnyCPU/x64/Win32/TTA/MSI matrix, fresh
+   build receipt, exact collection, artifact validation, hashes, notices, and SBOM.
+3. Repeat the final-source H: optical Test & Copy gate and retain the passing WMA,
+   FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
+4. Run the pinned hosted workflows and compare them with the local receipts.
+5. Choose and implement a publisher signing/attestation identity and policy.
+6. Reconcile the dirty detached submodule work before R13 upgrades, then continue
+   R5/R8/R12/R13 modernization and lock-file rollout.
 
 ## Holes / external boundaries
 
 - CTDB TLS (R4) is out-of-repo (server operator).
 - CI depends on GitHub-hosted Windows image + VS Enterprise devenv path.
-- Vendored binary provenance remains a supply-chain surface even though current bytes
-  are now hash-bound and inventoried.
+- Signing identity/policy is an owner decision; hashes establish byte identity, not
+  publisher identity.
+- Remaining vendored provenance and the four dirty detached submodule worktrees are
+  supply-chain surfaces even though shipped bytes are hash-bound and inventoried.
 - MusicBrainz/gnudb/AccurateRip/CTDB servers are external; their behavior can change independent of this repo.
-- This machine has no full classic Visual Studio/targeting-pack environment, optical
-  drive test fixture, WMA runtime fixture, external FLAC/TAK executables, Icecast
-  server, or OpenCL verification host. These are explicit unobserved states, not
-  local passes.
+- The local classic build/MSI matrix passes, but complete frozen receipts and hosted
+  image parity remain. External FLAC/TAK pairs, Icecast
+  HTTPS/certificate/Mono, cross-vendor OpenCL, and deliberate optical failure injection
+  remain explicit unobserved states, not inferred passes.
 
 ## Changelog
 

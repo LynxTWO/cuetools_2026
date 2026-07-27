@@ -299,6 +299,24 @@ namespace CUETools.Codecs
             }
         }
 
+        /// <summary>
+        /// Returns the already-materialized byte representation without converting samples or
+        /// allocating a backing array. Best-effort telemetry uses this after a device read so a
+        /// visualization tap can never force a multi-megabyte <see cref="Samples"/> allocation on
+        /// the producer thread.
+        /// </summary>
+        public bool TryGetExistingBytes(out byte[] existingBytes)
+        {
+            if (dataInBytes && bytes != null)
+            {
+                existingBytes = bytes;
+                return true;
+            }
+
+            existingBytes = null;
+            return false;
+        }
+
         public AudioBuffer(AudioPCMConfig _pcm, int _size)
         {
             pcm = _pcm;

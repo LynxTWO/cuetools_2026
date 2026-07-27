@@ -71,7 +71,7 @@ visible and do not silently discard a newly supplied credential.
 | CTDB | verification, repair, metadata, and submission | plain HTTP remains in `CUETools.CTDB/CUEToolsDB.cs`; the server did not offer usable TLS when checked, so closure requires external coordination |
 | gnudb | freedb-compatible metadata fallback | plain HTTP text protocol in `Freedb/FreedbHelper.cs` |
 | cue.tools MOTD | classic CUETools startup message | exact HTTPS endpoint `https://cue.tools/motd/motd.txt`; bounded strict UTF-8 text with finite timeouts; the former remote-image decode/cache path is gone |
-| Icecast | CUEPlayer streaming source and metadata updates | HTTPS by default through `IcecastEndpointPolicy`; HTTP requires an explicit persisted `AllowInsecureHttp` choice and UI warning |
+| Icecast | CUEPlayer streaming source and metadata updates | HTTPS by default through `IcecastEndpointPolicy`; HTTP requires an explicit persisted `AllowInsecureHttp` choice and UI warning. A disposable Icecast 2.5.0 instance passed source/auth rejection, metadata, listener-byte, flush/close, and teardown smoke locally; HTTPS certificate and Mono behavior remain unobserved |
 | Apple artwork search | CUETools 2026 album-art flow | HTTPS in `CUETools.Wpf/Services/AlbumArtService.cs` |
 | MusicBrainz | browser links and tag field names | the legacy client source/project was deleted; direct lookup was retired. Metadata comes through CTDB proxy/freedb paths, while browser links to musicbrainz.org remain |
 | External encoder sites | CUETools 2026 setup flow | the app opens a browser; it does not silently download or execute bytes. A user-picked executable is copied into the managed encoder directory, bound to approval metadata, and rehashed under a retained deny-write/delete lease at launch |
@@ -81,14 +81,14 @@ visible and do not silently discard a newly supplied credential.
 
 | Boundary | Controls now present | Residual limit |
 | --- | --- | --- |
-| Network bytes to verification/metadata parsers | AccurateRip and MOTD use HTTPS; MOTD input is bounded text; Icecast validates one endpoint authority and defaults to TLS | CTDB and gnudb remain unauthenticated HTTP; live Icecast TLS/auth behavior is not locally observed |
-| Audio/archive bytes to managed, `unsafe`, and native parsers | bounded `BitReader`; codec tests and fuzz smoke; RAR input is read through an in-memory callback rather than extracted to attacker-selected disk paths | old vendored parser provenance and exhaustive malformed-input coverage remain incomplete |
+| Network bytes to verification/metadata parsers | AccurateRip and MOTD use HTTPS; MOTD input is bounded text; Icecast validates one endpoint authority and defaults to TLS. A local Icecast 2.5.0 source/auth/metadata/listener lifecycle passed | CTDB and gnudb remain unauthenticated HTTP; Icecast HTTPS certificate/interoperability and Mono behavior are not locally observed |
+| Audio/archive bytes to managed, `unsafe`, and native parsers | bounded `BitReader`; codec tests and fuzz smoke; RAR input is read through an in-memory callback rather than extracted to attacker-selected disk paths. Signed UnRAR 7.23 and a committed production-provider RAR5 fixture cover full read/backward seek; the fixture exposed and fixed a rewind/stale-EOF race | exhaustive malformed-input coverage remains incomplete |
 | Metadata to Windows paths | invalid characters, reserved device names, and trailing dot/space cases are cleansed and covered by tests | arbitrary path-length and filesystem-specific behavior is not exhaustively proven |
 | Plugin directory to application process | packaged plugins require `CUETools.PluginManifest.v1` entries with normalized relative path, size, SHA-256, assembly identity, and architecture; managed and native bytes are rehashed at load. Native modules use verified full paths with no bare-name fallback and retained handles | this is an integrity allowlist, not publisher signing. A principal able to replace both manifest and directory can approve new bytes |
 | Local-development plugin path | loose `CUETools.*.dll` enumeration is disabled unless `CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS=1` is explicitly set | enabling the switch intentionally restores an unmanifested local-development trust boundary |
-| Application to optical drive | SCSI command construction and device access in `Bwg.Scsi` and `CUETools.Ripper.SCSI` | physical-drive, firmware, C2, and cache behavior requires hardware evidence |
+| Application to optical drive | SCSI command construction and device access in `Bwg.Scsi` and `CUETools.Ripper.SCSI`; H: and K: completed real full-disc reads and simultaneous inquiry/TOC, and H: completed a full rip plus two-read Test & Copy | two drives do not establish every firmware, C2, cache, cancellation, disagreement, or damaged-media behavior; the final-source H: repeat remains pending |
 | EAC host to plugin | .NET 2.0 plugin boundary and inputs are documented | EAC process behavior, installer environment, and COM integration are external |
-| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts | the full classic artifact still requires a suitable Visual Studio/devenv environment and hosted execution evidence |
+| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts. Local classic AnyCPU/x64/Win32/TTA builds and a targeted MSI build pass | frozen 97-path classic receipts and execution on the pinned hosted VS2022 image remain |
 
 ## 6. Transaction and publication boundaries
 
@@ -127,8 +127,9 @@ verification oracle.
 
 ## 7. Build, test, and release evidence
 
-Local TRX results captured 2026-07-26 discovered 388 tests: 381 passed, 0
-failed, and 7 were expected skips.
+The earlier local TRX snapshot captured 2026-07-26 discovered 388 tests: 381
+passed, 0 failed, and 7 were expected skips. It is historical evidence, not the
+current aggregate after the final implementation wave.
 
 | Suite | Discovered | Passed | Skipped |
 | --- | ---: | ---: | ---: |
@@ -140,9 +141,10 @@ failed, and 7 were expected skips.
 
 `eng/ci/test-suites.json` records the discovery floors and skip ceilings, and
 `eng/ci/Invoke-TestSuites.ps1` fails on zero discovery, failures, count
-regressions, or excess skips. The excluded legacy
-`CUETools/TestRipper/TestRipper.csproj` still depends on hardcoded captures at
-`Y:\Temp\dbg\960`; it is not the eight-test modern ripper suite.
+regressions, or excess skips. `CUETools/TestRipper/TestRipper.csproj` no longer
+depends on private `Y:\Temp` captures or a stale copied vote algorithm. Its SDK
+net47 tests call the production `SecureSectorVote` helper, are enrolled with a
+three-test/zero-skip floor, and passed 3/3 locally.
 
 The .NET 2.0 lane has an additional runtime probe outside the 388 MSTest total.
 `ExceptionRelay` intentionally preserves the original exception type and object
@@ -153,23 +155,29 @@ and runs this contract under .NET 2.0.
 
 Workflow and release scripts now define legacy/modern test lanes, warning gates,
 fuzz smoke, classic and WPF artifact contracts, plugin trust manifests, native
-probes, provenance, and SBOM output. This is verified statically and locally
-where noted; it is not a claim that the hosted workflow or full classic package
-has completed on the current source state.
+probes, provenance, and SBOM output. Local classic evidence includes AnyCPU
+53/0, x64 and Win32 at 2/0 with 59 skipped configuration entries each, TTA
+compiled/linked for both, and an Installer Projects 8/0 pass that produced a
+929,792-byte MSI. This is not a claim that frozen 97-path receipts or the hosted
+workflow have completed on the current source state.
 
 ## 8. Remaining evidence gaps
 
 - First successful hosted CI/release execution on the current source state.
-- Full classic Visual Studio/devenv build and artifact validation on a machine
-  with the required legacy tooling.
-- Physical optical-drive Test & Copy and repair smoke with known media.
-- Real WMA codec, Icecast TLS/auth, Mono/private `HttpWebRequest`, OpenCL/FLACCL,
-  and supported hardware/runtime matrices.
+- Frozen classic 97-path artifact/receipt validation and hosted-image parity for
+  the passing local AnyCPU/x64/Win32/TTA/MSI matrix.
+- Final-source H: Test & Copy repeat plus deliberate optical
+  cancellation/disagreement/damaged-media cases. The two-drive read, full rip,
+  Test & Copy mechanism, and staged known-image CTDB repair paths have run.
+- Broader runtime matrices: WMA beyond the passing local net8 round trip,
+  Icecast HTTPS certificate and Mono/private `HttpWebRequest`, and OpenCL beyond
+  the passing RTX 3060 modes 0-8 evidence.
 - Real `ApplicationSettingsBase.Save()` persistence and legacy Icecast
   credential migration in CUEPlayer.
 - CTDB server-side TLS and gnudb transport modernization.
-- Complete provenance decisions for HDCD, LAME, UnRAR, TTA, and other vendored
-  binaries; release signing and NuGet lockfiles.
+- Complete residual provenance decisions for HDCD, LAME build inputs, TTA, and
+  other vendored binaries; UnRAR 7.23 origin/signature/ABI/runtime evidence is
+  closed. Release signing and NuGet lockfiles remain.
 
 See `docs/architecture/coverage-ledger.md` for review depth and
 `docs/unknowns/` for the bounded open questions.

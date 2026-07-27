@@ -65,7 +65,7 @@
 	(((x)&(1<<15))?(1<< 0):0))
 
 #ifdef _WIN32
-	#pragma pack(1)
+	#pragma pack(push, 1)
 	#define __ATTRIBUTE_PACKED__
 	typedef unsigned __int64 uint64;
 #else
@@ -143,5 +143,9 @@ static  const unsigned long *shift_16 = bit_shift + 4;
 
 void rice_init(adapt *rice, unsigned long k0, unsigned long k1);
 void encoder_init(encoder *tta, long nch, long byte_size);
+
+#ifdef _WIN32
+	#pragma pack(pop)
+#endif
 
 #endif // TTACOMMON_H_

@@ -87,10 +87,23 @@ public sealed class DriveCalibrationService
                 cal.CacheConfidence = CalConfidence.Confirmed;
             }
 
-            _store.Save(cal);
+            try
+            {
+                _store.Save(cal);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("calibrate", $"drive {drive}: calibration persistence failed: {ex.GetType().Name}");
+                throw new DriveCalibrationPersistenceException(
+                    "Calibration measurements completed, but could not be saved.", ex);
+            }
             _log.Info("calibrate", $"drive {drive}: cache={cal.CacheDefeat} ({cal.CacheConfidence}) " +
                 $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps flushEvict={probe.FlushEvictBytes}B read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
             return cal;
+        }
+        catch (DriveCalibrationPersistenceException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

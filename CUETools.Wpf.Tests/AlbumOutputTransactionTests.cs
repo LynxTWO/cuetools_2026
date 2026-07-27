@@ -62,9 +62,81 @@ namespace CUETools.Wpf.Tests
                 AlbumOutputTransaction.CompletionMarkerName)));
             Assert.IsFalse(File.Exists(Path.Combine(destination,
                 AlbumOutputTransaction.OwnershipMarkerName)));
+            Assert.IsFalse(File.Exists(Path.Combine(destination,
+                AlbumOutputTransaction.ProofPendingMarkerName)));
             Assert.AreEqual("CUETOOLS_OUTPUT_COMPLETE_V1",
                 File.ReadLines(Path.Combine(destination,
                     AlbumOutputTransaction.CompletionMarkerName)).First());
+        }
+
+        [TestMethod]
+        public void InterruptedPendingPublicationIsQuarantinedBeforeNameReuse()
+        {
+            string destination;
+            string pending;
+            using (var original = AlbumOutputTransaction.Reserve(
+                _root,
+                "Artist - Album"))
+            {
+                File.WriteAllText(
+                    Path.Combine(original.StagingDirectory, "01.flac"),
+                    "audio");
+                destination = original.PublishPendingValidation();
+                pending = Path.Combine(
+                    destination,
+                    AlbumOutputTransaction.ProofPendingMarkerName);
+                Assert.IsTrue(File.Exists(pending));
+                Assert.IsFalse(original.IsPublished);
+            }
+
+            using var recovered = AlbumOutputTransaction.Reserve(
+                _root,
+                "Artist - Album");
+
+            Assert.AreEqual(destination, recovered.DestinationDirectory);
+            Assert.IsFalse(Directory.Exists(destination));
+            string[] quarantined = Directory.GetDirectories(
+                _root,
+                ".cuetools-incomplete-published-recovered-*");
+            Assert.AreEqual(1, quarantined.Length);
+            Assert.AreEqual(
+                "audio",
+                File.ReadAllText(Path.Combine(quarantined[0], "01.flac")));
+            Assert.IsTrue(File.Exists(Path.Combine(
+                quarantined[0],
+                AlbumOutputTransaction.ProofPendingMarkerName)));
+        }
+
+        [TestMethod]
+        public void OwnershipMarkerWithoutPendingProofDoesNotMoveExistingAlbum()
+        {
+            string destination;
+            using (var original = AlbumOutputTransaction.Reserve(
+                _root,
+                "Artist - Album"))
+            {
+                File.WriteAllText(
+                    Path.Combine(original.StagingDirectory, "01.flac"),
+                    "audio");
+                destination = original.PublishPendingValidation();
+                File.Delete(Path.Combine(
+                    destination,
+                    AlbumOutputTransaction.ProofPendingMarkerName));
+            }
+
+            using var next = AlbumOutputTransaction.Reserve(
+                _root,
+                "Artist - Album");
+
+            Assert.AreEqual(
+                Path.Combine(_root, "Artist - Album (2)"),
+                next.DestinationDirectory);
+            Assert.AreEqual(
+                "audio",
+                File.ReadAllText(Path.Combine(destination, "01.flac")));
+            Assert.AreEqual(0, Directory.GetDirectories(
+                _root,
+                ".cuetools-incomplete-published-recovered-*").Length);
         }
 
         [TestMethod]

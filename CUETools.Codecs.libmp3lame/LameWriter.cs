@@ -85,9 +85,15 @@ namespace CUETools.Codecs.libmp3lame
                 m_bytesWritten += flushResult;
             }
 
-            int lametagFrameSize = this.GetLametagFrame();
-            this.m_outputStream.Seek(m_streamStart, SeekOrigin.Begin);
-            this.m_outputStream.Write(this.m_outputBuffer, 0, lametagFrameSize);
+            // A LAME/Xing tag is a rewrite of the first MPEG frame. Live outputs
+            // (Icecast, pipes, sockets) cannot seek, so they are finalized by the
+            // flush above and deliberately omit that optional file-only tag.
+            if (this.m_outputStream.CanSeek)
+            {
+                int lametagFrameSize = this.GetLametagFrame();
+                this.m_outputStream.Seek(m_streamStart, SeekOrigin.Begin);
+                this.m_outputStream.Write(this.m_outputBuffer, 0, lametagFrameSize);
+            }
         }
 
         public void Close()
@@ -118,6 +124,20 @@ namespace CUETools.Codecs.libmp3lame
                 throw;
             }
             CloseOutputStream();
+        }
+
+        /// <summary>
+        /// Releases a partially-written encoder without flushing more audio.
+        /// This is used when a live transport is being aborted; Delete remains
+        /// reserved for encoders that own an output file.
+        /// </summary>
+        public void Abort()
+        {
+            if (this.m_closed)
+                return;
+            this.m_closed = true;
+            CloseHandleNoThrow();
+            CloseOutputStreamNoThrow();
         }
 
         private int GetLametagFrame()
@@ -155,7 +175,9 @@ namespace CUETools.Codecs.libmp3lame
                     if (m_handle == IntPtr.Zero)
                         throw new LameException("lame_init failed");
 
-                    libmp3lamedll.lame_set_bWriteVbrTag(m_handle, 1);
+                    libmp3lamedll.lame_set_bWriteVbrTag(
+                        m_handle,
+                        this.m_outputStream.CanSeek ? 1 : 0);
                     libmp3lamedll.lame_set_write_id3tag_automatic(m_handle, 0);
 
                     libmp3lamedll.lame_set_num_channels(m_handle, this.Settings.PCM.ChannelCount);
@@ -186,7 +208,9 @@ namespace CUETools.Codecs.libmp3lame
                     m_bytesWritten += id3v2.Length;
                     m_outputStream.Write(new byte[padding], 0, padding);
                     m_bytesWritten += padding;
-                    m_streamStart = this.m_outputStream.Position;
+                    m_streamStart = this.m_outputStream.CanSeek
+                        ? this.m_outputStream.Position
+                        : m_bytesWritten;
 
                     this.m_initialized = true;
                 }

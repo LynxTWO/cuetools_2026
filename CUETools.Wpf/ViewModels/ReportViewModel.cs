@@ -5,9 +5,8 @@ namespace CUETools.Wpf.ViewModels;
 
 /// <summary>
 /// Report page. Renders the most recent job (from <see cref="IReportStore"/>) as a
-/// certificate: the outcome, the AccurateRip / CTDB confidences, the full rip-log text, and
-/// the model-B self-check - a SHA-256 over the log's canonical form, recomputed live so it is
-/// a real integrity footer rather than a decorative string.
+/// receipt: the outcome, its independent-read and database assurance sources, the full
+/// rip-log text, and a reproducible SHA-256 checksum over the displayed canonical form.
 /// </summary>
 public sealed class ReportViewModel : PageViewModel
 {
@@ -17,7 +16,7 @@ public sealed class ReportViewModel : PageViewModel
     {
         Title = "Report";
         Group = "Session";
-        Subtitle = "The per-job accuracy log, with a tamper-evident checksum.";
+        Subtitle = "The per-job accuracy report, with a reproducible SHA-256 checksum.";
         _store = store;
         _store.Changed += (_, __) => Refresh();
         Refresh();
@@ -67,8 +66,10 @@ public sealed class ReportViewModel : PageViewModel
             return;
         }
 
-        Confirmed = r.Confirmed;
-        Headline = r.Confirmed ? "Accurately ripped" : "Not confirmed";
+        Confirmed = r.Verified;
+        Headline = r.DatabaseConfirmed
+            ? "Accurately ripped"
+            : r.IndependentReadsVerified ? "Verified by independent reads" : "Not confirmed";
         Album = r.Album;
         Artist = string.IsNullOrWhiteSpace(r.Year) ? r.Artist : $"{r.Artist}  ({r.Year})";
         Subhead = $"{r.Mode}  .  {r.CorrectionQualityName}  .  {r.Timestamp:yyyy-MM-dd HH:mm}";
@@ -81,15 +82,32 @@ public sealed class ReportViewModel : PageViewModel
         string digest = LogIntegrity.ComputeDigest(body);
         DigestFooter = LogIntegrity.Footer(digest);
 
-        // Honest wording: the self-check is always local; the "confirmed against" clause only
-        // names a database when that database actually returned a positive confidence.
+        // Name each assurance source independently. Test & Copy agreement is real evidence but
+        // must never be presented as an AccurateRip or CTDB match.
         string against = r.Accurate && r.CtdbConfidence > 0
             ? $"CTDB (conf {r.CtdbConfidence}) and AccurateRip (conf {r.ArConfidence})"
             : r.CtdbConfidence > 0 ? $"CTDB (conf {r.CtdbConfidence})"
             : r.Accurate ? $"AccurateRip (conf {r.ArConfidence})"
             : "";
-        IntegrityLine = against.Length > 0
-            ? $"Log integrity: self-check OK; results confirmed against {against}."
-            : "Log integrity: self-check OK; results not independently confirmed (disc not in the databases).";
+        string evidence = r.IndependentReadsVerified
+            ? $"verified after {r.OpticalReadsUsed} optical reads; every track agreed across "
+                + $"at least {r.MinimumAgreeingReads} reads"
+                + (against.Length > 0 ? $"; also confirmed against {against}" : "; not found in AR/CTDB")
+            : against.Length > 0 ? $"confirmed against {against}"
+            : "not independently confirmed";
+        string outputEvidence = !r.OutputVerificationKnown
+            ? " Final encoded-output verification: not recorded."
+            : !r.LosslessOutput
+                ? " Final encoded-output verification: not applicable to lossy output."
+                : r.OutputVerificationPerformed
+                    ? " Final encoded-output verification: "
+                        + (string.IsNullOrWhiteSpace(r.OutputVerificationDetail)
+                            ? "performed after metadata finalization"
+                            : r.OutputVerificationDetail)
+                        + "."
+                    : " WARNING: final lossless output was not independently decoded and compared.";
+        IntegrityLine = "Report checksum calculated over the text above (not a signature; " +
+            $"compare it with a previously retained digest). Read evidence: {evidence}." +
+            outputEvidence;
     }
 }

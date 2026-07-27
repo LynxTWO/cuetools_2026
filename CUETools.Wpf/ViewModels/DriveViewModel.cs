@@ -19,6 +19,14 @@ public sealed class DriveViewModel : PageViewModel
     private bool _busy;
 
     public DriveViewModel(IDriveService drives, DriveCalibrationService calibration)
+        : this(drives, calibration, autoDetect: true)
+    {
+    }
+
+    internal DriveViewModel(
+        IDriveService drives,
+        DriveCalibrationService calibration,
+        bool autoDetect)
     {
         Title = "Drive & Read";
         Group = "Setup";
@@ -29,7 +37,7 @@ public sealed class DriveViewModel : PageViewModel
         DriveLetter = d.Count > 0 ? d[0] + ":" : "no optical drive";
         DetectCommand = new RelayCommand(_ => { _ = DetectAsync(); }, _ => !_busy && !drives.RipInProgress);
         CalibrateCommand = new RelayCommand(_ => { _ = CalibrateAsync(); }, _ => !_busy && HasDetails && !drives.RipInProgress);
-        if (d.Count > 0) _ = DetectAsync();   // populate on open so the page is never empty
+        if (autoDetect && d.Count > 0) _ = DetectAsync();   // populate on open so the page is never empty
     }
 
     private string _driveLetter = "";
@@ -68,32 +76,64 @@ public sealed class DriveViewModel : PageViewModel
 
     private async Task DetectAsync()
     {
+        if (_busy || _drives.RipInProgress)
+            return;
         var d = _drives.GetDrives();
         if (d.Count == 0) { Status = "No optical drive found."; return; }
         _busy = true;
+        CommandManager.InvalidateRequerySuggested();
         Status = "Reading the drive over SCSI...";
         char drive = TargetDrive(d);
         DriveLetter = drive + ":";
-        var det = await Task.Run(() => _drives.GetDriveDetails(drive));
-        Details = det;
-        if (det.Valid)
+        try
         {
-            Status = "Read live from " + det.Model + " over SCSI"
-                + (det.OffsetKnown ? ". AccurateRip offset " + det.OffsetText + "." : ". AccurateRip offset not in the cached table.");
-            // show any saved calibration for this drive (signature = AR name)
-            Cal = await Task.Run(() => _calibration.Get(det.ARName ?? ""));
+            var det = await Task.Run(() => _drives.GetDriveDetails(drive));
+            Details = det;
+            if (det.Valid)
+            {
+                Status = "Read live from " + det.Model + " over SCSI"
+                    + (det.OffsetKnown ? ". AccurateRip offset " + det.OffsetText + "." : ". AccurateRip offset not in the cached table.");
+                // A corrupt calibration store is deliberately fail-closed so it cannot be silently
+                // overwritten. That failure must still remain a normal UI state: do not let this
+                // fire-and-forget detect task fault or leave the page permanently busy.
+                try
+                {
+                    Cal = await Task.Run(() => _calibration.Get(det.ARName ?? ""));
+                }
+                catch (System.IO.InvalidDataException)
+                {
+                    Cal = null;
+                    Status += " Saved calibration is unreadable and was not used.";
+                }
+            }
+            else
+            {
+                Cal = null;
+                Status = "Could not read the drive" + (det.Error.Length > 0 ? " (" + det.Error + ")." : ".");
+            }
         }
-        else
+        catch (System.Exception ex)
         {
-            Status = "Could not read the drive" + (det.Error.Length > 0 ? " (" + det.Error + ")." : ".");
+            Details = null;
+            Cal = null;
+            Status = "Could not read the drive (" + ex.GetType().Name + ").";
         }
-        _busy = false;
+        finally
+        {
+            _busy = false;
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
+
+    internal Task DetectForTestAsync() => DetectAsync();
+    internal bool IsBusyForTest => _busy;
 
     // Probe the drive's cache behaviour + speed and persist it. A disc must be loaded (the probe
     // reads real audio sectors). Read-only - it never writes rip output.
     private async Task CalibrateAsync()
     {
+        if (_busy)
+            return;
         var d = _drives.GetDrives();
         if (d.Count == 0) return;
         // Belt and braces with the CanExecute above: never probe a drive a rip holds open. The
@@ -102,17 +142,33 @@ public sealed class DriveViewModel : PageViewModel
         if (_drives.RipInProgress) { Status = "A rip is running on this drive - calibration has to wait."; return; }
         char drive = TargetDrive(d);
         _busy = true;
+        CommandManager.InvalidateRequerySuggested();
         Status = "Calibrating " + drive + ": (probing cache and speed - needs a disc)...";
-        var cal = await Task.Run(() => _calibration.Calibrate(drive));
-        if (cal != null)
+        try
         {
-            Cal = cal;
-            Status = "Calibrated " + drive + ":  cache " + cal.CacheDefeat + ".";
+            var cal = await Task.Run(() => _calibration.Calibrate(drive));
+            if (cal != null)
+            {
+                Cal = cal;
+                Status = "Calibrated " + drive + ":  cache " + cal.CacheDefeat + ".";
+            }
+            else
+            {
+                Status = "Calibration needs an audio disc in the drive. Insert one and try again.";
+            }
         }
-        else
+        catch (DriveCalibrationPersistenceException ex)
         {
-            Status = "Calibration needs an audio disc in the drive. Insert one and try again.";
+            Status = ex.Message;
         }
-        _busy = false;
+        catch (System.Exception ex)
+        {
+            Status = "Calibration failed (" + ex.GetType().Name + ").";
+        }
+        finally
+        {
+            _busy = false;
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 }

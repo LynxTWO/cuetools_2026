@@ -23,16 +23,6 @@ namespace CUEPlayer.Properties {
             }
         }
 
-        [global::System.Configuration.ApplicationScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.SpecialSettingAttribute(global::System.Configuration.SpecialSetting.ConnectionString)]
-        [global::System.Configuration.DefaultSettingValueAttribute("Data Source=|DataDirectory|\\CUEPlayer.sdf")]
-        public string CUEPlayerConnectionString {
-            get {
-                return ((string)(this["CUEPlayerConnectionString"]));
-            }
-        }
-
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         public global::CUETools.Codecs.Icecast.IcecastSettingsData IcecastSettings {

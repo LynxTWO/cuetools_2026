@@ -39,7 +39,6 @@
                          "CUETools.Wpf/Models/DriveDetails.cs|CS8604|Possible null reference argument for parameter \u0027c\u0027 in \u0027string DriveDetails.Join(string a, string b, string c, string none)\u0027.",
                          "CUETools.Wpf/Services/DriveService.cs|CS8600|Converting null literal or possible null value to non-nullable type.",
                          "CUETools.Wpf/Services/GzJson.cs|CS8603|Possible null reference return.",
-                         "CUETools.Wpf/Services/GzJson.cs|CS8604|Possible null reference argument for parameter \u0027path\u0027 in \u0027DirectoryInfo Directory.CreateDirectory(string path)\u0027.",
                          "CUETools.Wpf/Services/NamingContextMapper.cs|CS8603|Possible null reference return.",
                          "CUETools.Wpf/Services/NamingContextMapper.cs|CS8604|Possible null reference argument for parameter \u0027date\u0027 in \u0027string NamingContextMapper.Year4(string date)\u0027.",
                          "CUETools.Wpf/Services/NamingContextMapper.cs|CS8604|Possible null reference argument for parameter \u0027s\u0027 in \u0027int NamingContextMapper.ParseInt(string s, int dflt)\u0027.",

@@ -27,7 +27,7 @@ No automatic upload path was found. Retention/purge behavior is not claimed.
 | F1 | Classic proxy settings | `CUEConfig.Save` removes `advanced.ProxyPassword` from serialized Advanced JSON and stores a DPAPI CurrentUser `ProxyPasswordProtected` value; corrupt/wrong-user/unsupported blobs are rejected | verified: the prior plaintext-at-rest finding is closed; no plaintext fallback | fixed |
 | F2 | CUETools 2026 proxy settings | `SettingsStore` uses `SecretProtector` and `WpfProxyPasswordProtected`, migrates legacy plaintext, registers the in-memory secret with the diagnostic redactor, and atomically publishes settings | verified: credential read rejection fails closed; save failure is logged/caught, but UI visibility is not established | fixed with UI-observability limit |
 | F3 | CUEPlayer Icecast settings | `IcecastCredentialStore` implements a bounded DPAPI CurrentUser blob; source ordering attempts protected persistence before clearing legacy plaintext, and UI set/clear semantics do not redisplay the stored secret | verified source invariant; real `ApplicationSettingsBase.Save()` persistence, failure, and migration behavior remain unobserved | implemented, integration gap |
-| F4 | Icecast network auth | endpoint policy defaults source and metadata requests to HTTPS; HTTP needs explicit persisted opt-in and a UI warning; trace failures record exception type, not credential value | verified control; live TLS/auth interoperability remains unknown | bounded external gap |
+| F4 | Icecast network auth | endpoint policy defaults source and metadata requests to HTTPS; HTTP needs explicit persisted opt-in and a UI warning; trace failures record exception type, not credential value | verified control plus disposable Icecast 2.5.0 source/auth rejection, metadata, listener-byte, flush/close, and teardown smoke; HTTPS certificate and Mono interoperability remain unknown | bounded external gap |
 | F5 | CUETools 2026 diagnostic log | registers username, profile/music roots, proxy password, album metadata, user-selected input/output roots, and owned staging paths before work; error records include exception type, message, stack, and inner exceptions | verified: case-insensitive longest-match redaction scrubs direct messages, nested exception messages, and stack text without reprocessing the replacement token | fixed |
 | F6 | Plugin discovery traces | records manifest/development-mode/load failures and exception details through `Trace` | paths and error details, not credential values in inspected calls | low |
 | F7 | `Bwg.Scsi/Device.cs` and `Bwg.Logging` | emits SCSI command, sense, drive, and sector diagnostics when enabled | sampled only; no credential data found, but raw-buffer verbosity is not exhaustively ruled out | open low-risk audit |
@@ -99,8 +99,10 @@ Icecast policy.
 Sampled, not exhaustive: all 89-style `Bwg.Scsi/Device.cs` log calls and every
 possible exception message from native/external components.
 
-External/unknown: live Icecast TLS/auth behavior, hosted runner logs, and any
-logging performed internally by vendored native/managed dependencies.
+External/unknown: Icecast HTTPS certificate and Mono behavior, hosted runner
+logs, and any logging performed internally by vendored native/managed
+dependencies. Local Icecast 2.5.0 auth/source/metadata/listener/teardown behavior
+has been observed.
 
 Open questions and closed historical findings are maintained in
 `docs/unknowns/logging-audit.md`.

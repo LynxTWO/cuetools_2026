@@ -93,7 +93,7 @@
       <AdditionalIncludeDirectories>..\..\..\Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>EXCLUDE_CIO;PLATFORM_WINDOWS;PLATFORM_WINDOWS_NO_HEADER;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <WarningLevel>Level3</WarningLevel>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -121,7 +121,7 @@
       <AdditionalIncludeDirectories>..\..\..\Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>EXCLUDE_CIO;PLATFORM_WINDOWS;PLATFORM_WINDOWS_NO_HEADER;WIN32;_DEBUG;_LIB;PLATFORM_x64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <WarningLevel>Level3</WarningLevel>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -147,7 +147,7 @@
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <AdditionalIncludeDirectories>..\..\..\Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>EXCLUDE_CIO;PLATFORM_WINDOWS;PLATFORM_WINDOWS_NO_HEADER;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <PrecompiledHeaderFile>all.h</PrecompiledHeaderFile>
@@ -177,7 +177,7 @@
       <OmitFramePointers>true</OmitFramePointers>
       <AdditionalIncludeDirectories>..\..\..\Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>EXCLUDE_CIO;PLATFORM_WINDOWS;PLATFORM_WINDOWS_NO_HEADER;_CRT_SECURE_NO_WARNINGS;;WIN32;NDEBUG;_LIB;PLATFORM_x64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <WarningLevel>Level3</WarningLevel>
@@ -208,7 +208,7 @@
     <ClInclude Include="..\..\..\MACLibDll\MACLibDll.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MACLib\MACLib.vcxproj">
+    <ProjectReference Include="..\..\Visual Studio - 2022\MACLib\MACLib.vcxproj">
       <Project>{21bf980f-c022-4dcc-9250-7c73528e422b}</Project>
     </ProjectReference>
   </ItemGroup>

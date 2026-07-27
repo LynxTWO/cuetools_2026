@@ -49,6 +49,20 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
 5. CORRECTNESS OUTRANKS ELEGANCE. Never refactor away a guard, a bounds check, a verification step or
    an error path to reduce duplication. If two blocks look identical but one has an extra check, that
    is a finding to investigate, not noise to unify. Say so explicitly.
+6. PROOF MUST SURVIVE PUBLICATION. A verified Boolean is not evidence. Bind any bit-exact claim to the
+   exact finalized files, carry that proof through copies and moves, and independently reopen the
+   destination before exposing success. Test real Windows child-handle and parent-directory rename
+   behavior. If a destination cannot be revalidated after a move, clear the claim and quarantine the
+   owned result while preserving recovery evidence.
+7. RELEASE RECEIPTS ARE GENERATED EVIDENCE. One orchestrator must prepare dependencies, rebuild,
+   create the receipt, collect, and validate under one lease. The receipt must record commands that
+   actually ran, resolved tools, exit results, logs, the complete planned source set, every consumed
+   native or generated input including ignored files, and hashes of the exact collected bytes. Do not
+   accept caller-authored claims or a fresh staging directory as proof of fresh inputs. Scope the
+   lease to every shared output across versions and helper entrypoints. Recover or refuse a retained
+   intent before cleanup. Validate archive expansion against the pinned archive instead of a partial
+   tracked-tree sentinel, hash ignored expanded sources explicitly, and evaluate warning baselines
+   from the exact rebuild logs that produced the collected bytes.
 
 ### How to choose the extraction
 
@@ -67,6 +81,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
   SEQUENCE into one method both call. This is the highest-value category in this codebase, because
   every past instance of it has produced a real user-visible bug when one copy was fixed and the other
   was not.
+- ASSURANCE or RELEASE duplication - hashing, finalization, publication, receipt creation, collection,
+  or rollback split across multiple callers: extract the complete ordered transaction, including its
+  reservation, lease, exact-set checks, commit point, invalidation, quarantine, and recovery behavior.
+  A helper that centralizes only the happy-path copy or move makes the dangerous state transitions
+  harder to see.
 
 ### Deliverables
 

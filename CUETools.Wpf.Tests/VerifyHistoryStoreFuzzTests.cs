@@ -4,17 +4,15 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 using CUETools.Wpf.Accuracy;
+using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CUETools.Wpf.Tests
 {
-    // VerifyHistoryStore reads its on-disk history file through GzJson, which never throws and
-    // returns default(T) on bad input - but the store itself must also treat that null as an
-    // empty history (not crash, not misreport a corrupt file as a known disc). This points a
-    // store at malformed/empty/garbage files written directly to its path and asserts
-    // CompareAndUpsert degrades gracefully every time: never throws, and reports the disc as
-    // unknown (KnownDisc=false) on this first-ever CompareAndUpsert call against that path,
-    // exactly as it would for a genuinely empty history. Fixed seed so a failure reproduces.
+    // GzJson's compatibility Load API remains non-throwing for untrusted bytes. A writable evidence
+    // store has a stronger contract: a missing file is a valid first run, but an existing unreadable
+    // file must fail closed and remain byte-for-byte unchanged instead of being mistaken for empty
+    // history and overwritten. Fixed seed so a failure reproduces.
     [TestClass]
     public class VerifyHistoryStoreFuzzTests
     {
@@ -116,22 +114,28 @@ namespace CUETools.Wpf.Tests
                 {
                     if (writeFile) File.WriteAllBytes(path, bytes);
 
-                    VerifyOutcome outcome;
-                    try
+                    byte[] original = writeFile ? File.ReadAllBytes(path) : Array.Empty<byte>();
+                    GzJsonLoadResult<Dictionary<string, List<VerifyRecord>>> load =
+                        GzJson.TryLoad<Dictionary<string, List<VerifyRecord>>>(path);
+                    var store = new VerifyHistoryStore(path);
+                    if (load.Status == GzJsonLoadStatus.Failed)
                     {
-                        var store = new VerifyHistoryStore(path);
-                        outcome = store.CompareAndUpsert(Rec("D1", 10, 20, 30));
+                        Assert.ThrowsException<InvalidDataException>(
+                            () => store.CompareAndUpsert(Rec("D1", 10, 20, 30)),
+                            $"case '{label}' (seed={Seed}) must fail closed");
+                        CollectionAssert.AreEqual(original, File.ReadAllBytes(path),
+                            $"case '{label}' (seed={Seed}) was overwritten");
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Assert.Fail($"CompareAndUpsert threw on case '{label}' (seed={Seed}): {ex}");
-                        return;
+                        VerifyOutcome outcome =
+                            store.CompareAndUpsert(Rec("D1", 10, 20, 30));
+                        if (load.Status == GzJsonLoadStatus.Missing)
+                        {
+                            Assert.IsFalse(outcome.KnownDisc);
+                            Assert.AreEqual(0, outcome.PriorReads);
+                        }
                     }
-
-                    // A bad/unreadable store is treated as empty: this is reported as the disc's
-                    // first-ever read against this (garbage) path, never as a false "known disc".
-                    Assert.IsFalse(outcome.KnownDisc, $"case '{label}' (seed={Seed}): malformed store must read as empty, not a known disc");
-                    Assert.AreEqual(0, outcome.PriorReads, $"case '{label}' (seed={Seed}): malformed store must report zero prior reads");
                 }
                 finally
                 {

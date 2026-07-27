@@ -5,14 +5,20 @@
 The scenarios below are the preserved 2026-07-02 pass. SC2, SC3, SC4, SC6, and SC8
 are now closed by bounded decoders, HTTPS text-only MOTD, filename hardening,
 AccurateRip HTTPS, and DPAPI/atomic settings respectively. SC5 is closed for
-manifest-bound packaged plugins but remains a deliberate trust boundary when local
-plugins are explicitly enabled.
+manifest-bound packaged plugins and separately manifest-bound per-user enrollment.
+The deliberately unmanifested local-development override remains a trust boundary,
+and neither hash manifest is a substitute for publisher signing.
 
 The follow-up pass added and exercised repo-specific failure scenarios for
 cross-process album publication, repair staging/verification, external encoder
 timeouts and truncated output, WMA lossless mismatches, plugin identity preloading,
 settings-write interruption, native finalization failure, and artifact omissions.
+Later live runs added WMA Lossless, FLACCL/RTX 3060, H:/K: optical reads, an H:
+full FLAC rip and two-read Test & Copy, CTDB repair, and Icecast 2.5.0 evidence.
 Results and residual external checks are in `2026-07-26-autonomous-audit.md`.
+TestRipper's former private captures and stale copied vote algorithm have also been
+replaced by SDK net47 tests against the production `SecureSectorVote` helper; its
+canonical run passed 3/3 with zero skips.
 
 Pass 08, 2026-07-02. Synthetic abuse/failure scenarios that fit CUETools' actual shape, used to test whether the current map and comments would hold. Score key: 0 = the current understanding misses it, 1 = partly covered, 2 = clearly covered. Scorecard in `scenario-scorecard.md`.
 
@@ -52,7 +58,7 @@ Plausible: attacker on the network returns a dBAR response claiming a bad rip is
 ### SC7. RAR with path-traversal filenames (`../../evil`)
 
 Plausible: a malicious RAR used as input.
-- **Holds?** Yes. The input path streams via `Unrar.Test()` + DataAvailable callback; it never extracts to a filesystem path, so traversal filenames have nowhere to land (verified S4, pass 07). **Score 2.**
+- **Holds?** Yes. The input path streams via `Unrar.Test()` + DataAvailable callback; it never extracts to a filesystem path, so traversal filenames have nowhere to land (verified S4, pass 07). Official signed UnRAR 7.23 now passes the production path in both architectures. A committed RAR5 fixture additionally exposed and fixed backward-seek replay against stale EOF, then passed 20/20 repeats. **Score 2.**
 
 ### SC8. Proxy password read from the profile at rest
 
@@ -62,7 +68,7 @@ Plausible: malware or another user reads the CUETools profile file.
 ### SC9. A tampered release ships because tests never ran
 
 Plausible (historical): before this session, CI built but ran no tests, so a regression in parity/codec math could ship.
-- **Holds now?** Yes. TestParity/TestCodecs are `dotnet test`-gated in both CI and release workflows (S13/S14). Regression in the covered math now blocks the build. Gap: TestProcessor/TestRipper still can't run (fixtures/hardware). **Score 2 for covered math, 1 for engine/ripper.**
+- **Holds now?** Yes for enrolled local coverage. TestParity/TestCodecs are `dotnet test`-gated in both CI and release workflows (S13/S14), TestProcessor fixtures are restored, and the synthetic production-vote TestRipper fixture passes 3/3 with zero skips. Hosted execution, frozen classic artifact receipts, and real optical failure injection remain. **Score 2 for covered logic, 1 for hosted/hardware evidence.**
 
 ## Themes
 

@@ -10,14 +10,29 @@ No open entry remains in this ledger.
 
 ## Closed items
 
+### RarStream backward seek could accept stale EOF
+
+- **Area or file:** `CUETools.Compression.Rar/RarStream.cs`,
+  `CUETools/CUETools.TestCodecs/RarCompressionProviderTest.cs`
+- **Resolution:** fixed 2026-07-26. A backward seek asks the worker to abort and
+  reopen the archive, but `Read` could see the completed prior pass's `_eof`
+  before rewind was acknowledged and return zero bytes. The wait predicate now
+  treats `_rewind` as pending work and waits for replay data or terminal state.
+- **Evidence:** the committed 280-byte RAR5 fixture and 2,083-byte source oracle
+  exercise the production provider/stream path. The focused case passed, followed
+  by 20/20 repeated no-build full-read/backward-seek runs.
+- **Boundary:** this closes the concrete replay race; broad malformed-RAR and
+  concurrency fuzzing remain separate coverage.
+- **Status:** closed
+
 ### BitReader buffer over-read
 
 - **Area or file:** `CUETools.Codecs/BitReader.cs`
 - **Resolution:** fixed in commit `624879c`. Speculative cache top-up now reads
   zero beyond the logical end instead of dereferencing beyond the supplied
   buffer, while unbounded unary/Rice scans detect the end and throw.
-- **Evidence:** implementation inspected 2026-07-26; current codec suite
-  discovered 109 tests, passed 107, and had 2 expected skips.
+- **Evidence:** implementation and focused boundary tests inspected 2026-07-26;
+  aggregate totals are refreshed by the final canonical gate.
 - **Boundary:** this closes the concrete shared `BitReader` out-of-bounds read.
   It is not a claim that every managed/native codec parser is exhaustively safe
   against malformed input.
@@ -30,9 +45,8 @@ No open entry remains in this ledger.
 - **Resolution:** fixed in commit `e93532e`. `CleanseString` maps trailing
   dot/space runs to underscores and prefixes reserved DOS device-name
   components, including names with extensions.
-- **Evidence:** implementation and focused tests inspected 2026-07-26;
-  Processor suite discovered 8 tests, passed 7, and had 1 unrelated expected
-  skip.
+- **Evidence:** implementation and focused tests inspected 2026-07-26; aggregate
+  totals are refreshed by the final canonical gate.
 - **Boundary:** filesystem path length, permissions, reparse points, and
   non-Windows filesystem semantics are separate concerns.
 - **Status:** closed
@@ -56,7 +70,9 @@ No open entry remains in this ledger.
 - **Resolution:** verified 2026-07-02. The reachable `VerifyParity` path folds
   corrections into a running CRC, combines the current rip's CTDB CRC, and
   refuses recovery unless the residual is zero.
-- **Evidence:** live repair call path and invariant reviewed.
+- **Evidence:** repair call path and invariant reviewed. A later live opt-in run
+  detected and repaired a deliberately damaged known image, independently
+  post-verified the published sibling, and confirmed source hashes were unchanged.
 - **Boundary:** CRC32 detects ordinary corruption but is not a cryptographic
   server signature. CTDB HTTP transport remains an open architecture concern.
 - **Status:** closed

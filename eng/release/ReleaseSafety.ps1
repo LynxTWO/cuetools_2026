@@ -123,6 +123,188 @@ function Get-GeneratedUntrackedClassification {
     return $null
 }
 
+function Get-ClassicReleaseLeasePath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseRoot
+    )
+
+    $releaseFullPath = [IO.Path]::GetFullPath($ReleaseRoot)
+    return Join-Path $releaseFullPath ".cuetools-classic-release.lock"
+}
+
+function Enter-ClassicReleaseLease {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseRoot,
+        [int]$TimeoutMilliseconds = 30000
+    )
+
+    if ($TimeoutMilliseconds -lt 1) {
+        throw "Classic release lease timeout must be positive."
+    }
+
+    $releaseFullPath = [IO.Path]::GetFullPath($ReleaseRoot)
+    if (-not (Test-Path -LiteralPath $releaseFullPath -PathType Container)) {
+        New-Item -ItemType Directory -Path $releaseFullPath | Out-Null
+    }
+    Assert-NoReparsePointInExistingPath `
+        -Path $releaseFullPath `
+        -Purpose "Classic release lease directory"
+    $leasePath = Get-ClassicReleaseLeasePath -ReleaseRoot $releaseFullPath
+    if (Test-Path -LiteralPath $leasePath) {
+        Assert-NoReparsePointInExistingPath `
+            -Path $leasePath `
+            -Purpose "Classic release lease"
+        $leaseInfo = Get-Item -LiteralPath $leasePath -Force -ErrorAction Stop
+        if ($leaseInfo.PSIsContainer -or
+            -not ($leaseInfo -is [IO.FileInfo]) -or
+            ($leaseInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Classic release lease path is not a regular file: $leasePath"
+        }
+    }
+
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $lastFailure = $null
+    while ($timer.ElapsedMilliseconds -lt $TimeoutMilliseconds) {
+        $stream = $null
+        try {
+            $stream = New-Object IO.FileStream(
+                $leasePath,
+                [IO.FileMode]::OpenOrCreate,
+                [IO.FileAccess]::ReadWrite,
+                [IO.FileShare]::None)
+            $priorToken = $null
+            if ($stream.Length -eq 32) {
+                $priorBytes = New-Object byte[] 32
+                $priorRead = $stream.Read($priorBytes, 0, $priorBytes.Length)
+                if ($priorRead -eq $priorBytes.Length) {
+                    $strictUtf8 = New-Object Text.UTF8Encoding($false, $true)
+                    $candidatePriorToken =
+                        $strictUtf8.GetString($priorBytes)
+                    if ($candidatePriorToken -cmatch "^[0-9a-f]{32}$") {
+                        $priorToken = $candidatePriorToken
+                    }
+                }
+            }
+            $token = [Guid]::NewGuid().ToString("N")
+            $tokenBytes = (New-Object Text.UTF8Encoding($false)).GetBytes($token)
+            $stream.SetLength(0)
+            $stream.Write($tokenBytes, 0, $tokenBytes.Length)
+            $stream.Flush()
+            $stream.Position = 0
+            return [pscustomobject]@{
+                path = [IO.Path]::GetFullPath($leasePath)
+                releaseRoot = $releaseFullPath
+                token = $token
+                priorToken = $priorToken
+                stream = $stream
+            }
+        }
+        catch {
+            if ($stream -ne $null) {
+                $stream.Dispose()
+                $stream = $null
+            }
+            $ioFailure = $_.Exception
+            while ($ioFailure -ne $null -and
+                -not ($ioFailure -is [IO.IOException])) {
+                $ioFailure = $ioFailure.InnerException
+            }
+            if ($ioFailure -eq $null) { throw }
+            $code = $ioFailure.HResult -band 0xffff
+            if ($code -ne 32 -and $code -ne 33) { throw }
+            $lastFailure = $ioFailure
+            Start-Sleep -Milliseconds 25
+        }
+    }
+    $timeout = New-Object TimeoutException(
+        "Timed out waiting for the classic release lease at $leasePath.",
+        $lastFailure)
+    throw $timeout
+}
+
+function Assert-ActiveClassicReleaseLease {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Lease,
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseRoot,
+        [Parameter(Mandatory = $true)]
+        [string]$LeaseToken
+    )
+
+    if ($LeaseToken -cnotmatch "^[0-9a-f]{32}$") {
+        throw "Classic release lease token is invalid."
+    }
+    $releaseFullPath = [IO.Path]::GetFullPath($ReleaseRoot)
+    $expectedPath = [IO.Path]::GetFullPath(
+        (Get-ClassicReleaseLeasePath -ReleaseRoot $releaseFullPath))
+    if ($Lease -eq $null -or
+        $Lease.PSObject.Properties["path"] -eq $null -or
+        $Lease.PSObject.Properties["releaseRoot"] -eq $null -or
+        $Lease.PSObject.Properties["token"] -eq $null -or
+        $Lease.PSObject.Properties["priorToken"] -eq $null -or
+        $Lease.PSObject.Properties["stream"] -eq $null -or
+        [string]$Lease.token -cne $LeaseToken -or
+        -not [string]::Equals(
+            [string]$Lease.releaseRoot,
+            $releaseFullPath,
+            [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals(
+            [string]$Lease.path,
+            $expectedPath,
+            [StringComparison]::OrdinalIgnoreCase) -or
+        $Lease.stream -eq $null -or
+        $Lease.stream.SafeFileHandle.IsClosed -or
+        -not [string]::Equals(
+            [IO.Path]::GetFullPath($Lease.stream.Name),
+            $expectedPath,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "An active repo-wide classic release lease with the exact token is required."
+    }
+
+    $position = $Lease.stream.Position
+    try {
+        $Lease.stream.Position = 0
+        $reader = New-Object IO.StreamReader(
+            $Lease.stream,
+            (New-Object Text.UTF8Encoding($false)),
+            $false,
+            128,
+            $true)
+        try {
+            $storedToken = $reader.ReadToEnd()
+        }
+        finally {
+            $reader.Dispose()
+        }
+        if ($storedToken -cne $LeaseToken) {
+            throw "Classic release lease token no longer matches its locked file."
+        }
+    }
+    finally {
+        $Lease.stream.Position = $position
+    }
+}
+
+function Exit-ClassicReleaseLease {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Lease
+    )
+
+    if ($Lease.PSObject.Properties["stream"] -ne $null -and
+        $Lease.stream -ne $null) {
+        $Lease.stream.Dispose()
+        $Lease.stream = $null
+    }
+}
+
 function Get-VerifiedArtifactFiles {
     [CmdletBinding()]
     param(

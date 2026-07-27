@@ -34,6 +34,7 @@
     <ProjectReference Include="..\..\CUETools.Codecs.LossyWAV\CUETools.Codecs.LossyWAV.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs.WMA\CUETools.Codecs.WMA.csproj" />
     <ProjectReference Include="..\..\CUETools.Codecs\CUETools.Codecs.csproj" />
+    <ProjectReference Include="..\..\CUETools.Compression.Rar\CUETools.Compression.Rar.csproj" />
     <ProjectReference Include="..\..\CUETools.Compression\CUETools.Compression.csproj" />
     <ProjectReference Include="..\..\CUETools.DSP.Resampler\CUETools.DSP.Resampler.csproj" />
     <ProjectReference Include="..\..\CUETools.Ripper\CUETools.Ripper.csproj" />
@@ -49,6 +50,9 @@
     <None Include="..\..\ThirdParty\x64\hdcd.dll" Condition="Exists('..\..\ThirdParty\x64\hdcd.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\hdcd.dll" />
     <None Include="..\..\ThirdParty\x64\libmp3lame.dll" Condition="Exists('..\..\ThirdParty\x64\libmp3lame.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\libmp3lame.dll" />
     <None Include="..\..\ThirdParty\x64\wavpackdll.dll" Condition="Exists('..\..\ThirdParty\x64\wavpackdll.dll')" CopyToOutputDirectory="PreserveNewest" Link="x64\wavpackdll.dll" />
+    <!-- The RAR wrapper uses a fixed unrar.dll P/Invoke name. Keep the approved signed x64
+         library beside the x64 testhost so this exercises the same production stream path. -->
+    <None Include="..\..\ThirdParty\x64\Unrar.dll" CopyToOutputDirectory="PreserveNewest" Link="unrar.dll" />
   </ItemGroup>
 
 </Project>

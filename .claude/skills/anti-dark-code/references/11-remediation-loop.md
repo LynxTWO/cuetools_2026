@@ -133,27 +133,59 @@ Treat words such as `verified`, `bit-exact`, `atomic`, `repaired`, `complete`, a
 5. positive, mismatch, truncation, finalization-failure, cancellation, and unavailable-capability results when applicable
 6. the exact runtime, toolchain, target tuple, and observed counts
 7. every UI, tooltip, log, or document that repeats the claim
+8. every later copy, move, metadata rewrite, upload, or publication boundary that
+   carries the claim; a Boolean detached from its evidence is not a transferable
+   receipt
 
 For lossless audio or similar transforms, a whole-output oracle normally reopens or decodes the finalized output and compares format, expected length or sample count, and all payload data (directly or by a collision-resistant digest over the exact bytes). A successful write or per-frame comparison does not cover an ignored final flush. When the required runtime or codec is unavailable, record `capability unavailable`; do not report the real path as passing.
 
 Do not let one implementation lend its guarantee to another format that lacks the same oracle.
+When a verified artifact is transformed or re-homed, carry an immutable proof that
+binds the exact constrained output set, content identity, and relevant semantic
+oracle. Revalidate that proof at the new boundary or explicitly clear/downgrade the
+claim. Prevent time-of-check/time-of-use gaps by holding an appropriate read lease
+while hashing, copying, or reopening the bytes that the proof names.
 
 ### Transaction and atomic-publication checklist
 
 Use this checklist for repair, import, output publication, multi-file encoding, migration artifacts, or any operation advertised as atomic:
 
 - Resolve canonical source, staging, quarantine, and final paths; enforce containment and reject reparse or traversal surprises where the threat model requires it.
-- Reserve the destination against concurrent writers.
+- Reserve the destination against concurrent writers. State the coordination domain
+  (thread, process, terminal session, host, or shared filesystem); a session-local
+  mutex does not serialize another session or machine that can reach the same store.
 - Create a unique same-volume sibling stage with an unpredictable ownership token. Delete, move, or quarantine it only after proving ownership; a path name alone is not ownership.
 - Write only to the stage. Keep the source and final destination unchanged until all producers finalize successfully.
 - Check every finalize, flush, close, and child-process result. Require the exact expected output set, nonempty required files, and no silent missing tail outputs.
 - Reopen the staged result through an independent reader or validator. For repairs, prove the repair engine actually applied the intended correction and validate the repaired copy, not the source or an in-memory promise.
+- Test the platform's real lease and rename behavior before designing a proof handoff.
+  On Windows, a child file opened with delete sharing can still prevent a parent
+  directory rename. Do not infer directory-move compatibility from a file-share
+  flag or another operating system's behavior.
+- If proof leases cannot remain open across the atomic move, retain destination
+  reservation and transaction ownership, move into a pending-publication state,
+  reopen and revalidate the exact result at its destination, then expose success.
+  On post-move validation failure, clear the assurance claim and quarantine the
+  owned result instead of publishing it or deleting the only evidence.
+- Bound both stored bytes and decoded/expanded bytes before parsing persisted or
+  compressed input. Validate the complete object graph, not only syntax and a non-null
+  root, before a read-modify-write path can republish it.
 - Write a completion marker only after validation, then publish with one same-volume atomic rename into an absent final destination.
+- Never replace a pre-existing destination merely because its path matches an
+  expected release or output name. Require a validated ownership/completion receipt
+  that binds the exact tree; otherwise refuse and preserve the foreign directory.
+- Before moving an existing owned destination aside, write a recovery journal. Bind
+  stage, backup, cleanup, and journal actions to one unpredictable transaction token;
+  validate the published destination before deleting the backup. If rollback cannot
+  be proven, retain the backup and journal with a deterministic recovery path.
 - Name the exact commit point. Once it succeeds, cleanup, marker removal, reservation
   release, advisory callbacks, or diagnostics must not reclassify the operation as
   failed and invite a destructive or duplicate retry. Make post-commit cleanup
   best-effort or report it through a separate non-transactional channel.
 - On failure or cancellation, expose no partial final result. Preserve the original source and any independently verified evidence; quarantine or remove only owned incomplete staging.
+- During backup recovery, never rotate a known-bad primary over the last validated
+  backup. Promote the validated copy, quarantine corrupt evidence under a separate
+  role, and fault-test the next restart plus a second corruption.
 - Define stale-stage recovery without allowing a replaced or attacker-controlled directory to be deleted.
 - Fault-test mid-write failure, finalization failure, verification mismatch, cancellation, concurrent publication, missing or extra outputs, stale recovery, stage replacement before cleanup, and cleanup failure immediately after the commit point.
 
@@ -176,6 +208,132 @@ Use this for external tools, isolated parser/fuzz children, helpers, and service
   be silently converted into a passing timeout assertion.
 - Fault-test a normal exit, timeout plus successful kill, kill failure, and a child
   that remains alive after the kill deadline where the platform permits injection.
+
+### Toolchain and installer coherence checklist
+
+Use this when a build is blocked on an IDE, SDK, compiler, workload, extension, or
+package-manager installation:
+
+- Distinguish selected components, installer inventory, files on disk, and a working
+  target build. None proves the next layer by itself.
+- Verify a claimed restart from the operating system's boot timestamp and pending-
+  reboot state. A returned user session does not prove that locked installer files
+  were replaced.
+- Check that resolvers, tasks, and their dependent assemblies form one compatible
+  version set. Presence of every file can still leave a split, unloadable toolchain.
+- Record the exact host/toolset tuple when one IDE or build host drives another
+  installation's compiler, targets, or SDK. A successful hybrid build exercises that
+  tuple; it does not clear the unhealthy installation.
+- Run one direct build of the previously blocked target. Classify a remaining failure
+  as source defect, toolchain blocker, native dependency blocker, or unexercised path
+  instead of treating installer success as a passing build.
+- For release collection, distinguish a fresh exact staging tree from fresh compiled
+  inputs. Require a build receipt that binds the source commit or dirty-worktree
+  fingerprint, configuration, platform/toolchain tuple, and hashes of compiled
+  inputs, or make one command clean, build, receipt, collect, and validate without
+  accepting pre-existing binaries.
+- Treat a build receipt as generated evidence, not caller-supplied assertions. It
+  must record the exact commands that actually ran, their exit results and logs, the
+  resolved executable identities, the complete planned source/input set, and every
+  consumed native or generated binary, including ignored files outside normal source
+  globs. Reject receipts whose tool path, command sequence, source set, input digest,
+  or artifact digest cannot be reconciled with the release plan.
+- Keep clean, dependency preparation, build, receipt creation, collection, and
+  validation under one orchestrator and one release lease. A collector may borrow
+  that already-held lease, but it must not create a gap in which another process can
+  replace inputs between receipt creation and copying.
+- Scope the release lease to every shared mutable output, not only the final artifact
+  name. Two versions, plans, helper scripts, or native builders that write the same
+  leaves must contend on one stable lock. Helper entrypoints must not expose a
+  supported path that creates a receipt or publishes under a shorter replacement
+  lease.
+- Recover or refuse a retained build intent before deleting any prior output. Validate
+  its exact schema, plan identity, and ownership first; preserve the intent and logs
+  as abandoned-build evidence. A corrupt or foreign intent must leave every output
+  leaf untouched.
+- Do not use a tracked file as the sentinel for an expanded archive when that file is
+  present in the repository's partial overlay. Pin the archive digest, validate every
+  destination, repair only missing archive-owned files, and reject unexpected drift.
+  Prove the clean-checkout shape in a fixture where tracked overlays exist but
+  archive-only build inputs do not.
+- Git status is not a source receipt for expanded or generated inputs hidden by
+  ignore rules or local excludes. Bind the exact consumed tree independently, including
+  locally patched archive targets; proving that patch hunks reverse-apply does not
+  detect unrelated edits elsewhere in the same file.
+- Evaluate warning or policy baselines from the logs of the build whose bytes are
+  actually collected. A successful preflight rebuild does not gate a later rebuild.
+  Bind the baseline digest, exact log digests, normalized findings, and pass result to
+  the same receipt before publication.
+- Bind collected bytes directly to the receipt with hashes of the complete receipt
+  and the exact source artifacts, then copy from handles that deny mutation during
+  the read. A matching build id or tree label is not artifact identity.
+- Before repair or reinstall, inspect installer logs for locked processes, deferred
+  replacement codes, and the first failing package. Prefer a real restart and bounded
+  repair over blind component churn.
+
+### Duplication and hot-path refactoring checklist
+
+Use this before consolidating repeated code, especially in streaming, device, parser,
+publication, repair, or destructive paths:
+
+- Classify the repetition as shared behavior, pure computation, boilerplate, or a
+  multi-step process. Choose a language-native helper, generic, base type, generated
+  code, or whole-sequence extraction only after the category is clear.
+- Prove semantic equivalence before extracting. An extra guard, bound, verification,
+  cleanup, or error path is a possible invariant, not cosmetic drift.
+- For each hot loop, record the existing allocation, blocking, I/O, dispatch, and call
+  shape. Do not introduce allocation, formatting, boxing, captured closures,
+  iteration helpers, locks, waits, synchronous I/O, or extra dynamic dispatch without
+  a measured budget that permits it.
+- Keep service seams testable, but prefer direct or statically resolvable calls where
+  per-item dispatch is material. Apply inlining hints only to measured small hot
+  helpers; a hint is not performance evidence.
+- When duplicated code writes, moves, repairs, publishes, or deletes artifacts,
+  extract the complete ordered transaction rather than isolated lines. Centralize its
+  guards, commit point, validation, rollback, and cleanup semantics together.
+- When a rendered collection can filter, skip, sort, or fail individual rows, never
+  use its ordinal as persisted-model identity. Carry a stable id or model reference
+  through selection, mutation, playback, and deletion paths.
+- Do not imitate a mechanism from another language when the active stack has no honest
+  equivalent. Name the mismatch and use the simplest native construct that preserves
+  the contract.
+- Verify behavior and failure parity first, then measure allocations and throughput on
+  the touched loop. List look-alike blocks deliberately left separate and why.
+- For asynchronous telemetry, visualization, or progress consumers, do not replace
+  per-event arrays with one reused buffer unless ownership proves consumption is
+  complete. Prefer a bounded preallocated SPSC ring or mailbox; a slow UI may drop
+  presentation samples, but it must not block, allocate on, or alter the producer's
+  correctness path. Test stalled-consumer bounds, slot lifetime, ordering, scaling,
+  producer-thread allocation, and queue-full behavior.
+
+### Compatibility, defaults, and user-facing truth checklist
+
+Use this when a remediation changes defaults, serialized settings, public plugin
+surfaces, network connection code, or UI claims about side effects:
+
+- Before changing a `DefaultValue`, default-on flag, or constructor default, inspect
+  every serializer and migration path. Historical values omitted because they matched
+  the old default are indistinguishable from "unset"; a new default can silently
+  reverse an existing user's choice. Preserve the old default or provide an explicit
+  migration, opt-out, and rollout/benchmark evidence.
+- Treat public member type/signature changes in plugins and legacy assemblies as a
+  binary-compatibility event even when every in-repo consumer rebuilds. Keep a safe
+  compatibility shim or deliberately version and document the break.
+- Treat approved in-process plugins as code-execution grants, not sandboxes. A staged
+  registrar can make its own collection publication all-or-none, but it cannot claim
+  rollback of arbitrary constructor, module-initializer, thread, native-load, or
+  mutation side effects without real isolation.
+- A network `Connect` or HTTP success status does not prove a streaming integration.
+  Exercise the first real payload write, sustained body transfer, final flush/close,
+  authentication rejection, and any ancillary metadata request. Observe the server
+  side when the protocol is full-duplex or acknowledgement timing is ambiguous.
+- Propagate persistence and publication outcomes to the UI separately from the main
+  operation's result. Clear the prior job's status when a new job starts, and never
+  display "saved", "recorded", "calibrated", or "published" after that side effect
+  failed or was not attempted.
+- When a formerly swallowed failure becomes an exception or explicit error, inspect
+  every reachable consumer. Ancillary failures must be contained at the boundary
+  where product policy says the primary operation should continue.
 
 Edit rules:
 - keep changes small and single-purpose

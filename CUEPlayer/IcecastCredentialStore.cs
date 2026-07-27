@@ -90,6 +90,8 @@ namespace CUEPlayer
             var originalPasswords = new Dictionary<IcecastSettingsData, string>();
             foreach (IcecastSettingsData item in settings)
                 originalPasswords[item] = item.Password ?? "";
+            string originalProtectedValue =
+                Properties.Settings.Default.IcecastCredentialsProtected;
 
             string protectedValue = ProtectPayload(settings);
             try
@@ -104,6 +106,14 @@ namespace CUEPlayer
                     Properties.Settings.Default.AppSettings;
                 Properties.Settings.Default.IcecastCredentialsProtected = protectedValue;
                 Properties.Settings.Default.Save();
+            }
+            catch
+            {
+                // Keep the in-memory settings graph internally consistent when the provider
+                // rejects the write. The caller separately restores the edited server fields.
+                Properties.Settings.Default.IcecastCredentialsProtected =
+                    originalProtectedValue;
+                throw;
             }
             finally
             {

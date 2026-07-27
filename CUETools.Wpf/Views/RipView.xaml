@@ -248,12 +248,16 @@
             <Ellipse.Effect><DropShadowEffect Color="#5CCB8B" BlurRadius="10" ShadowDepth="0" Opacity="0.9"/></Ellipse.Effect>
           </Ellipse>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+            <Button Content="Repair from CTDB" Command="{Binding RepairLastRipCommand}" Style="{StaticResource Accent}" Padding="12,6" Margin="0,0,8,0"
+                    Visibility="{Binding CanRepairLastRip, Converter={StaticResource BoolVis}}"
+                    ToolTip="Create a separately verified repaired sibling. The completed rip remains unchanged."/>
             <Button Content="Open folder" Command="{Binding OpenFolderCommand}" Style="{StaticResource Accent}" Padding="12,6"/>
             <Button Content="Dismiss" Command="{Binding DismissDoneCommand}" Padding="10,6" Margin="8,0,0,0"/>
           </StackPanel>
           <StackPanel>
             <TextBlock Text="Rip complete" Foreground="{DynamicResource Ink}" FontFamily="{StaticResource Serif}" FontSize="16" FontWeight="SemiBold"/>
             <TextBlock Text="{Binding RipSummary}" Foreground="{DynamicResource InkDim}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding RepairLastRipText}" Foreground="{StaticResource Amber}" FontSize="11.5" Margin="0,4,0,0" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding LastOutputDir}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
           </StackPanel>
         </DockPanel>

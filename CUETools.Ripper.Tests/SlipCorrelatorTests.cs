@@ -18,9 +18,12 @@ namespace CUETools.Ripper.Tests
         public void ZeroOffsetForIdentical()
         {
             var a = Ramp(2000, 0);
-            var (off, str) = SlipCorrelator.FindOffset(a, (short[])a.Clone(), 64);
-            Assert.AreEqual(0, off);
-            Assert.IsTrue(str >= SlipCorrelator.MinStrength, $"identical should be strong, was {str}");
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(a, (short[])a.Clone(), 64);
+            Assert.AreEqual(0, result.Offset);
+            Assert.IsTrue(
+                result.Strength >= SlipCorrelator.MinStrength,
+                $"identical should be strong, was {result.Strength}");
         }
 
         [TestMethod]
@@ -31,9 +34,12 @@ namespace CUETools.Ripper.Tests
             // so the best shift that aligns candidate onto reference is +5.
             var candidate = new short[2000];
             for (int i = 5; i < 2000; i++) candidate[i] = reference[i - 5];
-            var (off, str) = SlipCorrelator.FindOffset(reference, candidate, 64);
-            Assert.AreEqual(5, off);
-            Assert.IsTrue(str >= SlipCorrelator.MinStrength, $"a clean shift should be strong, was {str}");
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 64);
+            Assert.AreEqual(5, result.Offset);
+            Assert.IsTrue(
+                result.Strength >= SlipCorrelator.MinStrength,
+                $"a clean shift should be strong, was {result.Strength}");
         }
 
         [TestMethod]
@@ -43,8 +49,11 @@ namespace CUETools.Ripper.Tests
             var rnd = new System.Random(1);
             var garbage = new short[2000];
             for (int i = 0; i < garbage.Length; i++) garbage[i] = (short)rnd.Next(-2000, 2000);
-            var (_, str) = SlipCorrelator.FindOffset(reference, garbage, 64);
-            Assert.IsTrue(str < SlipCorrelator.MinStrength, $"garbage should be weak, was {str}");
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, garbage, 64);
+            Assert.IsTrue(
+                result.Strength < SlipCorrelator.MinStrength,
+                $"garbage should be weak, was {result.Strength}");
         }
     }
 }

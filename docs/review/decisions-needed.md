@@ -22,24 +22,39 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Decision:** file an issue / ask upstream to enable TLS on db.cuetools.net; revisit the client once the server answers TLS.
 - **Done:** filed tracking issue LynxTWO/cuetools_2026#1 (had to enable Issues on the fork first; the third-party gchudov repo was NOT posted to). Includes upstream-ready ask text. Client `CUEToolsDB.cs` left unchanged until the server answers TLS.
 
-### D3. unrar.dll upgrade - APPROVED
+### D3. unrar.dll upgrade - DONE 2026-07-26
 
 - **Decision:** upgrade the bundled unrar DLL.
-- **Evidence:** `unrar.dll` is 6.11 (2022-05-28), predating the 6.12 fix for CVE-2022-30333 (path traversal). `CUETools.Compression.Rar\Unrar.cs` wraps it.
-- **Urgency note (adversarial pass 07, 2026-07-02):** the RAR *input* path (`RarStream` -> `Unrar.Test()` + `DataAvailable` callback) streams into memory and never extracts to a filesystem path, so the CVE-2022-30333 traversal vector is NOT reachable via normal use. Upgrade is hygiene (the DLL still decompresses untrusted data in memory), not an urgent fix.
-- **Status 2026-07-02: SCOPED, DEFERRED (hygiene, needs functional verification).** Current vendored DLLs: `ThirdParty\Win32\unrar.dll` and `ThirdParty\x64\Unrar.dll`, both 6.11.0. The old direct URL `https://www.rarlab.com/rar/UnRARDLL.exe` now 404s (rarlab versions the file). Not swapped because: (a) it's hygiene-only per pass 07, and (b) a blind binary swap can't be functionally verified headless (no RAR encoder here to build a test archive; only a round-trip through `RarStream` would prove the classic P/Invoke API still matches).
-- **Plan when picked up:** find the current rarlab UnRAR DLL download (their SDK page), replace both DLLs keeping filenames, confirm the classic API exports (`RAROpenArchiveEx`, `RARReadHeaderEx`, `RARProcessFile`, `RARSetCallback`, `RARSetPassword`) are unchanged, then verify with a real RAR: create a small `.rar` (WinRAR/`rar.exe` or another encoder) and round-trip it through `RarStream`/`RarCompressionProvider` (mirror the ziptest harness in scratchpad). The classic UnRAR API has been ABI-stable for ~20 years, so the swap is expected clean, but ship it only after that round-trip passes.
+- **Historical evidence:** the prior 6.11 DLLs predated the 6.12 fix for
+  CVE-2022-30333. The reachable `RarStream` path uses `Unrar.Test()` plus an
+  in-memory callback and never extracts attacker-selected paths, so that traversal
+  vector was not reachable through normal CUETools use. The prior bytes remain traced
+  to an import-era snapshot of RARLAB's signed `UnRARDLL.exe`.
+- **Completed evidence:** both packaged architectures now use official RARLAB UnRAR
+  7.23.0 from the versioned, 825,320-byte `unrardll-723.exe` SFX. The SFX and both
+  DLLs have valid win.rar GmbH Authenticode signatures; the checked-in x86 DLL is
+  339,664 bytes and the x64 DLL is 412,368 bytes, with exact SHA-256 values pinned in
+  [`native-dependencies.json`](../../eng/release/native-dependencies.json). Both
+  expose the wrapper's six required exports.
+- **Runtime result:** the production `RarCompressionProvider`/`RarStream` path read
+  RARLAB's real `test.rar` under x64 PowerShell and x86 Windows PowerShell, listed all
+  14 entries, matched the exact full-read payload, and matched the independent
+  backward-seek SHA-256 result. The native inventory, notices, and 7.23 license were
+  updated. A committed 280-byte RAR5 fixture and its 2,083-byte source oracle add this
+  production path to TestCodecs. Its first run exposed a real backward-seek race:
+  `Read` could treat the previous pass's stale EOF as final before the worker
+  acknowledged rewind. The wait predicate now remains blocked while rewind is
+  pending; the focused test passes and 20/20 repeated no-build full-read/seek runs
+  passed.
 
 ### D4. SharpZipLib upgrade - DONE 2026-07-02
 
 - **Done:** `CUETools.Compression.Zip` now uses the SharpZipLib 1.4.2 NuGet package for net47 + netstandard2.0; net20 keeps the vendored 0.85.5 DLL (modern SharpZipLib dropped net20). Adapted the password path for the modern API: `GetInputStream` returns a plain `Stream` (not `ZipInputStream`) and AES needs the password on the `ZipFile` *before* opening the entry, so `ZipCompressionProvider.Decompress` now requests and sets the password up front instead of lazily on first read. Both `collect_files.bat` and `collect_files_debug.bat` fixed to ship the modern DLL from the build output, not the old vendored copy.
 - **Verified:** net47 + netstandard2.0 build; a net8 round-trip harness against the built provider passes all 6 checks (contents list, full read byte-exact, Length, forward seek, backward-seek reopen, and AES-encrypted read via the PasswordRequired event).
 
-### D6. MusicBrainz client replacement - SCOPED; STOPPED FOR YOUR DECISION 2026-07-02
+### D6. MusicBrainz client replacement - DONE 2026-07-02
 
 - **Premise changed - there is no live MusicBrainz client to replace.** Full analysis in `docs/review/musicbrainz-replacement-scope.md`. In short: the `MusicBrainz/` musicbrainz-sharp library is dead code (not built, referenced by no project), and CUERipper's direct MusicBrainz query is commented out (`frmCUERipper.cs:893-918`). CUETools gets MusicBrainz metadata via **CTDB's server-side proxy** (`cueSheet.CTDB.Metadata`) plus a Freedb/gnudb fallback. So a "replacement" would reintroduce a direct-to-MusicBrainz path the project deliberately removed - a product decision, not a mechanical swap.
-- **I stopped rather than implement**, per your conditional approval: I'm confident I *could* build a modern MB v2 JSON provider, but whether it *should* exist (vs. relying on CTDB's proxy) is your call.
-- **Your decision (see the scope doc):** (A) rely on CTDB's proxy and delete the dead library (recommended); (B) add a NEW direct MusicBrainz v2 provider behind the metadata seam as a fallback/richer source (I'll implement + verify on request); (C) leave as-is. Either A or B retires the dead `MusicBrainz/` project (folds into D5).
 - **DONE 2026-07-02 - you chose A.** Deleted the dead `MusicBrainz/` project (musicbrainz-sharp mirror), `ThirdParty/MusicBrainz.dll`, the `CUERipper.csproj` datasource reference + file, and the sln solution-items entry. Removed the commented-out direct-MB block in `frmCUERipper.cs` (replaced with a note pointing at the CTDB-proxy path). MB metadata continues via CTDB + Freedb/gnudb. The "look up on musicbrainz.org" website buttons (frmChoice, frmCUERipper) are unrelated to the library and were kept (and flipped http->https). TestCodecs 34/34 green; GUI projects verified by CI/devenv on push.
 
 ### D7. CUEControls resgen under dotnet build - PARTIALLY DONE; old-style GUIs deferred to R12
@@ -72,11 +87,15 @@ than starting a large program blind.
 
 - **What is already done** (see D1, D2, D4, D7): HTTPS lookups, SharpZipLib 1.4.2,
   the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`.
-- **The blocking sub-decision:** the remaining big pieces - SDK-style conversion of the
+- **The remaining sub-decision:** the remaining big pieces - SDK-style conversion of the
   old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`),
   then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm
-  resource/icon loading and behavior. This machine has Build Tools only (no full VS) and
-  the review is headless, so I cannot verify a GUI change here. Options:
+  resource/icon loading and behavior. The current classic baseline is locally green:
+  AnyCPU completed 53/0, x64 and Win32 each completed 2/0 with 59 skipped
+  configuration entries, TTA compiled and linked for both, and the targeted Installer
+  Projects build completed 8/0 and produced a 929,792-byte MSI. That removes the
+  former local toolchain blocker; it does not answer who will perform interactive GUI
+  behavior checks for each future conversion. Options:
   - (A) You (or CI with a GUI runner) verify each converted GUI; I do the conversions in
     reviewable branches one project at a time.
   - (B) Defer all GUI-touching modernization until the codec/rollout work settles, and I
@@ -86,15 +105,15 @@ than starting a large program blind.
 
 ### R13 decision - codec refresh needs your codec wishlist + a native build/verify path
 
-- **Current pins and upstream check (2026-07-26):** libFLAC 1.5.0 and
-  taglib-sharp 2.3.0.0 match current upstream releases. WavPack 5.8.1 trails
-  5.9.0, MAC SDK 10.86 trails 13.20, and vendored LAME 3.100 trails the newly
+- **Current pins and upstream check (2026-07-26):** libFLAC 1.5.0,
+  Monkey's Audio 13.20, and taglib-sharp 2.3.0.0 match current upstream releases.
+  WavPack 5.8.1 trails 5.9.0, and vendored LAME 3.100 trails the newly
   released official 4.0. The standalone, currently unshipped FFmpeg 7.1.1 path
   trails 8.1.2.
 - **Why the remaining bumps are not part of this commit:** WavPack and
-  taglib-sharp contain existing local work that must be preserved; MAC has
-  crossed native interface generations; LAME is a new major release without a
-  packaged MP3 decode/quality gate; and FFmpeg is not part of either primary
+  taglib-sharp contain existing local work that must be preserved; LAME has
+  a new major release without a packaged MP3 decode/quality gate; and FFmpeg is
+  not part of either primary
   artifact. The current native build/probe gate is available, but it does not
   replace per-codec compatibility and corpus evidence.
 - **Product input still needed for the format-addition half of R13:**
@@ -103,8 +122,9 @@ than starting a large program blind.
 - **Next safe implementation sequence:** preserve/reconcile the dirty submodule
   work, upgrade one native integration at a time, rebuild both architectures,
   run its independent decode/corpus gate, and update provenance before moving to
-  the next codec. UnRAR still needs a real `.rar` round-trip.
+  the next codec. The UnRAR upgrade and real two-architecture `.rar` round trip are
+  complete.
 
 ## Resolved / actioned
 
-- **D1 AccurateRip HTTPS - DONE 2026-07-02.** Flipped both `http://www.accuraterip.com` literals to `https://` (`AccurateRip.cs:833` dBAR lookup, `:1247` DriveOffsets.bin). No http fallback: a failed AR lookup degrades to "not verified" (corroborative, no data loss), so retrying over cleartext buys nothing. Verified: AccurateRip builds; the HTTPS dBAR path returns 404 for a fake id (proves TLS+routing) and DriveOffsets.bin returned 200 earlier; TestParity 18/18 green. Commit pending in this batch.
+- **D1 AccurateRip HTTPS - DONE 2026-07-02.** Flipped both `http://www.accuraterip.com` literals to `https://` (`AccurateRip.cs:833` dBAR lookup, `:1247` DriveOffsets.bin). No http fallback: a failed AR lookup degrades to "not verified" (corroborative, no data loss), so retrying over cleartext buys nothing. Verified: AccurateRip builds; the HTTPS dBAR path returns 404 for a fake id (proves TLS+routing) and DriveOffsets.bin returned 200 earlier; TestParity 18/18 green. Committed as `27b565f`.

@@ -11,6 +11,11 @@ Debug/
 *.vcxproj.filters
 *.vcxproj.user
 *.csproj.user
+*_wpftmp.csproj
+*_wpftmp.csproj.*
+UpgradeLog*.htm
+UpgradeLog*.xml
+UpgradeReport*.htm
 *.sdf
 *.suo
 *.opensdf

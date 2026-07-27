@@ -3,8 +3,32 @@
   "scope": "Native and mixed-mode DLLs produced or copied by the Windows release workflows.",
   "pinnedFiles": [
     {
-      "path": "ThirdParty/MAC_SDK/MAC_1086_SDK.zip",
-      "sha256": "6dc0ffa5c6014229551ee89ad927d00b4dece158f81aabb9d8df6fd29dc29dce"
+      "path": "ThirdParty/MAC_SDK/MAC_1320_SDK.zip",
+      "sha256": "9cdf4f5afff700b859d417d3996b70ed91d59c3bf7b2fb275f5faeeaf9e4e31e"
+    },
+    {
+      "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp",
+      "sha256": "df391d2c11d67814666d5f95de78e41010dd1e3b06752a131d29dcc34f81aec3"
+    },
+    {
+      "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def",
+      "sha256": "004f56ff0f88e9d95a50dab5377c0438d8b3b949012fc897f33adf316cdda704"
+    },
+    {
+      "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.h",
+      "sha256": "df978f0dec0f147fb882551af4cf8c00438df9556e32b72ab4dc8ea8fe52a2a5"
+    },
+    {
+      "path": "ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj",
+      "sha256": "af1726e5c0967b0ddb32dc9ef40685d3e2df929e4811abe38099f2cd8133b5a9"
+    },
+    {
+      "path": "ThirdParty/submodule_flac_CUETools.patch",
+      "sha256": "81a305c65c14c8c1c3539f588b5c154c76b70cfc8a2bde30fbd24e3a597fb883"
+    },
+    {
+      "path": "ThirdParty/submodule_WavPack_CUETools.patch",
+      "sha256": "fb3e0652a27ff16b5285ab9e7c850895cef27f5ec4ee87219a9c5498ff66f103"
     },
     {
       "path": "ThirdParty/Win32/hdcd.dll",
@@ -24,11 +48,11 @@
     },
     {
       "path": "ThirdParty/Win32/unrar.dll",
-      "sha256": "a647aec65edb9736ad9bbc60a99779d18438b783b3a7045533de97ba4134f4fe"
+      "sha256": "2a6bf612d52020e1479e9308a5ecd5e382f9f7b799e169a174a834c6e9bf4188"
     },
     {
       "path": "ThirdParty/x64/Unrar.dll",
-      "sha256": "d98d274733eabc6a7e425c6549c6b28fc61e850a0ac5f3c103b2d3efdb99b019"
+      "sha256": "894b7d2db8d6363eb12f30c7b89f48eab9e71963b8b438675bdd64c12dd59bcc"
     }
   ],
   "pinnedSubmodules": [
@@ -51,6 +75,8 @@
       "version": "1.5.0",
       "sourceStatus": "source-built",
       "upstream": "https://github.com/xiph/flac",
+      "license": "BSD-3-Clause",
+      "licenseSource": "ThirdParty/flac/COPYING.Xiph",
       "sourceInputs": [
         "ThirdParty/flac (pinned git submodule)",
         "ThirdParty/submodule_flac_CUETools.patch"
@@ -70,6 +96,8 @@
       "version": "5.8.1",
       "sourceStatus": "source-built",
       "upstream": "https://github.com/dbry/WavPack",
+      "license": "BSD-3-Clause",
+      "licenseSource": "ThirdParty/WavPack/license.txt",
       "sourceInputs": [
         "ThirdParty/WavPack (pinned git submodule)",
         "ThirdParty/submodule_WavPack_CUETools.patch"
@@ -86,18 +114,30 @@
         "plugins/win32/MACLibDll.dll",
         "plugins/x64/MACLibDll.dll"
       ],
-      "version": "10.86",
+      "version": "13.20",
       "sourceStatus": "source-built",
       "upstream": "https://www.monkeysaudio.com/developers.html",
+      "sourceArchive": {
+        "url": "https://monkeysaudio.com/files/MAC_1320_SDK.zip",
+        "sha256": "9cdf4f5afff700b859d417d3996b70ed91d59c3bf7b2fb275f5faeeaf9e4e31e",
+        "bytes": 1787657
+      },
+      "sourceArchiveVerification": "Re-downloaded from monkeysaudio.com on 2026-07-26. The official archive is byte-for-byte identical to the user-provided archive used for this upgrade.",
+      "originalWrapperImportCommit": "7da1cc204809cb24613fcef6c42f3c69340bee72",
+      "license": "BSD-3-Clause",
+      "licenseSource": "License.txt inside ThirdParty/MAC_SDK/MAC_1320_SDK.zip",
       "sourceInputs": [
-        "ThirdParty/MAC_SDK/MAC_1086_SDK.zip (SHA-256 pinned above)",
-        "ThirdParty/ThirdParty_MAC_SDK_CUETools.patch"
+        "ThirdParty/MAC_SDK/MAC_1320_SDK.zip (SHA-256 pinned above)",
+        "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp (SHA-256 pinned above)",
+        "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def (SHA-256 pinned above)",
+        "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.h (SHA-256 pinned above)",
+        "ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj (SHA-256 pinned above)"
       ],
       "buildRecipe": [
-        "eng/ci/Build-NativeDependencies.ps1 safely expands the SDK when absent, applies the patch, and rebuilds Release|x64",
+        "eng/ci/Build-NativeDependencies.ps1 safely expands and byte-validates the SDK, validates the CUETools stream wrapper, and rebuilds both release architectures",
         "CUETools.sln Release|Win32 builds the classic Win32 output"
       ],
-      "verification": "Release scripts require the output, check the x64 PE machine, enforce a warning baseline, hash the packaged bytes, and exercise MACLib from the published WPF layout."
+      "verification": "Preparation validates all 423 official archive files, four hash-pinned wrapper overrides, and the expanded source closure. Release scripts require the outputs, check PE machines, enforce a warning baseline, and hash the packaged bytes. Win32 and x64 builds passed real finalized 16-bit and 24-bit encode/decode PCM round trips."
     },
     {
       "id": "tta-cpp-cli",
@@ -107,7 +147,20 @@
       ],
       "version": "ttalib 1.1",
       "sourceStatus": "source-built-mixed-mode",
-      "upstream": "Vendored source; original upstream locator is not recorded.",
+      "upstream": "https://sourceforge.net/projects/tta/",
+      "sourceArchive": {
+        "url": "https://downloads.sourceforge.net/project/tta/tta/ttalib-mswin/ttalib-1.1-src.zip",
+        "sha256": "f7a2788a97b3fa142fd8ad009de18ce586d8efab9cabc71bceaee91f3fdd067b",
+        "bytes": 35928
+      },
+      "sourceArchiveVerification": "Re-downloaded from the official SourceForge project on 2026-07-26. The 2009 import contains all 20 library and build files from the 21-file archive and omits only samples/example.cpp. After normalizing line endings, 16 files are exact. The four import-time differences are reviewable local changes: a null-safe TTATester cleanup, an upgraded x86/x64 Visual C++ project, and an include/forward-declaration cleanup in TTAReader.cpp and TTAReader.h. Later changes remain attributable in Git history.",
+      "importCommit": "1a251073489775190b45c21ca53a6a28954458e9",
+      "authors": [
+        "Alexander Djourik",
+        "Pavel Zhilin"
+      ],
+      "license": "GPL-2.0-or-later",
+      "licenseSource": "ttalib-1.1/COPYING and copyright/license headers in the vendored source",
       "sourceInputs": [
         "CUETools.Codecs.TTA/CUETools.Codecs.TTA.vcxproj",
         "CUETools.Codecs.TTA/CUETools.Codecs.TTA.cpp",
@@ -118,7 +171,7 @@
         "CUETools.sln Release|x64 builds the x64 C++/CLI wrapper"
       ],
       "verification": "The classic artifact contract requires both architecture outputs and binds both hashes in the runtime manifest.",
-      "limitations": "The vendored ttalib source has no recorded immutable upstream URL or import commit."
+      "limitations": "SourceForge does not expose a checksum captured contemporaneously with the 2009 import. The current versioned archive hash plus file-level comparison establishes the source family and exact local delta, but does not cryptographically prove that SourceForge never republished the archive. Current source also contains later CUETools build, include-case, and warning cleanup recorded in Git."
     },
     {
       "id": "hdcd",
@@ -128,14 +181,22 @@
       ],
       "version": "No file version",
       "sourceStatus": "vendored-binary",
-      "upstream": "Unknown",
+      "upstream": "Christopher Key's HDCD decoder; original download URL unknown",
+      "attributionEvidence": [
+        "Commit bbb87a2d490d9699bbeb5bed2c0eb14cbfe348de: wrapper for Christopher Key's HDCD decoder",
+        "Commit 4bd778c59484c4b3849834c5ed7534b2271934e3: HDCD detection and decoding with library by Christopher Key",
+        "License.txt: redistribution license and copyright notice for hdcd.dll"
+      ],
+      "license": "LicenseRef-Christopher-Key-HDCD",
+      "licenseSource": "License.txt, hdcd.dll section",
+      "buildEvidence": "Both binaries have 2008-11-13 PE timestamps and linker version 8.00 (Visual Studio 2005 toolchain family), no version resource, no Authenticode signature, no PDB path, and the same 19-function hdcd_decoder_* ABI.",
       "sourceInputs": [
         "ThirdParty/Win32/hdcd.dll (SHA-256 pinned above)",
         "ThirdParty/x64/hdcd.dll (SHA-256 pinned above)"
       ],
       "buildRecipe": [],
       "verification": "Packaged bytes are hash-bound; the WPF release probe initializes and closes the x64 decoder.",
-      "limitations": "Original source, upstream revision, compiler, and build recipe are not recorded."
+      "limitations": "The author/library family, redistribution license, import-era evidence, ABI, and compiler family are recorded. Exact source revision, original download URL, compiler build, flags, and build recipe remain unknown."
     },
     {
       "id": "libmp3lame",
@@ -144,15 +205,46 @@
         "plugins/x64/libmp3lame.dll"
       ],
       "version": "3.100",
-      "sourceStatus": "vendored-binary",
+      "sourceStatus": "third-party-vendored-binary",
       "upstream": "https://lame.sourceforge.io/",
+      "upstreamDistributionPolicy": "The LAME project publishes source code only; these DLLs are not official upstream binaries.",
+      "binaryDistributor": "RareWares",
+      "binaryArchives": [
+        {
+          "architecture": "x86",
+          "url": "https://www.rarewares.org/files/mp3/libmp3lame-3.100x86.zip",
+          "sha256": "75690f5c187eb5e79d24cd3d884890f5fd991e29a5375f336ea099124b7cbc09",
+          "bytes": 343382,
+          "dllEntry": "libmp3lame.dll",
+          "dllSha256": "91d3c0cc833265066c51408d940faaf76c5b8fc5bda854540a9cc6c88b1d1f20"
+        },
+        {
+          "architecture": "x64",
+          "url": "https://www.rarewares.org/files/mp3/libmp3lame-3.100x64.zip",
+          "sha256": "99d934cf99c74e8e76d8a2fdbf83b778dfdc3c4476af6f81173fe5a7e278e313",
+          "bytes": 455657,
+          "dllEntry": "libmp3lame.dll",
+          "dllSha256": "71dba147b6c16d8d0f012b8e657d52e12cb8796a659e1151200d0a6c8b04bce3"
+        }
+      ],
+      "binaryArchiveVerification": "Re-downloaded from RareWares on 2026-07-26. Each archive's libmp3lame.dll entry is byte-for-byte identical to the corresponding checked-in DLL.",
+      "importCommit": "711c3dd1c84d06650613be0307f2caf6198b9aca",
+      "importEvidence": "The import commit records both RareWares archive URLs, version 3.100, and the 2017-10-22 build date.",
+      "license": "LGPL-2.0-or-later",
+      "licenseSource": "eng/release/licenses/LAME-3.100-LICENSE.txt and eng/release/licenses/GNU-LGPL-2.0.txt, copied from the official LAME 3.100 source archive with line endings, page-break controls, and insignificant horizontal whitespace normalized",
+      "licenseSourceArchive": {
+        "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+        "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e",
+        "bytes": 1524133
+      },
+      "buildEvidence": "File version 3.100; PE timestamps are 2017-10-22 07:46:33 UTC (x86) and 08:00:39 UTC (x64), linker version 14.00. Embedded PDB paths identify RareWares build trees: E:\\lame-3.100-CVS\\output\\ReleaseNASM\\libmp3lame.pdb (x86) and E:\\lame-3.100-CVS\\output\\Release\\libmp3lame.pdb (x64).",
       "sourceInputs": [
         "ThirdParty/Win32/libmp3lame.dll (SHA-256 pinned above)",
         "ThirdParty/x64/libmp3lame.dll (SHA-256 pinned above)"
       ],
       "buildRecipe": [],
       "verification": "Packaged bytes are hash-bound; the WPF release probe calls the x64 library version export through the registered encoder.",
-      "limitations": "The upstream release is known, but the compiler, flags, source archive hash, and original DLL build recipe are not recorded."
+      "limitations": "Repository history plus current archive re-downloads close the binary distributor, archive URLs and hashes, byte identity, version, architecture, build date, configuration names, and Visual Studio toolchain family. They do not prove the exact upstream source revision/archive used by RareWares or recover compiler flags and the full DLL build recipe."
     },
     {
       "id": "unrar",
@@ -160,16 +252,46 @@
         "plugins/win32/unrar.dll",
         "plugins/x64/Unrar.dll"
       ],
-      "version": "6.11.0",
-      "sourceStatus": "vendored-binary",
+      "version": "7.23.0",
+      "sourceStatus": "upstream-signed-vendored-binary",
       "upstream": "https://www.rarlab.com/rar_add.htm",
+      "binaryDistributor": "RARLAB",
+      "binaryOriginAtImport": "https://www.rarlab.com/rar/UnRARDLL.exe",
+      "binaryOriginStatus": "The import used RARLAB's former mutable UnRARDLL.exe URL. The current update uses RARLAB's versioned 7.23 archive URL; an import-era Wayback snapshot preserves the prior signed 6.11 installer.",
+      "binaryArchives": [
+        {
+          "architecture": "x86+x64 signed SFX",
+          "url": "https://www.rarlab.com/rar/unrardll-723.exe",
+          "sha256": "68b064b34691988158c4126d3cf422f4e74a7d1d618c26bafc93b4e502b88b55",
+          "bytes": 825320,
+          "x86Entry": "UnRAR.dll",
+          "x86Sha256": "2a6bf612d52020e1479e9308a5ecd5e382f9f7b799e169a174a834c6e9bf4188",
+          "x64Entry": "x64/UnRAR64.dll",
+          "x64Sha256": "894b7d2db8d6363eb12f30c7b89f48eab9e71963b8b438675bdd64c12dd59bcc"
+        }
+      ],
+      "priorBinaryEvidence": {
+        "version": "6.11.0",
+        "url": "https://web.archive.org/web/20220504172705id_/https://www.rarlab.com/rar/UnRARDLL.exe",
+        "originalUrl": "https://www.rarlab.com/rar/UnRARDLL.exe",
+        "captureTimestampUtc": "2022-05-04T17:27:05Z",
+        "sha256": "92d9d9553dfd98e1db8af3139ff47f87e3c54d1cea7bba5cb3ca5709f928999b",
+        "bytes": 756200
+      },
+      "binaryArchiveVerification": "Downloaded from RARLAB on 2026-07-26. The SFX and both DLL entries have valid win.rar GmbH Authenticode signatures. The extracted UnRAR.dll and x64/UnRAR64.dll entries are byte-for-byte identical to the checked-in x86 and x64 DLLs.",
+      "importCommit": "47dd6f17c8b5b6c8d01ab7b0809a840b58a9ee28",
+      "importEvidence": "The import commit records version 6.11, the RARLAB UnRARDLL.exe URL, the two original entry names, and their checked-in destinations.",
+      "license": "LicenseRef-UnRAR-DLL-Freeware",
+      "licenseSource": "eng/release/licenses/UnRAR-DLL-7.23-LICENSE.txt, copied from license.txt inside the signed 7.23 SFX with line endings and insignificant trailing whitespace normalized",
+      "authenticode": "Both DLLs have valid signatures from win.rar GmbH. Signing certificate thumbprint: 729AE1F8B489DE176CC099FF49937F85F9E412F7; issuer: DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1.",
+      "buildEvidence": "File version 7.23.0; PE timestamps are 2026-06-27 07:34:49 UTC (x86) and 07:34:52 UTC (x64), linker version 14.44.",
       "sourceInputs": [
         "ThirdParty/Win32/unrar.dll (SHA-256 pinned above)",
         "ThirdParty/x64/Unrar.dll (SHA-256 pinned above)"
       ],
       "buildRecipe": [],
-      "verification": "Classic packaged bytes are hash-bound.",
-      "limitations": "Original source archive, compiler, flags, and build recipe are not recorded; the approved upgrade remains tracked separately as remediation R5."
+      "verification": "Classic packaged bytes are hash-bound. Both architectures expose the wrapper's required RAROpenArchiveEx, RARReadHeaderEx, RARProcessFile, RARSetCallback, RARSetPassword, and RARCloseArchive ABI. The production RarCompressionProvider/RarStream path listed 14 files and independently matched full-read and backward-seek SHA-256 payloads from RARLAB's real test archive under 64-bit PowerShell and 32-bit Windows PowerShell.",
+      "limitations": "Official archive origin, signatures, byte identity, ABI, and the reachable stream round trip are closed. These are upstream binaries, so no local build recipe is claimed. RARLAB's exact source revision, compiler build, and flags for these DLLs are not recorded."
     },
     {
       "id": "ffmpeg-on-demand",

@@ -94,7 +94,8 @@ public sealed class EncoderCatalog
             foreach (var encoder in config.Encoders)
             {
                 if (encoder.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli ||
-                    cli.HasLosslessVerifier)
+                    !cli.Lossless ||
+                    (cli.VerificationRequired && cli.HasLosslessVerifier))
                     continue;
                 if (cli.Extension == "flac" && cli.Name == "flac.exe")
                     ConfigureSelfVerifier(
@@ -149,19 +150,96 @@ public sealed class EncoderCatalog
         settings.VerificationUsesEncoder = true;
         settings.VerificationPath = "";
         settings.VerificationParameters = parameters;
+        settings.VerificationRequired = true;
     }
 
     /// <summary>The single usability rule: in-process encoders always work; a command-line encoder
-    /// must resolve on this machine, and a lossless one must self-decode through that exact resolved
-    /// executable under an explicit verification contract.</summary>
+    /// must resolve on this machine. New lossless commands require a decoder contract whose
+    /// executable also resolves on this machine (either the encoder itself or a separate decoder).
+    /// Pre-contract custom profiles remain usable but are explicitly labeled unverified until the
+    /// user supplies a decoder contract.</summary>
     public bool IsUsable(AudioEncoderSettingsViewModel? enc)
     {
         if (enc == null) return false;
         if (enc.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli) return true;
-        if (cli.VerificationRequired &&
-            (!cli.HasLosslessVerifier || !cli.VerificationUsesEncoder))
+        if (ResolveExe(enc) == null)
             return false;
-        return ResolveExe(enc) != null;
+        if (!cli.VerificationRequired)
+            return true;
+        if (!cli.HasLosslessVerifier)
+            return false;
+        return cli.VerificationUsesEncoder ||
+            ResolveVerificationExe(cli) != null;
+    }
+
+    /// <summary>
+    /// Resolve and freeze a separately configured verification decoder. Unlike imported encoders,
+    /// this is an explicitly user-managed compatibility path: it is never copied into or silently
+    /// loaded from the app-managed encoders directory, whose files require host-owned receipts.
+    /// </summary>
+    internal string? ResolveVerificationExe(
+        CUETools.Codecs.CommandLine.EncoderSettings settings)
+    {
+        try
+        {
+            string configured = settings.VerificationPath ?? "";
+            if (string.IsNullOrWhiteSpace(configured))
+                return null;
+
+            bool hasDirectory =
+                Path.IsPathRooted(configured) ||
+                configured.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+                configured.IndexOf(Path.AltDirectorySeparatorChar) >= 0;
+            if (hasDirectory)
+            {
+                string absolute = Path.GetFullPath(configured);
+                if (!File.Exists(absolute) ||
+                    IsWithinManagedDirectory(absolute))
+                    return null;
+                settings.VerificationPath = absolute;
+                return absolute;
+            }
+
+            if (!IsSimpleExecutableName(configured))
+                return null;
+
+            string beside = Path.GetFullPath(
+                Path.Combine(AppContext.BaseDirectory, configured));
+            if (File.Exists(beside))
+            {
+                settings.VerificationPath = beside;
+                return beside;
+            }
+
+            foreach (string dir in
+                (Environment.GetEnvironmentVariable("PATH") ?? "")
+                    .Split(Path.PathSeparator))
+            {
+                if (string.IsNullOrWhiteSpace(dir))
+                    continue;
+                try
+                {
+                    string candidate = Path.GetFullPath(
+                        Path.Combine(dir.Trim().Trim('"'), configured));
+                    if (!File.Exists(candidate) ||
+                        IsWithinManagedDirectory(candidate))
+                        continue;
+                    settings.VerificationPath = candidate;
+                    return candidate;
+                }
+                catch
+                {
+                    // Ignore malformed PATH entries.
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("encoders",
+                "verification decoder resolution failed: " +
+                ex.GetType().Name);
+        }
+        return null;
     }
 
     /// <summary>The app's lossy-ness rule for a format, one meaning per dropdown entry. The USER'S

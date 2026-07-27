@@ -78,6 +78,10 @@ namespace TTALib
 		data_pos = 0;
 		encoder_init(tta, num_chan, byte_size);
 		fframes--;
+		// A file shorter than one nominal frame starts on its final partial frame. Without this
+		// transition, CompressBlock never reaches data_pos == framelen, so the only frame is not
+		// finalized and decodes to different PCM.
+		if (!fframes && lastlen) framelen = lastlen;
 
 		max_bytes = (num_chan * byte_size * ttahdr.DataLength) >> is_float;
 	}

@@ -297,7 +297,7 @@ public sealed class SettingsSecurityTests
     }
 
     [TestMethod]
-    public void AdvancedSettings_RejectUnknownPropertyAndWrongTypeAsAWhole()
+    public void AdvancedSettings_IgnoreUnknownPropertyButRejectWrongTypeAsAWhole()
     {
         using var profile = new IsolatedProfile();
         SettingsStore store = profile.CreateStore();
@@ -311,9 +311,9 @@ public sealed class SettingsSecurityTests
         var unknownTarget = new CUEConfig();
         unknownTarget.advanced.ProxyPort = 4567;
         store.Load(unknownTarget, new AppSettings());
-        Assert.IsTrue(unknownTarget.AdvancedSettingsRejected);
-        Assert.AreEqual(4567, unknownTarget.advanced.ProxyPort,
-            "an unknown key must reject the entire Advanced object");
+        Assert.IsFalse(unknownTarget.AdvancedSettingsRejected);
+        Assert.AreEqual(8123, unknownTarget.advanced.ProxyPort,
+            "a newer unknown key must not discard known Advanced settings");
 
         string wrongType = valid.Replace("\"ProxyPort\": 8123", "\"ProxyPort\": { \"value\": 8123 }");
         Assert.AreNotEqual(valid, wrongType, "test setup did not locate ProxyPort in the serialized JSON");
@@ -474,12 +474,33 @@ public sealed class SettingsSecurityTests
 
         string player = File.ReadAllText(
             Path.Combine(repoRoot, "CUEPlayer", "Icecast.cs"));
+        int workerStart = player.IndexOf(
+            "private void FlushThread()",
+            StringComparison.Ordinal);
+        int workerEnd = player.IndexOf(
+            "void Mixer_AudioRead",
+            workerStart,
+            StringComparison.Ordinal);
+        Assert.IsTrue(workerStart >= 0 && workerEnd > workerStart);
+        string worker = player.Substring(
+            workerStart,
+            workerEnd - workerStart);
+        int clearWriter = worker.IndexOf(
+            "_icecastWriter = null;",
+            StringComparison.Ordinal);
+        int deleteWriter = worker.IndexOf(
+            "writer.Delete();",
+            StringComparison.Ordinal);
+        Assert.IsTrue(
+            clearWriter >= 0 && deleteWriter > clearWriter,
+            "the stopped state must be published before finalizing the writer");
         const string workerCleanupPattern =
-            @"try\s*\{\s*_icecastWriter\.Delete\(\);\s*\}\s*" +
+            @"try\s*\{\s*if\s*\(abort\)\s*writer\.Delete\(\);\s*" +
+            @"else\s*writer\.Close\(\);\s*\}\s*" +
             @"catch\s*\(Exception\s+cleanupException\)\s*\{\s*" +
             @"Trace\.WriteLine\(\s*""Icecast streaming cleanup failed: ""\s*\+\s*" +
             @"cleanupException\.GetType\(\)\.Name\);\s*\}\s*" +
-            @"finally\s*\{\s*_icecastWriter\s*=\s*null;\s*\}";
+            @"finally\s*\{\s*abortClose\s*=\s*false;\s*\}";
         const string connectionCleanupPattern =
             @"IcecastWriter\s+icecastWriter\s*=\s*null;\s*try\s*\{\s*" +
             @"icecastWriter\s*=\s*new\s+IcecastWriter\(\s*" +
@@ -493,15 +514,17 @@ public sealed class SettingsSecurityTests
             @"catch\s*\(Exception\s+cleanupException\)\s*\{\s*" +
             @"Trace\.WriteLine\(\s*""Icecast connection cleanup failed: ""\s*\+\s*" +
             @"cleanupException\.GetType\(\)\.Name\);\s*\}\s*\}\s*" +
-            @"toolTip1\.ToolTipIcon\s*=\s*ToolTipIcon\.Error;";
+            @"SetTransmitStoppedState\(\s*null,\s*" +
+            @"""Connection failed"",\s*" +
+            @"""Connection failed\. Check the server and credential settings\.""\s*\);";
 
         Assert.IsTrue(
             Regex.IsMatch(
-                player,
+                worker,
                 workerCleanupPattern,
                 RegexOptions.CultureInvariant,
                 TimeSpan.FromSeconds(1)),
-            "the background Delete cleanup must contain exceptions and always clear the writer");
+            "the background cleanup must contain exceptions and reset abort state");
         Assert.IsTrue(
             Regex.IsMatch(
                 player,

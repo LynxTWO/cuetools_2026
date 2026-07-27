@@ -42,6 +42,7 @@ namespace CUETools.Processor
         public const string ManifestFileName = "CUETools.PluginManifest.v1";
         public const string LocalDevelopmentEnvironmentVariable =
             "CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS";
+        public const string UserPluginDirectoryName = "plugins";
 
         private const long MaximumManifestBytes = 64 * 1024;
         private const int MaximumEntries = 128;
@@ -71,6 +72,20 @@ namespace CUETools.Processor
                 Environment.GetEnvironmentVariable(LocalDevelopmentEnvironmentVariable),
                 "1",
                 StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// User-installed plugins live outside the packaged manifest in a per-user trust zone.
+        /// That directory has its own exact hash manifest, so extending CUETools does not require
+        /// weakening or rewriting the build-produced package allowlist.
+        /// </summary>
+        public static string GetUserPluginDirectory()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.ApplicationData),
+                "CUETools2026",
+                UserPluginDirectoryName);
         }
 
         public static string GetRuntimeArchitecture()
