@@ -206,9 +206,10 @@ The UI must not give every lossless format the same guarantee:
   failures.
 - Flake, ALAC, and FLACCL decode and compare each encoded frame.
 - Raw WAV has no independent whole-output PCM oracle.
-- FLACCL is classic-only. Its exact-length boundary was fixed with a per-task
-  zero-lookahead verification buffer and exercised on an RTX 3060 across OpenCL modes
-  0-8, two CPU workers, 24-bit input, and an exact 4096-sample boundary. App-hosted
+- FLACCL is classic-only. Its exact-length boundary uses the shared BitReader's
+  logical remaining-bit accounting and was re-exercised on an RTX 3060 across OpenCL
+  modes 0-8, two CPU workers, 24-bit input, and an exact 4096-sample boundary. It no
+  longer copies frames into or relies on a zero-lookahead buffer. App-hosted
   settings receive a one-time verify-on migration; the standalone CLI remains
   explicitly opt-in through `--verify`.
 
@@ -342,7 +343,13 @@ Observed hardware evidence on 2026-07-26:
   the mechanism; a final-source no-build rerun is pending because the behavior-preserving
   `SecureSectorVote` extraction landed afterward;
 - K: (`ASUS BW-16D1HT`, firmware 3.11) completed a 12-track read-only verification
-  with zero read errors, recording AccurateRip 257/707 and CTDB 1345/1464;
+  with zero read errors, recording AccurateRip 257/707 and CTDB 1345/1464. A later
+  24-track damaged-disc FLAC rip exhausted rereads in three windows and published all
+  24 outputs only after final decoded-PCM proof. The Rip page immediately exposed a
+  six-sector CTDB repair. Repair published a separately verified `album - repaired`
+  sibling; all 24 repaired FLACs independently decoded under FFmpeg `-xerror`, while
+  the original 29 top-level files retained aggregate SHA-256
+  `56B8701EEF43A3A368DE5E65801D503EC24E807EFCABB68A301B39921F9C212B`;
 - both drives answered simultaneous SCSI inquiry and TOC reads.
 
 Still not implemented:

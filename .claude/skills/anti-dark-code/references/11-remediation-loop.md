@@ -139,6 +139,15 @@ Treat words such as `verified`, `bit-exact`, `atomic`, `repaired`, `complete`, a
 
 For lossless audio or similar transforms, a whole-output oracle normally reopens or decodes the finalized output and compares format, expected length or sample count, and all payload data (directly or by a collision-resistant digest over the exact bytes). A successful write or per-frame comparison does not cover an ignored final flush. When the required runtime or codec is unavailable, record `capability unavailable`; do not report the real path as passing.
 
+Treat disagreement between the product's verifier and a credible independent oracle as
+a verifier finding, not automatic proof that the produced artifact is corrupt. Preserve
+the exact rejected artifact, identify the first failing object and boundary, and test
+both implementations against it before changing the producer or suppressing the check.
+For buffered parsers, distinguish logical input extent from array capacity, allocation
+slack, speculative cache position, or the address of a physical read cursor. Bound the
+logical units consumed; otherwise a hardening guard can still over-read, or falsely
+reject valid data already held in a cache.
+
 Do not let one implementation lend its guarantee to another format that lacks the same oracle.
 When a verified artifact is transformed or re-homed, carry an immutable proof that
 binds the exact constrained output set, content identity, and relevant semantic
@@ -158,6 +167,11 @@ Use this checklist for repair, import, output publication, multi-file encoding, 
 - Write only to the stage. Keep the source and final destination unchanged until all producers finalize successfully.
 - Check every finalize, flush, close, and child-process result. Require the exact expected output set, nonempty required files, and no silent missing tail outputs.
 - Reopen the staged result through an independent reader or validator. For repairs, prove the repair engine actually applied the intended correction and validate the repaired copy, not the source or an in-memory promise.
+- If a producer can finish with a recoverable degraded result, expose recovery from
+  that producer's completion path as well as from any later maintenance or verify
+  screen. Exercise both routes and every supported output shape; proving that repair
+  works after a user manually reopens one file does not prove that a completed
+  multi-file, image, batch, or transactional output can reach it safely.
 - Test the platform's real lease and rename behavior before designing a proof handoff.
   On Windows, a child file opened with delete sharing can still prevent a parent
   directory rename. Do not infer directory-move compatibility from a file-share

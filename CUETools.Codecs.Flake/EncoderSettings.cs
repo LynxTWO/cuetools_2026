@@ -152,8 +152,8 @@ namespace CUETools.Codecs.Flake
 
         // Default ON: decode-while-encode proves each frame round-trips, so a bad encode cannot ship
         // silently. The verify path used to abort valid encodes ("read past end of buffer"); that was a
-        // missing-lookahead-slack bug in how the frame was handed to the verify decoder, fixed in
-        // AudioEncoder (VerifyLookaheadPad) and gated by FlacVerifyOnEncodeTests. Only the default
+        // BitReader bug that confused its speculative cache pointer with logical input exhaustion.
+        // BitReaderBoundsTests and FlacVerifyOnEncodeTests gate the corrected exact-frame path. Only the default
         // changed - a user who turned Verify off keeps that choice, since [JsonProperty] persists it.
         [DefaultValue(true)]
         [DisplayName("Verify")]

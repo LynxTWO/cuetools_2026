@@ -189,11 +189,12 @@ source is in:
 ### FLACCL exact-length verification closure
 
 FLACCL remains reachable only through the classic net47/OpenCL package. The exact-length
-failure was fixed without relying on shared GPU-pipeline slack: each verification task
-gets a zero-lookahead buffer sized to `max_frame_size + 16`. The fix was exercised on an
-RTX 3060 across OpenCL modes 0-8, with two CPU workers, 24-bit input, and an exact
-4096-sample boundary. Verify-on and verify-off output was byte-identical and decoded PCM
-MD5 matched.
+failure is fixed without relying on shared GPU-pipeline slack or a copied lookahead
+buffer: the shared BitReader distinguishes logical remaining input from its speculative
+cache pointer, and FLACCL passes the exact encoded frame extent. The rerun on an RTX
+3060 passed OpenCL modes 0-8, two CPU workers, 24-bit input, and an exact 4096-sample
+boundary. Verify-on and verify-off output was byte-identical and independent decoding
+passed.
 
 For serialized-settings compatibility, the codec type retains its historical false
 default. The application policy performs a versioned one-time migration that enables

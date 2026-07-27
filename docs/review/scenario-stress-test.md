@@ -15,6 +15,8 @@ timeouts and truncated output, WMA lossless mismatches, plugin identity preloadi
 settings-write interruption, native finalization failure, and artifact omissions.
 Later live runs added WMA Lossless, FLACCL/RTX 3060, H:/K: optical reads, an H:
 full FLAC rip and two-read Test & Copy, CTDB repair, and Icecast 2.5.0 evidence.
+K: later supplied a real damaged 24-track rip whose post-rip six-sector CTDB repair
+published a verified sibling while the original file-set hash remained unchanged.
 Results and residual external checks are in `2026-07-26-autonomous-audit.md`.
 TestRipper's former private captures and stale copied vote algorithm have also been
 replaced by SDK net47 tests against the production `SecureSectorVote` helper; its

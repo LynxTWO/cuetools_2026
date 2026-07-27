@@ -1,8 +1,8 @@
 # FLAC verify-on-encode crashes the encode (Flake encoder)
 
 Date: 2026-07-25
-Status: FIXED and ON by default. Root cause found, fixed in the encoder, and gated by a test that
-fails without the fix. ALAC checked too and is not affected.
+Status: FIXED and ON by default. Root cause found, fixed in the shared bit reader, and gated by
+exact-buffer and encoder tests. ALAC checked too and is not affected.
 Severity: was blocking - every FLAC encode failed while the option defaulted to ON.
 
 ## Plain English
@@ -43,18 +43,14 @@ died about 16 s in. The failure is in the CHECKER, not the audio. The encoder's 
 
 ## Root cause (found)
 
-The verify path hands the decoder ONE frame in a buffer that ends exactly at that frame's last byte:
-`verify.DecodeFrame(frame_buffer, 0, fs)`. But `BitReader` keeps a 56-bit cache filled SPECULATIVELY,
-and its own comment (BitReader.fill, CUETools.Codecs/BitReader.cs:113-119) says so: "on a valid last
-frame this legitimately reaches a few bytes past end_m". The hardened unbounded scans deliberately
-throw instead of running off the buffer - `read_rice_block` throws at `end_m` (BitReader.cs:326-330).
-
-Those two facts collide only when the buffer ends at the frame end:
-
-- File decoding never hit it, because that path passes a 128 KB buffer holding MANY frames
-  (`DecodeFrame(_framesBuffer, _framesBufferOffset, _framesBufferLength)`), so the speculative
-  lookahead always lands on real, in-bounds bytes.
-- The verify path passes exactly one frame, so the lookahead runs straight into the guard.
+The verify path hands the decoder one frame in a buffer that ends exactly at that frame's last byte:
+`verify.DecodeFrame(frame_buffer, 0, fs)`. `BitReader` keeps a 56-bit cache filled speculatively, so
+its raw cache pointer can move several bytes beyond the logical input while valid, unread bits remain
+in the cache. The hardened unary/Rice scan compared that speculative pointer directly with `end_m`.
+It therefore rejected a valid terminator already present in the cache as soon as the pointer crossed
+the end. The same collision occurs in ordinary file decoding at the final frame when no later frame
+bytes happen to provide physical lookahead; a damaged-disc run proved this with two valid, independently
+FFmpeg-decoded FLAC tracks.
 
 It is data-dependent, which is why it looked random: the guard only trips when a rice unary run near
 the frame's end needs another byte. A long unary run means a LARGE residual, i.e. a big prediction
@@ -65,13 +61,14 @@ signal with sparse full-scale spikes over a quiet tone fails in ~250 ms.
 
 ## The fix
 
-`CUETools.Codecs.Flake/AudioEncoder.cs`:
+`CUETools.Codecs/BitReader.cs` now tracks logical source bits independently from its speculative
+cache pointer. Fixed-width reads reject when logical input is exhausted. Unary and Rice scans consume
+and bound-check real logical bits while allowing a terminator already held in the cache. Speculative
+refill still substitutes zero without dereferencing past `end_m`, but those zeroes never become valid
+encoded input.
 
-- `frame_buffer` is allocated with `VerifyLookaheadPad` (16) extra bytes. The BitWriter is still bounded
-  to `max_frame_size` and only `fs` bytes are ever written out, so encoding is untouched.
-- The verify block zeroes those pad bytes and calls `DecodeFrame(frame_buffer, 0, fs + pad)`. The
-  speculative reads now land on in-bounds zeros - byte-identical to what `fill()` substitutes anyway -
-  and the decoder stays hard-bounded, so a genuinely corrupt frame still trips the guard.
+`CUETools.Codecs.Flake/AudioEncoder.cs` and `CUETools.Codecs.FLACCL/FLACCLWriter.cs` consequently verify
+the exact `fs` bytes again. Neither relies on an artificial lookahead pad or adjacent frame data.
 
 `CUETools.Codecs.Flake/EncoderSettings.cs`: `DoVerify` is `[DefaultValue(true)]`. The owner's saved
 config carries no `DoVerify` entry for FLAC, so the new default takes effect; a user who turns it off
@@ -79,11 +76,15 @@ persists that choice via `[JsonProperty]`.
 
 ## Verification
 
-- `CUETools.Wpf.Tests/FlacVerifyOnEncodeTests.cs` - the permanent gate. Its transient-content case
+- `CUETools.Wpf.Tests/BitReaderBoundsTests.cs` proves the exact two-byte Rice boundary that used to
+  fail, rejects the same input without its unary terminator, and rejects fixed-width over-read.
+- `CUETools.Wpf.Tests/FlacVerifyOnEncodeTests.cs` - the permanent encoder gate. Its transient-content case
   FAILS without the fix and passes with it (RED then GREEN, confirmed in that order). Also sweeps every
   compression mode, covers silence/noise/loud/music, and asserts verify-ON produces byte-identical
   output to verify-OFF (verify must only observe).
 - The full real 345 s track that crashed in production now encodes with verify ON.
+- All 24 retained FLAC tracks from the damaged-disc run decode to their declared sample counts with
+  the corrected managed decoder; the two former failures independently decode cleanly with FFmpeg.
 - Full suite green.
 - Independent check: the encoder's output decodes cleanly under ffmpeg and each file's decoded audio
   matches its own STREAMINFO MD5 (11/11 on a real rip), so encoder output was and remains valid FLAC.

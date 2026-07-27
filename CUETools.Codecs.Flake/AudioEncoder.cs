@@ -68,12 +68,6 @@ namespace CUETools.Codecs.Flake
 		// this can be used to allocate memory for output
 		int max_frame_size;
 
-		// Trailing slack handed to the verify decoder past each frame. BitReader keeps a 56-bit (7-byte)
-		// cache filled speculatively, so decoding a frame legitimately reads a few bytes beyond its last
-		// byte; 16 bytes is over twice that worst case while keeping the decoder hard-bounded, so a
-		// genuinely corrupt frame still trips read_rice_block's guard instead of running away.
-		const int VerifyLookaheadPad = 16;
-
 		byte[] frame_buffer = null;
 
 		int frame_count = 0;
@@ -2026,16 +2020,10 @@ new int[] { // 30
 			if (verify != null)
 				try
 				{
-					// Hand the decoder the frame PLUS zeroed trailing slack. Decoding one frame from a
-					// buffer that ends exactly at its last byte aborts a perfectly valid frame:
-					// BitReader.fill() speculatively tops the cache up past the end (by design, see its
-					// comment), and read_rice_block then throws when a long unary run - a big prediction
-					// miss, common on real music transients - needs one of those bytes. The file-decode
-					// path never hit this because its buffer holds many frames. Zero the pad so the
-					// speculative bits are the same zeros fill() would have substituted, and the decoder
-					// stays hard-bounded, so a corrupt frame still trips the guard.
-					Array.Clear(frame_buffer, fs, VerifyLookaheadPad);
-					int decoded = verify.DecodeFrame(frame_buffer, 0, fs + VerifyLookaheadPad);
+					// Decode the exact frame extent. BitReader separately tracks logical source bits,
+					// so its speculative cache refill cannot reject a valid cached Rice terminator or
+					// make zero lookahead bytes count as encoded input.
+					int decoded = verify.DecodeFrame(frame_buffer, 0, fs);
 					if (decoded != fs || verify.Remaining != bs)
 						throw new Exception(Properties.Resources.ExceptionValidationFailed);
 					fixed (int* s = verifyBuffer, r = verify.Samples)
@@ -2363,12 +2351,7 @@ new int[] { // 30
 				verifyBuffer = new int[FlakeConstants.MAX_BLOCKSIZE * channels];
 			}
 
-			// The extra VerifyLookaheadPad bytes are never written to the output (the BitWriter is
-			// bounded to max_frame_size and only fs bytes are written per frame). They exist so the
-			// verify decoder can be handed a frame with trailing slack: BitReader.fill() speculatively
-			// tops its cache up past the frame's last byte, and read_rice_block throws if that walks
-			// off the buffer end. See output_frame's verify block.
-			frame_buffer = new byte[max_frame_size + VerifyLookaheadPad];
+			frame_buffer = new byte[max_frame_size];
 
 			return header_len;
 		}
