@@ -57,5 +57,45 @@ namespace CUETools.Ripper.Tests
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest));
         }
+
+        [TestMethod]
+        public void InvalidFieldCanRetryOnceOnlyAfterAControlTransition()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+                true,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+                false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
+        public void ControlTransitionDoesNotRetryOtherCommandOrDeviceFailures()
+        {
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+                true,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x21,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+                true,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+                true,
+                Device.CommandStatus.IoctlFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
     }
 }

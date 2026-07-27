@@ -32,5 +32,25 @@ namespace CUETools.Ripper.SCSI
             return senseKey == Device.SenseKeyType.MediumError ||
                 (asc == 0x64 && ascq == 0x00);
         }
+
+        /// <summary>
+        /// Some optical firmware briefly rejects the first READ CD after an accepted
+        /// control-plane transition such as SET CD SPEED. Retry only the exact
+        /// observed 24/00 rejection, only while that transition is still pending.
+        /// A repeated rejection and every unrelated failure remain fatal.
+        /// </summary>
+        public static bool ShouldRetryAfterControlTransition(
+            bool transitionPending,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return transitionPending &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.IllegalRequest &&
+                asc == 0x24 &&
+                ascq == 0x00;
+        }
     }
 }

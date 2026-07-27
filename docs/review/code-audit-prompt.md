@@ -87,6 +87,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     hardware failures. Only the subject-data class may become explicitly untrusted evidence for an
     existing retry, quarantine, or repair policy. Test the classifier without the scarce dependency,
     then reproduce beyond the original failure point on the real boundary.
+13. CONTROL SUCCESS IS NOT PAYLOAD READINESS. A successful seek, speed change, mode change, flush, or
+    reset proves only that command completed. Serialize the transition with the dependent payload,
+    honor a measured bounded settle when required, and retry only the exact observed transient while
+    the transition is pending. Repeated or unrelated failures remain fatal. Log enough scrubbed
+    command shape and transition state to locate intermittent failures without logging payload data.
 
 ### How to choose the extraction
 

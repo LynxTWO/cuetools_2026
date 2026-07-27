@@ -72,6 +72,12 @@ progress documents for it belong here, under `docs/review/`.
   Transport, removal, not-ready, unit-attention, illegal-command, and hardware
   failures remain fatal. `StopOnUnrecoverable` is applied only after the configured
   evidence and retry policy has classified a sector as unrecoverable.
+- An accepted optical-drive control command does not prove the payload path is ready.
+  Serialize speed, seek, cache, and mode transitions with READ CD, apply only a
+  bounded measured settle, and retry only a transition-bound failure class that has
+  real hardware evidence. A repeated or unrelated failure stays fatal. Include
+  relative sector, transfer count, command mode, and applied speed in scrubbed
+  failure context; never include sector payload bytes.
 - Keep the Rip page operable at the 1200-pixel default width. Primary actions,
   Test/Copy CRC evidence, and drive selection must remain reachable. Use bounded
   proportional layout and wrapping at supported widths, vertical scrolling for

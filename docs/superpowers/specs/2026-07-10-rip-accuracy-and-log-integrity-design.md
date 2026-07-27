@@ -168,9 +168,10 @@ the two SCSI primitives (`GetSupportedSpeeds`, `SetReadSpeed`) were added to `CD
 initial speed set at rip start, and speed changes applied mid-read from the `ReadProgress` handler
 on stuck windows / clean stretches. Results on the ASUS BW-16D1HT:
 
-- **Init works.** GetSpeed returns only the drive's MAX (one descriptor), so we synthesize the
-  standard CD ladder from it: "adaptive speed on: 9 steps 704-8468 kB/s, start 8468" (48x). Setting
-  the initial speed before reading is safe.
+- **Init appeared to work in this run.** GetSpeed returns only the drive's MAX (one descriptor), so
+  we synthesize the standard CD ladder from it: "adaptive speed on: 9 steps 704-8468 kB/s, start
+  8468" (48x). Later archived runs proved that an accepted initial speed transition can still leave
+  the immediately following payload briefly unready; see the 2026-07-27 correction below.
 - **Mid-read SET CD SPEED CRASHES.** ~18 s into a verify on the pin-holed disc, at the first stuck
   window where the handler issued SET CD SPEED, the very next READ CD failed with
   `SCSIException: illegal request: INVALID FIELD IN CDB` (FetchSectors). Because that read runs on a
@@ -203,8 +204,9 @@ pin-holed disc:
 - **Fix B - serialized speed apply.** `CDDriveReader.RequestReadSpeed(kbps)` only STORES a pending
   value (volatile); the read loop applies it in `PrefetchSector` at the next fresh-window boundary
   (on the read thread, after TestReadCommand, before any FetchSectors of that window) - exactly
-  where the original author's commented SetCdSpeed sat. No more mid-window SET CD SPEED, so no more
-  INVALID FIELD IN CDB. A refused command is swallowed and stops further attempts.
+  where the original author's commented SetCdSpeed sat. This removed concurrent mid-window changes,
+  but the original "so no more INVALID FIELD IN CDB" conclusion was too broad. A refused command is
+  swallowed and stops further attempts.
 - **Policy.** RipService builds an `AdaptiveSpeedController` from the synthesised ladder (steps
   clearly below the drive's reported max, then the true max on top - no near-duplicate top step),
   requests one step down when a stuck window starts, and eases up one step per clean ~5% stretch.
@@ -214,6 +216,17 @@ Live proof on the pin-holed disc (ASUS BW-16D1HT): init "9 steps 704-8467 kB/s, 
 across the 10-13% pin-holed zone the speed stepped 48x -> 40x -> 32x -> 24x through hundreds of
 errors and several "unreadable by drive" give-ups, with ZERO crash lines (attempt 1 died at the
 first stuck window). Verify stopped cleanly by the user after 219 s.
+
+### 2026-07-27 correction: serialization did not prove payload readiness
+
+The same ASUS/firmware later reproduced `IllegalRequest 24/00` at the payload call
+18, 19, and 28 seconds into separate reads, while identical configurations also
+progressed for minutes or completed. Serializing SET CD SPEED removed concurrency
+but still issued the first READ CD immediately after the accepted control command.
+The bounded correction is a 40 ms settle plus one 80 ms retry only for the first
+transition-bound `24/00`. Repeated `24/00`, unrelated illegal requests, and
+device/transport failures remain fatal. Payload failures now retain relative
+sector, transfer count, command mode, and applied speed in privacy-safe context.
 
 Still open in this program: Feature 1 (cache defeat, touches the data path), Feature 2 (lead-in/out
 overread), and the per-drive calibration record + Drive & Read surfacing.

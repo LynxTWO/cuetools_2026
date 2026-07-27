@@ -1137,7 +1137,7 @@ does not relax evidence, rollback, or verification requirements.
   Multi-sector payload failures split into individual reads; persistent
   single-sector medium errors enter the existing low-confidence vote and retry
   path. Hardware, not-ready, unit-attention, command, removal, and transport
-  failures remain fatal. The modern ripper suite passes 12/12, the WPF suite passes
+  failures remain fatal. The modern ripper suite passes 14/14, the WPF suite passes
   352/352, and the SCSI project builds for net8/net47/net20. The damaged K: rerun is
   still required to prove the real `NO SEEK COMPLETE` path completes as failed
   sectors and reaches CTDB.
@@ -1169,6 +1169,35 @@ does not relax evidence, rollback, or verification requirements.
   The WPF suite passes 352/352. A loaded-disc 1200-pixel capture proved the action
   controls and CRC columns remain reachable after the viewport fix. Final-source
   1784-, 1200-, and 1024-pixel presentation captures remain.
+
+### R57. Accepted speed changes can leave the next payload briefly unready - bucket A, risk high
+
+- **Area or slice:** adaptive optical speed control, SCSI `PrefetchSector`, payload
+  failure context, Test & Copy, and damaged-disc recovery.
+- **Why it matters:** an intermittent command-state rejection aborts Test & Copy
+  before CTDB can receive the damaged-sector evidence, even though an identical
+  payload succeeds on other runs.
+- **Evidence found:** K: firmware 3.11 failed Test read 1 after 28 seconds with
+  `IllegalRequest` ASC/ASCQ `24/00` at the ordinary `FetchSectors` call. Archived
+  runs on the same drive failed at 18 and 19 seconds with the same sense, while
+  otherwise identical runs progressed for minutes or completed. SET CD SPEED is
+  serialized at the fresh-window boundary but the first payload followed
+  immediately. The prior claim that serialization alone eliminated the failure was
+  false.
+- **Confidence:** verified.
+- **Approval needed:** no; the user requested autonomous damaged-disc completion.
+- **Recommended next reference or pass type:** pass 11 bounded safe fix.
+- **Smallest safe next step:** add a short bounded settle after an accepted speed
+  change and retry once only for transition-bound `IllegalRequest 24/00`. Capture
+  scrubbed payload shape and transition state in the fatal exception. Never make
+  illegal requests generally retryable. Record the bounded retry count on a
+  completed phase so a recovered firmware transition remains observable.
+- **Verification plan:** pure transition-policy tests, all SCSI target builds,
+  ripper and WPF suites, then repeat K: Test & Copy beyond the former failure point.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. The modern
+  ripper suite passes 14/14, the WPF suite passes 352/352, and SCSI builds pass for
+  net8/net47/net20. The K: hardware rerun remains.
 
 ## Ordering
 
@@ -1219,3 +1248,6 @@ dependency:
 - 2026-07-27 - implemented R55's damaged-media failure classification and R56's
   responsive Rip layout. Deterministic gates pass; the damaged K: rerun and
   final-source presentation captures remain external evidence.
+- 2026-07-27 - added R57 after the damaged K: rerun reproduced the previously
+  overclaimed adaptive-speed boundary at 28 seconds. The retry is limited to the
+  exact transition-bound `IllegalRequest 24/00` state.

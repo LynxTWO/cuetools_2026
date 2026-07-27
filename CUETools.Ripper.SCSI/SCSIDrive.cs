@@ -67,7 +67,10 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatBytes;
 		private byte[] _flushScratch;
 		private bool _cacheDefeatJustFlushed;
+		private bool _speedChangeJustApplied;
+		private int _controlTransitionRetryCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
+		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -1453,16 +1456,19 @@ namespace CUETools.Ripper.SCSI
 
 			if (!abort)
 				return st;
-			SCSIException ex = new SCSIException(Resource1.ReadCDError, m_device, st);
-			Device.SenseKeyType senseKey = st == Device.CommandStatus.DeviceFailed
-				? m_device.GetSenseKey()
-				: Device.SenseKeyType.NoSense;
-			byte asc = st == Device.CommandStatus.DeviceFailed
-				? m_device.GetSenseAsc()
-				: (byte)0;
-			byte ascq = st == Device.CommandStatus.DeviceFailed
-				? m_device.GetSenseAscq()
-				: (byte)0;
+			string readContext = string.Format(
+				"{0} [relative-sector={1}, sectors={2}, command={3}, speed={4}kB/s, speed-transition={5}, cache-transition={6}]",
+				Resource1.ReadCDError,
+				sector,
+				Sectors2Read,
+				_readCDCommand,
+				_appliedSpeedKbps,
+				_speedChangeJustApplied,
+				_cacheDefeatJustFlushed);
+			SCSIException ex = new SCSIException(readContext, m_device, st);
+			Device.SenseKeyType senseKey = ex.SenseKey;
+			byte asc = ex.Asc;
+			byte ascq = ex.Ascq;
 			bool mediumError =
 				PayloadReadFailurePolicy.IsMediumError(st, senseKey);
 			bool legacyTrackMode =
@@ -1505,7 +1511,7 @@ namespace CUETools.Ripper.SCSI
 							// pinpoint read. Do not mislabel device removal, transport, readiness,
 							// command, or hardware failures as damage that CTDB can repair.
 							throw new SCSIException(
-								Resource1.ReadCDError,
+								readContext,
 								m_device,
 								singleStatus);
 						}
@@ -1698,7 +1704,10 @@ namespace CUETools.Ripper.SCSI
 			// FetchSectors passes of an in-flight window) made the next READ CD fail with
 			// "illegal request: INVALID FIELD IN CDB" on an ASUS BW-16D1HT and crashed the rip.
 			// This is also exactly where the upstream author left speed control (the commented
-			// SetCdSpeed that used to sit here). A refused command stops further attempts.
+			// SetCdSpeed that used to sit here). An accepted command still needs a short settle:
+			// this ASUS firmware has intermittently returned 24/00 on the immediately following
+			// READ CD even though the identical payload succeeds on other runs. One exact,
+			// transition-bound retry below handles that state; a repeated rejection stays fatal.
 			int wantSpeed = _pendingSpeedKbps;
 			if (wantSpeed > 0 && wantSpeed != _appliedSpeedKbps)
 			{
@@ -1706,11 +1715,22 @@ namespace CUETools.Ripper.SCSI
 				{
 					ushort v = (ushort)Math.Min(0xFFFE, wantSpeed);
 					if (m_device.SetCdSpeed(Device.RotationalControl.CLVandNonPureCav, v, v) == Device.CommandStatus.Success)
+					{
 						_appliedSpeedKbps = wantSpeed;
+						_speedChangeJustApplied = true;
+						Thread.Sleep(40);
+					}
 					else
+					{
 						_pendingSpeedKbps = 0;   // drive refused: keep its current speed, stop asking
+						_speedChangeJustApplied = false;
+					}
 				}
-				catch { _pendingSpeedKbps = 0; }
+				catch
+				{
+					_pendingSpeedKbps = 0;
+					_speedChangeJustApplied = false;
+				}
 			}
 
 			// TODO:
@@ -1749,6 +1769,22 @@ namespace CUETools.Ripper.SCSI
 					{
 						FetchSectors(sector, Sectors2Read, true);
 					}
+					catch (SCSIException readFailure) when (
+						PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(
+							_speedChangeJustApplied,
+							readFailure.Status,
+							readFailure.SenseKey,
+							readFailure.Asc,
+							readFailure.Ascq))
+					{
+						// The SET CD SPEED command completed, but the firmware had not made
+						// the payload path ready. Retry the exact same READ CD once after a
+						// second bounded settle. The policy excludes every other failure.
+						Thread.Sleep(80);
+						_controlTransitionRetryCount++;
+						FetchSectors(sector, Sectors2Read, true);
+						_speedChangeJustApplied = false;
+					}
 					catch (SCSIException) when (_cacheDefeatJustFlushed)
 					{
 						// Some optical firmware briefly rejects the first payload CDB after the long
@@ -1760,6 +1796,7 @@ namespace CUETools.Ripper.SCSI
 						FetchSectors(sector, Sectors2Read, true);
 					}
 					_cacheDefeatJustFlushed = false;
+					_speedChangeJustApplied = false;
 					//TimeSpan delay1 = DateTime.Now - LastFetch;
 					//DateTime LastFetched = DateTime.Now;
 					if (pass >= _correctionQuality)
@@ -2037,9 +2074,24 @@ namespace CUETools.Ripper.SCSI
 
 	public sealed class SCSIException : Exception
 	{
+		public Device.CommandStatus Status { get; private set; }
+		public Device.SenseKeyType SenseKey { get; private set; }
+		public byte Asc { get; private set; }
+		public byte Ascq { get; private set; }
+
 		public SCSIException(string args, Device device, Device.CommandStatus st)
 			: base(args + ": " + (st == Device.CommandStatus.DeviceFailed ? device.GetErrorString() : st.ToString()))
 		{
+			Status = st;
+			SenseKey = st == Device.CommandStatus.DeviceFailed
+				? device.GetSenseKey()
+				: Device.SenseKeyType.NoSense;
+			Asc = st == Device.CommandStatus.DeviceFailed
+				? device.GetSenseAsc()
+				: (byte)0;
+			Ascq = st == Device.CommandStatus.DeviceFailed
+				? device.GetSenseAscq()
+				: (byte)0;
 		}
 	}
 
