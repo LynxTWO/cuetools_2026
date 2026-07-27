@@ -1199,38 +1199,47 @@ does not relax evidence, rollback, or verification requirements.
   ripper suite passes 14/14, the WPF suite passes 352/352, and SCSI builds pass for
   net8/net47/net20. K: then completed the full 1,179-second Test phase and advanced
   its Copy phase to relative sector 283328 without another transition-bound
-  failure; the later ordinary-batch rejection is tracked separately as R58.
+  failure; the later nested pinpoint rejection is tracked separately as R58.
 
-### R58. A normal multi-sector READ CD batch can be rejected after hours of valid payload - bucket A, risk high
+### R58. A medium-error batch can expose a transient illegal-request pinpoint - bucket A, risk high
 
-- **Area or slice:** SCSI payload transfer shape, Test & Copy Copy phase, secure
+- **Area or slice:** SCSI nested failure identity, medium-error decomposition, Test
+  and Copy phases, secure
   read evidence, and damaged-disc completion.
-- **Why it matters:** a drive can accept the same READ CD form for hundreds of
-  thousands of sectors, then reject one ordinary 16-sector transfer. Treating this
-  as media damage invents evidence; aborting without trying the independently valid
-  item shape loses an otherwise recoverable long-running job.
-- **Evidence found:** after R57, K: completed the 1,179-second Test phase and
-  published all Test CRCs. The Copy phase then failed after 773 seconds at relative
-  sector 283328 on a 16-sector `ReadCdBEh` with `DeviceFailed`,
-  `IllegalRequest 24/00`, applied speed 5632 kB/s, and both
-  `speed-transition=False` and `cache-transition=False`. This contradicts the
-  narrower hypothesis that every observed 24/00 was transition-bound.
+- **Why it matters:** a batch-level medium error is valid damaged-media evidence,
+  but the drive can answer one subsequent pinpoint read with a different transient
+  command failure. Reusing the parent context hides the exact sector and makes a
+  safe recovery decision impossible. Treating every nested command failure as media
+  damage would invent evidence; aborting every corroborated transient loses an
+  otherwise recoverable long-running job.
+- **Evidence found:** the first post-R57 run completed Test, then failed Copy near
+  relative sector 283328. The `e2c3ba6` rerun failed Test at the same displayed
+  16-sector context after 752 seconds. Its exact stack stopped at the non-medium
+  child guard inside the medium-error split, proving that the outer 16-sector
+  command reported `MediumError` and a subsequent single-sector command reported
+  `IllegalRequest 24/00`. The exception incorrectly reused the outer range. A
+  read-only production-reader probe then consumed the full 2,400-sector
+  neighborhood from 283328, and a second probe consumed the actual 283200 window
+  at the failed run's 4224 kB/s request. Both passed, proving the address and
+  one-sector command shape are valid outside the intermittent state.
 - **Confidence:** verified.
 - **Approval needed:** no; the user requested autonomous damaged-disc completion.
 - **Recommended next reference or pass type:** pass 11 bounded safe fix.
-- **Smallest safe next step:** for only that exact rejected multi-sector payload
-  class, read the range one sector at a time. Continue only if every single-sector
-  payload succeeds. Keep any individual medium, transport, readiness, hardware, or
-  command failure fatal rather than feeding it into the damaged-media vote. Count a
-  completed fallback in the phase log.
+- **Smallest safe next step:** preserve exact child context and sense immediately.
+  Only after a parent medium error, retry an exact pinpoint `24/00` once after a
+  bounded settle. Consume only a successful retry. If the retry reports medium
+  error or repeats the same corroborated LBA-specific `24/00`, mark that exact
+  sector untrusted for the existing vote/CTDB path. Any other repeat remains fatal.
+  Count retries and corroborated unreadable pinpoints.
 - **Verification plan:** pure classifier positives and negatives; modern ripper and
-  WPF suites; net8/net47/net20 SCSI builds; then repeat K: Test & Copy beyond
-  relative sector 283328 and confirm a completed Copy CRC or an exact
-  single-sector failure.
+  WPF suites; net8/net47/net20 SCSI builds; retained opt-in window probe; then
+  repeat K: Test & Copy beyond relative sector 283328 and confirm a completed Copy
+  CRC or an exact child failure.
 - **Owner:** repo owner.
-- **Status:** implemented and deterministic-test verified 2026-07-27. The modern
-  ripper suite passes 16/16, the WPF suite passes 352/352, and SCSI builds pass for
-  net8/net47/net20. The K: hardware rerun remains.
+- **Status:** implemented and bounded-test verified 2026-07-27. The modern ripper
+  policy suite passes 18/18, the WPF suite passes 352/352, SCSI builds pass for
+  net8/net47/net20, and both bounded K: window probes pass. The end-to-end rerun
+  remains.
 
 ## Ordering
 
@@ -1284,6 +1293,7 @@ dependency:
 - 2026-07-27 - added R57 after the damaged K: rerun reproduced the previously
   overclaimed adaptive-speed boundary at 28 seconds. The retry is limited to the
   exact transition-bound `IllegalRequest 24/00` state.
-- 2026-07-27 - added R58 after K: completed Test, then rejected an ordinary
-  16-sector Copy transfer at relative sector 283328. The fallback preserves trust
-  by requiring every sector in the rejected batch to succeed independently.
+- 2026-07-27 - corrected R58 after the exact stack proved the displayed 16-sector
+  `24/00` was a nested pinpoint failure following a parent medium error. Two
+  bounded reads proved the same address and command shape succeed outside that
+  intermittent state.

@@ -26,7 +26,55 @@ namespace CUETools.Wpf.Tests
             "CUETOOLS_OPTICAL_TESTCOPY_DRIVE";
         private const string OutputEnvironmentVariable =
             "CUETOOLS_OPTICAL_TESTCOPY_OUTPUT_BASE";
+        private const string SectorEnvironmentVariable =
+            "CUETOOLS_OPTICAL_PROBE_SECTOR";
+        private const string SpeedEnvironmentVariable =
+            "CUETOOLS_OPTICAL_PROBE_SPEED_KBPS";
         private const string OwnershipMarker = ".cuetools-live-testcopy-owner";
+
+        [TestMethod]
+        [TestCategory("Hardware")]
+        public void LoadedDriveReadsConfiguredSectorWindow()
+        {
+            char drive = ReadDrive();
+            Assert.IsTrue(
+                int.TryParse(
+                    Environment.GetEnvironmentVariable(
+                        SectorEnvironmentVariable),
+                    out int sector) &&
+                sector >= 0,
+                $"Set {SectorEnvironmentVariable} to a non-negative relative sector.");
+
+            using var reader = new CDDriveReader();
+            Assert.IsTrue(
+                reader.Open(drive),
+                "The loaded audio disc could not be opened.");
+            reader.CorrectionQuality = 0;
+            reader.DeepRecovery = false;
+            string speedText =
+                Environment.GetEnvironmentVariable(
+                    SpeedEnvironmentVariable) ?? "";
+            if (!string.IsNullOrWhiteSpace(speedText))
+            {
+                Assert.IsTrue(
+                    int.TryParse(speedText, out int speedKbps) &&
+                    speedKbps > 0,
+                    $"{SpeedEnvironmentVariable} must be a positive integer.");
+                reader.RequestReadSpeed(speedKbps);
+            }
+            reader.Position = (long)sector * 588;
+
+            const int WindowSamples = 2400 * 588;
+            var buffer = new AudioBuffer(
+                AudioPCMConfig.RedBook,
+                WindowSamples);
+            int read = reader.Read(buffer, WindowSamples);
+            Assert.IsTrue(
+                read > 0,
+                "The optical reader returned no samples for the configured window.");
+            TestContext.WriteLine(
+                $"PASS drive={drive}: relative-sector={sector} samples={read}");
+        }
 
         [TestMethod]
         [TestCategory("Hardware")]

@@ -196,6 +196,12 @@ device cache, boundary read, media property, or persisted calibration.
   damaged-subject evidence. If any required item still fails, preserve that item's
   exact identity and failure class and stop under the existing fatal policy. Bound
   the fallback and record successful use so compatibility recovery remains visible.
+- Nested recovery must snapshot and report the innermost failing item before another
+  operation can overwrite shared error state. Do not attach a child failure to its
+  parent's range, count, or identity. A child failure may enter an untrusted-subject
+  path only when independent parent evidence and a bounded repeat corroborate that
+  narrower classification, and no bytes from a rejected attempt are consumed. Every
+  different repeat keeps its own fatal class.
 - Size an edge or range probe from the real configured offset or requirement. Proving
   the nearest block does not prove a larger correction range.
 - Persist semantic evidence roles, not only interchangeable values. Test, Copy,

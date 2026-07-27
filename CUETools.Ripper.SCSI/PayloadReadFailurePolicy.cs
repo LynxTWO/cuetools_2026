@@ -54,6 +54,57 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// Some firmware reports a batch-level medium error, then transiently
+        /// rejects the exact single-sector pinpoint read with 24/00. The parent
+        /// medium error and valid multi-sector shape are required corroboration;
+        /// an uncorroborated single-sector illegal request remains fatal.
+        /// </summary>
+        public static bool ShouldRetryPinpointAfterMediumBatch(
+            bool parentWasMediumError,
+            int parentSectorCount,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return parentWasMediumError &&
+                parentSectorCount > 1 &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.IllegalRequest &&
+                asc == 0x24 &&
+                ascq == 0x00;
+        }
+
+        /// <summary>
+        /// A repeated 24/00 for the same in-range pinpoint may enter the existing
+        /// untrusted-sector pipeline only when a parent transfer independently
+        /// reported medium error. No payload from either rejected command is used.
+        /// </summary>
+        public static bool IsCorroboratedUnreadablePinpoint(
+            bool parentWasMediumError,
+            int parentSectorCount,
+            Device.CommandStatus initialStatus,
+            Device.SenseKeyType initialSenseKey,
+            byte initialAsc,
+            byte initialAscq,
+            Device.CommandStatus repeatedStatus,
+            Device.SenseKeyType repeatedSenseKey,
+            byte repeatedAsc,
+            byte repeatedAscq)
+        {
+            return parentWasMediumError &&
+                parentSectorCount > 1 &&
+                initialStatus == Device.CommandStatus.DeviceFailed &&
+                initialSenseKey == Device.SenseKeyType.IllegalRequest &&
+                initialAsc == 0x24 &&
+                initialAscq == 0x00 &&
+                repeatedStatus == Device.CommandStatus.DeviceFailed &&
+                repeatedSenseKey == Device.SenseKeyType.IllegalRequest &&
+                repeatedAsc == 0x24 &&
+                repeatedAscq == 0x00;
+        }
+
+        /// <summary>
         /// Some optical firmware briefly rejects the first READ CD after an accepted
         /// control-plane transition such as SET CD SPEED. Retry only the exact
         /// observed 24/00 rejection, only while that transition is still pending.

@@ -97,6 +97,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     semantics, and continue only from successful item results. Do not recast command-shape,
     transport, or container failures as damaged-subject evidence. Any required item that still fails
     keeps its exact identity and fatal failure class. Bound and count compatibility fallbacks.
+15. NESTED FAILURE KEEPS NESTED IDENTITY. Snapshot a child operation's status before another command
+    can overwrite shared error state, and report the child's exact item, range, and shape rather than
+    reusing its parent's context. Reclassify a child as untrusted subject data only when independent
+    parent evidence plus a bounded repeat corroborate that narrower result. Never consume payload
+    from a rejected attempt; every different repeat remains fatal under its own class.
 
 ### How to choose the extraction
 
