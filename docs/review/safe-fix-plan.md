@@ -421,3 +421,35 @@ text trimming. The full WPF suite passes 352/352. A 1200-pixel loaded-disc captu
 proved the primary controls and CRC columns remain reachable after the viewport
 fix. Final-source 1784-, 1200-, and 1024-pixel captures remain the presentation
 check after publication.
+
+### Settle accepted drive-control transitions before payload reads
+
+**Exact files:** `CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
+`CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
+`CUETools.Wpf/Services/RipService.cs`, and the R57 review record.
+
+**Safety and unchanged behavior:** keep SET CD SPEED serialized on the read thread
+at a fresh-window boundary. After the drive accepts the transition, wait a bounded
+40 ms before the first payload. Retry once after another bounded 80 ms only when
+that first payload reports the observed `DeviceFailed`, `IllegalRequest`, ASC/ASCQ
+`24/00` state. Clear the transition latch after the first payload. A repeated
+`24/00`, a `24/00` without a pending transition, every other illegal request, and
+all device/transport failures remain fatal.
+
+**Checks:** pure transition-policy positives and negatives; modern ripper tests;
+net8/net47/net20 SCSI builds; full WPF tests; then repeat K: Test & Copy beyond the
+former 18-28 second failure window and retain payload context if it still fails.
+
+**Rollback:** revert the transition latch, settle, classifier, and added exception
+context together. Do not retain a broad command retry without its transition gate.
+
+**Observability:** payload SCSI failures add relative sector, transfer count, read
+command, applied speed, and pending speed/cache transition flags. These are
+device/read facts; no sector bytes or user metadata are logged. A completed phase
+also records the count of transition-bound retries.
+
+**Status:** implemented and deterministic-test verified on 2026-07-27. The modern
+ripper suite passes 14/14, the full WPF suite passes 352/352, and the SCSI project
+builds for net8, net47, and net20 under its required full-MSBuild host. The real K:
+rerun remains.

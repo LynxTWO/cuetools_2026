@@ -183,6 +183,12 @@ device cache, boundary read, media property, or persisted calibration.
 - Probe the exact command, transfer shape, flags, and range the runtime will consume.
   A multi-block boundary probe can falsely reject a valid one-block overread; a
   successful capability flag is useless if the read path still pads or bypasses it.
+- Treat completion of a hardware control command as evidence for that command only,
+  not proof that the next payload command is ready. Serialize control transitions
+  with payload I/O, add a measured bounded settle when the device requires one, and
+  retry only the exact observed transient while the transition is pending. A repeat
+  or unrelated failure stays fatal. Preserve transition and payload shape in the
+  failure context so intermittent state bugs can be distinguished from bad ranges.
 - Size an edge or range probe from the real configured offset or requirement. Proving
   the nearest block does not prove a larger correction range.
 - Persist semantic evidence roles, not only interchangeable values. Test, Copy,

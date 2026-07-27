@@ -898,6 +898,7 @@ public sealed class RipService : IRipService
                 _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
+                    $"control_transition_retries={reader.ControlTransitionRetryCount} " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch
