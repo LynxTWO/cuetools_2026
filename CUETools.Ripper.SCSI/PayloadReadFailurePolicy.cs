@@ -76,6 +76,70 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// A parent multi-sector 24/00 followed by an exact one-sector 24/00 disproves
+        /// the original "transfer shape only" hypothesis for that address. Retry that
+        /// pinpoint once after a bounded settle; unrelated child failures remain fatal.
+        /// </summary>
+        public static bool ShouldRetryPinpointAfterRejectedPayloadBatch(
+            int parentSectorCount,
+            Device.CommandStatus parentStatus,
+            Device.SenseKeyType parentSenseKey,
+            byte parentAsc,
+            byte parentAscq,
+            Device.CommandStatus pinpointStatus,
+            Device.SenseKeyType pinpointSenseKey,
+            byte pinpointAsc,
+            byte pinpointAscq)
+        {
+            return ShouldDecomposeRejectedPayloadBatch(
+                    parentSectorCount,
+                    parentStatus,
+                    parentSenseKey,
+                    parentAsc,
+                    parentAscq) &&
+                pinpointStatus == Device.CommandStatus.DeviceFailed &&
+                pinpointSenseKey == Device.SenseKeyType.IllegalRequest &&
+                pinpointAsc == 0x24 &&
+                pinpointAscq == 0x00;
+        }
+
+        /// <summary>
+        /// Two different parent/child command shapes plus one bounded exact retry all
+        /// rejected the same in-range address with 24/00. No rejected payload is used;
+        /// that one sector may enter the existing untrusted vote/CTDB path.
+        /// </summary>
+        public static bool IsCorroboratedRejectedBatchPinpoint(
+            int parentSectorCount,
+            Device.CommandStatus parentStatus,
+            Device.SenseKeyType parentSenseKey,
+            byte parentAsc,
+            byte parentAscq,
+            Device.CommandStatus initialStatus,
+            Device.SenseKeyType initialSenseKey,
+            byte initialAsc,
+            byte initialAscq,
+            Device.CommandStatus repeatedStatus,
+            Device.SenseKeyType repeatedSenseKey,
+            byte repeatedAsc,
+            byte repeatedAscq)
+        {
+            return ShouldRetryPinpointAfterRejectedPayloadBatch(
+                    parentSectorCount,
+                    parentStatus,
+                    parentSenseKey,
+                    parentAsc,
+                    parentAscq,
+                    initialStatus,
+                    initialSenseKey,
+                    initialAsc,
+                    initialAscq) &&
+                repeatedStatus == Device.CommandStatus.DeviceFailed &&
+                repeatedSenseKey == Device.SenseKeyType.IllegalRequest &&
+                repeatedAsc == 0x24 &&
+                repeatedAscq == 0x00;
+        }
+
+        /// <summary>
         /// A repeated 24/00 for the same in-range pinpoint may enter the existing
         /// untrusted-sector pipeline only when a parent transfer independently
         /// reported medium error. No payload from either rejected command is used.

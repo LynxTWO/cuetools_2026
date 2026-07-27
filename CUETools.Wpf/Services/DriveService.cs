@@ -67,6 +67,27 @@ public sealed class DriveService : IDriveService
     /// <summary>Marks the drive as in use by a rip for as long as the returned token is undisposed.</summary>
     internal static IDisposable EnterRip() => new RipScope();
 
+    /// <summary>
+    /// Claim one physical drive for a complete operation. Unlike <see cref="EnterRip()"/>,
+    /// this ownership crosses process boundaries; a separately launched CUETools drive window
+    /// cannot read, calibrate, rip, verify, or eject hardware another job owns.
+    /// </summary>
+    internal static IDisposable? TryEnterRip(char drive, IDiagnosticLog log)
+    {
+        OpticalDriveLease? lease = OpticalDriveLease.TryAcquire(drive, log);
+        if (lease == null)
+            return null;
+        try
+        {
+            return new LeasedRipScope(lease);
+        }
+        catch
+        {
+            lease.Dispose();
+            throw;
+        }
+    }
+
     private static void NotifyRipInProgressChanged()
     {
         // UI observers are outside the audio correctness path. A broken listener must not abort
@@ -94,6 +115,25 @@ public sealed class DriveService : IDriveService
         }
     }
 
+    private sealed class LeasedRipScope : IDisposable
+    {
+        private readonly OpticalDriveLease _lease;
+        private readonly RipScope _rip = new();
+        private int _disposed;
+
+        internal LeasedRipScope(OpticalDriveLease lease) => _lease = lease;
+
+        public void Dispose()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+            // Drop the UI busy indication first; the hardware lease remains held until the
+            // same finally path completes, so no process can enter during that notification.
+            _rip.Dispose();
+            _lease.Dispose();
+        }
+    }
+
     public IReadOnlyList<char> GetDrives()
     {
         try { return CDDrivesList.DrivesAvailable(); }
@@ -102,6 +142,8 @@ public sealed class DriveService : IDriveService
 
     public DiscInfo? ReadDisc(char drive, Action<string>? onStatus = null)
     {
+      using OpticalDriveLease? lease = OpticalDriveLease.TryAcquire(drive, _log);
+      if (lease == null) return null;
       lock (_scsiGate)
       {
         var reader = new CDDriveReader();
@@ -295,6 +337,13 @@ public sealed class DriveService : IDriveService
     // from INQUIRY, which needs no disc. Blocking SCSI: callers run this off the UI thread.
     public DriveDetails GetDriveDetails(char drive)
     {
+        using OpticalDriveLease? lease = OpticalDriveLease.TryAcquire(drive, _log);
+        if (lease == null)
+            return new DriveDetails
+            {
+                Letter = drive,
+                Error = "Another CUETools job is using this drive."
+            };
         DriveCapabilities caps;
         // fail safe like ReadDisc does: a flaky/vanishing drive must degrade, not throw into the UI
         try { lock (_scsiGate) { caps = DriveInspector.Query(drive); } }
@@ -319,7 +368,14 @@ public sealed class DriveService : IDriveService
     public DriveTrayState GetTrayState(char drive)
     {
         // polled every 2s by the tray watcher - a throw here would spam the crash handler
-        try { lock (_scsiGate) { return DriveInspector.GetTray(drive); } }
+        try
+        {
+            using OpticalDriveLease? lease =
+                OpticalDriveLease.TryAcquire(drive, _log);
+            if (lease == null)
+                return DriveTrayState.Unknown;
+            lock (_scsiGate) { return DriveInspector.GetTray(drive); }
+        }
         catch { return DriveTrayState.Unknown; }
     }
 
@@ -344,6 +400,8 @@ public sealed class DriveService : IDriveService
 
     private void TrayIoctl(char drive, uint code, string what)
     {
+      using OpticalDriveLease? lease = OpticalDriveLease.TryAcquire(drive, _log);
+      if (lease == null) return;
       lock (_scsiGate)
       {
         var h = CreateFileW($@"\\.\{char.ToUpperInvariant(drive)}:", 0x80000000 /*GENERIC_READ*/,

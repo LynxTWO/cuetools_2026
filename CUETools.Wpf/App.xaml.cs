@@ -14,12 +14,18 @@ public partial class App : Application
     private SettingsStore? _settingsStore;
     private CUEConfig? _config;
     private AppSettings? _appSettings;
+    private IDiagnosticLog? _log;
+    private AppLaunchOptions _launchOptions = new();
 
     protected override void OnExit(ExitEventArgs e)
     {
         // persist every user setting (engine config + app prefs) on the way out
-        if (_settingsStore != null && _config != null && _appSettings != null)
+        if (!_launchOptions.IsSecondaryDriveWindow &&
+            _settingsStore != null && _config != null && _appSettings != null)
             _settingsStore.Save(_config, _appSettings);
+        else if (_launchOptions.IsSecondaryDriveWindow)
+            _log?.Info("settings",
+                "secondary drive window closed; shared settings intentionally left unchanged");
         base.OnExit(e);
     }
 
@@ -27,7 +33,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        _launchOptions = AppLaunchOptions.Parse(e.Args);
         var services = new ServiceCollection();
+        services.AddSingleton(_launchOptions);
 
         // Explicit factory: CUEConfig has a copy constructor too, and the DI container would
         // otherwise pick it and self-recurse. Force the parameterless ctor, then apply the app's
@@ -86,7 +94,11 @@ public partial class App : Application
         // Diagnostic log + global crash handlers first, so anything below is captured. The log is
         // privacy-safe (see DiagnosticLog): structure only, no album/artist/track names.
         var log = provider.GetRequiredService<IDiagnosticLog>();
+        _log = log;
         log.Info("app", $"start clr={Environment.Version} os={Environment.OSVersion.Version} x64={Environment.Is64BitProcess} log={log.LogPath}");
+        if (_launchOptions.IsSecondaryDriveWindow)
+            log.Info("app",
+                $"secondary drive window requested drive={_launchOptions.PreferredDrive}");
         DispatcherUnhandledException += (s, e) => { log.Error("crash.ui", "unhandled UI-thread exception (kept alive)", e.Exception); e.Handled = true; };
         AppDomain.CurrentDomain.UnhandledException += (s, e) => log.Error("crash.fatal", "unhandled exception (terminating)", e.ExceptionObject as Exception);
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) => { log.Error("crash.task", "unobserved task exception", e.Exception); e.SetObserved(); };
@@ -152,6 +164,19 @@ public partial class App : Application
         var theme = provider.GetRequiredService<ThemeService>();
         theme.Apply(theme.Current);
 
+        // Publish the requested drive before page view-models are constructed. The Rip and
+        // Drive & Read pages then initialize against the same hardware without a transient read
+        // of the first enumerated drive.
+        if (_launchOptions.PreferredDrive != '\0')
+        {
+            IDriveService drives = provider.GetRequiredService<IDriveService>();
+            if (drives.GetDrives().Contains(_launchOptions.PreferredDrive))
+                drives.SelectedDrive = _launchOptions.PreferredDrive;
+            else
+                log.Warn("app",
+                    $"requested drive {_launchOptions.PreferredDrive}: is not attached");
+        }
+
         // A broken system font-cache entry for a specific family makes DWrite throw FileNotFoundException
         // when WPF first lays out text in it, which aborts the whole window (the app then runs with no
         // visible window - looks like it "did nothing"). Probe each themed font up front; if one is
@@ -191,7 +216,14 @@ public partial class App : Application
             MainWindow window = null;
             try
             {
-                window = new MainWindow(theme, provider.GetRequiredService<AppStatusService>()) { DataContext = mainVm };
+                window = new MainWindow(theme, provider.GetRequiredService<AppStatusService>())
+                {
+                    DataContext = mainVm,
+                    Title = _launchOptions.IsSecondaryDriveWindow &&
+                        _launchOptions.PreferredDrive != '\0'
+                            ? $"CUETools 2026 - Drive {_launchOptions.PreferredDrive}:"
+                            : "CUETools 2026"
+                };
                 window.Show();
                 window.UpdateLayout();     // force the deferred layout so a font glitch throws here, caught
                 window.Activate();

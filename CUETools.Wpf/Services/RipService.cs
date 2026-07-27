@@ -252,7 +252,12 @@ public sealed class RipService : IRipService
         // Hold one outer scope across calibration and the actual read. The nested scopes inside
         // those phases keep their own invariants, while this one prevents a drive selector from
         // briefly re-enabling in the handoff between them.
-        using var operationScope = DriveService.EnterRip();
+        using var operationScope = DriveService.TryEnterRip(drive, _log);
+        if (operationScope == null)
+            return new VerifyResult
+            {
+                Error = $"Drive {char.ToUpperInvariant(drive)}: is already in use by another CUETools job."
+            };
         _stopRequested = false;
         if (!EnsureCalibration(
                 drive,
@@ -265,7 +270,12 @@ public sealed class RipService : IRipService
 
     public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null)
     {
-        using var operationScope = DriveService.EnterRip();
+        using var operationScope = DriveService.TryEnterRip(drive, _log);
+        if (operationScope == null)
+            return new VerifyResult
+            {
+                Error = $"Drive {char.ToUpperInvariant(drive)}: is already in use by another CUETools job."
+            };
         _stopRequested = false;
         if (!EnsureCalibration(
                 drive,
@@ -1091,7 +1101,12 @@ public sealed class RipService : IRipService
     {
         // Test, Copy, and an optional tie-break are separate Run calls. Keep drive ownership
         // continuous across their calibration, staging, and between-read gaps.
-        using var operationScope = DriveService.EnterRip();
+        using var operationScope = DriveService.TryEnterRip(drive, _log);
+        if (operationScope == null)
+            return new TestCopyRunResult
+            {
+                Error = $"Drive {char.ToUpperInvariant(drive)}: is already in use by another CUETools job."
+            };
         // Calibration and drive setup can fail before the first staged Run call, so protect the
         // final user-selected destination at this outer entry point too.
         RedactOutputRoot(outputBaseDir);

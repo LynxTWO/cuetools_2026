@@ -99,6 +99,84 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void RejectedBatchPinpointGetsOneBoundedRetry()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy
+                    .ShouldRetryPinpointAfterRejectedPayloadBatch(
+                        16,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryPinpointAfterRejectedPayloadBatch(
+                        1,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryPinpointAfterRejectedPayloadBatch(
+                        16,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.HardwareError,
+                        0x44,
+                        0x00));
+        }
+
+        [TestMethod]
+        public void RepeatedRejectedBatchPinpointBecomesUntrustedOnlyForSameFailure()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy
+                    .IsCorroboratedRejectedBatchPinpoint(
+                        16,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .IsCorroboratedRejectedBatchPinpoint(
+                        16,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.NotReady,
+                        0x04,
+                        0x01));
+        }
+
+        [TestMethod]
         public void PinpointInvalidFieldRetriesOnlyAfterParentMediumError()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryPinpointAfterMediumBatch(

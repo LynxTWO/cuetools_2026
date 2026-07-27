@@ -1507,20 +1507,93 @@ namespace CUETools.Ripper.SCSI
 					if (singleStatus != Device.CommandStatus.Success)
 					{
 						// A rejected transfer shape says nothing about the trustworthiness
-						// of any sector. Continue only when every independent payload read
-						// succeeds; preserve the exact failed single-sector command otherwise.
+						// of any sector. Snapshot the exact child sense before another command
+						// overwrites the device buffer, then accept only a successful retry or
+						// explicit untrusted-sector evidence.
 						string singleContext = string.Format(
-							"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, batch-fallback=True]",
+							"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, batch-fallback=True, parent-batch-sector={6}, parent-batch-sectors={7}, parent-batch-sense={8}]",
 							Resource1.ReadCDError,
 							singleSector,
 							_readCDCommand,
 							_appliedSpeedKbps,
 							_speedChangeJustApplied,
-							_cacheDefeatJustFlushed);
-						throw new SCSIException(
+							_cacheDefeatJustFlushed,
+							sector,
+							Sectors2Read,
+							senseKey);
+						SCSIException singleFailure = new SCSIException(
 							singleContext,
 							m_device,
 							singleStatus);
+
+						if (PayloadReadFailurePolicy.IsMediumError(
+							singleFailure.Status,
+							singleFailure.SenseKey))
+						{
+							MarkSectorUnreadable(singleSector);
+							continue;
+						}
+
+						if (PayloadReadFailurePolicy
+							.ShouldRetryPinpointAfterRejectedPayloadBatch(
+								Sectors2Read,
+								st,
+								senseKey,
+								asc,
+								ascq,
+								singleFailure.Status,
+								singleFailure.SenseKey,
+								singleFailure.Asc,
+								singleFailure.Ascq))
+						{
+							Thread.Sleep(80);
+							_pinpointRetryCount++;
+							Device.CommandStatus repeatedStatus =
+								FetchSectors(singleSector, 1, false);
+							if (repeatedStatus == Device.CommandStatus.Success)
+								continue;
+
+							string repeatedContext = string.Format(
+								"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, batch-fallback=True, parent-batch-sector={6}, parent-batch-sectors={7}, parent-batch-sense={8}, pinpoint-retry=True]",
+								Resource1.ReadCDError,
+								singleSector,
+								_readCDCommand,
+								_appliedSpeedKbps,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								sector,
+								Sectors2Read,
+								senseKey);
+							SCSIException repeatedFailure = new SCSIException(
+								repeatedContext,
+								m_device,
+								repeatedStatus);
+							if (PayloadReadFailurePolicy.IsMediumError(
+									repeatedFailure.Status,
+									repeatedFailure.SenseKey) ||
+								PayloadReadFailurePolicy
+									.IsCorroboratedRejectedBatchPinpoint(
+										Sectors2Read,
+										st,
+										senseKey,
+										asc,
+										ascq,
+										singleFailure.Status,
+										singleFailure.SenseKey,
+										singleFailure.Asc,
+										singleFailure.Ascq,
+										repeatedFailure.Status,
+										repeatedFailure.SenseKey,
+										repeatedFailure.Asc,
+										repeatedFailure.Ascq))
+							{
+								_corroboratedUnreadablePinpointCount++;
+								MarkSectorUnreadable(singleSector);
+								continue;
+							}
+							throw repeatedFailure;
+						}
+						throw singleFailure;
 					}
 				}
 				_payloadBatchFallbackCount++;

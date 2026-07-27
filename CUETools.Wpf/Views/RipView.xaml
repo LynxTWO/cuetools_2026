@@ -384,6 +384,21 @@
             <Button Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"
                     Margin="0,0,0,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+            <!-- A live job stays pinned to its immutable drive snapshot. Start another drive
+                 in an isolated process instead of sharing this page's Stop/CUESheet/staging
+                 state. The OS-wide physical-drive lease rejects same-drive collisions. -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,10,6"
+                        Visibility="{Binding ShowParallelDriveLauncher, Converter={StaticResource BoolVis}}">
+              <TextBlock Text="Another drive" Foreground="{DynamicResource Muted}"
+                         FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
+              <ComboBox Width="64" ItemsSource="{Binding ParallelDrives}"
+                        SelectedItem="{Binding ParallelDrive, Mode=TwoWay}"
+                        VerticalAlignment="Center" Margin="0,0,6,0"
+                        ToolTip="A different attached optical drive. The active drive is intentionally excluded."/>
+              <Button Content="Open window" Command="{Binding OpenParallelDriveCommand}"
+                      Padding="11,7"
+                      ToolTip="Open an isolated CUETools drive window. Both drives can rip at once; same-drive use is blocked."/>
+            </StackPanel>
             <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource Accent}"
                     Padding="18,9" Margin="0,0,0,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}"

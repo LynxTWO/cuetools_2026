@@ -26,6 +26,9 @@ public sealed class RipViewModel : PageViewModel
     private readonly CUEConfig _config;
     private readonly IAlbumArtService _art;
     private readonly AppSettings _settings;
+    private readonly SettingsStore _settingsStore;
+    private readonly AppLaunchOptions _launchOptions;
+    private readonly IDiagnosticLog _log;
     private readonly IConvertService _codecs;
     private readonly AppStatusService _status;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
@@ -35,6 +38,7 @@ public sealed class RipViewModel : PageViewModel
     private DiscInfo? _lastDisc;
 
     public ObservableCollection<char> Drives { get; } = new();
+    public ObservableCollection<char> ParallelDrives { get; } = new();
     public ObservableCollection<TrackItem> Tracks { get; } = new();
     public ObservableCollection<RecentRip> Recent { get; } = new();
 
@@ -137,9 +141,29 @@ public sealed class RipViewModel : PageViewModel
             // used to act on GetDrives()[0], so calibrating there while ripping a different drive left
             // the rip with no calibration and silently skipped cache defeat
             _drives.SelectedDrive = value;
+            RebuildParallelDrives();
             _ = ReadDiscAsync();
         }
     }
+
+    private char _parallelDrive;
+    public char ParallelDrive
+    {
+        get => _parallelDrive;
+        set
+        {
+            if (Set(ref _parallelDrive, value))
+                CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    /// <summary>
+    /// A running job keeps this window pinned to its immutable drive snapshot. Any other
+    /// attached drive is launched in an explicitly isolated CUETools process with an OS-wide
+    /// hardware lease, so Stop, CUESheet state, telemetry, and staging cannot cross jobs.
+    /// </summary>
+    public bool ShowParallelDriveLauncher =>
+        IsRipping && ParallelDrives.Count > 0;
 
     private bool _isDiscPresent;
     public bool IsDiscPresent { get => _isDiscPresent; private set { if (Set(ref _isDiscPresent, value)) OnPropertyChanged(nameof(ShowDiscArea)); } }
@@ -197,7 +221,19 @@ public sealed class RipViewModel : PageViewModel
     public double RipProgress { get => _ripProgress; private set => Set(ref _ripProgress, value); }
 
     private bool _isRipping;
-    public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) { OnPropertyChanged(nameof(ControlsUnlocked)); CommandManager.InvalidateRequerySuggested(); } } }
+    public bool IsRipping
+    {
+        get => _isRipping;
+        private set
+        {
+            if (Set(ref _isRipping, value))
+            {
+                OnPropertyChanged(nameof(ControlsUnlocked));
+                OnPropertyChanged(nameof(ShowParallelDriveLauncher));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
 
     /// <summary>False while a rip/verify runs. Bound to the IsEnabled of the controls whose value is
     /// SNAPSHOTTED when the job starts - the drive picker and accuracy mode. Letting them
@@ -342,8 +378,23 @@ public sealed class RipViewModel : PageViewModel
     public ICommand TestCopyCommand { get; }
     public ICommand AcceptCopyAnywayCommand { get; }
     public ICommand DiscardHeldCommand { get; }
+    public ICommand OpenParallelDriveCommand { get; }
 
-    public RipViewModel(IDriveService drives, IRipService rip, IVerifyService verify, IConvertService codecs, IReportStore reports, IHistoryStore history, CUEConfig config, IAlbumArtService art, AppSettings settings, EncoderCatalog catalog, AppStatusService status)
+    public RipViewModel(
+        IDriveService drives,
+        IRipService rip,
+        IVerifyService verify,
+        IConvertService codecs,
+        IReportStore reports,
+        IHistoryStore history,
+        CUEConfig config,
+        IAlbumArtService art,
+        AppSettings settings,
+        EncoderCatalog catalog,
+        AppStatusService status,
+        SettingsStore settingsStore,
+        AppLaunchOptions launchOptions,
+        IDiagnosticLog log)
     {
         Title = "Rip";
         Group = "Work";
@@ -356,6 +407,9 @@ public sealed class RipViewModel : PageViewModel
         _config = config;
         _art = art;
         _settings = settings;
+        _settingsStore = settingsStore;
+        _launchOptions = launchOptions;
+        _log = log;
         _status = status;
         _codecs = codecs;
         _drives.SelectedDriveChanged += OnSharedSelectedDriveChanged;
@@ -409,14 +463,22 @@ public sealed class RipViewModel : PageViewModel
         TestCopyCommand = new RelayCommand(_ => { _ = RunTestCopyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
         AcceptCopyAnywayCommand = new RelayCommand(_ => AcceptCopyAnyway(), _ => _heldResult != null);
         DiscardHeldCommand = new RelayCommand(_ => DiscardHeld(), _ => _heldResult != null);
+        OpenParallelDriveCommand = new RelayCommand(
+            _ => OpenParallelDrive(),
+            _ => IsRipping && ParallelDrive != '\0' &&
+                 ParallelDrives.Contains(ParallelDrive));
 
         foreach (var d in drives.GetDrives()) Drives.Add(d);
         LoadRecent();
 
         if (Drives.Count > 0)
         {
-            _selectedDrive = Drives[0];   // set the field to avoid a double read from the setter
+            char shared = _drives.SelectedDrive;
+            _selectedDrive = Drives.Contains(shared)
+                ? shared
+                : Drives[0];   // set the field to avoid a double read from the setter
             _drives.SelectedDrive = _selectedDrive;   // ...but still publish it for the Drive & Read page
+            RebuildParallelDrives();
             OnPropertyChanged(nameof(SelectedDrive));
             _ = ReadDiscAsync();
             StartTrayWatch();
@@ -437,8 +499,24 @@ public sealed class RipViewModel : PageViewModel
         if (IsRipping || IsBusy)
             return;
         _selectedDrive = selected;
+        RebuildParallelDrives();
         OnPropertyChanged(nameof(SelectedDrive));
         _ = ReadDiscAsync();
+    }
+
+    private void RebuildParallelDrives()
+    {
+        char previous = _parallelDrive;
+        ParallelDrives.Clear();
+        foreach (char drive in Drives)
+            if (drive != _selectedDrive)
+                ParallelDrives.Add(drive);
+        _parallelDrive = ParallelDrives.Contains(previous)
+            ? previous
+            : ParallelDrives.Count > 0 ? ParallelDrives[0] : '\0';
+        OnPropertyChanged(nameof(ParallelDrive));
+        OnPropertyChanged(nameof(ShowParallelDriveLauncher));
+        CommandManager.InvalidateRequerySuggested();
     }
 
     // Poll the drive for tray/media changes so the UI reacts to the physical eject button and to a
@@ -522,15 +600,23 @@ public sealed class RipViewModel : PageViewModel
         {
             IsDiscPresent = false;
             bool open = TrayState == DriveTrayState.Open;
+            bool ownedElsewhere = !details.Valid &&
+                details.Error.Contains(
+                    "Another CUETools job",
+                    StringComparison.OrdinalIgnoreCase);
             // the drive tells us the media type: distinguish "empty" from "a disc, but not audio"
             bool nonAudio = !open && details.Valid && details.MediaPresent && details.CurrentProfile.Length > 0;
-            AlbumTitle = open ? "Tray open - insert a disc, then Close"
+            AlbumTitle = ownedElsewhere
+                ? $"Drive {drive}: is already ripping in another CUETools window"
+                : open ? "Tray open - insert a disc, then Close"
                 : nonAudio ? $"Not an audio CD - {details.CurrentProfile} in drive {drive}:"
                 : "No disc in drive " + drive + ":";
             AlbumArtist = "";
             DiscInfoText = "";
             ClearArt();
-            StatusText = open ? "Tray open."
+            StatusText = ownedElsewhere
+                ? "This physical drive is locked to its existing job. Choose another drive or use that window."
+                : open ? "Tray open."
                 : nonAudio ? $"{details.CurrentProfile} loaded - insert an audio CD to rip."
                 : "Drive ready - insert an audio CD to begin.";
         }
@@ -792,6 +878,7 @@ public sealed class RipViewModel : PageViewModel
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
+        PersistPrimarySettingsSnapshot();
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         IsRipping = true;
@@ -957,6 +1044,7 @@ public sealed class RipViewModel : PageViewModel
     private async Task RunTestCopyAsync()
     {
         if (!IsDiscPresent || IsRipping || IsBusy) return;
+        PersistPrimarySettingsSnapshot();
         // Keep the previous held staging until the NEW run has produced a result. Discarding it up
         // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
         // with nothing to accept - the verified reads they already had were gone.
@@ -1448,6 +1536,41 @@ public sealed class RipViewModel : PageViewModel
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose where ripped albums go" };
         if (dlg.ShowDialog() == true) OutputBaseDir = dlg.FolderName;
+    }
+
+    private void PersistPrimarySettingsSnapshot()
+    {
+        // The primary dashboard publishes its current preferences before a long job starts.
+        // A secondary drive window launched during that job then begins from the same durable
+        // snapshot. Secondary windows never write the shared file, including on exit.
+        if (!_launchOptions.IsSecondaryDriveWindow)
+            _settingsStore.Save(_config, _settings);
+    }
+
+    private void OpenParallelDrive()
+    {
+        char drive = ParallelDrive;
+        if (!IsRipping || drive == '\0' || !ParallelDrives.Contains(drive))
+            return;
+
+        try
+        {
+            var start = DriveWindowLauncher.Create(drive);
+            System.Diagnostics.Process.Start(start);
+            StatusText =
+                $"Drive {drive}: opened in an isolated CUETools window. " +
+                $"This {SelectedDrive}: job continues here.";
+            _log.Info("drive",
+                $"launched secondary drive window requestedDrive={drive}");
+        }
+        catch (Exception ex)
+        {
+            StatusText =
+                $"Could not open a CUETools window for drive {drive}: please try again.";
+            _log.Error("drive",
+                $"secondary drive window launch failed requestedDrive={drive}",
+                ex);
+        }
     }
 
     private void OpenFolder()

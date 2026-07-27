@@ -47,7 +47,12 @@ public sealed class DiagnosticLog : IDiagnosticLog
             "CUETools2026",
             "logs");
         string selectedPath = string.IsNullOrWhiteSpace(logPath)
-            ? Path.Combine(defaultDir, $"cuetools-{DateTime.Now:yyyyMMdd-HHmmss}.log")
+            // Multiple drive workers can start in the same second. Include both the process
+            // identity and a nonce so every job retains its own complete diagnostic evidence.
+            ? Path.Combine(
+                defaultDir,
+                $"cuetools-{DateTime.Now:yyyyMMdd-HHmmss-fff}-p{Environment.ProcessId}-" +
+                $"{Guid.NewGuid():N}.log")
             : logPath;
         string? dir = Path.GetDirectoryName(selectedPath);
         try

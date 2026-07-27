@@ -1098,19 +1098,31 @@ does not relax evidence, rollback, or verification requirements.
 - **Confidence:** verified by code trace.
 - **Approval needed:** no; the user requested concurrent multi-drive ripping on
   2026-07-27.
-- **Smallest safe next step:** build an explicit process-per-drive worker boundary
-  behind one dashboard. Add a cross-process lease keyed by stable device identity,
-  unique per-worker logs, safe shared-cache/settings policy, immutable per-job
-  configuration, authenticated worker status/Stop messages, and per-drive result
-  cards. Do not emulate concurrency by sharing the current singleton job state.
+- **Smallest safe next step:** use an explicit process-per-drive window boundary.
+  Add a cross-process lease keyed by both the current letter and Windows physical
+  storage identity, unique per-process logs, a single-writer settings policy,
+  non-sensitive launch arguments, and independently owned status/Stop controls.
+  Do not emulate concurrency by sharing the current singleton job state.
 - **Verification plan:** simultaneous real H:/K: rips; a negative test that a
   second worker cannot claim the same drive; cross-process output-name collision,
   history/calibration update, settings-exit, log-uniqueness, worker-crash, Stop,
   CTDB repair, and machine-sleep/tray-lock tests.
 - **Owner:** repo owner.
-- **Status:** open. The Drive & Read dropdown now enumerates and synchronizes all
-  attached drives and locks selection across the full current job, but parallel
-  workers are deliberately not claimed yet.
+- **Status:** implementation staged and focused-test verified 2026-07-27. A running
+  Rip page offers only other attached drives and opens the selected one in a
+  separately titled CUETools process. The job lease holds both drive letter and
+  Windows device number across calibration and every child read; nesting is
+  thread-owner-bound, while other threads/processes fail before touching hardware.
+  Secondary windows load but never save shared settings, settings publication is
+  cross-process serialized, command lines contain only role and drive letter, and
+  log names include process identity plus a nonce. Album publication and gzip
+  evidence stores retain their existing cross-process transactions. The new lease
+  launch, and settings-writer contracts pass 6/6 focused tests. The full WPF suite
+  passes 358/358, release safety passes 41 checks, all five staged vendor worktrees
+  remain clean, and a separate clean self-contained artifact passed its 36-file,
+  14-entry runtime-trust, 19-registration, and five-native-probe contract.
+  Simultaneous H:/K:, same-drive denial, independent Stop, and crash-release hardware
+  proof remain.
 
 ### R55. Payload medium errors bypass damaged-sector recovery - bucket A, risk high
 
@@ -1241,6 +1253,39 @@ does not relax evidence, rollback, or verification requirements.
   net8/net47/net20, and both bounded K: window probes pass. The end-to-end rerun
   remains.
 
+### R59. Rejected-batch decomposition can expose the same failing pinpoint - bucket A, risk high
+
+- **Area or slice:** SCSI rejected-payload decomposition, nested failure ancestry,
+  Test & Copy, secure vote input, and CTDB repair reachability.
+- **Why it matters:** the same exact one-sector `24/00` can be reached from two
+  different parents. R58 covered a parent medium error, but a parent multi-sector
+  `24/00` takes the transfer-shape fallback first. Throwing its failed child aborts
+  a twelve-minute damaged-disc read before the vote and CTDB paths can consume
+  explicit untrusted-sector evidence.
+- **Evidence found:** the final-source K: rerun started at 18:14:04 and failed after
+  739 seconds at relative sector 283328, one sector, `READ CD BEh`, 4224 kB/s.
+  The exact context included `batch-fallback=True`, proving the parent entered
+  rejected-batch decomposition rather than R58's medium-error branch. This is why
+  the covered-looking R58 policy never ran.
+- **Confidence:** verified from the production diagnostic and source branch.
+- **Approval needed:** no; the user requested autonomous damaged-disc completion.
+- **Smallest safe next step:** snapshot the rejected-batch child sense. Retry only
+  an exact child `24/00` once after the same bounded settle. Consume only successful
+  retry bytes. An exact medium error, or a repeated exact `24/00` corroborated by
+  the different parent/child command shapes, marks only that sector untrusted.
+  Every other child or repeat remains fatal.
+- **Verification plan:** classifier route positives/negatives; modern ripper and
+  WPF suites; net8/net47/net20 SCSI builds; then repeat K: Test & Copy past sector
+  283328 and require completion or a differently classified exact failure.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. No rejected
+  payload is consumed. The modern ripper policy suite passes 20/20, the WPF suite
+  passes 358/358, and the SCSI project builds for net8/net47/net20 with the exact
+  Visual Studio 18.8 full-MSBuild host used for net20. Release safety passes 41
+  checks, all five staged vendor worktrees remain clean, and the separate clean
+  self-contained artifact passes its production contract. The K: end-to-end rerun
+  remains.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1249,11 +1294,11 @@ dependency:
 1. Finish and adversarially review any open R44-R49 follow-ups.
 2. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Run the final-source K: damaged-disc CTDB repair/Test & Copy lane after its device
-   reset. Retain the passing H: cache-defeat, WMA,
+3. Run R59's final-source K: damaged-disc CTDB repair/Test & Copy lane. Retain the
+   passing H: cache-defeat, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
-4. Implement R54's process-per-drive worker boundary and prove simultaneous H:/K:
-   operation without shared-state or same-drive collisions.
+4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
+   and crash release without shared-state collisions.
 5. Run the pinned hosted workflows and compare them with the local receipts.
 6. Choose and implement a publisher signing/attestation identity and policy.
 7. Continue R5/R8/R12/R13 modernization and lock-file rollout.
@@ -1297,3 +1342,6 @@ dependency:
   `24/00` was a nested pinpoint failure following a parent medium error. Two
   bounded reads proved the same address and command shape succeed outside that
   intermittent state.
+- 2026-07-27 - added R59 when the next K: run proved the same exact child failure
+  was also reachable through rejected-batch decomposition. Added classifier-route
+  coverage rather than widening R58's medium-parent claim.
