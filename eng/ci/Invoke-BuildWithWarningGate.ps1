@@ -11,6 +11,8 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$vendorPreparation = Join-Path $PSScriptRoot "Prepare-VendorSources.ps1"
+& $vendorPreparation -RepositoryRoot $repoRoot
 if ([string]::IsNullOrWhiteSpace($BaselinePath)) {
     $BaselinePath = Join-Path $PSScriptRoot "warning-baseline.json"
 }

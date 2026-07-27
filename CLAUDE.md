@@ -20,6 +20,11 @@ progress documents for it belong here, under `docs/review/`.
   net20 flavor).
 - Prefer `dotnet build` per project. Use explicit full-MSBuild or `devenv.com` paths
   for legacy GUI, C++/CLI, and installer targets, and record any target not exercised.
+- Run `eng/ci/Prepare-VendorSources.ps1` before restore or build. Four pinned
+  submodules are combined with tracked patches under `obj/vendor-sources/current`;
+  managed, native, classic, CI, and release consumers must use that staged tree.
+  Never apply the patches in place or use a submodule worktree as an intermediate.
+  Finish a real build with `eng/ci/Test-VendorSubmodulesClean.ps1`.
 - Run classic release clean/build/receipt/collect/validate through
   `eng/release/Invoke-ClassicRelease.ps1`. A clean staging directory does not prove
   fresh compiled inputs. The orchestrator holds one repo-wide lease across recovery,
@@ -29,13 +34,22 @@ progress documents for it belong here, under `docs/review/`.
   input. They bind the expanded Monkey's Audio tree to its archive, and bind the exact
   Release|x64 and Release|Win32 command logs plus warning-baseline hash before
   collection. A new warning retains the intent and logs and must not publish.
+- A retry may archive a source-stale failed build only through
+  `Invoke-ClassicRelease.ps1 -ArchiveStalePendingIntent`. The explicit path preserves
+  the old intent byte-for-byte before cleanup. Do not delete or rename pending intent
+  evidence manually.
 - Monkey's Audio is pinned to the official 13.20 SDK archive. Prepare and build it
   through `eng/ci/Build-NativeDependencies.ps1`; the script byte-validates all 423
   archive files plus four hash-pinned CUETools wrapper overrides before building
-  the Win32 and x64 outputs.
+  the Win32 and x64 outputs. Both the archive project and CUETools wrapper must pin
+  v143 explicitly; never inherit `DefaultPlatformToolset`.
 - Do not assume that a Windows file handle opened with delete sharing permits its
   parent directory to move. Assurance-bearing publication must revalidate the exact
   destination before releasing its reservation or reporting success.
+- CTDB repair is a preservation transaction. It must retain source-derived audio
+  basenames, standard and unknown tags, and embedded artwork in the repaired sibling
+  copy, reject destination-name collisions before writing, and leave the source set
+  byte-for-byte unchanged.
 
 ## Writing rules for all human-facing text
 

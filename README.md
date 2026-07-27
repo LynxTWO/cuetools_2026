@@ -15,10 +15,10 @@ Third-party codec packages should be enrolled with the release archive's
 `git clone https://github.com/gchudov/cuetools.net.git`
 * Get the required submodules using:  
 `git submodule update --init --recursive`
-* Prepare the pinned native dependencies and apply ThirdParty patches:
-`powershell -NoProfile -ExecutionPolicy Bypass -File eng/ci/Build-NativeDependencies.ps1 -ApplyPatchesOnly`
-`git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch`  
-`git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch`
+* Materialize the pinned commits plus CUETools patches in the ignored vendor source stage:
+`powershell -NoProfile -ExecutionPolicy Bypass -File eng/ci/Prepare-VendorSources.ps1`
+  The checked-out submodules remain clean. Native codec builds call this preparation step
+  automatically.
 * The solution can be built using Microsoft Visual Studio 2022 or newer (Community Edition will work)
   * Install the required .NET development tools (currently .NET Framework 4.7 and the .NET SDK)
   * Install the v143 C++ build tools and C++/CLI support

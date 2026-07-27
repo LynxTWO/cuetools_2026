@@ -30,18 +30,18 @@
     <ProjectReference Include="..\CUETools.Codecs\CUETools.Codecs.csproj" />
   </ItemGroup>
 
-  <!-- WindowsMediaLib is a net47/net20-only SUBMODULE. For net8.0-windows we compile its four
-       interop sources directly into this assembly instead of multi-targeting the submodule -
-       zero submodule edits, same types (internalized). Rectangle comes from
+  <!-- WindowsMediaLib is a net47/net20-only project. For net8.0-windows we compile its four
+       staged interop sources directly into this assembly instead of multi-targeting the project.
+       This keeps the same internalized types. Rectangle comes from
        System.Drawing.Primitives, which is part of the net8 framework. -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net8.0-windows'">
-    <ProjectReference Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WindowsMediaLib.csproj" />
+    <ProjectReference Include="..\obj\vendor-sources\current\ThirdParty\WindowsMediaLib\wmlib\src\WindowsMediaLib.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
-    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\MMIO.cs" />
-    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMCore.cs" />
-    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMDefs.cs" />
-    <Compile Include="..\ThirdParty\WindowsMediaLib\wmlib\src\WMUtils.cs" />
+    <Compile Include="..\obj\vendor-sources\current\ThirdParty\WindowsMediaLib\wmlib\src\MMIO.cs" />
+    <Compile Include="..\obj\vendor-sources\current\ThirdParty\WindowsMediaLib\wmlib\src\WMCore.cs" />
+    <Compile Include="..\obj\vendor-sources\current\ThirdParty\WindowsMediaLib\wmlib\src\WMDefs.cs" />
+    <Compile Include="..\obj\vendor-sources\current\ThirdParty\WindowsMediaLib\wmlib\src\WMUtils.cs" />
   </ItemGroup>
 
 </Project>

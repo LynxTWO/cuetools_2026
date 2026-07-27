@@ -39,45 +39,6 @@ function Resolve-RepoPath([string]$RelativePath) {
     return $path
 }
 
-function Invoke-IdempotentPatch(
-    [string]$TargetDirectory,
-    [string]$PatchRelativePath) {
-    $patchPath = Resolve-RepoPath $PatchRelativePath
-    if (-not (Test-Path -LiteralPath $patchPath -PathType Leaf)) {
-        throw "Required patch does not exist: $PatchRelativePath"
-    }
-
-    $oldErrorAction = $ErrorActionPreference
-    try {
-        # A failed --check is expected when testing the already-applied branch. Windows PowerShell
-        # turns native stderr into an ErrorRecord under Stop, so lower it only around these probes.
-        $ErrorActionPreference = "Continue"
-        & git -C $repoRoot apply --check "--directory=$TargetDirectory" --whitespace=nowarn $patchPath 2>$null
-        $canApply = $LASTEXITCODE -eq 0
-    }
-    finally { $ErrorActionPreference = $oldErrorAction }
-    if ($canApply) {
-        & git -C $repoRoot apply "--directory=$TargetDirectory" --whitespace=nowarn $patchPath
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to apply $PatchRelativePath"
-        }
-        Write-Host "Applied native dependency patch: $PatchRelativePath"
-        return
-    }
-
-    try {
-        $ErrorActionPreference = "Continue"
-        & git -C $repoRoot apply --reverse --check "--directory=$TargetDirectory" --whitespace=nowarn $patchPath 2>$null
-        $isApplied = $LASTEXITCODE -eq 0
-    }
-    finally { $ErrorActionPreference = $oldErrorAction }
-    if ($isApplied) {
-        Write-Host "Native dependency patch already applied: $PatchRelativePath"
-        return
-    }
-    throw "Patch is neither cleanly applicable nor cleanly applied: $PatchRelativePath"
-}
-
 function Expand-MacSdkIfRequired {
     $macRoot = Resolve-RepoPath "ThirdParty\MAC_SDK"
     $macProject = Resolve-RepoPath (
@@ -286,6 +247,25 @@ function Expand-MacSdkIfRequired {
         }
     }
 
+    $macWrapperProject = Resolve-RepoPath (
+        "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLibDll\MACLibDll.vcxproj")
+    foreach ($projectPath in @($macProject, $macWrapperProject)) {
+        [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw
+        $toolsetNodes = @(
+            $projectXml.SelectNodes(
+                "/*[local-name()='Project']" +
+                "/*[local-name()='PropertyGroup']" +
+                "/*[local-name()='PlatformToolset']"))
+        if ($toolsetNodes.Count -eq 0 -or
+            @($toolsetNodes | Where-Object {
+                $_.InnerText.Trim() -ne "v143"
+            }).Count -ne 0) {
+            throw (
+                "Monkey's Audio projects must use one explicit v143 toolset: " +
+                $projectPath)
+        }
+    }
+
     $generatedPrefixPattern =
         "^Source/Projects/Visual Studio - 2022/MACLib/(?:x64/)?(?:Debug|Release)/"
     $generatedCount = 0
@@ -406,14 +386,15 @@ if ($ExpandMacSdkOnly) {
     Write-Host "Pinned Monkey's Audio SDK expansion check passed. No patch or build was requested."
     exit 0
 }
-Invoke-IdempotentPatch `
-    "ThirdParty/flac" `
-    "ThirdParty/submodule_flac_CUETools.patch"
-Invoke-IdempotentPatch `
-    "ThirdParty/WavPack" `
-    "ThirdParty/submodule_WavPack_CUETools.patch"
+$vendorStagingScript = Join-Path $PSScriptRoot "VendorSourceStaging.ps1"
+if (-not (Test-Path -LiteralPath $vendorStagingScript -PathType Leaf)) {
+    throw "Vendor source staging helper does not exist: $vendorStagingScript"
+}
+. $vendorStagingScript
+$vendorStage = Initialize-CUEToolsVendorSources `
+    -RepositoryRoot $repoRoot
 if ($ApplyPatchesOnly) {
-    Write-Host "Pinned native sources are expanded and patched. No build was requested."
+    Write-Host "Pinned dependency sources are expanded and staged. No build was requested."
     exit 0
 }
 
@@ -424,10 +405,10 @@ $builds = New-Object "Collections.Generic.List[object]"
 foreach ($platform in @("Win32", "x64")) {
     foreach ($definition in @(
         @(
-            "ThirdParty\flac\src\libFLAC\libFLAC_dynamic.vcxproj",
+            "obj\vendor-sources\current\ThirdParty\flac\src\libFLAC\libFLAC_dynamic.vcxproj",
             "libFLAC_dynamic.dll"),
         @(
-            "ThirdParty\WavPack\wavpackdll\wavpackdll.vcxproj",
+            "obj\vendor-sources\current\ThirdParty\WavPack\wavpackdll\wavpackdll.vcxproj",
             "wavpackdll.dll"),
         @(
             "ThirdParty\MAC_SDK\Source\Projects\VS2022\MACLibDll\MACLibDll.vcxproj",
@@ -449,6 +430,7 @@ foreach ($build in $builds) {
     $output = @(
         & $msbuild $project /t:Rebuild "/p:Configuration=$Configuration" `
             "/p:Platform=$($build.platform)" `
+            "/p:PlatformToolset=v143" `
             "/p:SolutionDir=$solutionDirectory" /nologo 2>&1
     )
     $exitCode = $LASTEXITCODE

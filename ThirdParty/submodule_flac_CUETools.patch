@@ -548,3 +548,17 @@ index d3d62653..18a68e27 100644
  
  #if (defined GIT_COMMIT_HASH && defined GIT_COMMIT_DATE)
  # ifdef GIT_COMMIT_TAG
+diff --git a/src/libFLAC/bitwriter.c b/src/libFLAC/bitwriter.c
+--- a/src/libFLAC/bitwriter.c
++++ b/src/libFLAC/bitwriter.c
+@@ -679,6 +679,6 @@ FLAC__bool FLAC__bitwriter_write_rice_signed_block(FLAC__BitWriter *bw, const FL
+ #if (ENABLE_64_BIT_WORDS == 0)
+-	if(bitpointer < FLAC__TEMP_BITS) {
+-		bw->accum = wide_accum >> bitpointer;
+-		bw->bits = FLAC__TEMP_BITS - bitpointer;
+-	}
++	if(bitpointer < FLAC__TEMP_BITS) {
++		bw->accum = (bwword)(wide_accum >> bitpointer);
++		bw->bits = FLAC__TEMP_BITS - bitpointer;
++	}
+ #else

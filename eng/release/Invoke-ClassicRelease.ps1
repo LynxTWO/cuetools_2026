@@ -5,7 +5,8 @@ param(
     [string]$ReceiptPath,
     [string]$DevenvPath,
     [string]$MSBuildPath,
-    [int]$LeaseTimeoutMilliseconds = 30000
+    [int]$LeaseTimeoutMilliseconds = 30000,
+    [switch]$ArchiveStalePendingIntent
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +139,7 @@ function Invoke-ClassicRelease {
         [string]$DevenvPath,
         [string]$MSBuildPath,
         [int]$LeaseTimeoutMilliseconds = 30000,
+        [switch]$ArchiveStalePendingIntent,
         [object]$TestToolchain,
         [string]$TestToolRoot,
         [scriptblock]$TestCommandInvoker,
@@ -186,6 +188,12 @@ function Invoke-ClassicRelease {
             -ReleaseRoot $releaseRoot `
             -TimeoutMilliseconds $LeaseTimeoutMilliseconds
         $leaseToken = [string]$lease.token
+        $vendorPreparationPath = Join-Path $RepositoryRoot (
+            "eng\ci\Prepare-VendorSources.ps1")
+        if (Test-Path -LiteralPath $vendorPreparationPath -PathType Leaf) {
+            [void](Initialize-CUEToolsVendorSources `
+                -RepositoryRoot $RepositoryRoot)
+        }
         [void](Archive-ValidatedPendingClassicBuildIntent `
             -RepositoryRoot $RepositoryRoot `
             -PlanPath $PlanPath `
@@ -194,6 +202,7 @@ function Invoke-ClassicRelease {
             -Platforms @("Any CPU", "x64", "Win32") `
             -Lease $lease `
             -LeaseToken $leaseToken `
+            -AllowStaleSource:$ArchiveStalePendingIntent `
             -TestToolRoot $TestToolRoot)
         [void](Repair-ClassicArtifactPublication `
             -ArtifactDirectory $artifactDirectory `
@@ -307,5 +316,6 @@ if ($MyInvocation.InvocationName -ne ".") {
         -ReceiptPath $ReceiptPath `
         -DevenvPath $DevenvPath `
         -MSBuildPath $MSBuildPath `
-        -LeaseTimeoutMilliseconds $LeaseTimeoutMilliseconds)
+        -LeaseTimeoutMilliseconds $LeaseTimeoutMilliseconds `
+        -ArchiveStalePendingIntent:$ArchiveStalePendingIntent)
 }

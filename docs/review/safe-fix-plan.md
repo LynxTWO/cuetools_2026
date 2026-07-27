@@ -6,9 +6,10 @@ plans, but the final status/counts are in `2026-07-26-autonomous-audit.md` and
 the final canonical gate rather than this historical plan. Optical-drive reads, an
 H: full FLAC rip and same-drive Test & Copy, CTDB repair, WMA Lossless, FLACCL/OpenCL,
 Icecast 2.5.0, and local actionlint now have direct evidence. The local classic
-matrix is green: AnyCPU 53/0, x64 and Win32 2/0 with 59 skipped configuration entries,
+matrix is green: AnyCPU 58/0/11, and x64 and Win32 9/0/60,
 TTA in both architectures, and Installer Projects 8/0 with a 929,792-byte MSI.
-Frozen classic receipts and hosted parity remain pending. Signing, CTDB TLS, and named residual
+The local frozen classic receipt and exact 97-file collection pass; hosted parity
+remains pending. Signing, CTDB TLS, and named residual
 hardware/service failure cases remain pending; H: Test & Copy also needs a final-source
 repeat after the behavior-preserving `SecureSectorVote` extraction.
 no intermediate "ready" label should be read as the current state.
@@ -110,7 +111,11 @@ transaction. Backups are never deleted during rollback.
 **Observability:** log phase names and exception types only. Do not log album paths or audio
 contents.
 
-**Status:** ready after the repair seam is mapped.
+**Status:** complete on 2026-07-26. The WPF repair path now stages on the source
+volume, requires an applied CTDB repair, independently decodes the candidate files,
+and atomically publishes a sibling while leaving the source unchanged. Focused
+transaction and post-rip routing tests pass, and a prior live K: damaged-disc run
+proved the completed-rip route.
 
 ### Batch 2C: remove false WPF safety controls
 
@@ -164,7 +169,11 @@ leave the Boolean claim without its evidence.
 
 **Observability:** content fingerprints remain in memory. Do not log or persist them.
 
-**Status:** in progress.
+**Status:** complete locally on 2026-07-26. Immutable exact-output proofs and the
+destination-bound handoff cover metadata-complete multi-file publication, held
+acceptance, writer races, crash recovery, and failure quarantine. The focused
+publication/proof suite passes 33/33; the final hardware repeat remains a release
+gate.
 
 ### Classic release ownership, recovery, and fresh inputs
 
@@ -189,7 +198,11 @@ Never delete a destination or stage by name resemblance.
 **Observability:** receipts contain repository/toolchain identity and file hashes,
 not user media or local secrets.
 
-**Status:** in progress.
+**Status:** complete locally on 2026-07-27. The exact release orchestrator passes
+restore, Any CPU, x64, Win32, warning evaluation, receipt completion, 95-input
+collection, notices, and transactional publication. A failed build exposed a
+source-change recovery gap; an explicit stale-intent path now preserves the prior
+intent bytes and is covered by the 86-check orchestrator harness.
 
 ### Bounded optical telemetry
 
@@ -210,7 +223,11 @@ gate and live optical integration.
 
 **Observability:** only bounded RMS/sample presentation data crosses the mailbox.
 
-**Status:** in progress.
+**Status:** complete locally on 2026-07-26. The producer uses a preallocated bounded
+SPSC mailbox, drops presentation-only windows under pressure, and clears stale
+scope state on reset. Focused tests cover allocation, byte decoding, slot lifetime,
+ordering, reuse, concurrency, and stalled/full consumers. The final hardware repeat
+remains a release gate.
 
 ### FLACCL verification capability uses exact runtime identity
 
@@ -231,4 +248,72 @@ plugin and WPF trust gates.
 
 **Observability:** the capability is runtime-only and contains no path or hash.
 
-**Status:** implemented, validation pending source freeze.
+**Status:** complete locally on 2026-07-26. Manifest-approved registration enrolls
+the exact runtime settings type. Identically named types from another assembly or
+load context, subclasses, unrelated types, and malformed verification properties
+are rejected by focused tests and the canonical WPF gate.
+
+### Vendor patches build from an ignored source stage
+
+**Exact files:** `eng/ci/Prepare-VendorSources.ps1`,
+`eng/ci/Build-NativeDependencies.ps1`, its focused preparation tests,
+`eng/release/New-ClassicBuildReceipt.ps1` and receipt tests, `CUETools.sln`,
+the five direct TagLibSharp/WindowsMediaLib project consumers, `README.md`,
+the three Windows workflows, and the S13/R51 review records.
+
+**Safety and unchanged behavior:** preserve the four pinned gitlink commits, the
+four checked patch bytes, project GUIDs, managed APIs, native output paths, warning
+budgets, and artifact membership. Materialize the exact patched source closure under
+ignored `obj/vendor-sources/current` and make every patched-source consumer use that
+closure. Preparation must refuse dirty or mismatched submodules and must leave their
+before/after status identical.
+
+**Checks:** clean and repeated preparation, pinned-commit and patch-hash binding,
+tampered-stage replacement, dirty-submodule refusal, patch applicability, managed
+WPF and classic builds, both native architectures, classic receipt mutation
+rejection, workflow static checks, and recursive clean-submodule assertions.
+
+**Rollback:** restore direct submodule project paths and in-place patch commands.
+The generated stage is ignored and may be removed only after its ownership manifest
+and containment checks succeed. Checked patch files and gitlinks remain unchanged.
+
+**Observability:** stage receipts contain repository-relative paths, commit hashes,
+patch hashes, file counts, and aggregate source hashes. They contain no user media,
+credentials, or machine-specific absolute paths.
+
+**Status:** complete on 2026-07-27. The identity-bound stage contains 1,549 source
+files and is reused idempotently. The staging harness passes 15 checks, native
+preparation passes 21, all real consumer scans are clean, and five initialized
+submodules remain unchanged after managed, native, and classic builds.
+
+### CTDB repair preserves source names and metadata
+
+**Exact files:** `CUETools.Wpf/Services/VerifyService.cs`,
+`CUETools.Wpf/Services/RepairTransaction.cs`, focused WPF repair tests, the opt-in
+live CTDB probe, and the R52 review record.
+
+**Safety and unchanged behavior:** keep the source set read-only and retain the
+owned sibling-stage/atomic-publication transaction. Change only the private repair
+configuration: use source basenames for repaired FLAC outputs and force standard
+tags, representable custom tags, and embedded artwork to be copied. Keep verify-time
+tag/log writes, sidecar extraction, M3U creation, and arbitrary user filename
+templates disabled. Continue decoding the final files after TagLib saves and before
+publication.
+
+**Checks:** isolated-config mutation tests; real managed-FLAC track and image
+transcodes with punctuation-bearing names, basic/custom tags, and artwork; existing
+escape, rollback, collision, and source-immutability tests; then the opt-in live
+damaged CTDB repair probe.
+
+**Rollback:** restore the repair-only filename and copy flags. No source file or
+already-published repair directory is modified by rollback.
+
+**Observability:** progress and result messages expose only the already-redacted
+repair directory. Tests compare metadata in temporary fixtures without logging tag
+contents or user paths.
+
+**Status:** complete locally on 2026-07-27. Real managed-FLAC track-set and
+disc-image tests preserve punctuation-bearing basenames, standard tags, custom
+Xiph fields, and embedded artwork while proving the source bytes unchanged.
+Focused repair tests pass 14/14 and the full WPF suite passes 339/339. The opt-in
+live K: damaged-disc check remains external evidence, not an inferred pass.

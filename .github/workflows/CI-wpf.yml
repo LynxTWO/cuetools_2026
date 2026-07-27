@@ -4,7 +4,7 @@ name: CI-wpf
 # Builds the .NET 8 WPF app (CUETools 2026) and runs a bounded fuzz smoke. The legacy
 # CI-windows.yml builds the full VS solution with devenv; this job needs only the .NET 8 SDK
 # because its application closure targets .NET 8. Imported native codec DLLs are reproducible
-# outputs from pinned, patched submodule/SDK source and are rebuilt explicitly below. Kept as its
+# outputs from pinned, staged submodule/SDK source and are rebuilt explicitly below. Kept as its
 # own workflow so a break in the modern app is obvious and independent of the legacy solution build.
 
 # yamllint disable-line rule:truthy
@@ -21,19 +21,11 @@ jobs:
         with:
           submodules: recursive
 
-      # Managed references use taglib-sharp/WindowsMediaLib. The checked native build script below
-      # owns the idempotent flac/WavPack/Monkey's Audio patch and build sequence.
-      - name: Apply managed dependency patches
-        shell: cmd
-        run: |
-          git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose --whitespace=nowarn
-          git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose --whitespace=nowarn
-
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '8.0.x'
 
-      - name: Rebuild required x64 native codec DLLs from pinned source
+      - name: Stage patched vendor sources and rebuild native codec DLLs
         shell: powershell
         run: .\eng\ci\Build-NativeDependencies.ps1 -Configuration Release
 
@@ -50,3 +42,7 @@ jobs:
       # Bounded, deterministic, headless property and checked-in corpus lanes.
       - name: Fuzz smoke - properties and parser/decoder corpora (20k iters)
         run: dotnet run --project CUETools.Fuzz/CUETools.Fuzz.csproj -c Release --no-build -- 20260712 20000
+
+      - name: Assert vendor submodules stayed clean
+        shell: powershell
+        run: .\eng\ci\Test-VendorSubmodulesClean.ps1

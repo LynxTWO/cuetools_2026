@@ -77,6 +77,9 @@ internal sealed class CueRepairEngine : IRepairEngine
             if (expectedAudio.Length == 0)
                 throw new InvalidOperationException(
                     "The repair engine did not generate an audio destination.");
+            // Preserving source basenames can make different source extensions
+            // converge on one .flac name. Reject that before ExecuteScript writes.
+            RepairWorkspace.RequireDistinctAudioPaths(expectedAudio);
             RepairWorkspace.RequireSafeStagingDirectory(stagingDirectory);
             RepairWorkspace.RequireContainedPath(stagingDirectory, stagedCue, "repaired cue");
             foreach (string path in expectedAudio)
@@ -242,14 +245,32 @@ internal sealed class RepairWorkspace : IDisposable
         if (expectedAudioPaths == null || expectedAudioPaths.Count == 0)
             throw new InvalidOperationException("The repair engine did not declare any audio output.");
 
+        RequireDistinctAudioPaths(expectedAudioPaths);
         RequireNonemptyOwnedFile(stagedCuePath, "repaired cue");
         string[] audioPaths = expectedAudioPaths
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         foreach (string path in audioPaths)
             RequireNonemptyOwnedFile(path, "repaired audio");
         _validatedCuePath = stagedCuePath;
         _validatedAudioPaths = audioPaths;
+    }
+
+    internal static void RequireDistinctAudioPaths(
+        IReadOnlyList<string> expectedAudioPaths)
+    {
+        if (expectedAudioPaths == null)
+            throw new ArgumentNullException(nameof(expectedAudioPaths));
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in expectedAudioPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new InvalidOperationException(
+                    "The repair engine generated an empty audio destination.");
+            if (!seen.Add(Path.GetFullPath(path)))
+                throw new InvalidOperationException(
+                    "Source filenames collide after conversion to repaired FLAC names.");
+        }
     }
 
     public string Publish()

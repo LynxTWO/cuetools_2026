@@ -167,6 +167,17 @@ Use this checklist for repair, import, output publication, multi-file encoding, 
 - Write only to the stage. Keep the source and final destination unchanged until all producers finalize successfully.
 - Check every finalize, flush, close, and child-process result. Require the exact expected output set, nonempty required files, and no silent missing tail outputs.
 - Reopen the staged result through an independent reader or validator. For repairs, prove the repair engine actually applied the intended correction and validate the repaired copy, not the source or an in-memory promise.
+- Define the preserved representation as well as the payload. Test source-derived
+  filenames, tags or properties, artwork, sidecars, ordering, timestamps when
+  promised, and any format-specific fields. A repaired payload with synthetic names
+  or dropped metadata is not a complete preserved result.
+- Give preservation and recovery operations their own policy. Do not let a user's
+  ordinary conversion preferences silently disable source names or metadata that the
+  preservation contract requires. Apply metadata before the final independent
+  validation and publication step so the oracle covers the bytes the user receives.
+- Derive destination names in a contained stage and reject collisions after every
+  normalization, extension change, and case-folding rule that the destination
+  filesystem applies. Do this before writing any output.
 - If a producer can finish with a recoverable degraded result, expose recovery from
   that producer's completion path as well as from any later maintenance or verify
   screen. Exercise both routes and every supported output shape; proving that repair
@@ -265,6 +276,11 @@ package-manager installation:
   its exact schema, plan identity, and ownership first; preserve the intent and logs
   as abandoned-build evidence. A corrupt or foreign intent must leave every output
   leaf untouched.
+- Make failed-intent inspection non-destructive. A refused recovery must not consume
+  the only lease token or ownership fact needed for a later valid recovery. If source
+  must change to fix the failed build, require an explicit stale-intent abandonment
+  mode, preserve the original intent bytes, and start the replacement build under a
+  new receipt only after archival succeeds.
 - Do not use a tracked file as the sentinel for an expanded archive when that file is
   present in the repository's partial overlay. Pin the archive digest, validate every
   destination, repair only missing archive-owned files, and reject unexpected drift.
@@ -274,6 +290,19 @@ package-manager installation:
   ignore rules or local excludes. Bind the exact consumed tree independently, including
   locally patched archive targets; proving that patch hunks reverse-apply does not
   detect unrelated edits elsewhere in the same file.
+- Keep pinned dependency worktrees immutable during builds. Materialize the recorded
+  commit plus tracked patches into an owned ignored stage, record hashes for the pin,
+  patches, and staged file manifest, and reject dirty or gitlink-drifted inputs.
+  Redirect every project, restore, build, test, packaging, and release consumer to the
+  stage, then assert dependency status is unchanged after the real build.
+- Treat stage-local restore assets, generated files, and compiler output as
+  disposable build state, not source. Prepare the stage before restore, validate
+  reusable stages against their manifest, and quarantine a stage whose ownership or
+  inputs cannot be proven.
+- Pin one compatible compiler toolset across a native project graph unless the graph
+  explicitly documents and tests a mixed-toolset contract. A parent project choosing
+  one Visual Studio installation does not prove its child projects chose the same
+  compiler or targets.
 - Evaluate warning or policy baselines from the logs of the build whose bytes are
   actually collected. A successful preflight rebuild does not gate a later rebuild.
   Bind the baseline digest, exact log digests, normalized findings, and pass result to

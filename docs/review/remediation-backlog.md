@@ -379,14 +379,14 @@ does not relax evidence, rollback, or verification requirements.
   contract. The next pass found net35-only `SortedSet<T>` in the adaptive-speed ladder;
   its ordered `List<T>` replacement preserves semantics because rungs are strictly
   ascending and the 97% cutoff keeps them below the appended real maximum. The
-  redirected-output classic AnyCPU solution build then completed with 53 succeeded and
-  0 failed. The x64 and Win32 configurations each completed with 2 succeeded,
-  0 failed, and 59 skipped configuration entries. TTA compiled and linked for both
+  redirected-output classic AnyCPU solution build then completed successfully. The
+  current exact matrix passes at Any CPU 58/0/11 and x64 and Win32 9/0/60.
+  TTA compiled and linked for both
   into valid CLR PE files. Installer Projects 3.0.0, using
   `DisableOutOfProcBuild`, passed 8 projects with 0 failures and produced a
   929,792-byte MSI. The local route used the Visual Studio 18 resolver with the
-  VS2022 v143 toolset. Frozen classic artifact receipts and parity on the pinned
-  hosted VS2022 image remain.
+  VS2022 v143 toolset. The local frozen receipt and exact collection now pass;
+  parity on the pinned hosted VS2022 image remains.
 
 ### R24. External encoder process lifecycle can hang or accept bad output - bucket B, risk high
 
@@ -876,8 +876,10 @@ does not relax evidence, rollback, or verification requirements.
   injected move/rollback failures, retained recovery state, restart recovery, and
   reparse tests.
 - **Owner:** repo owner.
-- **Status:** implemented; real orchestrated build, receipt, and collection pending
-  source freeze.
+- **Status:** fixed and locally verified 2026-07-27. The real orchestrator held one
+  repo-wide lease through recovery, exact cleanup, four build commands, receipt,
+  collection, and publication. The 86-check harness covers ownership, contention,
+  rollback, restart, foreign intent, source-stale intent, and malformed evidence.
 
 ### R46. A fresh classic stage does not prove fresh compiled inputs - bucket A, risk medium
 
@@ -894,8 +896,9 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** reject a prior same-version binary, mismatched dirty-source
   receipt, and modified/missing source before the prior artifact moves.
 - **Owner:** repo owner.
-- **Status:** implemented; real orchestrated build, receipt, and collection pending
-  source freeze.
+- **Status:** fixed and locally verified 2026-07-27. The exact receipt binds the
+  source fingerprint, Visual Studio 18.8/v143 toolchain, four command logs, warning
+  result, and 95 collection inputs before the 97-file artifact becomes visible.
 
 ### R47. Optical visualization allocates and dispatches from the read loop - bucket A, risk medium
 
@@ -979,20 +982,80 @@ does not relax evidence, rollback, or verification requirements.
   pair is quarantined under an explicit recovered-incomplete name before reuse.
   Missing or mismatched pending evidence leaves the existing directory untouched.
 
+### R51. Build preparation dirties four pinned vendor submodules - bucket A, risk medium
+
+- **Area or slice:** vendor source preparation, managed/native project references,
+  classic release receipts, and Windows workflows.
+- **Why it matters:** the checked CUETools patches are reproducible, but applying them
+  in place makes clean pinned submodules indistinguishable from later local edits and
+  leaves native build residue in vendored worktrees.
+- **Evidence found:** all four worktree diffs exactly reverse-checked against the
+  tracked patch files; `README.md`, three workflows, the native build helper, five
+  managed projects, and `CUETools.sln` consume the patched worktrees directly.
+- **Confidence:** verified.
+- **Approval needed:** yes for CI/release controls; explicitly approved by the user on
+  2026-07-27.
+- **Smallest safe next step:** materialize pinned commits plus checked patches beneath
+  an ignored, owned staging root; point every patched-source consumer at that root;
+  bind the stage identity into classic receipts; and fail if preparation changes a
+  submodule.
+- **Verification plan:** clean/idempotent preparation, malformed/tampered-stage and
+  dirty-submodule rejection, managed and native builds, classic receipt contracts,
+  workflow text checks, and before/after recursive submodule status equality.
+- **Owner:** repo owner.
+- **Status:** fixed and verified 2026-07-27. The ignored stage binds four gitlinks,
+  four patch hashes, 1,549 staged files, and the complete file manifest. Its focused
+  harness passes 15 checks, native preparation passes 21, and every managed, native,
+  fuzz, packaging, and release consumer now uses the stage. Six native targets and
+  the exact classic Release matrix built successfully while all five initialized
+  submodules remained clean. The classic matrix passed at Any CPU 58/0/11 and x64
+  and Win32 9/0/60. The exact release receipt bound 95 collection inputs and the
+  published artifact contained 97 files.
+
+### R52. CTDB repaired copies lose source filenames and optional metadata - bucket A, risk high
+
+- **Area or slice:** WPF file/post-rip CTDB repair transaction and the legacy
+  `CUESheet` encode adapter.
+- **Why it matters:** repaired PCM can verify and publish successfully while the new
+  copy uses generic `01.flac`/`album.flac` names. Tag and artwork retention also
+  follows ordinary conversion preferences, so disabling those preferences can
+  silently strip metadata from a preservation operation.
+- **Evidence found:** `VerifyService.CreateRepairConfig` explicitly sets
+  `keepOriginalFilenames = false`, `%tracknumber%`, and `album`; it does not override
+  `copyBasicTags`, `copyUnknownTags`, `CopyAlbumArt`, or `embedAlbumArt`.
+- **Confidence:** verified.
+- **Approval needed:** no; the user explicitly requested filename and tag
+  preservation on 2026-07-27.
+- **Smallest safe next step:** make the private repair config preserve source
+  basenames and force representable standard tags, custom tags, and embedded artwork
+  into the isolated FLAC copy without enabling verify-time source writes.
+- **Verification plan:** config isolation tests plus real Flake/TagLib track-set and
+  image-mode integration tests, final-output proof checks after TagLib save, repair
+  rollback/publication tests, and the opt-in live damaged-disc CTDB probe.
+- **Owner:** repo owner.
+- **Status:** fixed and deterministic-test verified 2026-07-27. Repair now retains
+  source-derived audio basenames and forces basic tags, representable unknown tags,
+  and embedded artwork into the sibling copy without enabling source or sidecar
+  writes. Duplicate final paths are rejected before any write. The real managed-FLAC
+  track and disc-image preservation fixtures, transaction tests, and focused repair
+  set pass 14/14; the full WPF suite passes 339/339. The canonical managed total is
+  503 passed with six declared fixture skips. The opt-in test also asserts live
+  repaired basenames; the K: damaged-disc run remains the final external check.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
 dependency:
 
-1. Finish and adversarially review R44-R49.
-2. Run the canonical managed suites, classic AnyCPU/x64/Win32/TTA/MSI matrix, fresh
-   build receipt, exact collection, artifact validation, hashes, notices, and SBOM.
-3. Repeat the final-source H: optical Test & Copy gate and retain the passing WMA,
+1. Finish and adversarially review any open R44-R49 follow-ups.
+2. Refresh the classic receipt after the source commit and retain its exact
+   AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
+3. Run the final-source K: damaged-disc CTDB repair lane and repeat the H: optical
+   Test & Copy gate. Retain the passing WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 4. Run the pinned hosted workflows and compare them with the local receipts.
 5. Choose and implement a publisher signing/attestation identity and policy.
-6. Reconcile the dirty detached submodule work before R13 upgrades, then continue
-   R5/R8/R12/R13 modernization and lock-file rollout.
+6. Continue R5/R8/R12/R13 modernization and lock-file rollout.
 
 ## Holes / external boundaries
 
@@ -1000,11 +1063,12 @@ dependency:
 - CI depends on GitHub-hosted Windows image + VS Enterprise devenv path.
 - Signing identity/policy is an owner decision; hashes establish byte identity, not
   publisher identity.
-- Remaining vendored provenance and the four dirty detached submodule worktrees are
-  supply-chain surfaces even though shipped bytes are hash-bound and inventoried.
+- Remaining vendored provenance is a supply-chain surface even though shipped bytes,
+  immutable gitlinks, patches, and staged source manifests are hash-bound and
+  inventoried.
 - MusicBrainz/gnudb/AccurateRip/CTDB servers are external; their behavior can change independent of this repo.
-- The local classic build/MSI matrix passes, but complete frozen receipts and hosted
-  image parity remain. External FLAC/TAK pairs, Icecast
+- The local classic build, frozen receipt, exact collection, and MSI matrix pass, but
+  hosted image parity remains. External FLAC/TAK pairs, Icecast
   HTTPS/certificate/Mono, cross-vendor OpenCL, and deliberate optical failure injection
   remain explicit unobserved states, not inferred passes.
 
@@ -1016,3 +1080,6 @@ dependency:
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
+- 2026-07-27 - closed R51 with immutable vendor staging and R52 with filename/tag/art
+  preservation. The exact classic release then rebuilt, receipted, and published all
+  three configurations locally.

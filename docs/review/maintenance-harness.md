@@ -15,12 +15,18 @@ suites, artifact contracts, and deterministic local gates).
 - **Release evidence gates:** managed and native warning fingerprints, deterministic
   fuzz smoke, clean artifact contracts, plugin/native load probes, provenance,
   and CycloneDX/SPDX generation are wired into the current workflows.
+- **Vendor-source staging:** `Prepare-VendorSources.ps1` materializes four pinned
+  submodules plus tracked patches into an identity-bound ignored tree. CI and release
+  run its contract tests and fail if a real build changes a submodule worktree.
 
 ## Hard gates (enforced by tooling)
 
 - The modern CI lanes run all five selected suites, enforce their count/skip
   contracts, run the net20 probe, and reject new managed/native warning
   fingerprints.
+- Restore and build consume `obj/vendor-sources/current`; direct in-place patching is
+  unsupported. `Test-VendorSubmodulesClean.ps1` checks every initialized gitlink
+  after CI and release builds.
 - Releases run the same tests and fuzz gate before packaging. The WPF artifact
   must satisfy its required-file and trust manifests and initialize all five
   packaged native codecs. Both release contracts require the per-user plugin
@@ -57,26 +63,27 @@ From `00-conventions.md` plus repo specifics verified this session:
   are not converted into passes. WMA Lossless also has separate passing live net8
   encode/finalize/independent-decode evidence.
 - The modern ripper suite is covered; the newly modernized
-  `CUETools/TestRipper` canonical run passed 3/3 with zero skips. Its private
+  `CUETools/TestRipper` canonical run passed 17/17 with zero skips. Its private
   captures and stale copied vote algorithm are gone: SDK net47 tests call the same
   `SecureSectorVote.CorrectSector` helper as shipping `SCSIDrive`, using deterministic
   flagged/unflagged corruption, insufficient-clean-pass confidence, and C2-plane
   reconstruction without false secure assurance. The canonical contract requires
-  three tests and zero skips.
+  17 tests and zero skips.
 - No automated secret-scanning or comment-continuity check is wired (the repo has no such workflow today); these are reviewer-checklist items only. A future `gh` workflow could add a grep-based secret check and a protected-comment-removal diff check if drift appears.
 - CI depends on the VS Enterprise `devenv.com` path and GitHub-hosted Windows image (out-of-repo control surface).
 - The focused net20 exception-relay probe passes, but it is not a whole-solution net20
   certification. Classic passes found and fixed a tuple-metadata blocker in
   slip-correlation and a net35-only `SortedSet<T>` in adaptive speed. The resulting
-  classic AnyCPU solution build is green (53 succeeded, 0 failed). The x64 and Win32
-  configurations each pass at 2 succeeded, 0 failed, and 59 skipped configuration
+  classic AnyCPU solution build is green (58 succeeded, 0 failed, 11 skipped).
+  The x64 and Win32 configurations each pass at 9 succeeded, 0 failed, and 60 skipped
+  configuration
   entries; TTA compiles and links for both. The targeted Installer Projects build
   passes 8/0 and produces a 929,792-byte MSI.
 
 ## What still needs harness support later
 
 - Keep the passing canonical TestRipper production-helper fixture in the normal CI
-  selection with its three-test/zero-skip floor.
+  selection with its 17-test/zero-skip floor.
 - Retain the passing WMA Lossless, FLACCL/RTX 3060, H:/K: optical, H: Test & Copy,
   CTDB repair, Icecast 2.5.0, and local actionlint evidence in repeatable release
   lanes. Repeat H: Test & Copy against final source after the `SecureSectorVote`
@@ -84,12 +91,15 @@ From `00-conventions.md` plus repo specifics verified this session:
   cases.
 - Preserve the K: 24-track damaged-disc lane as the completed-rip CTDB repair oracle:
   final lossless proof must succeed before publication, the Rip page must expose the
-  recoverable sector count, repair must publish a verified sibling, and the original
-  top-level aggregate hash must remain unchanged.
-- Finish the frozen classic artifact/receipt and direct CUEPlayer checks, then repeat
-  the passing local AnyCPU/x64/Win32/TTA/MSI matrix on the pinned hosted VS2022 image.
-  The local route used the Visual Studio 18 resolver with the VS2022 v143 toolset.
-- Add signing/attestation and reconcile the dirty detached submodules. The current
-  SBOM, recovered vendor evidence, and hashes establish inventory and byte identity,
-  not publisher identity.
+  recoverable sector count, and repair must publish a verified sibling. The repaired
+  audio basenames, standard and unknown tags, and embedded artwork must match their
+  source representation. The original top-level aggregate hash must remain unchanged.
+- Retain the passing frozen classic receipt and exact 97-file artifact, then repeat
+  the local AnyCPU/x64/Win32/TTA/MSI matrix on the pinned hosted VS2022 image.
+  The local route used Visual Studio 18.8 with the VS2022 v143 toolset. The exact
+  release bound 95 inputs, 61 native warning lines, and eight known fingerprints.
+- Add signing/attestation. The four patched submodules now stay clean and detached at
+  their recorded gitlinks; the ignored stage binds their commits, patches, and file
+  manifests. The current SBOM, vendor evidence, and hashes establish inventory and
+  byte identity, not publisher identity.
 - If a crash reporter or analytics is added, a rule to exclude the config object (carries ProxyPassword) from capture.

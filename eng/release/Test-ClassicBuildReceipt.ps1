@@ -374,7 +374,7 @@ try {
         "Production validation accepted fake fixture tools."
 
     $originalReceiptText = [IO.File]::ReadAllText($receiptPath)
-    $tampered = $originalReceiptText | ConvertFrom-Json
+    $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
     $tampered.leaseToken = [Guid]::NewGuid().ToString("N")
     [IO.File]::WriteAllText(
         $receiptPath,
@@ -399,7 +399,7 @@ try {
     $nativeManifestPath = Join-Path $tempRoot (
         "eng\release\native-dependencies.json")
     $nativeManifestText = [IO.File]::ReadAllText($nativeManifestPath)
-    $nativeManifest = $nativeManifestText | ConvertFrom-Json
+    $nativeManifest = ConvertFrom-ClassicBuildJson -Text $nativeManifestText
     $nativeManifest.pinnedFiles[0].sha256 = "0" * 64
     [IO.File]::WriteAllText(
         $nativeManifestPath,
@@ -409,7 +409,7 @@ try {
         -Message "Receipt accepted an expanded SDK detached from its source pin."
     [IO.File]::WriteAllText($nativeManifestPath, $nativeManifestText)
 
-    $tampered = $originalReceiptText | ConvertFrom-Json
+    $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
     $tampered.nativeWarningGate.baseline.sha256 = "0" * 64
     [IO.File]::WriteAllText(
         $receiptPath,
@@ -419,7 +419,7 @@ try {
         -Message "Receipt accepted a tampered native warning baseline digest."
     [IO.File]::WriteAllText($receiptPath, $originalReceiptText)
 
-    $tampered = $originalReceiptText | ConvertFrom-Json
+    $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
     $tampered.nativeWarningGate.logs[0].path =
         [string]$tampered.commands[0].log.path
     [IO.File]::WriteAllText(
@@ -430,7 +430,7 @@ try {
         -Message "Receipt accepted a warning gate bound to the restore log."
     [IO.File]::WriteAllText($receiptPath, $originalReceiptText)
 
-    $tampered = $originalReceiptText | ConvertFrom-Json
+    $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
     $tampered.commands[1].arguments[1] = "/Build"
     [IO.File]::WriteAllText(
         $receiptPath,
@@ -440,7 +440,7 @@ try {
         -Message "Receipt accepted /Build in place of /Rebuild."
     [IO.File]::WriteAllText($receiptPath, $originalReceiptText)
 
-    $tampered = $originalReceiptText | ConvertFrom-Json
+    $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
     $tampered.toolchain.tools =
         @($tampered.toolchain.tools | Select-Object -Skip 1)
     [IO.File]::WriteAllText(

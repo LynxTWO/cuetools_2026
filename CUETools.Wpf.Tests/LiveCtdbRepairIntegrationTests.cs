@@ -39,6 +39,7 @@ namespace CUETools.Wpf.Tests
                     codec => codec is CUETools.Codecs.Flake.DecoderSettings))
                 CUEProcessorPlugins.decs.Add(new CUETools.Codecs.Flake.DecoderSettings());
 
+            string[] sourceAudioPaths = ReadSourceAudioPaths(source);
             var before = HashSourceSet(source);
             var service = new VerifyService(new CUEConfig(), new ProbeLog());
 
@@ -58,6 +59,20 @@ namespace CUETools.Wpf.Tests
             Assert.IsTrue(repaired.Accurate || repaired.CtdbConfidence > 0,
                 "The independently decoded repaired copy did not match AccurateRip or CTDB.");
 
+            string[] expectedNames = sourceAudioPaths
+                .Select(path => Path.ChangeExtension(Path.GetFileName(path), ".flac"))
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string[] actualNames = Directory
+                .EnumerateFiles(repaired.OutputPath, "*.flac", SearchOption.AllDirectories)
+                .Select(Path.GetFileName)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            CollectionAssert.AreEqual(
+                expectedNames,
+                actualNames,
+                "CTDB repair did not preserve the source audio basenames.");
+
             CollectionAssert.AreEquivalent(
                 before.Select(pair => pair.Key + "=" + pair.Value).ToArray(),
                 HashSourceSet(source).Select(pair => pair.Key + "=" + pair.Value).ToArray(),
@@ -67,6 +82,23 @@ namespace CUETools.Wpf.Tests
         }
 
         public TestContext TestContext { get; set; }
+
+        private static string[] ReadSourceAudioPaths(string source)
+        {
+            var sheet = new CUESheet(new CUEConfig());
+            try
+            {
+                sheet.Open(source);
+                return sheet.SourcePaths
+                    .Select(Path.GetFullPath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            finally
+            {
+                sheet.Close();
+            }
+        }
 
         private static Dictionary<string, string> HashSourceSet(string cuePath)
         {

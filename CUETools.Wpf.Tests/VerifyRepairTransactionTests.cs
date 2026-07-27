@@ -174,6 +174,11 @@ public sealed class VerifyRepairTransactionTests
         config.extractAlbumArt = true;
         config.extractLog = true;
         config.createM3U = true;
+        config.writeBasicTagsFromCUEData = false;
+        config.copyBasicTags = false;
+        config.copyUnknownTags = false;
+        config.CopyAlbumArt = false;
+        config.embedAlbumArt = false;
         var engine = new FakeRepairEngine();
         var service = CreateService(config, engine);
 
@@ -188,9 +193,14 @@ public sealed class VerifyRepairTransactionTests
             Assert.IsFalse(used.writeArLogOnVerify);
             Assert.IsFalse(used.writeArLogOnConvert);
             Assert.IsFalse(used.arLogToSourceFolder);
-            Assert.IsFalse(used.keepOriginalFilenames);
+            Assert.IsTrue(used.keepOriginalFilenames);
             Assert.AreEqual("%tracknumber%", used.trackFilenameFormat);
             Assert.AreEqual("album", used.singleFilenameFormat);
+            Assert.IsTrue(used.writeBasicTagsFromCUEData);
+            Assert.IsTrue(used.copyBasicTags);
+            Assert.IsTrue(used.copyUnknownTags);
+            Assert.IsTrue(used.CopyAlbumArt);
+            Assert.IsFalse(used.embedAlbumArt);
             Assert.IsFalse(used.extractAlbumArt);
             Assert.IsFalse(used.extractLog);
             Assert.IsFalse(used.createM3U);
@@ -212,6 +222,11 @@ public sealed class VerifyRepairTransactionTests
         Assert.IsTrue(config.extractAlbumArt);
         Assert.IsTrue(config.extractLog);
         Assert.IsTrue(config.createM3U);
+        Assert.IsFalse(config.writeBasicTagsFromCUEData);
+        Assert.IsFalse(config.copyBasicTags);
+        Assert.IsFalse(config.copyUnknownTags);
+        Assert.IsFalse(config.CopyAlbumArt);
+        Assert.IsFalse(config.embedAlbumArt);
         Assert.IsTrue(config.advanced.WriteCTDBTagsOnVerify);
         Assert.IsTrue(config.advanced.CreateTOC);
         Assert.IsFalse(config.createCUEFileInTracksMode);
@@ -234,6 +249,23 @@ public sealed class VerifyRepairTransactionTests
             stage,
             Path.Combine(stage, "track.flac"),
             "repaired audio");
+    }
+
+    [TestMethod]
+    public void Repair_DuplicatePreservedFlacNameIsRejectedBeforeEngineWrites()
+    {
+        using var temp = new TempDirectory();
+        string first = Path.Combine(temp.Path, "same.flac");
+        string second = Path.Combine(temp.Path, "SAME.flac");
+
+        InvalidOperationException error =
+            Assert.ThrowsException<InvalidOperationException>(
+                () => RepairWorkspace.RequireDistinctAudioPaths(
+                    new[] { first, second }));
+
+        StringAssert.Contains(
+            error.Message,
+            "collide after conversion to repaired FLAC names");
     }
 
     [TestMethod]
