@@ -490,3 +490,38 @@ transition flags without audio bytes. Completed phases record
 policy suite passes 18/18, the full WPF suite passes 352/352, and SCSI builds pass
 for net8/net47/net20. The bounded K: probes pass at the exact relative sector and
 at the real window boundary/speed. The end-to-end rerun remains.
+
+### Remove obsolete legacy SCSI build warnings
+
+**Exact files:** `Bwg.Scsi/Bwg.Scsi.csproj`,
+`CUETools.Ripper.SCSI/CUETools.Ripper.SCSI.csproj`,
+`CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`eng/ci/warning-baseline.json`, and the R60 review record.
+
+**Safety and unchanged behavior:** disable source-revision suffixes only for the
+`net20` target consumed by the legacy Assembly Linker, which accepts numeric
+product versions only. Preserve the declared assembly version, current-target
+informational versions, and release provenance carried by receipts and hashes.
+Remove the `cdtext` field only after proving it has no live writes or reads.
+Do not add a source workaround for MSB3088: that message was a stale resource
+cache produced by invoking the unsupported `dotnet` build host for `net20`, and a
+full-MSBuild rebuild clears it.
+
+**Checks:** rebuild `net20` through the installed full Visual Studio MSBuild host
+without command-line overrides and require zero warnings; build the SCSI project
+for net47 and net8; run the modern ripper and WPF suites; run the checked warning
+gate; and confirm all staged vendor worktrees remain clean.
+
+**Rollback:** restore both target-local metadata properties, the dead field, and
+its baseline fingerprint together. No persisted setting, SCSI command, audio data,
+or release artifact format changes.
+
+**Observability:** no runtime telemetry changes. Build receipts continue to carry
+the source identity; the old `net20` satellite assembly receives the same numeric
+product version as its parent assembly.
+
+**Status:** implemented and verified on 2026-07-27. Full Visual Studio MSBuild
+rebuilds the net20 SCSI graph with zero warnings and zero errors, and net47/net8
+builds are also clean. The ripper suite passes 20/20, the WPF suite passes 358/358,
+and the checked modern warning budget passes with 34 unchanged fingerprints and
+no new warnings. All staged vendor worktrees remain clean.

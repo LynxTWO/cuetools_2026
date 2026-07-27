@@ -26,7 +26,6 @@
     "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.sample_number' is never assigned to, and will always have its default value 0",
     "CUETools.Codecs.libFLAC/libFLAC.cs|CS0649|Field 'FLAC__FrameHeader.sample_rate' is never assigned to, and will always have its default value 0",
     "CUETools.Compression.Zip/SeekableZipStream.cs|CS0067|The event 'SeekableZipStream.PasswordRequired' is never used",
-    "CUETools.Ripper.SCSI/SCSIDrive.cs|CS0414|The field 'CDDriveReader.cdtext' is assigned but its value is never used",
     "CUETools.Wpf/Accuracy/DriveCalibrationService.cs|CS8603|Possible null reference return.",
     "CUETools.Wpf/Accuracy/TestAndCopyLog.cs|CS8603|Possible null reference return.",
     "CUETools.Wpf/Accuracy/TestAndCopyResolver.cs|CS8603|Possible null reference return.",
