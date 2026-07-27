@@ -82,6 +82,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     throughout Copy or an optional tie-break. Send immutable, semantically named snapshots at each
     completed phase, preserve older roles that the phase did not replace, and keep the final composite
     result distinct from those already-proven intermediate facts.
+12. BAD INPUT IS NOT A DEAD DEVICE. At hardware, parser, archive, and protocol boundaries, classify
+    subject-data failures separately from transport, readiness, removal, unit-attention, command, and
+    hardware failures. Only the subject-data class may become explicitly untrusted evidence for an
+    existing retry, quarantine, or repair policy. Test the classifier without the scarce dependency,
+    then reproduce beyond the original failure point on the real boundary.
 
 ### How to choose the extraction
 

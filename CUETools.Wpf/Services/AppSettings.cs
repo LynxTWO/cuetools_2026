@@ -35,9 +35,10 @@ public sealed class AppSettings
 
     /// <summary>Deep recovery: recovers more audio from damaged discs by re-reading a stuck window
     /// while it is still improving (a strict superset of the old blind cap - never worse), slowing the
-    /// drive to its floor on stuck spots, and on a caching drive flushing the cache before each secure
-    /// re-read so the comparison is genuine. ON by default now (proven bit-exact); it only engages on
-    /// stuck windows / caching drives, so a clean disc or Burst mode pays nothing. Toggle to disable.</summary>
+    /// drive to its floor on stuck spots, and attempting slip recovery. ON by default now (proven
+    /// bit-exact); it only engages on stuck windows, so a clean disc or Burst mode pays nothing.
+    /// Secure and Paranoid cache defeat is a separate correctness rule and remains active if this
+    /// expert setting is disabled.</summary>
     public bool DeepRecovery { get; set; } = true;
 
     /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)

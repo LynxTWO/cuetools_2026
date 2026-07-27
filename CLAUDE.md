@@ -66,6 +66,17 @@ progress documents for it belong here, under `docs/review/`.
 - Publish immutable named evidence at the end of each completed phase. In Test &
   Copy, Test CRC appears before Copy starts and Copy CRC appears before any
   tie-break; a later phase must not erase a prior role it did not replace.
+- READ CD payload medium errors are untrusted media evidence, not proof that the
+  drive is dead. Split a failed batch to isolate sectors and feed persistent
+  single-sector medium errors into the existing flagged vote and retry policy.
+  Transport, removal, not-ready, unit-attention, illegal-command, and hardware
+  failures remain fatal. `StopOnUnrecoverable` is applied only after the configured
+  evidence and retry policy has classified a sector as unrecoverable.
+- Keep the Rip page operable at the 1200-pixel default width. Primary actions,
+  Test/Copy CRC evidence, and drive selection must remain reachable. Use bounded
+  proportional layout and wrapping at supported widths, vertical scrolling for
+  rail overflow, and horizontal scrolling instead of clipping below the supported
+  work-area minimum. Trim long identity text only with its full value in a tooltip.
 
 ## Writing rules for all human-facing text
 

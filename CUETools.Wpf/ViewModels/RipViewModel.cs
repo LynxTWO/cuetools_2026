@@ -200,7 +200,7 @@ public sealed class RipViewModel : PageViewModel
     public bool IsRipping { get => _isRipping; private set { if (Set(ref _isRipping, value)) { OnPropertyChanged(nameof(ControlsUnlocked)); CommandManager.InvalidateRequerySuggested(); } } }
 
     /// <summary>False while a rip/verify runs. Bound to the IsEnabled of the controls whose value is
-    /// SNAPSHOTTED when the job starts - the drive picker, accuracy mode and deep recovery. Letting them
+    /// SNAPSHOTTED when the job starts - the drive picker and accuracy mode. Letting them
     /// move mid-run produced a job that half-obeyed the change: the disc was read one way while the saved
     /// report claimed another, and switching drive mid-rip filed the results against a different album.
     /// The honest fix is to snapshot the value AND stop offering the change.</summary>
@@ -311,9 +311,6 @@ public sealed class RipViewModel : PageViewModel
 
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
-    /// <summary>Opt-in deep recovery for damaged discs (progress-aware cap + slow-to-floor + slip
-    /// re-alignment). Off by default; the default rip path is unchanged.</summary>
-    public bool DeepRecovery { get => _settings.DeepRecovery; set { if (_settings.DeepRecovery != value) { _settings.DeepRecovery = value; OnPropertyChanged(); } } }
     public bool WriteLog { get => _config.createEACLOG; set { _config.createEACLOG = value; OnPropertyChanged(); } }
     public bool EmbedArt { get => _config.embedAlbumArt; set { _config.embedAlbumArt = value; OnPropertyChanged(); if (value) TriggerArtFetch(); else ClearArt(); } }
 

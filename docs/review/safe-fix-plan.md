@@ -351,6 +351,73 @@ audio checksums and disc identity, not user paths or tags.
 25 Paranoid cache-defeat windows twice; the final-source run used the real read
 offset, consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF
 suite passes 347/347, the ripper suites pass net8 8/8 and net47 17/17, and the SCSI
-project builds for net8, net47, and net20 under its required full-MSBuild host. K:
-remains an explicit hardware evidence gap until Windows releases its wedged device
-handle.
+project builds for net8, net47, and net20 under its required full-MSBuild host.
+After an elevated device restart and tray cycle, K: reopened and began a real
+Paranoid Test & Copy. That run exposed the distinct payload medium-error gap tracked
+below instead of a calibration failure.
+
+## Damaged-disc completion and narrow-window access batch (2026-07-27)
+
+### Represent payload medium errors as unreadable sectors
+
+**Exact files:** `CUETools.Ripper.SCSI/SCSIDrive.cs`, a focused pure failure-policy
+helper under `CUETools.Ripper.SCSI/`, `CUETools.Ripper.Tests/`, and the R55 review
+record.
+
+**Safety and unchanged behavior:** preserve fatal handling for transport failures,
+device removal, not-ready, unit-attention, illegal commands, and hardware errors.
+When a READ CD payload command reports a medium error, retry its batch one sector
+at a time. A sector that still reports a medium error contributes flagged evidence
+to the existing secure vote and failed-sector map. It may continue only under the
+existing retry and Stop-on-unrecoverable policy. Do not turn a failed command into
+trusted audio.
+
+**Checks:** pure classification tests for medium, hardware, not-ready, ioctl, and
+legacy `64/00` behavior; net8/net47/net20 SCSI builds; modern ripper tests; full WPF
+tests; and a repeat on the damaged K: disc with Stop-on-unrecoverable off.
+
+**Rollback:** revert the classification helper and `FetchSectors` integration
+together. The old behavior aborts the whole read on any payload medium error.
+
+**Observability:** retain the existing bounded recovery and failed-window logs.
+Do not log sector payload bytes or user metadata.
+
+**Status:** implemented and deterministic-test verified on 2026-07-27. The failure
+policy classifies only device-reported medium errors as damaged-media evidence,
+preserves fatal handling for every tested non-media class, and retains the legacy
+`64/00` split behavior. The modern ripper suite passes 12/12, the full WPF suite
+passes 352/352, and the SCSI project builds for net8, net47, and net20 under its
+required full-MSBuild host. A repeat on the damaged K: disc remains the hardware
+check that must prove `NO SEEK COMPLETE` becomes failed-sector evidence rather than
+aborting the transaction.
+
+### Keep the Rip page reachable at narrow widths
+
+**Exact files:** `CUETools.Wpf/Views/RipView.xaml`, a focused layout-contract test
+under `CUETools.Wpf.Tests/`, and the R56 review record.
+
+**Safety and unchanged behavior:** preserve commands, bindings, settings, evidence,
+and wide-screen visual order. Replace fixed side-rail allocation with bounded
+proportional widths, let action controls wrap, let side rails scroll vertically,
+trim long headings with their full text in a tooltip, and provide a horizontal
+fail-safe only below the supported work-area minimum. Keep Deep recovery default-on
+and durable, but move its expert opt-out to Settings instead of presenting it as a
+per-rip action.
+
+**Checks:** XAML contract assertions for the scroll and wrap safeguards; full WPF
+tests; build and publish; then inspect the Rip page at 1784, 1200, and 1024 logical
+pixels with a loaded disc and with a completed/failed job.
+
+**Rollback:** revert the Rip-page XAML as one unit. No persisted setting or output
+format changes.
+
+**Observability:** none. This is presentation-only and does not add telemetry.
+
+**Status:** implemented and deterministic-test verified on 2026-07-27. The XAML
+contract binds each inner work grid to its viewport so ScrollViewer measurement
+cannot make proportional columns expand without bound. It also requires bounded
+proportional rails, vertical rail scrolling, wrapped actions, and tooltip-backed
+text trimming. The full WPF suite passes 352/352. A 1200-pixel loaded-disc capture
+proved the primary controls and CRC columns remain reachable after the viewport
+fix. Final-source 1784-, 1200-, and 1024-pixel captures remain the presentation
+check after publication.

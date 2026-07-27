@@ -1,0 +1,61 @@
+using Bwg.Scsi;
+using CUETools.Ripper.SCSI;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace CUETools.Ripper.Tests
+{
+    [TestClass]
+    public class PayloadReadFailurePolicyTests
+    {
+        [TestMethod]
+        public void MediumErrorCanBecomeUnreadableSectorEvidence()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.IsMediumError(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.MediumError));
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldSplitBatch(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.MediumError,
+                0x02,
+                0x00));
+        }
+
+        [TestMethod]
+        public void HardwareAndNotReadyFailuresRemainFatal()
+        {
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldSplitBatch(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x02,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldSplitBatch(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.NotReady,
+                0x3A,
+                0x00));
+        }
+
+        [TestMethod]
+        public void TransportFailureRemainsFatal()
+        {
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldSplitBatch(
+                Device.CommandStatus.IoctlFailed,
+                Device.SenseKeyType.MediumError,
+                0x02,
+                0x00));
+        }
+
+        [TestMethod]
+        public void LegacyTrackModeStillSplitsWithoutBecomingMediumError()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldSplitBatch(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x64,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.IsMediumError(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest));
+        }
+    }
+}

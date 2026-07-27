@@ -10,20 +10,38 @@
 
     <!-- drive / disc bar -->
     <Border Grid.Row="0" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
-      <DockPanel LastChildFill="False">
-        <TextBlock DockPanel.Dock="Left" Text="Drive" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
-        <ComboBox DockPanel.Dock="Left" Width="80" VerticalAlignment="Center"
+      <ScrollViewer x:Name="DiscCommandScroller"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Disabled">
+      <Grid x:Name="DiscCommandGrid" MinWidth="860"
+            Width="{Binding ActualWidth, ElementName=DiscCommandScroller}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Text="Drive" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
+        <ComboBox Grid.Column="1" Width="80" VerticalAlignment="Center"
                   ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"/>
         <!-- real drive model, read from INQUIRY (no disc needed) -->
-        <TextBlock DockPanel.Dock="Left" Margin="12,0,0,0" VerticalAlignment="Center"
-                   Text="{Binding DriveModel}" Foreground="{DynamicResource Ink}" FontSize="12" FontWeight="SemiBold"/>
-        <TextBlock DockPanel.Dock="Left" Margin="16,0,0,0" VerticalAlignment="Center"
-                   Text="{Binding DiscInfoText}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5"/>
-        <Button DockPanel.Dock="Right" Content="{Binding EjectButtonText}" Command="{Binding EjectCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"
+        <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding DriveModel}" ToolTip="{Binding DriveModel}"
+                   Foreground="{DynamicResource Ink}" FontSize="12" FontWeight="SemiBold"
+                   MaxWidth="190" TextTrimming="CharacterEllipsis"/>
+        <TextBlock Grid.Column="3" Margin="16,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding DiscInfoText}" ToolTip="{Binding DiscInfoText}"
+                   Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5"
+                   MaxWidth="230" TextTrimming="CharacterEllipsis"/>
+        <Button Grid.Column="6" Content="{Binding EjectButtonText}" Command="{Binding EjectCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"
                 ToolTip="{Binding EjectButtonTip}"/>
-        <Button DockPanel.Dock="Right" Content="Read disc" Command="{Binding ReadDiscCommand}" Padding="12,6" VerticalAlignment="Center"/>
+        <Button Grid.Column="5" Content="Read disc" Command="{Binding ReadDiscCommand}" Padding="12,6" VerticalAlignment="Center"/>
         <!-- release picker: ranked best-first by source + completeness; pick one to relabel -->
-        <ComboBox DockPanel.Dock="Right" Width="320" Margin="10,0,10,0" VerticalAlignment="Center"
+        <ComboBox Grid.Column="4" MinWidth="180" MaxWidth="320" Margin="10,0,10,0"
+                  HorizontalAlignment="Stretch" VerticalAlignment="Center"
                   ItemsSource="{Binding Releases}" SelectedItem="{Binding SelectedRelease, Mode=TwoWay}"
                   Visibility="{Binding HasReleases, Converter={StaticResource BoolVis}}"
                   ToolTip="Metadata release used for this rip. Ranked best-first by source quality and how complete the info is. Pick one to relabel the album and tracks.">
@@ -40,24 +58,33 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-      </DockPanel>
+      </Grid>
+      </ScrollViewer>
     </Border>
 
     <!-- disc present: metadata + tracks + action bar -->
-    <Grid Grid.Row="1" Visibility="{Binding ShowDiscArea, Converter={StaticResource BoolVis}}">
+    <ScrollViewer x:Name="DiscWorkScroller" Grid.Row="1"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled"
+                  HorizontalContentAlignment="Stretch"
+                  Visibility="{Binding ShowDiscArea, Converter={StaticResource BoolVis}}">
+    <Grid MinWidth="860" Width="{Binding ActualWidth, ElementName=DiscWorkScroller}">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="252"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="234"/>
+        <ColumnDefinition Width="0.35*" MinWidth="180" MaxWidth="252"/>
+        <ColumnDefinition Width="*" MinWidth="500"/>
+        <ColumnDefinition Width="0.32*" MinWidth="180" MaxWidth="234"/>
       </Grid.ColumnDefinitions>
 
       <!-- right: AccurateRip / CTDB / options -->
       <Border Grid.Column="2" Grid.RowSpan="3" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0" Padding="14,16">
+        <ScrollViewer x:Name="RipRightRailScroll"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
           <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13" Margin="0,0,0,11">
             <StackPanel>
@@ -99,19 +126,34 @@
               <TextBlock Text="TEST &amp; COPY" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,7"/>
               <TextBlock Text="{Binding TestCopyText}" FontSize="12" TextWrapping="Wrap"
                          Foreground="{Binding TestCopyIsWarning, Converter={StaticResource BoolBrush}, ConverterParameter=Amber;Muted}"/>
-              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+              <WrapPanel Margin="0,10,0,0">
                 <Button Content="Re-run" Command="{Binding TestCopyCommand}" Padding="12,6" Margin="0,0,8,0"/>
                 <Button Content="Accept anyway" Command="{Binding AcceptCopyAnywayCommand}" Padding="12,6" Margin="0,0,8,0"/>
                 <Button Content="Discard" Command="{Binding DiscardHeldCommand}" Padding="12,6"/>
-              </StackPanel>
+              </WrapPanel>
             </StackPanel>
           </Border>
           <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13">
             <StackPanel>
               <TextBlock Text="OPTIONS" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,8"/>
-              <DockPanel Margin="0,3,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCue}"/><TextBlock Text="Create .cue sheet" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
-              <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteLog}"/><TextBlock Text="Write rip log" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
-              <DockPanel Margin="0,8,0,0"><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedArt}"/><TextBlock Text="Embed cover art" Foreground="{DynamicResource InkDim}" FontSize="12.5" VerticalAlignment="Center"/></DockPanel>
+              <DockPanel Margin="0,3,0,0">
+                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCue}"/>
+                <TextBlock Text="Create .cue sheet" ToolTip="Create .cue sheet"
+                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
+                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteLog}"/>
+                <TextBlock Text="Write rip log" ToolTip="Write rip log"
+                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
+                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+              </DockPanel>
+              <DockPanel Margin="0,8,0,0">
+                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedArt}"/>
+                <TextBlock Text="Embed cover art" ToolTip="Embed cover art"
+                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
+                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+              </DockPanel>
               <!-- preview of the exact cover to be embedded: the largest Apple master (UPC-exact when
                    the disc carries a barcode), resized with the RIOT-matched filter; database cover if none -->
               <StackPanel Margin="0,10,0,0" Visibility="{Binding EmbedArt, Converter={StaticResource BoolVis}}">
@@ -126,19 +168,27 @@
             </StackPanel>
           </Border>
         </StackPanel>
+        </ScrollViewer>
       </Border>
 
       <!-- left: live disc read-map -->
       <Border Grid.Column="0" Grid.RowSpan="3" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0" Padding="16,18">
+        <ScrollViewer x:Name="RipLeftRailScroll"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
         <StackPanel VerticalAlignment="Top">
           <!-- 3D disc on GPU-accelerated hardware; the 2D read-map is the software-rendering fallback -->
-          <ctl:DiscModel3D Width="216" Height="216" HorizontalAlignment="Center"
-                           Progress="{Binding RipProgress, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"
-                           RereadActive="{Binding RereadActive, Mode=OneWay}" RereadFrac="{Binding RereadFrac, Mode=OneWay}"
-                           Unreadable="{Binding Unreadable, Mode=OneWay}"
-                           Visibility="{Binding Supports3DDisc, Converter={StaticResource BoolVis}}"/>
-          <ctl:DiscReadMap Width="216" Height="216" HorizontalAlignment="Center" Progress="{Binding RipProgress, Mode=OneWay}"
-                           Visibility="{Binding Supports3DDisc, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+          <Viewbox MaxWidth="216" MaxHeight="216" Stretch="Uniform"
+                   Visibility="{Binding Supports3DDisc, Converter={StaticResource BoolVis}}">
+            <ctl:DiscModel3D Width="216" Height="216"
+                             Progress="{Binding RipProgress, Mode=OneWay}" Active="{Binding IsRipping, Mode=OneWay}"
+                             RereadActive="{Binding RereadActive, Mode=OneWay}" RereadFrac="{Binding RereadFrac, Mode=OneWay}"
+                             Unreadable="{Binding Unreadable, Mode=OneWay}"/>
+          </Viewbox>
+          <Viewbox MaxWidth="216" MaxHeight="216" Stretch="Uniform"
+                   Visibility="{Binding Supports3DDisc, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+            <ctl:DiscReadMap Width="216" Height="216" Progress="{Binding RipProgress, Mode=OneWay}"/>
+          </Viewbox>
           <TextBlock Text="reading inside-out" FontFamily="{StaticResource Mono}" FontSize="10" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,0"/>
           <Border Margin="0,16,0,0" Background="{DynamicResource Glass}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1" CornerRadius="10" Padding="11,9">
             <StackPanel>
@@ -174,11 +224,17 @@
             </StackPanel>
           </Border>
         </StackPanel>
+        </ScrollViewer>
       </Border>
 
       <StackPanel Grid.Row="0" Grid.Column="1" Margin="18,16,18,8">
-        <TextBlock Text="{Binding AlbumTitle}" FontFamily="{StaticResource Serif}" FontSize="24" Foreground="{DynamicResource Ink}"/>
-        <TextBlock Text="{Binding AlbumArtist}" FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="14" Foreground="{DynamicResource InkDim}" Margin="0,2,0,0"/>
+        <TextBlock x:Name="AlbumTitleText" Text="{Binding AlbumTitle}" ToolTip="{Binding AlbumTitle}"
+                   FontFamily="{StaticResource Serif}" FontSize="24" Foreground="{DynamicResource Ink}"
+                   TextTrimming="CharacterEllipsis"/>
+        <TextBlock Text="{Binding AlbumArtist}" ToolTip="{Binding AlbumArtist}"
+                   FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="14"
+                   Foreground="{DynamicResource InkDim}" Margin="0,2,0,0"
+                   TextTrimming="CharacterEllipsis"/>
         <!-- why this release was chosen (all matches fit the disc; ranked by source + completeness) -->
         <TextBlock Text="{Binding SelectedRelease.Why}" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource Mono}" FontSize="10.5" Margin="0,5,0,0" TextWrapping="Wrap"
                    Visibility="{Binding HasReleases, Converter={StaticResource BoolVis}}"/>
@@ -266,49 +322,77 @@
       </Border>
 
       <Border Grid.Row="2" Grid.Column="1" Background="{DynamicResource Face}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,12">
-        <DockPanel LastChildFill="False">
-          <!-- Stop replaces the primary action while a rip/verify runs; Rip/Verify grey out. -->
-          <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource Accent}" Padding="18,9"
-                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}"
-                  ToolTip="Stop the rip or verify. It finishes the current block, then stops cleanly."/>
-          <Button DockPanel.Dock="Right" Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9" Margin="0,0,10,0"
-                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
-          <Button DockPanel.Dock="Right" Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}" Padding="18,9" Margin="0,0,10,0"
-                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
-          <Button DockPanel.Dock="Right" Content="Test &amp; Copy" Command="{Binding TestCopyCommand}" Padding="18,9" Margin="0,0,10,0"
-                  Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"
-                  ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. First use calibrates the drive automatically; cached re-reads are flushed. Slower (2-3x reads). Best for discs not in AccurateRip."/>
-          <Button DockPanel.Dock="Right" Content="tune" FontFamily="{StaticResource Mono}" FontSize="11" Padding="9,6" Margin="0,0,10,0" VerticalAlignment="Center"
-                  Click="EncoderSettings_Click"
-                  ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
-          <ComboBox DockPanel.Dock="Right" Width="120" Margin="0,0,6,0" VerticalAlignment="Center"
-                    ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
-                    IsEnabled="{Binding CodecUnlocked}"
-                    ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
-          <ComboBox DockPanel.Dock="Right" Width="104" Margin="0,0,10,0" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
-                    ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
-            <ComboBoxItem>Burst</ComboBoxItem>
-            <ComboBoxItem>Secure</ComboBoxItem>
-            <ComboBoxItem>Paranoid</ComboBoxItem>
-          </ComboBox>
-          <CheckBox DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center"
-                    Content="Deep recovery" IsChecked="{Binding DeepRecovery, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"
-                    ToolTip="On by default. On damaged discs: keep re-reading while results improve, classify slips, and slow the drive on stuck spots. Cache defeat is a separate Secure/Paranoid correctness rule and remains active even when this recovery extension is off. Slower only where damage needs it."/>
-          <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
-            <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="440"/>
-            <ProgressBar Height="4" Width="240" Minimum="0" Maximum="1" Value="{Binding RipProgress, Mode=OneWay}" Margin="0,5,0,0" HorizontalAlignment="Left"
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <StackPanel Grid.Row="0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding StatusText}" ToolTip="{Binding StatusText}"
+                       Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap"/>
+            <ProgressBar Height="4" MaxWidth="240" Minimum="0" Maximum="1"
+                         Value="{Binding RipProgress, Mode=OneWay}" Margin="0,5,0,0"
+                         HorizontalAlignment="Stretch"
                          Background="{DynamicResource Glass}" Foreground="{StaticResource Teal}" BorderThickness="0"/>
             <!-- where the ripped album folder is created -->
-            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-              <TextBlock Text="saves to" Foreground="{DynamicResource Muted}" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0"/>
-              <TextBlock Text="{Binding OutputBaseDir}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="10.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
-              <Button Content="Change..." Command="{Binding BrowseOutputCommand}" Padding="8,2" Margin="8,0,0,0" FontSize="10.5"
+            <Grid Margin="0,6,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="saves to" Foreground="{DynamicResource Muted}"
+                         FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0"/>
+              <TextBlock Grid.Column="1" Text="{Binding OutputBaseDir}" ToolTip="{Binding OutputBaseDir}"
+                         Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}"
+                         FontSize="10.5" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"/>
+              <Button Grid.Column="2" Content="Change..." Command="{Binding BrowseOutputCommand}"
+                      Padding="8,2" Margin="8,0,0,0" FontSize="10.5"
                       ToolTip="Choose the base folder. Each album gets its own 'Artist - Album' subfolder here."/>
-            </StackPanel>
+            </Grid>
           </StackPanel>
-        </DockPanel>
+
+          <!-- Wrap instead of clipping when side rails leave a narrow center column. Every command
+               remains reachable; below the 860-pixel work-area minimum the outer scroller is the
+               final fallback. Stop replaces the primary actions while a read is active. -->
+          <WrapPanel x:Name="RipActionWrap" Grid.Row="1" Margin="0,10,0,0"
+                     HorizontalAlignment="Right">
+            <ComboBox Width="104" Margin="0,0,10,6" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}"
+                      IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
+                      ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
+              <ComboBoxItem>Burst</ComboBoxItem>
+              <ComboBoxItem>Secure</ComboBoxItem>
+              <ComboBoxItem>Paranoid</ComboBoxItem>
+            </ComboBox>
+            <ComboBox Width="120" Margin="0,0,6,6" VerticalAlignment="Center"
+                      ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
+                      IsEnabled="{Binding CodecUnlocked}"
+                      ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
+            <Button Content="tune" FontFamily="{StaticResource Mono}" FontSize="11"
+                    Padding="9,6" Margin="0,0,10,6" VerticalAlignment="Center"
+                    Click="EncoderSettings_Click"
+                    ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
+            <Button Content="Test &amp; Copy" Command="{Binding TestCopyCommand}"
+                    Padding="18,9" Margin="0,0,10,6"
+                    Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"
+                    ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. First use calibrates the drive automatically; cached re-reads are flushed. Slower (2-3x reads). Best for discs not in AccurateRip."/>
+            <Button Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}"
+                    Padding="18,9" Margin="0,0,10,6"
+                    Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+            <Button Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"
+                    Margin="0,0,0,6"
+                    Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+            <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource Accent}"
+                    Padding="18,9" Margin="0,0,0,6"
+                    Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}"
+                    ToolTip="Stop the rip or verify. It finishes the current block, then stops cleanly."/>
+          </WrapPanel>
+        </Grid>
       </Border>
     </Grid>
+    </ScrollViewer>
 
     <!-- no disc: status + recently ripped. Keyed off ShowDiscArea, NOT IsDiscPresent: this sits in
          the SAME grid cell as the disc area and is declared after it, so with eject-after-rip on
