@@ -451,5 +451,38 @@ also records the count of transition-bound retries.
 
 **Status:** implemented and deterministic-test verified on 2026-07-27. The modern
 ripper suite passes 14/14, the full WPF suite passes 352/352, and the SCSI project
-builds for net8, net47, and net20 under its required full-MSBuild host. The real K:
-rerun remains.
+builds for net8, net47, and net20 under its required full-MSBuild host. K: later
+completed Test and advanced Copy to relative sector 283328 without another
+transition-bound failure. The ordinary-batch failure there is tracked under R58.
+
+### Decompose a rejected payload batch without inventing damaged-media evidence
+
+**Exact files:** `CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
+`CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
+`CUETools.Wpf/Services/RipService.cs`, and the R58 review record.
+
+**Safety and unchanged behavior:** only a multi-sector `DeviceFailed`,
+`IllegalRequest`, ASC/ASCQ `24/00` payload may use the compatibility fallback.
+Read the rejected range one sector at a time and return success only when every
+independent payload succeeds. A single-sector `24/00` cannot recurse. Medium
+errors in this path do not become damaged-sector evidence because the originating
+failure established only a rejected transfer shape; every individual failure
+remains fatal with its exact sector context. All other payload policy is unchanged.
+
+**Checks:** pure batch-policy positives and negatives; modern ripper tests; full
+WPF tests; net8/net47/net20 SCSI builds; then repeat K: Test & Copy beyond relative
+sector 283328.
+
+**Rollback:** revert the policy method, isolated fallback branch, counter, and log
+field together. Do not merge this with the medium-error split, whose trust
+semantics deliberately differ.
+
+**Observability:** each fatal individual fallback carries its exact relative
+sector, transfer count of one, command, applied speed, transition flags, and a
+batch-fallback marker without audio bytes. Completed phases record
+`payload_batch_fallbacks`.
+
+**Status:** implemented and deterministic-test verified on 2026-07-27. The modern
+ripper suite passes 16/16, the full WPF suite passes 352/352, and the SCSI project
+builds for net8, net47, and net20 under full MSBuild. The real K: rerun remains.

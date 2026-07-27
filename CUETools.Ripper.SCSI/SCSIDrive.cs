@@ -69,8 +69,10 @@ namespace CUETools.Ripper.SCSI
 		private bool _cacheDefeatJustFlushed;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
+		private int _payloadBatchFallbackCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
+		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -1478,6 +1480,45 @@ namespace CUETools.Ripper.SCSI
 			if (Sectors2Read == 1 && mediumError)
 			{
 				MarkSectorUnreadable(sector);
+				return Device.CommandStatus.Success;
+			}
+
+			if (PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+				Sectors2Read,
+				st,
+				senseKey,
+				asc,
+				ascq))
+			{
+				if (_debugMessages)
+					System.Console.WriteLine(
+						"\n{0}: retrying the rejected batch one sector at a time",
+						ex.Message);
+				for (int iSector = 0; iSector < Sectors2Read; iSector++)
+				{
+					int singleSector = sector + iSector;
+					Device.CommandStatus singleStatus =
+						FetchSectors(singleSector, 1, false);
+					if (singleStatus != Device.CommandStatus.Success)
+					{
+						// A rejected transfer shape says nothing about the trustworthiness
+						// of any sector. Continue only when every independent payload read
+						// succeeds; preserve the exact failed single-sector command otherwise.
+						string singleContext = string.Format(
+							"{0} [relative-sector={1}, sectors=1, command={2}, speed={3}kB/s, speed-transition={4}, cache-transition={5}, batch-fallback=True]",
+							Resource1.ReadCDError,
+							singleSector,
+							_readCDCommand,
+							_appliedSpeedKbps,
+							_speedChangeJustApplied,
+							_cacheDefeatJustFlushed);
+						throw new SCSIException(
+							singleContext,
+							m_device,
+							singleStatus);
+					}
+				}
+				_payloadBatchFallbackCount++;
 				return Device.CommandStatus.Success;
 			}
 

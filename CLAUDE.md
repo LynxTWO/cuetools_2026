@@ -78,6 +78,11 @@ progress documents for it belong here, under `docs/review/`.
   real hardware evidence. A repeated or unrelated failure stays fatal. Include
   relative sector, transfer count, command mode, and applied speed in scrubbed
   failure context; never include sector payload bytes.
+- A rejected multi-sector READ CD transfer is not damaged-media evidence. The exact
+  observed `DeviceFailed / IllegalRequest / 24/00` batch shape may fall back to
+  single-sector payload reads only when every sector succeeds independently. Any
+  single-sector failure remains fatal with its exact sector and sense context; do
+  not feed it into CTDB or the damaged-sector vote. Count successful batch fallbacks.
 - Keep the Rip page operable at the 1200-pixel default width. Primary actions,
   Test/Copy CRC evidence, and drive selection must remain reachable. Use bounded
   proportional layout and wrapping at supported widths, vertical scrolling for

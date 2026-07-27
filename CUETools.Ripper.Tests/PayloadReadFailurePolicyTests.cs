@@ -59,6 +59,46 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void InvalidFieldBatchCanDecomposeOnlyWhenItContainsMultipleSectors()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                1,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
+        public void BatchDecompositionDoesNotCoverOtherPayloadFailures()
+        {
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x21,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                16,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.MediumError,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                16,
+                Device.CommandStatus.IoctlFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
         public void InvalidFieldCanRetryOnceOnlyAfterAControlTransition()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryAfterControlTransition(

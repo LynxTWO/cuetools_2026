@@ -1197,6 +1197,39 @@ does not relax evidence, rollback, or verification requirements.
 - **Owner:** repo owner.
 - **Status:** implemented and deterministic-test verified 2026-07-27. The modern
   ripper suite passes 14/14, the WPF suite passes 352/352, and SCSI builds pass for
+  net8/net47/net20. K: then completed the full 1,179-second Test phase and advanced
+  its Copy phase to relative sector 283328 without another transition-bound
+  failure; the later ordinary-batch rejection is tracked separately as R58.
+
+### R58. A normal multi-sector READ CD batch can be rejected after hours of valid payload - bucket A, risk high
+
+- **Area or slice:** SCSI payload transfer shape, Test & Copy Copy phase, secure
+  read evidence, and damaged-disc completion.
+- **Why it matters:** a drive can accept the same READ CD form for hundreds of
+  thousands of sectors, then reject one ordinary 16-sector transfer. Treating this
+  as media damage invents evidence; aborting without trying the independently valid
+  item shape loses an otherwise recoverable long-running job.
+- **Evidence found:** after R57, K: completed the 1,179-second Test phase and
+  published all Test CRCs. The Copy phase then failed after 773 seconds at relative
+  sector 283328 on a 16-sector `ReadCdBEh` with `DeviceFailed`,
+  `IllegalRequest 24/00`, applied speed 5632 kB/s, and both
+  `speed-transition=False` and `cache-transition=False`. This contradicts the
+  narrower hypothesis that every observed 24/00 was transition-bound.
+- **Confidence:** verified.
+- **Approval needed:** no; the user requested autonomous damaged-disc completion.
+- **Recommended next reference or pass type:** pass 11 bounded safe fix.
+- **Smallest safe next step:** for only that exact rejected multi-sector payload
+  class, read the range one sector at a time. Continue only if every single-sector
+  payload succeeds. Keep any individual medium, transport, readiness, hardware, or
+  command failure fatal rather than feeding it into the damaged-media vote. Count a
+  completed fallback in the phase log.
+- **Verification plan:** pure classifier positives and negatives; modern ripper and
+  WPF suites; net8/net47/net20 SCSI builds; then repeat K: Test & Copy beyond
+  relative sector 283328 and confirm a completed Copy CRC or an exact
+  single-sector failure.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. The modern
+  ripper suite passes 16/16, the WPF suite passes 352/352, and SCSI builds pass for
   net8/net47/net20. The K: hardware rerun remains.
 
 ## Ordering
@@ -1251,3 +1284,6 @@ dependency:
 - 2026-07-27 - added R57 after the damaged K: rerun reproduced the previously
   overclaimed adaptive-speed boundary at 28 seconds. The retry is limited to the
   exact transition-bound `IllegalRequest 24/00` state.
+- 2026-07-27 - added R58 after K: completed Test, then rejected an ordinary
+  16-sector Copy transfer at relative sector 283328. The fallback preserves trust
+  by requiring every sector in the rejected batch to succeed independently.
