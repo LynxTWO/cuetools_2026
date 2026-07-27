@@ -102,6 +102,19 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     reusing its parent's context. Reclassify a child as untrusted subject data only when independent
     parent evidence plus a bounded repeat corroborate that narrower result. Never consume payload
     from a rejected attempt; every different repeat remains fatal under its own class.
+16. TEST THE ROUTE, NOT JUST THE DESTINATION. More than one classifier branch can reach the same
+    fallback and exact child operation. Preserve and log the selected parent branch, then cover every
+    reachable parent/child combination with deterministic policy tests. A passing test for
+    "medium-error parent -> pinpoint failure" proves nothing about
+    "rejected-batch parent -> the same pinpoint failure." When hardware contradicts a covered-looking
+    claim, reconstruct the actual branch ancestry before widening policy.
+17. MULTI-RESOURCE CONCURRENCY IS AN AUTHORITY PROBLEM. Enabling a selector or creating another
+    service instance does not create safe parallelism. Inventory process-local stop/current state,
+    physical-resource identity, shared settings, caches, histories, logs, staging, and publication
+    destinations. Isolate mutable jobs, lease the real resource across processes, make incidental
+    workers read-only toward shared preferences, keep sensitive job data out of command lines, and
+    prove same-resource denial, independent Stop, crash release, log uniqueness, and output
+    collision behavior before claiming concurrency.
 
 ### How to choose the extraction
 

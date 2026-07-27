@@ -40,7 +40,14 @@ public sealed class DriveCalibrationService
     public DriveCalibration Calibrate(char drive)
     {
         // the probe opens its own handle, so it counts as drive-busy too
-        using var ripScope = CUETools.Wpf.Services.DriveService.EnterRip();
+        using var ripScope =
+            CUETools.Wpf.Services.DriveService.TryEnterRip(drive, _log);
+        if (ripScope == null)
+        {
+            _log.Warn("calibrate",
+                $"drive {drive}: another CUETools job owns the drive");
+            return null;
+        }
         var reader = new CDDriveReader();
         try
         {

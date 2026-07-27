@@ -170,6 +170,8 @@ public sealed class SettingsStore
     {
         try
         {
+            using SettingsFileLease settingsLease =
+                SettingsFileLease.Acquire(SettingsFilePath);
             string proxyPassword = config.advanced.ProxyPassword ?? "";
             _log.Redact(proxyPassword);
             string protectedProxyPassword = string.IsNullOrEmpty(proxyPassword)

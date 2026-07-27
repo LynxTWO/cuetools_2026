@@ -63,6 +63,12 @@ progress documents for it belong here, under `docs/review/`.
   lock selection while an operation owns the hardware. UI observers and progress
   listeners are ancillary; their exceptions must not change calibration, rip, or
   cleanup outcomes.
+- Concurrent optical jobs run in separate process-per-drive windows. Claim the drive
+  letter before querying device identity, then hold both the letter and physical-device
+  lease for the complete operation. A second claimant for either identity fails before
+  touching the hardware. Each window owns its Stop/status state and collision-safe log;
+  secondary windows do not publish shared settings. Launch arguments carry only the
+  window role and validated drive letter.
 - Publish immutable named evidence at the end of each completed phase. In Test &
   Copy, Test CRC appears before Copy starts and Copy CRC appears before any
   tie-break; a later phase must not erase a prior role it did not replace.
@@ -80,15 +86,18 @@ progress documents for it belong here, under `docs/review/`.
   failure context; never include sector payload bytes.
 - A rejected multi-sector READ CD transfer is not damaged-media evidence. The exact
   observed `DeviceFailed / IllegalRequest / 24/00` batch shape may fall back to
-  single-sector payload reads only when every sector succeeds independently. Any
-  single-sector failure remains fatal with its exact sector and sense context; do
-  not feed it into CTDB or the damaged-sector vote. Count successful batch fallbacks.
+  single-sector payload reads. Each child must succeed independently unless the exact
+  child repeats `24/00` after one bounded retry; the rejected parent plus two exact
+  child command shapes may then mark only that address untrusted. Never consume a
+  rejected payload. Every different child failure remains fatal with its exact sector
+  and sense context. Count successful batch fallbacks and corroborated pinpoints.
 - Preserve nested SCSI identity. When a batch reports medium error, snapshot each
   failed pinpoint sector before another command overwrites device sense. A pinpoint
   `IllegalRequest / 24/00` may retry once only with that parent medium-error
-  corroboration. Use only a successful retry; a repeated identical rejection may
-  mark that exact sector untrusted, while every different repeat remains fatal.
-  Never report a child failure using its parent's sector count or range.
+  corroboration or the exact rejected-batch ancestry above. Use only a successful
+  retry; a repeated identical rejection may mark that exact sector untrusted, while
+  every different repeat remains fatal. Never report a child failure using its
+  parent's sector count or range.
 - Keep the Rip page operable at the 1200-pixel default width. Primary actions,
   Test/Copy CRC evidence, and drive selection must remain reachable. Use bounded
   proportional layout and wrapping at supported widths, vertical scrolling for
