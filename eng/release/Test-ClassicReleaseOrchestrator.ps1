@@ -324,11 +324,38 @@ try {
     $failedBuildId = [string]$failedIntentDocument.value.buildId
     $failedIntentArchive = $receiptPath + ".intent." +
         $failedBuildId + ".abandoned.json"
+    [IO.File]::AppendAllText(
+        (Join-Path $tempRoot "Source.cs"),
+        "// repair after failed build`n")
+    $staleIntentRejected = $false
+    try {
+        [void](Invoke-ClassicRelease `
+            -RepositoryRoot $tempRoot `
+            -PlanPath $planPath `
+            -ReceiptPath $receiptPath `
+            -LeaseTimeoutMilliseconds 1000 `
+            -TestToolchain $toolchain `
+            -TestToolRoot $toolRoot `
+            -TestCommandInvoker $commandInvoker `
+            -TestCollectionInvoker $collectionInvoker)
+    }
+    catch {
+        $staleIntentRejected =
+            $_.Exception.Message -match "stale source fingerprint"
+    }
+    Assert-True `
+        $staleIntentRejected `
+        "Retry silently archived a pending intent after its source changed."
+    Assert-True `
+        (Test-Path -LiteralPath (
+            $receiptPath + ".intent.json") -PathType Leaf) `
+        "Rejected stale-intent recovery did not retain the pending intent."
     $retryResult = Invoke-ClassicRelease `
         -RepositoryRoot $tempRoot `
         -PlanPath $planPath `
         -ReceiptPath $receiptPath `
         -LeaseTimeoutMilliseconds 1000 `
+        -ArchiveStalePendingIntent `
         -TestToolchain $toolchain `
         -TestToolRoot $toolRoot `
         -TestCommandInvoker $commandInvoker `
@@ -455,8 +482,8 @@ try {
     $corruptIntentPath = $receiptPath + ".intent.json"
     $validPendingIntentText =
         Get-Content -LiteralPath $corruptIntentPath -Raw
-    $corruptIntent = $validPendingIntentText |
-        ConvertFrom-Json
+    $corruptIntent = ConvertFrom-ClassicBuildJson `
+        -Text $validPendingIntentText
     $corruptIntent.leaseToken = [Guid]::NewGuid().ToString("N")
     [IO.File]::WriteAllText(
         $corruptIntentPath,

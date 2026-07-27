@@ -8,7 +8,7 @@
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp",
-      "sha256": "df391d2c11d67814666d5f95de78e41010dd1e3b06752a131d29dcc34f81aec3"
+      "sha256": "f54ba4e70d4650b347fd895bd39416a17ff443d7289d19ef8233f922455a989c"
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def",
@@ -16,11 +16,11 @@
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.h",
-      "sha256": "df978f0dec0f147fb882551af4cf8c00438df9556e32b72ab4dc8ea8fe52a2a5"
+      "sha256": "23297cf56409ee59598ed59a4752c4259c152b2a953070c4b7e8e947ff77b671"
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj",
-      "sha256": "af1726e5c0967b0ddb32dc9ef40685d3e2df929e4811abe38099f2cd8133b5a9"
+      "sha256": "e8f1b8e3696fb32d3cd1bfc190c1cbf95e81cb82ece8aa7dfe72389935aa2180"
     },
     {
       "path": "ThirdParty/submodule_flac_CUETools.patch",

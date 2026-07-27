@@ -229,9 +229,20 @@ public sealed class VerifyService : IVerifyService
             writeArLogOnVerify = false,
             writeArLogOnConvert = false,
             arLogToSourceFolder = false,
-            keepOriginalFilenames = false,
+            // Repair is a source-preserving operation, not a normal conversion
+            // preset. CUESheet constrains these to Path.GetFileName(...) before
+            // combining them with the owned staging directory.
+            keepOriginalFilenames = true,
             trackFilenameFormat = "%tracknumber%",
             singleFilenameFormat = "album",
+            writeBasicTagsFromCUEData = true,
+            copyBasicTags = true,
+            copyUnknownTags = true,
+            CopyAlbumArt = true,
+            // CopyAlbumArt loads and writes embedded source pictures. Leaving
+            // embedAlbumArt off avoids turning repair into a folder-art scan or
+            // remote metadata-art import.
+            embedAlbumArt = false,
             extractAlbumArt = false,
             extractLog = false,
             createM3U = false,

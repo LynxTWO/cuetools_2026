@@ -31,20 +31,16 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '8.0.x'
-      - name: Apply managed dependency patches
-        # yamllint disable-line rule:line-length
-        run: |
-          git apply --directory=ThirdParty/taglib-sharp ThirdParty/submodule_taglib-sharp_CUETools.patch --verbose
-          git apply --directory=ThirdParty/WindowsMediaLib ThirdParty/submodule_WindowsMediaLib_CUETools.patch --verbose
       - name: Test release-control contracts
         run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-VendorSourceStaging.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-NativeWarningBaseline.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-NativeDependencyPreparation.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicBuildReceipt.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicReleaseOrchestrator.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ClassicArtifactCollection.ps1
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Test-ReleaseSafety.ps1
-      - name: Prepare pinned native dependency sources
+      - name: Prepare pinned staged dependency sources
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Build-NativeDependencies.ps1 -Configuration Release -ApplyPatchesOnly
       - name: Rebuild, receipt, collect, and publish the classic artifact
@@ -74,6 +70,9 @@ jobs:
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Sboms.ps1 -ArtifactDirectory bin\Release\CUETools2026-win-x64 -OutputDirectory bin\Release\evidence\sbom\wpf -CycloneInputPath CUETools.Wpf\CUETools.Wpf.csproj -CycloneFramework net8.0-windows -CycloneRuntime win-x64 -OutputStem cuetools-wpf -PackageName "CUETools 2026" -PackageVersion 2026.1.0
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Sboms.ps1 -ArtifactDirectory bin\Release\CUETools_2.2.6 -OutputDirectory bin\Release\evidence\sbom\classic -CycloneInputPath CUETools.sln -CycloneFramework net47 -OutputStem cuetools-classic -PackageName CUETools -PackageVersion 2.2.6
+      - name: Assert vendor submodules stayed clean
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\ci\Test-VendorSubmodulesClean.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deploy

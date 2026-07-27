@@ -23,7 +23,7 @@
     <Content Include="..\CUETools\CUETools.TestCodecs\Data\alac.m4a" Link="Corpus\Codecs\alac.m4a" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\CUETools\CUETools.TestProcessor\Test Images\Amarok\Amarok.cue" Link="Corpus\Cue\Amarok.cue" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\CUETools\CUETools.TestProcessor\Test Images\Amarok\Amarok.dummy" Link="Corpus\Cue\Amarok.dummy" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\ThirdParty\taglib-sharp\src\TaglibSharp.Tests\samples\sample.mp3" Link="Corpus\Tags\sample.mp3" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\obj\vendor-sources\current\ThirdParty\taglib-sharp\src\TaglibSharp.Tests\samples\sample.mp3" Link="Corpus\Tags\sample.mp3" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

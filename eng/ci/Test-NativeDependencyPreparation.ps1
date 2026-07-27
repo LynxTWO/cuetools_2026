@@ -57,6 +57,14 @@ try {
         "The clean-checkout-shaped Monkey's Audio SDK expansion failed."
     Assert-True (Test-Path -LiteralPath $archiveOnlyProject -PathType Leaf) `
         "The archive-only MACLib project was not expanded."
+    $wrapperProjectText = [IO.File]::ReadAllText($trackedSentinel)
+    Assert-True ($wrapperProjectText -notmatch "DefaultPlatformToolset") `
+        "The Monkey's Audio wrapper still inherits an environment-selected toolset."
+    Assert-True (
+        ([regex]::Matches(
+            $wrapperProjectText,
+            "<PlatformToolset>v143</PlatformToolset>")).Count -eq 4) `
+        "The Monkey's Audio wrapper does not pin v143 in all four configurations."
 
     $generatedTarget = Join-Path $tempRoot (
         "ThirdParty\MAC_SDK\Source\Projects\Visual Studio - 2022\" +

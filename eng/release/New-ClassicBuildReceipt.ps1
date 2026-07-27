@@ -28,6 +28,13 @@ if (-not (Test-Path -LiteralPath $nativeWarningScript -PathType Leaf)) {
 }
 . $nativeWarningScript
 
+$vendorStagingScript = [IO.Path]::GetFullPath(
+    (Join-Path $PSScriptRoot "..\ci\VendorSourceStaging.ps1"))
+if (-not (Test-Path -LiteralPath $vendorStagingScript -PathType Leaf)) {
+    throw "Vendor source staging helper does not exist: $vendorStagingScript"
+}
+. $vendorStagingScript
+
 function Get-ClassicBuildTextSha256 {
     [CmdletBinding()]
     param(
@@ -45,6 +52,15 @@ function Get-ClassicBuildTextSha256 {
     finally {
         $algorithm.Dispose()
     }
+}
+
+function ConvertFrom-ClassicBuildJson([string]$Text) {
+    # PowerShell 7.6 converts ISO-looking JSON strings to DateTime by default.
+    # Receipt timestamps are canonical strings and must survive parsing byte-for-byte.
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey("DateKind")) {
+        return $Text | ConvertFrom-Json -DateKind String
+    }
+    return $Text | ConvertFrom-Json
 }
 
 function Write-AtomicClassicBuildJson {
@@ -183,7 +199,7 @@ function Read-ClassicBuildJsonDocument {
             path = $fullPath
             bytes = [long]$bytes.Length
             sha256 = $digest
-            value = ($text | ConvertFrom-Json)
+            value = ConvertFrom-ClassicBuildJson $text
         }
     }
     finally {
@@ -660,17 +676,25 @@ function Get-ClassicBuildSourceIdentity {
         -DisplayPath "."
     $expandedNativeInputs = @(
         Get-ClassicMacSdkExpandedSourceIdentity -RepositoryRoot $root)
+    $vendorSourceStage = $null
+    if (Test-Path -LiteralPath (
+        Join-Path $root "eng\ci\Prepare-VendorSources.ps1") -PathType Leaf) {
+        $vendorSourceStage = Get-CUEToolsVendorSourceIdentity `
+            -RepositoryRoot $root
+    }
     $canonicalRecord = [pscustomobject]([ordered]@{
         workspace = $record
         expandedNativeInputs = $expandedNativeInputs
+        vendorSourceStage = $vendorSourceStage
     })
     $canonical = $canonicalRecord | ConvertTo-Json -Depth 32 -Compress
     return [pscustomobject]([ordered]@{
         commit = [string]$record.commit
         fingerprintSha256 = Get-ClassicBuildTextSha256 -Text $canonical
-        fingerprintPolicy = "HEAD plus exact tracked binary diff, non-ignored untracked source, recursive initialized-submodule state, and explicitly hashed ignored expanded native inputs; classified native build residue is excluded"
+        fingerprintPolicy = "HEAD plus exact tracked binary diff, non-ignored untracked source, recursive initialized-submodule state, explicitly hashed expanded native inputs, and the manifest-verified staged vendor source closure; classified build residue is excluded"
         workspace = $record
         expandedNativeInputs = $expandedNativeInputs
+        vendorSourceStage = $vendorSourceStage
     })
 }
 
@@ -921,7 +945,7 @@ function Get-ClassicVisualStudioInstances {
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json)) {
         throw "Visual Studio instance discovery failed."
     }
-    $instances = $json | ConvertFrom-Json
+    $instances = ConvertFrom-ClassicBuildJson $json
     foreach ($instance in @($instances)) {
         Write-Output $instance
     }
@@ -1757,6 +1781,7 @@ function Archive-ValidatedPendingClassicBuildIntent {
         [object]$Lease,
         [Parameter(Mandatory = $true)]
         [string]$LeaseToken,
+        [switch]$AllowStaleSource,
         [string]$TestToolRoot
     )
 
@@ -1804,10 +1829,9 @@ function Archive-ValidatedPendingClassicBuildIntent {
         ((@($intent.platforms) -join "`n") -cne ($Platforms -join "`n"))) {
         throw "Pending classic build intent does not match the recovery tuple."
     }
-    if ([string]::IsNullOrWhiteSpace([string]$Lease.priorToken) -or
-        [string]$intent.leaseToken -cne [string]$Lease.priorToken) {
-        throw "Pending classic build intent is not bound to the prior repo-wide release lease."
-    }
+    $priorLeaseMatches =
+        -not [string]::IsNullOrWhiteSpace([string]$Lease.priorToken) -and
+        [string]$intent.leaseToken -ceq [string]$Lease.priorToken
 
     $plan = Get-ClassicCollectionPlan `
         -RepositoryRoot $root `
@@ -1841,10 +1865,15 @@ function Archive-ValidatedPendingClassicBuildIntent {
         throw "Pending classic build intent has a stale solution hash."
     }
     $source = Get-ClassicBuildSourceIdentity -RepositoryRoot $root
-    if (-not (Test-ClassicJsonEquivalent `
+    $sourceChanged = -not (Test-ClassicJsonEquivalent `
         -Left $source `
-        -Right $intent.source)) {
+        -Right $intent.source)
+    if ($sourceChanged -and -not $AllowStaleSource) {
         throw "Pending classic build intent has a stale source fingerprint."
+    }
+    if (-not $priorLeaseMatches -and
+        -not ($AllowStaleSource -and $sourceChanged)) {
+        throw "Pending classic build intent is not bound to the prior repo-wide release lease."
     }
     [void](Assert-CurrentClassicBuildToolchain `
         -Toolchain $intent.toolchain `
@@ -1873,12 +1902,21 @@ function Archive-ValidatedPendingClassicBuildIntent {
         [string]$intentDocument.sha256) {
         throw "Archived classic build intent bytes changed during recovery."
     }
-    Write-Host "Archived validated pending classic build intent: $archivePath"
+    $archiveReason = if ($sourceChanged) {
+        " after an explicitly approved source change"
+    } else {
+        ""
+    }
+    Write-Host (
+        "Archived validated pending classic build intent$archiveReason`: " +
+        $archivePath)
     return [pscustomobject]@{
         buildId = [string]$intent.buildId
         priorLeaseToken = [string]$intent.leaseToken
         archivePath = $archivePath
         contentSha256 = [string]$archiveDocument.sha256
+        sourceChanged = $sourceChanged
+        priorLeaseMatched = $priorLeaseMatches
     }
 }
 
