@@ -167,8 +167,10 @@ public interface IRipService
     /// the third read on a mismatch) so a codec change made during the Test read is honored -
     /// <paramref name="format"/> is otherwise used as-is. <paramref name="onEncodeStart"/> fires once
     /// before each of those encode reads (never before the Test read) so the caller can lock the
-    /// codec choice once encoding actually starts.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null);
+    /// codec choice once encoding actually starts. <paramref name="onCrcEvidence"/> receives a
+    /// fresh named Test/Copy snapshot after each completed read; it is an ancillary notification
+    /// and must not affect the read or final transaction result.</summary>
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -1081,7 +1083,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null)
     {
         // Test, Copy, and an optional tie-break are separate Run calls. Keep drive ownership
         // continuous across their calibration, staging, and between-read gaps.
@@ -1099,6 +1101,23 @@ public sealed class RipService : IRipService
         bool keepStaging = false;   // set true only when we return a HELD result the VM must clean up
 
         Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
+        void PublishCrcEvidence(
+            IReadOnlyList<VerifyRecord> completedReads,
+            int sourceReadIndex)
+        {
+            if (onCrcEvidence == null)
+                return;
+            TrackCrc[] snapshot =
+                BuildTestCopyCrcEvidence(completedReads, sourceReadIndex);
+            try { onCrcEvidence(snapshot); }
+            catch (Exception ex)
+            {
+                // This is an immediate display notification. The immutable final result still
+                // carries the same evidence, and a UI listener must never abort an optical read.
+                try { _log.Warn("rip", "live CRC UI notification failed: " + ex.GetType().Name); }
+                catch { }
+            }
+        }
 
         try
         {
@@ -1122,6 +1141,9 @@ public sealed class RipService : IRipService
             ThrowIfStopRequested();
             var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
+            PublishCrcEvidence(
+                new[] { testResult.Record! },
+                sourceReadIndex: 0);
 
             // Read 2 (Copy, index 1): staged encode - this is the file set that gets committed on a
             // 2-read pass, or is the preferred source per track on a 3-read pass. This is the first
@@ -1134,6 +1156,7 @@ public sealed class RipService : IRipService
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
 
             var reads = new System.Collections.Generic.List<VerifyRecord> { testResult.Record, copyResult.Record };
+            PublishCrcEvidence(reads, sourceReadIndex: 1);
             var staged = new System.Collections.Generic.List<bool> { false, true };
             var stagingAlbumDirs = new System.Collections.Generic.List<string> { "", copyResult.OutputDir };
             var encodedResults = new System.Collections.Generic.List<VerifyResult?> { null, copyResult };
@@ -1153,6 +1176,7 @@ public sealed class RipService : IRipService
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
 
                 reads.Add(thirdResult.Record);
+                PublishCrcEvidence(reads, sourceReadIndex: 2);
                 staged.Add(true);
                 stagingAlbumDirs.Add(thirdResult.OutputDir);
                 encodedResults.Add(thirdResult);
@@ -1553,7 +1577,10 @@ public sealed class RipService : IRipService
                 CopyCrc32 =
                     copyTrack != null && copyTrack.Crc32 != 0
                         ? copyTrack.Crc32
-                        : copyTrack?.CopyCrc32 ?? 0,
+                        : copyTrack?.CopyCrc32
+                            ?? selected?.CopyCrc32
+                            ?? testTrack?.CopyCrc32
+                            ?? 0,
             };
         }
         return result;

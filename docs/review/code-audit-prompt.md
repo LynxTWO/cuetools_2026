@@ -78,6 +78,10 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     device evidence immediately on selection changes, and lock selectors while a hardware-owning
     operation is active. UI/event listeners are ancillary: marshal them to the UI thread and contain
     their failures so they cannot abort calibration, ripping, or ownership-scope cleanup.
+11. PUBLISH PHASE EVIDENCE WHEN THE PHASE COMPLETES. A completed Test CRC must not remain hidden
+    throughout Copy or an optional tie-break. Send immutable, semantically named snapshots at each
+    completed phase, preserve older roles that the phase did not replace, and keep the final composite
+    result distinct from those already-proven intermediate facts.
 
 ### How to choose the extraction
 

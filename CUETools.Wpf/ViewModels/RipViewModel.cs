@@ -1051,6 +1051,22 @@ public sealed class RipViewModel : PageViewModel
         string outBase = OutputBaseDir;
         byte[]? cover = _coverBytes;   // hi-res Apple cover if the preview found one, else null -> DB cover
         void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
+        void PublishCrcEvidence(CUETools.Wpf.Accuracy.TrackCrc[] evidence)
+        {
+            void Apply()
+            {
+                try { ApplyCrcEvidence(evidence); }
+                catch
+                {
+                    // The final Test & Copy result carries the same CRC evidence. A transient
+                    // presentation failure must never terminate the active optical operation.
+                }
+            }
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.BeginInvoke((Action)Apply);
+            else
+                Apply();
+        }
         // liveFormat is polled just before each encode read (Copy, and the third read on a mismatch),
         // so a codec change made while the Test read is still running is honored.
         RipTelemetryMailbox telemetry = StartTelemetry();
@@ -1060,7 +1076,8 @@ public sealed class RipViewModel : PageViewModel
             result = await Task.Run(() => _rip.RunTestAndCopy(
                 drive, cq, fmt, meta, outBase, Report, telemetry,
                 Reread, cover, liveFormat: () => SelectedFormat,
-                onEncodeStart: LockCodec));
+                onEncodeStart: LockCodec,
+                onCrcEvidence: PublishCrcEvidence));
         }
         finally
         {
