@@ -2988,6 +2988,15 @@ namespace CUETools.Processor
                             // fill up missing information from tags
                             if (_config.copyBasicTags && sourceFileInfo != null)
                             {
+                                // A single-file image can carry its own title/track fields.
+                                // These were previously the only basic tags omitted from the
+                                // copy path, so source-preserving repair silently lost Title.
+                                if (fileInfo.Tag.Title == null)
+                                    fileInfo.Tag.Title = sourceFileInfo.Tag.Title;
+                                if (fileInfo.Tag.TrackCount == 0)
+                                    fileInfo.Tag.TrackCount = sourceFileInfo.Tag.TrackCount;
+                                if (fileInfo.Tag.Track == 0)
+                                    fileInfo.Tag.Track = sourceFileInfo.Tag.Track;
                                 if (fileInfo.Tag.DiscCount == 0)
                                     fileInfo.Tag.DiscCount = sourceFileInfo.Tag.DiscCount; // TODO: GetCommonTag?
                                 if (fileInfo.Tag.Disc == 0)
@@ -3484,6 +3493,12 @@ namespace CUETools.Processor
                 // these are not valid
                 destTags.Remove("CUESHEET");
                 CleanupTags(destTags, "ACCURATERIP");
+                // CTDB confidence tags, like AccurateRip tags, are assertions about
+                // the source audio payload. Never carry them into a newly encoded
+                // payload; the guarded generation below may add fresh values only
+                // after this encode has its own successful CTDB result.
+                CleanupTags(destTags, "CTDBDISCCONFIDENCE");
+                CleanupTags(destTags, "CTDBTRACKCONFIDENCE");
                 //CleanupTags(destTags, "REPLAYGAIN");
             }
 
@@ -3564,6 +3579,8 @@ namespace CUETools.Processor
 
                 // these are not valid
                 CleanupTags(destTags, "ACCURATERIP");
+                CleanupTags(destTags, "CTDBDISCCONFIDENCE");
+                CleanupTags(destTags, "CTDBTRACKCONFIDENCE");
                 //CleanupTags(destTags, "REPLAYGAIN");
 
                 destTags.Remove("CUESHEET");

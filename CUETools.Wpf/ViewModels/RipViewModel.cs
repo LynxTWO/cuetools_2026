@@ -531,6 +531,7 @@ public sealed class RipViewModel : PageViewModel
                 : (string.IsNullOrWhiteSpace(info.Year) ? info.Artist : $"{info.Artist}  ({info.Year})");
             DiscInfoText = $"{info.AudioTracks} tracks   {Fmt(info.TotalLength)}   {info.Releases.Count} release match(es)";
             foreach (var t in info.Tracks) Tracks.Add(t);
+            ApplyCrcEvidence(_rip.GetLatestCrcEvidence(info.DiscId));
             foreach (var rm in info.Releases) Releases.Add(rm);
             _selectedRelease = System.Linq.Enumerable.FirstOrDefault(Releases, r => r.IsBest) ?? (Releases.Count > 0 ? Releases[0] : null);
             _chosenMetadata = _selectedRelease?.Metadata;
@@ -1062,6 +1063,8 @@ public sealed class RipViewModel : PageViewModel
         }
 
         RipProgress = result.Ok ? 1 : RipProgress;
+        if (result.Ok)
+            ApplyCrcEvidence(result.CrcEvidence);
         if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed)
         {
             LastOutputDir = result.OutputDir;
@@ -1453,6 +1456,27 @@ public sealed class RipViewModel : PageViewModel
             int ct = i < result.CtdbPerTrack.Length ? result.CtdbPerTrack[i] : 0;
             Tracks[i].ArResult = ar > 0 ? ar.ToString() : "-";
             Tracks[i].CtdbResult = ct > 0 ? ct.ToString() : "-";
+        }
+        ApplyCrcEvidence(result.Record?.Tracks ?? Array.Empty<CUETools.Wpf.Accuracy.TrackCrc>());
+    }
+
+    private void ApplyCrcEvidence(
+        System.Collections.Generic.IReadOnlyList<CUETools.Wpf.Accuracy.TrackCrc> evidence)
+    {
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            CUETools.Wpf.Accuracy.TrackCrc? crc =
+                evidence != null && i < evidence.Count
+                    ? evidence[i]
+                    : null;
+            Tracks[i].TestCrc =
+                crc != null && crc.TestCrc32 != 0
+                    ? crc.TestCrc32.ToString("X8")
+                    : "-";
+            Tracks[i].CopyCrc =
+                crc != null && crc.CopyCrc32 != 0
+                    ? crc.CopyCrc32.ToString("X8")
+                    : "-";
         }
     }
 

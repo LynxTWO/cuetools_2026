@@ -235,10 +235,16 @@ public sealed class VerifyService : IVerifyService
             keepOriginalFilenames = true,
             trackFilenameFormat = "%tracknumber%",
             singleFilenameFormat = "album",
-            writeBasicTagsFromCUEData = true,
+            // Existing files are authoritative during repair. The cue can contain
+            // stale or normalized text that differs from the user's exact tags.
+            writeBasicTagsFromCUEData = false,
             copyBasicTags = true,
             copyUnknownTags = true,
             CopyAlbumArt = true,
+            // AccurateRip/CTDB results describe the source payload and become stale
+            // when CTDB changes samples. They must be recomputed by the independent
+            // post-repair verify, never copied or generated during the repair encode.
+            writeArTagsOnEncode = false,
             // CopyAlbumArt loads and writes embedded source pictures. Leaving
             // embedAlbumArt off avoids turning repair into a folder-art scan or
             // remote metadata-art import.
@@ -249,7 +255,11 @@ public sealed class VerifyService : IVerifyService
             createCUEFileInTracksMode = true,
             createCUEFileWhenEmbedded = true
         };
+        copy.advanced.WriteCTDBTagsOnEncode = false;
         copy.advanced.WriteCTDBTagsOnVerify = false;
+        // Preserve the source's exact disc-identity tag. Regenerating CDTOC here can
+        // normalize it or append a second value even though repair must preserve tags.
+        copy.advanced.WriteCDTOCTag = false;
         copy.advanced.CreateTOC = false;
         return copy;
     }

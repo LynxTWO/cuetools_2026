@@ -52,9 +52,14 @@ public sealed class DriveViewModel : PageViewModel
 
     // Per-drive calibration (persisted). Loaded on detect; refreshed by Calibrate (a disc needed).
     private DriveCalibration? _cal;
-    public DriveCalibration? Cal { get => _cal; private set { if (Set(ref _cal, value)) { OnPropertyChanged(nameof(HasCal)); OnPropertyChanged(nameof(CacheText)); OnPropertyChanged(nameof(CalMaxSpeedText)); OnPropertyChanged(nameof(CalMinSpeedText)); OnPropertyChanged(nameof(CalWhenText)); } } }
+    public DriveCalibration? Cal { get => _cal; private set { if (Set(ref _cal, value)) { OnPropertyChanged(nameof(HasCal)); OnPropertyChanged(nameof(CacheText)); OnPropertyChanged(nameof(OverreadText)); OnPropertyChanged(nameof(CalMaxSpeedText)); OnPropertyChanged(nameof(CalMinSpeedText)); OnPropertyChanged(nameof(CalWhenText)); } } }
     public bool HasCal => _cal != null;
     public string CacheText => _cal == null ? "not calibrated" : $"{_cal.CacheDefeat}  ({_cal.CacheConfidence})";
+    public string OverreadText => _cal == null
+        ? "not calibrated"
+        : !_cal.ReadOffsetKnown
+            ? "offset unknown  .  safely disabled"
+            : $"lead-in {(_cal.OverreadLeadIn ? "yes" : "no")}  .  lead-out {(_cal.OverreadLeadOut ? "yes" : "no")}";
     public string CalMaxSpeedText => _cal == null || _cal.MaxSpeedKbps <= 0 ? "--" : $"{_cal.MaxSpeedKbps} kB/s  (~{_cal.MaxSpeedKbps / 176}x)";
     public string CalMinSpeedText => _cal == null || _cal.MinSpeedKbps <= 0 ? "--" : $"{(_cal.MinSpeedKbps / 176.0).ToString("0.##", CultureInfo.InvariantCulture)}x ({_cal.MinSpeedKbps} kB/s)";
     public string CalWhenText => _cal == null ? "" : "calibrated " + _cal.CalibratedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
@@ -143,14 +148,16 @@ public sealed class DriveViewModel : PageViewModel
         char drive = TargetDrive(d);
         _busy = true;
         CommandManager.InvalidateRequerySuggested();
-        Status = "Calibrating " + drive + ": (probing cache and speed - needs a disc)...";
+        Status = "Calibrating " + drive + ": (probing cache, overread, and speed - needs a disc)...";
         try
         {
             var cal = await Task.Run(() => _calibration.Calibrate(drive));
             if (cal != null)
             {
                 Cal = cal;
-                Status = "Calibrated " + drive + ":  cache " + cal.CacheDefeat + ".";
+                Status = "Calibrated " + drive + ": cache " + cal.CacheDefeat
+                    + $"; overread lead-in {(cal.OverreadLeadIn ? "yes" : "no")}, "
+                    + $"lead-out {(cal.OverreadLeadOut ? "yes" : "no")}.";
             }
             else
             {

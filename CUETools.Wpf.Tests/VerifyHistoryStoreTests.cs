@@ -65,5 +65,57 @@ namespace CUETools.Wpf.Tests
             var o = s.CompareAndUpsert(Rec("D1", 7, 20, 30));
             Assert.IsTrue(o.PriorReads <= 5);
         }
+
+        [TestMethod]
+        public void TestAndCopyCrcsPersistAndEachRoleUpdatesIndependently()
+        {
+            string path = Path.Combine(
+                Path.GetTempPath(),
+                "vh-" + System.Guid.NewGuid().ToString("N") + ".json.gz");
+            try
+            {
+                var store = new VerifyHistoryStore(path);
+                var initial = Rec("D1", 10, 20);
+                initial.Tracks[0].TestCrc32 = 0x11111111;
+                initial.Tracks[0].CopyCrc32 = 0x22222222;
+                initial.Tracks[1].TestCrc32 = 0x33333333;
+                initial.Tracks[1].CopyCrc32 = 0x44444444;
+                store.CompareAndUpsert(initial);
+
+                // A future Verify changes only Test; the last Copy values must survive.
+                var verify = Rec("D1", 10, 20);
+                verify.Tracks[0].TestCrc32 = 0xAAAAAAAA;
+                verify.Tracks[1].TestCrc32 = 0xBBBBBBBB;
+                store.CompareAndUpsert(verify);
+                TrackCrc[] afterVerify = store.GetLatestCrcEvidence("D1");
+                Assert.AreEqual(0xAAAAAAAAu, afterVerify[0].TestCrc32);
+                Assert.AreEqual(0x22222222u, afterVerify[0].CopyCrc32);
+                Assert.AreEqual(0xBBBBBBBBu, afterVerify[1].TestCrc32);
+                Assert.AreEqual(0x44444444u, afterVerify[1].CopyCrc32);
+
+                // A future Rip changes only Copy; the latest Test values must survive.
+                var rip = Rec("D1", 10, 20);
+                rip.Tracks[0].CopyCrc32 = 0xCCCCCCCC;
+                rip.Tracks[1].CopyCrc32 = 0xDDDDDDDD;
+                store.CompareAndUpsert(rip);
+                TrackCrc[] afterRip =
+                    new VerifyHistoryStore(path).GetLatestCrcEvidence("D1");
+                Assert.AreEqual(0xAAAAAAAAu, afterRip[0].TestCrc32);
+                Assert.AreEqual(0xCCCCCCCCu, afterRip[0].CopyCrc32);
+                Assert.AreEqual(0xBBBBBBBBu, afterRip[1].TestCrc32);
+                Assert.AreEqual(0xDDDDDDDDu, afterRip[1].CopyCrc32);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path + ".lock")) File.Delete(path + ".lock");
+            }
+        }
+
+        [TestMethod]
+        public void UnknownDiscHasNoPersistedCrcEvidence()
+        {
+            Assert.AreEqual(0, NewStore().GetLatestCrcEvidence("missing").Length);
+        }
     }
 }

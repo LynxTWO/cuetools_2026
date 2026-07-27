@@ -90,6 +90,12 @@ The original source remains unchanged on failure. A repair result is not called 
 merely because `repair.Write` returned; the staged output and expected correction evidence
 must pass before publication.
 
+Repair treats existing audio files as authoritative for basenames, human metadata,
+representable custom fields, embedded artwork, and exact source CDTOC identity. It does
+not copy old AccurateRip or CTDB confidence/CRC tags after samples change. Those fields
+are payload-dependent proof and must be recomputed by an independent verification or
+left absent.
+
 ## Codec availability by product
 
 ### WPF in-process set
@@ -319,6 +325,14 @@ Implemented:
 
 - a read-only drive cache probe;
 - measured flush-size cache defeat for secure re-reads;
+- first-use/versioned calibration before Rip, Verify, and Test & Copy, with
+  Secure/Paranoid reads blocked unless calibration proves an independent reread;
+- conservative cache high-water persistence: a smaller or apparently uncached noisy
+  result cannot erase a larger previously proven flush;
+- complete-or-explicit cache flushing and a bounded firmware-settle retry at the
+  flush/long-seek/payload-read boundary;
+- offset-sized, one-sector lead-in and lead-out probes whose successful capabilities
+  are consumed by the SCSI reader instead of unconditional edge zero-padding;
 - supported/minimum speed probing;
 - adaptive speed requests applied at safe read-window boundaries. Its ascending rung
   ladder uses a net20-compatible `List<T>`; the 97% cutoff preserves ordering below
@@ -327,7 +341,9 @@ Implemented:
 - slip correlation through a named result/out-parameter API that remains compatible
   with declared net20 consumers (no `System.ValueTuple` metadata dependency);
 - same-drive Test & Copy with a third read when needed;
-- persisted drive calibration with confirmed/estimated/unconfirmed confidence.
+- persisted drive calibration with confirmed/estimated/unconfirmed confidence;
+- named, persistent Test CRC and Copy CRC evidence on the Rip track grid. A third
+  confirmation can choose the committed read but is never mislabeled as Copy.
 
 Observed hardware evidence on 2026-07-26:
 
@@ -340,8 +356,11 @@ Observed hardware evidence on 2026-07-26:
   outputs, AR 107/424 and CTDB 114/544 on both reads, and zero reread/failed windows.
   Both the runtime result and deserialized `rip.verify` asserted lossless output
   verification was known and performed with decoded-and-compared detail. This proves
-  the mechanism; a final-source no-build rerun is pending because the behavior-preserving
-  `SecureSectorVote` extraction landed afterward;
+  the mechanism. On 2026-07-27, current source passed the 25-window Paranoid
+  cache-defeat hardware probe twice. The final run used the real AccurateRip offset,
+  explicitly consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The
+  runs exercised every calibrated flush, long seek, and payload-read boundary well
+  beyond the former 19-second `INVALID FIELD IN CDB` failure;
 - K: (`ASUS BW-16D1HT`, firmware 3.11) completed a 12-track read-only verification
   with zero read errors, recording AccurateRip 257/707 and CTDB 1345/1464. A later
   24-track damaged-disc FLAC rip exhausted rereads in three windows and published all
@@ -354,17 +373,14 @@ Observed hardware evidence on 2026-07-26:
 
 Still not implemented:
 
-- lead-in overread probing;
-- lead-out overread probing;
 - dual-drive cross-verification.
 
-`DriveCalibrationService` currently writes both overread flags as false with an explicit
-follow-up comment. The data fields existing in `DriveCalibration` do not make the hardware
-probe real. Corrupt calibration JSON fails closed; `DriveViewModel` reports the error and
-clears its busy flag on every exit rather than silently replacing the file or leaving the
-page stuck. Detect/calibrate also reject re-entry while busy or while a rip owns the
-drive, and invalidate command state when work starts and finishes so enabled controls
-match the real operation.
+Corrupt calibration JSON fails closed; `DriveViewModel` reports the error and clears
+its busy flag on every exit rather than silently replacing the file or leaving the page
+stuck. Detect/calibrate reject re-entry while busy or while a rip owns the drive, and
+invalidate command state when work starts and finishes so enabled controls match the
+real operation. Failed probes retain their scrubbed exception/SCSI evidence and are not
+persisted as a current default-valued calibration.
 
 Classic per-drive settings still include read offset, C2 mode, and read command. WPF uses
 its own app setting for Burst/Secure/Paranoid depth and its calibration store for cache and
@@ -392,13 +408,12 @@ The earlier proposal to build one settings service, reuse encoder/decoder view m
 share a shell over `CUESheet` is now implemented in the WPF source. The remaining
 capability work is narrower:
 
-- repeat H: Test & Copy against the final source after `SecureSectorVote` extraction,
-  retain the passing H:/K: optical/mechanism evidence, and add cancellation,
+- retain the passing H:/K: optical/mechanism evidence and add cancellation,
   disagreement, and other deliberate failure-injection hardware cases;
 - finish frozen 97-path artifact/receipt validation for the passing local classic
   AnyCPU/x64/Win32/MSI matrix, then repeat it on the pinned hosted VS2022 image;
-- implement and validate lead-in/lead-out overread before exposing those flags as
-  calibrated capability;
+- complete the damaged K: final-source run after Windows releases its currently
+  wedged device handle, including observed lead-in/out results and end-of-disc use;
 - decide whether dual-drive comparison belongs in this product;
 - add behavioral coverage for TTA and MP3;
 - retain the passing WMA Lossless and FLACCL hardware integrations in a repeatable
@@ -412,7 +427,8 @@ are superseded:
 - Rip, Verify, and Convert do not share an identical encoder set or input surface.
 - WPF is implemented; its information architecture is no longer only a proposal.
 - Cache defeat and adaptive read-speed control are implemented.
-- Overread and dual-drive comparison remain future work.
+- Calibrated offset-sized overread is implemented; dual-drive comparison remains
+  future work.
 - TTA is a classic-only C++/CLI plugin.
 - FlaCuda is deleted.
 - FLACCL is classic-only; its exact-length verifier is fixed and app-hosted settings

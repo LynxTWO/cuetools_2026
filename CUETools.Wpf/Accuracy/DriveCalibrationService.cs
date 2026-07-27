@@ -14,7 +14,9 @@ namespace CUETools.Wpf.Accuracy;
 /// </summary>
 public sealed class DriveCalibrationService
 {
-    private const string Version = "2026.1.0";
+    // Bump when a newly required capability is added so the first subsequent Rip/Verify/Test &
+    // Copy refreshes old records before trusting them. 2026.2 adds real lead-in/out probing.
+    internal const string CurrentVersion = "2026.2.0";
     private readonly IDiagnosticLog _log;
     private readonly DriveCalibrationStore _store;
 
@@ -42,9 +44,41 @@ public sealed class DriveCalibrationService
             if (!opened) { _log.Warn("calibrate", $"drive {drive}: no audio disc / not ready"); return null; }
 
             string sig = (reader.ARName ?? "").Trim();
+            DriveCalibration? previous = _store.Get(sig);
+            int driveOffset = 0;
+            bool driveOffsetKnown = false;
+            try
+            {
+                driveOffsetKnown =
+                    CUETools.AccurateRip.AccurateRipVerify.FindDriveReadOffset(
+                    reader.ARName,
+                    out driveOffset);
+            }
+            catch (Exception ex)
+            {
+                // Offset lookup failure is not a reason to lose cache calibration. Probe
+                // one sector at each edge; a later run can still safely zero-pad.
+                _log.Warn(
+                    "calibrate",
+                    $"drive {drive}: read-offset lookup failed: {ex.GetType().Name}");
+            }
             CDDriveReader.DriveProbe probe;
             int minSpeedKbps;
-            lock (DriveService.ScsiGate) { probe = reader.Probe(); minSpeedKbps = reader.ProbeMinSpeedKbps(); }
+            lock (DriveService.ScsiGate)
+            {
+                probe = reader.Probe(driveOffset);
+                minSpeedKbps = reader.ProbeMinSpeedKbps();
+            }
+            if (!probe.Probed)
+            {
+                // Do not version-stamp and persist a default-valued record as if the
+                // required cache and edge probes completed. The previous record stays
+                // intact, and the first read gate can retry or fail explicitly.
+                _log.Warn(
+                    "calibrate",
+                    $"drive {drive}: capability probe did not complete");
+                return null;
+            }
 
             var cal = new DriveCalibration
             {
@@ -53,39 +87,18 @@ public sealed class DriveCalibrationService
                     ? probe.SupportedSpeeds[probe.SupportedSpeeds.Length - 1] : 0,
                 MinSpeedKbps = minSpeedKbps,
                 CalibratedUtc = DateTime.UtcNow,
-                RipperVersion = Version,
-                // overread not probed yet (finicky lead-in/out addressing) - left false, a follow-up
-                OverreadLeadIn = false,
-                OverreadLeadOut = false,
+                RipperVersion = CurrentVersion,
+                ReadOffsetSamples = driveOffset,
+                ReadOffsetKnown = driveOffsetKnown,
+                OverreadLeadIn = probe.OverreadLeadIn,
+                OverreadLeadOut = probe.OverreadLeadOut,
             };
 
-            if (!probe.Probed)
-            {
-                cal.CacheDefeat = "Unconfirmed";
-                cal.CacheConfidence = CalConfidence.Unconfirmed;
-            }
-            else if (probe.CachesReReads)
-            {
-                // the drive served the re-read from cache: a secure re-read must flush it. The probe now
-                // sizes the minimal evicting flush - record it when found, else the conservative fallback.
-                if (probe.FlushEvictBytes > 0)
-                {
-                    cal.CacheDefeat = $"Flush:{probe.FlushEvictBytes}";
-                    cal.CacheConfidence = CalConfidence.Confirmed;
-                }
-                else
-                {
-                    cal.CacheDefeat = "Caches re-reads - flush size unknown";
-                    cal.CacheConfidence = CalConfidence.Estimated;
-                }
-            }
-            else
-            {
-                // the re-read cost as much as the first: the drive genuinely re-reads from media, so a
-                // secure re-read is already a real read - no cache defeat needed.
-                cal.CacheDefeat = "Media re-reads (no cache)";
-                cal.CacheConfidence = CalConfidence.Confirmed;
-            }
+            cal.CacheDefeat = SelectConservativeCacheDefeat(
+                probe,
+                previous,
+                out CalConfidence cacheConfidence);
+            cal.CacheConfidence = cacheConfidence;
 
             try
             {
@@ -98,7 +111,10 @@ public sealed class DriveCalibrationService
                     "Calibration measurements completed, but could not be saved.", ex);
             }
             _log.Info("calibrate", $"drive {drive}: cache={cal.CacheDefeat} ({cal.CacheConfidence}) " +
-                $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps flushEvict={probe.FlushEvictBytes}B read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
+                $"maxSpeed={cal.MaxSpeedKbps}kBps minSpeed={cal.MinSpeedKbps}kBps flushEvict={probe.FlushEvictBytes}B " +
+                $"offset={(cal.ReadOffsetKnown ? cal.ReadOffsetSamples.ToString() : "unknown")} " +
+                $"overreadIn={(cal.OverreadLeadIn ? 1 : 0)} overreadOut={(cal.OverreadLeadOut ? 1 : 0)} " +
+                $"read1={probe.FirstReadMs:0}ms reread={probe.ReReadMs:0}ms");
             return cal;
         }
         catch (DriveCalibrationPersistenceException)
@@ -107,7 +123,10 @@ public sealed class DriveCalibrationService
         }
         catch (Exception ex)
         {
-            _log.Warn("calibrate", $"drive {drive} probe failed: {ex.GetType().Name}");
+            // A failed capability probe is operationally important: it blocks the first
+            // Rip/Verify/Test & Copy on this drive. Preserve the scrubbed exception and
+            // SCSI sense details instead of collapsing every failure to its CLR type.
+            _log.Error("calibrate", $"drive {drive} probe failed", ex);
             return null;
         }
         finally
@@ -115,4 +134,64 @@ public sealed class DriveCalibrationService
             try { reader.Close(); } catch { }
         }
     }
+
+    internal static int ParseFlushBytes(string? value)
+    {
+        if (string.IsNullOrEmpty(value) ||
+            !value.StartsWith("Flush:", StringComparison.Ordinal) ||
+            !int.TryParse(value.Substring(6), out int bytes) ||
+            bytes <= 0)
+            return 0;
+        return bytes;
+    }
+
+    internal static string SelectConservativeCacheDefeat(
+        CDDriveReader.DriveProbe probe,
+        DriveCalibration? previous,
+        out CalConfidence confidence)
+    {
+        int priorFlush = ParseFlushBytes(previous?.CacheDefeat);
+
+        // Timing can fluctuate enough for the same caching drive to look uncached
+        // during a later run. An observed cache is positive evidence; a later failure
+        // to observe it is not proof that the hardware stopped caching. Retain the
+        // largest flush ever proven safe for this drive signature.
+        if (priorFlush > 0)
+        {
+            int conservativeFlush = Math.Max(priorFlush, probe.FlushEvictBytes);
+            confidence = CalConfidence.Confirmed;
+            return $"Flush:{conservativeFlush}";
+        }
+
+        if (probe.CachesReReads)
+        {
+            if (probe.FlushEvictBytes > 0)
+            {
+                confidence = CalConfidence.Confirmed;
+                return $"Flush:{probe.FlushEvictBytes}";
+            }
+
+            confidence = CalConfidence.Estimated;
+            return "Caches re-reads - flush size unknown";
+        }
+
+        confidence = CalConfidence.Confirmed;
+        return "Media re-reads (no cache)";
+    }
+
+    internal static bool IsCurrent(DriveCalibration? calibration) =>
+        calibration != null &&
+        string.Equals(
+            calibration.RipperVersion,
+            CurrentVersion,
+            StringComparison.Ordinal);
+
+    internal static bool CanApplyOverread(
+        DriveCalibration? calibration,
+        bool currentOffsetKnown,
+        int currentOffsetSamples) =>
+        calibration != null &&
+        calibration.ReadOffsetKnown &&
+        currentOffsetKnown &&
+        calibration.ReadOffsetSamples == currentOffsetSamples;
 }

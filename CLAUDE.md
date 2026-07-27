@@ -49,7 +49,15 @@ progress documents for it belong here, under `docs/review/`.
 - CTDB repair is a preservation transaction. It must retain source-derived audio
   basenames, standard and unknown tags, and embedded artwork in the repaired sibling
   copy, reject destination-name collisions before writing, and leave the source set
-  byte-for-byte unchanged.
+  byte-for-byte unchanged. Preserve source CDTOC identity, but drop stale
+  AccurateRip/CTDB payload-proof tags unless an independent post-repair result
+  explicitly regenerates them.
+- Drive calibration is a versioned prerequisite. The first Rip, Verify, or Test &
+  Copy refreshes missing/stale capability data. Secure and Paranoid operations fail
+  closed unless an independent reread strategy is established. Once a drive has
+  demonstrated caching, retain the largest proven safe flush size across noisy later
+  calibrations. Lead-in/out flags are valid only when the exact offset-sized boundary
+  range was probed and the SCSI reader consumes it.
 
 ## Writing rules for all human-facing text
 

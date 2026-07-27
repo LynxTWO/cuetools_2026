@@ -25,6 +25,14 @@ public sealed class TrackItem : ViewModelBase
     private string _ctdbResult = "-";
     public string CtdbResult { get => _ctdbResult; set => Set(ref _ctdbResult, value); }
 
+    // Full-range CRC32 evidence. Unlike AccurateRip CRCs these cover the samples at both disc edges.
+    // They persist in verify history and are restored when the same disc is inserted again.
+    private string _testCrc = "-";
+    public string TestCrc { get => _testCrc; set => Set(ref _testCrc, value); }
+
+    private string _copyCrc = "-";
+    public string CopyCrc { get => _copyCrc; set => Set(ref _copyCrc, value); }
+
     // Live per-track progress during a rip (0..1), derived from the read head position.
     private double _progress;
     public double Progress { get => _progress; set => Set(ref _progress, value); }
