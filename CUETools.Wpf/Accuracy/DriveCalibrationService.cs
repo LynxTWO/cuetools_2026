@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using CUETools.Ripper.SCSI;
 using CUETools.Wpf.Services;
 
@@ -32,12 +33,12 @@ public sealed class DriveCalibrationService
     public event Action<DriveCalibration>? CalibrationSaved;
 
     /// <summary>The saved calibration for a drive signature, or null if it has never been run.</summary>
-    public DriveCalibration Get(string signature) => _store.Get(signature);
+    public DriveCalibration? Get(string signature) => _store.Get(signature);
 
     /// <summary>Run the probes on the drive (a disc must be loaded), persist, and return the record.
     /// Returns null if the drive could not be opened / has no audio disc. Safe to call any time
     /// there is no rip in progress; holds the app SCSI gate only for the probe.</summary>
-    public DriveCalibration Calibrate(char drive)
+    public DriveCalibration? Calibrate(char drive)
     {
         // the probe opens its own handle, so it counts as drive-busy too
         using var ripScope =
@@ -199,7 +200,8 @@ public sealed class DriveCalibrationService
         return "Media re-reads (no cache)";
     }
 
-    internal static bool IsCurrent(DriveCalibration? calibration) =>
+    internal static bool IsCurrent(
+        [NotNullWhen(true)] DriveCalibration? calibration) =>
         calibration != null &&
         string.Equals(
             calibration.RipperVersion,

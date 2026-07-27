@@ -70,7 +70,7 @@ public sealed class DriveDetails
         _ => "unknown"
     };
 
-    private static string Join(string a, string b, string c, string none)
+    private static string Join(string? a, string? b, string? c, string none)
     {
         var parts = new List<string>(3);
         if (a != null) parts.Add(a);

@@ -135,7 +135,7 @@ namespace CUETools.Wpf.Tests
             {
                 helperStarted = helper.Start();
                 Assert.IsTrue(helperStarted);
-                string? ready = await helper.StandardOutput
+                string ready = await helper.StandardOutput
                     .ReadLineAsync()
                     .WaitAsync(TimeSpan.FromSeconds(5));
                 if (!string.Equals("locked", ready, StringComparison.Ordinal))

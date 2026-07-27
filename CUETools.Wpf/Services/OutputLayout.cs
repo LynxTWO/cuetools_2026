@@ -135,7 +135,7 @@ public static class OutputLayout
             if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 throw new IOException(
                     "A rendered track path escaped the album output directory.");
-            string sub = Path.GetDirectoryName(full);
+            string? sub = Path.GetDirectoryName(full);
             if (!string.IsNullOrEmpty(sub))
             {
                 Directory.CreateDirectory(sub);

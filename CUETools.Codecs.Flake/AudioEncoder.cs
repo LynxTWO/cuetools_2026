@@ -49,7 +49,7 @@ namespace CUETools.Codecs.Flake
 
 		// audio sample rate in Hz
 		// set by user prior to calling flake_encode_init
-		int sr_code0, sr_code1;
+		int sr_code0;
 
 		// sample size in bits
 		// set by user prior to calling flake_encode_init
@@ -1286,15 +1286,6 @@ new int[] { // 30
 					bitwriter.writebits(8, frame.bs_code1);
 				else
 					bitwriter.writebits(16, frame.bs_code1);
-			}
-
-			// custom sample rate
-			if (sr_code1 > 0)
-			{
-				if (sr_code1 < 256)
-					bitwriter.writebits(8, sr_code1);
-				else
-					bitwriter.writebits(16, sr_code1);
 			}
 
 			// CRC-8 of frame header

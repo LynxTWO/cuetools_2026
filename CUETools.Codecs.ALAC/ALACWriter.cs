@@ -1192,18 +1192,10 @@ namespace CUETools.Codecs.ALAC
 				return;
 			int sz = _windowsize;
 			float* pos = window + _windowcount * Alac.MAX_BLOCKSIZE * 2;
-			do
-			{
-                windowSections[_windowcount, 0].setData(0, sz);
-                for (int j = 1; j < lpc.MAX_LPC_SECTIONS; j++)
-                    windowSections[_windowcount, j].setZero(sz, sz);
-                func(pos, sz);
-                break;
-				if ((sz & 1) != 0)
-					break;
-				pos += sz;
-				sz >>= 1;
-			} while (sz >= 32);
+            windowSections[_windowcount, 0].setData(0, sz);
+            for (int j = 1; j < lpc.MAX_LPC_SECTIONS; j++)
+                windowSections[_windowcount, j].setZero(sz, sz);
+            func(pos, sz);
             windowType[_windowcount] = flag;
             _windowcount++;
 		}

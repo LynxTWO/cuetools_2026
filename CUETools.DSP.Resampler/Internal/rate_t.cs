@@ -301,7 +301,7 @@ namespace CUETools.DSP.Resampler.Internal
         static void lsx_fir_to_phase(ref double[] h, ref int len, ref int post_len, double phase, thread_fft_cache info)
         {
             double phase1 = (phase > 50 ? 100 - phase : phase) / 50;
-            int i, work_len, begin, end, imp_peak = 0, peak = 0;
+            int i, work_len, begin, end, peak = 0;
             double imp_sum = 0, peak_imp_sum = 0;
             double prev_angle2 = 0, cum_2pi = 0, prev_angle1 = 0, cum_1pi = 0;
 

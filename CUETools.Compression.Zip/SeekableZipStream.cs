@@ -125,7 +125,12 @@ namespace CUETools.Compression.Zip
 			throw new NotSupportedException();
 		}
 
+		// Compatibility-only. Password acquisition moved to ZipCompressionProvider because modern
+		// SharpZipLib requires it before GetInputStream, but external callers may still bind this
+		// public event on the stream type.
+#pragma warning disable CS0067
 		public event EventHandler<CompressionPasswordRequiredEventArgs> PasswordRequired;
+#pragma warning restore CS0067
 		public event EventHandler<CompressionExtractionProgressEventArgs> ExtractionProgress;
 	}
 }

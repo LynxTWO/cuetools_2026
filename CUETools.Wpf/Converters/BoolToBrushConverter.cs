@@ -18,7 +18,7 @@ public sealed class BoolToBrushConverter : IValueConverter
         string keys = parameter as string ?? "Good;Muted";
         string[] parts = keys.Split(';');
         string key = on ? parts[0] : (parts.Length > 1 ? parts[1] : parts[0]);
-        object res = System.Windows.Application.Current?.TryFindResource(key);
+        object? res = System.Windows.Application.Current?.TryFindResource(key);
         return res as Brush ?? Brushes.Gray;
     }
 

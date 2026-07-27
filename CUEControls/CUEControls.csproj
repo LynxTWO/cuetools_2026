@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <TargetFrameworks>net47;net20</TargetFrameworks>
+    <!-- Legacy al.exe accepts numeric product versions only. -->
+    <IncludeSourceRevisionInInformationalVersion Condition="'$(TargetFramework)' == 'net20'">false</IncludeSourceRevisionInInformationalVersion>
     <Version>2.2.6.0</Version>
     <AssemblyName>CUEControls</AssemblyName>
     <RootNamespace>CUEControls</RootNamespace>

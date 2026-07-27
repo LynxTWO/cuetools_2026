@@ -14,7 +14,6 @@
         public uint size;
 
         public int ricemodifier;
-        public int cbits;
         public int shift;
         public int[] coefs;
         public int[] coefs_adapted;

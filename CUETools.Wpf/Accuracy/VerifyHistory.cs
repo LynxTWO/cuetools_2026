@@ -64,7 +64,7 @@ namespace CUETools.Wpf.Accuracy
         private const int MaxPerDisc = 5;
         private readonly string _path;
 
-        public VerifyHistoryStore(string path = null)
+        public VerifyHistoryStore(string? path = null)
         {
             _path = path ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -179,7 +179,7 @@ namespace CUETools.Wpf.Accuracy
         // History must remain comparable across drives and offsets. Prefer v2, then use v1 for older
         // records; raw CRC32 is deliberately excluded because it is not an offset-corrected contract.
         // Null-tolerant for corrupt history.
-        public static bool SameAudioForHistory(TrackCrc a, TrackCrc b)
+        public static bool SameAudioForHistory(TrackCrc? a, TrackCrc? b)
         {
             if (a == null || b == null) return false;
             if (a.ArV2 != 0 && b.ArV2 != 0) return a.ArV2 == b.ArV2;
@@ -190,12 +190,13 @@ namespace CUETools.Wpf.Accuracy
         // Test & Copy compares independent reads from the same drive at the same offset. Require the
         // full-range checksum, so AccurateRip's intentional disc-edge exclusions cannot certify a
         // difference there; retain the AR match as an independent corroborating signal.
-        public static bool SameAudioForTestAndCopy(TrackCrc a, TrackCrc b) =>
+        public static bool SameAudioForTestAndCopy(TrackCrc? a, TrackCrc? b) =>
             a != null && b != null &&
             a.Crc32 != 0 && b.Crc32 != 0 && a.Crc32 == b.Crc32 &&
             SameAudioForHistory(a, b);
 
-        private static bool SameTrackForHistory(TrackCrc a, TrackCrc b) => SameAudioForHistory(a, b);
+        private static bool SameTrackForHistory(TrackCrc? a, TrackCrc? b) =>
+            SameAudioForHistory(a, b);
 
         public static string ToJson(VerifyRecord r) =>
             JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true });

@@ -319,7 +319,7 @@ namespace CUETools.Codecs.FLACCL
         int channels, ch_code;
 
         // audio sample rate in Hz
-        int sr_code0, sr_code1;
+        int sr_code0;
 
         // sample size in bits
         // only 16-bit is currently supported
@@ -340,8 +340,6 @@ namespace CUETools.Codecs.FLACCL
         int frame_pos = 0;
 
         long first_frame_offset = 0;
-
-        TimeSpan _userProcessorTime;
 
         // header bytes
         // allocated by flake_encode_init and freed by flake_encode_close
@@ -631,7 +629,7 @@ namespace CUETools.Codecs.FLACCL
 
         public TimeSpan UserProcessorTime
         {
-            get { return _userProcessorTime; }
+            get { return TimeSpan.Zero; }
         }
 
         unsafe void encode_residual_fixed(int* res, int* smp, int n, int order)
@@ -907,15 +905,6 @@ namespace CUETools.Codecs.FLACCL
                     frame.writer.writebits(8, frame.bs_code1);
                 else
                     frame.writer.writebits(16, frame.bs_code1);
-            }
-
-            // custom sample rate
-            if (sr_code1 > 0)
-            {
-                if (sr_code1 < 256)
-                    frame.writer.writebits(8, sr_code1);
-                else
-                    frame.writer.writebits(16, sr_code1);
             }
 
             // CRC-8 of frame header
@@ -2418,6 +2407,9 @@ namespace CUETools.Codecs.FLACCL
         }
     }
 
+    // OpenCL kernels populate the result fields through these mapped buffers.
+    // Keep the packet layout intact even though managed code never assigns them.
+#pragma warning disable CS0649
     unsafe struct FLACCLSubframeTask
     {
         public int residualOrder;
@@ -2438,6 +2430,7 @@ namespace CUETools.Codecs.FLACCL
         public int encodingOffset;
         public fixed int coefs[32];
     };
+#pragma warning restore CS0649
 
     internal class FLACCLTask
     {

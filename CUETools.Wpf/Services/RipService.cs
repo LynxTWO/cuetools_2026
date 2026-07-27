@@ -406,7 +406,7 @@ public sealed class RipService : IRipService
                     "rip",
                     "calibrated overread range does not match the current known read offset; using edge zero-padding");
 
-            AdaptiveSpeedController speedCtl = null;
+            AdaptiveSpeedController? speedCtl = null;
             int lastRequested = 0;
             if (_settings.AdaptiveReadSpeed)
             {
@@ -449,8 +449,11 @@ public sealed class RipService : IRipService
             // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
             // hits media. Secure and Paranoid therefore always use it; Deep recovery is no longer an
             // unrelated gate. Scratch-only - it can recover error detection but cannot alter the audio.
-            if ((cq > 0 || forceCacheDefeat) && cal != null && (cal.CacheDefeat ?? "").StartsWith("Flush:")
-                && int.TryParse(cal.CacheDefeat.Substring(6), out int flushBytes) && flushBytes > 0)
+            if ((cq > 0 || forceCacheDefeat) &&
+                cal?.CacheDefeat is string cacheDefeat &&
+                cacheDefeat.StartsWith("Flush:", StringComparison.Ordinal) &&
+                int.TryParse(cacheDefeat.Substring(6), out int flushBytes) &&
+                flushBytes > 0)
             {
                 reader.SetCacheDefeat(flushBytes);
                 _log.Info("rip", $"cache defeat on: flush {flushBytes}B before each secure re-read" +
@@ -474,6 +477,9 @@ public sealed class RipService : IRipService
             var cue = new CUESheet(_config);
             lock (_stopGate) _current = cue;   // so Stop() can abort this run
             cue.OpenCD(ripper);
+            var toc = reader.TOC ??
+                throw new InvalidDataException(
+                    "The opened audio disc did not provide a table of contents.");
             if (metadata != null)
             {
                 // DISC-SWAP GUARD. The release was chosen for the disc that was in the drive when it was
@@ -578,7 +584,7 @@ public sealed class RipService : IRipService
                 cue.GenerateFilenames(AudioEncoderType.Lossless, "flac", Path.Combine(Path.GetTempPath(), "cueverify", "v.cue"));
             }
 
-            double total = Math.Max(1, reader.TOC.AudioLength);
+            double total = Math.Max(1, toc.AudioLength);
             double lastFrac = -1;
             // re-read reporting: the drive guarantees (cqc + 1) clean passes per window and breaks
             // early once they agree; any pass BEYOND that is a real re-read of a stuck window. The cap
@@ -691,7 +697,10 @@ public sealed class RipService : IRipService
                     // build the picture FIRST: if construction throws after the lists were cleared,
                     // the album would ship with NO art at all (not even the database fallback)
                     var pic = new TagLib.Picture(new TagLib.ByteVector(coverArt)) { Type = TagLib.PictureType.FrontCover };
-                    cue.Metadata.AlbumArt.Clear();
+                    CUEMetadata cueMetadata = cue.Metadata ??
+                        throw new InvalidDataException(
+                            "The opened disc did not provide metadata for cover embedding.");
+                    cueMetadata.AlbumArt.Clear();
                     cue.AlbumArt.Clear();
                     cue.AlbumArt.Add(pic);
                     _log.Info("rip", $"embed hi-res cover {coverArt.Length}B");
@@ -1160,8 +1169,14 @@ public sealed class RipService : IRipService
             ThrowIfStopRequested();
             var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
+            VerifyRecord? testRecord = testResult.Record;
+            if (testRecord == null)
+                return new TestCopyRunResult
+                {
+                    Error = "Test read completed without checksum evidence."
+                };
             PublishCrcEvidence(
-                new[] { testResult.Record! },
+                new[] { testRecord },
                 sourceReadIndex: 0);
 
             // Read 2 (Copy, index 1): staged encode - this is the file set that gets committed on a
@@ -1173,8 +1188,18 @@ public sealed class RipService : IRipService
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
             var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
+            VerifyRecord? copyRecord = copyResult.Record;
+            if (copyRecord == null)
+                return new TestCopyRunResult
+                {
+                    Error = "Copy read completed without checksum evidence."
+                };
 
-            var reads = new System.Collections.Generic.List<VerifyRecord> { testResult.Record, copyResult.Record };
+            var reads = new System.Collections.Generic.List<VerifyRecord>
+            {
+                testRecord,
+                copyRecord
+            };
             PublishCrcEvidence(reads, sourceReadIndex: 1);
             var staged = new System.Collections.Generic.List<bool> { false, true };
             var stagingAlbumDirs = new System.Collections.Generic.List<string> { "", copyResult.OutputDir };
@@ -1193,8 +1218,14 @@ public sealed class RipService : IRipService
                 ThrowIfStopRequested();
                 var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
                 if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
+                VerifyRecord? thirdRecord = thirdResult.Record;
+                if (thirdRecord == null)
+                    return new TestCopyRunResult
+                    {
+                        Error = "Confirming read completed without checksum evidence."
+                    };
 
-                reads.Add(thirdResult.Record);
+                reads.Add(thirdRecord);
                 PublishCrcEvidence(reads, sourceReadIndex: 2);
                 staged.Add(true);
                 stagingAlbumDirs.Add(thirdResult.OutputDir);
@@ -1204,9 +1235,9 @@ public sealed class RipService : IRipService
                 resolve = TestAndCopyResolver.Resolve(reads, staged);
             }
 
-            string discId = copyResult.Record?.DiscId ?? testResult.Record?.DiscId ?? "";
-            string driveSig = copyResult.Record?.Drive ?? "";
-            int offset = copyResult.Record?.ReadOffset ?? 0;
+            string discId = copyRecord.DiscId ?? testRecord.DiscId ?? "";
+            string driveSig = copyRecord.Drive ?? "";
+            int offset = copyRecord.ReadOffset;
 
             // Held: write nothing to outputBaseDir. Retain staging for the VM's Accept anyway /
             // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
@@ -1259,8 +1290,10 @@ public sealed class RipService : IRipService
                     // Scattered errors: each track found agreement somewhere, but no one read was
                     // clean throughout. Report which tracks the Copy read (index 1) itself got
                     // wrong, so the user sees why nothing was committed.
-                    var copyTracks = reads.Count > 1 ? reads[1]?.Tracks : null;
-                    int trackCount = copyTracks?.Length ?? 0;
+                    TrackCrc[] copyTracks = reads.Count > 1
+                        ? reads[1].Tracks ?? Array.Empty<TrackCrc>()
+                        : Array.Empty<TrackCrc>();
+                    int trackCount = copyTracks.Length;
                     var mismatches = new List<int>();
                     for (int t = 0; t < trackCount; t++)
                     {

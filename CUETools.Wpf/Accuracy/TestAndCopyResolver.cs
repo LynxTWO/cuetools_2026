@@ -78,7 +78,7 @@ namespace CUETools.Wpf.Accuracy
             };
         }
 
-        private static TrackCrc Track(VerifyRecord r, int t)
+        private static TrackCrc? Track(VerifyRecord? r, int t)
         {
             var arr = r?.Tracks;
             return (arr != null && t >= 0 && t < arr.Length) ? arr[t] : null;

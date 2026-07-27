@@ -8,10 +8,10 @@
 
     Gated on $(MSBuildRuntimeType) == 'Core' ON PURPOSE: this applies ONLY to `dotnet build`.
     Under full MSBuild (devenv / the CI + release workflows that produce the shipping binaries)
-    this file is a complete no-op, so the shipping build's resource format and runtime
-    dependencies are provably unchanged. The classic full-framework resgen keeps handling
-    binary resources there with no extra runtime DLL. This keeps the local-dev affordance from
-    leaking into what users download.
+    this resource block is a complete no-op, so the shipping build's resource format and runtime
+    dependencies are provably unchanged. The classic full-framework resgen keeps handling binary
+    resources there with no extra runtime DLL. This keeps the local-dev affordance from leaking
+    into what users download.
 
     Further scope:
       - net47 only. net20 cannot consume System.Resources.Extensions.
@@ -36,5 +36,14 @@
   <ItemGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
     <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
   </ItemGroup>
+
+  <!--
+    The pinned OpenCLNet gitlink deliberately retains OpenCL 1.1 fallback calls for old devices,
+    and its unused DirectX 9 extension carries an upstream #warning. Keep those compatibility
+    decisions visible here without editing or dirtying the immutable vendor source.
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OpenCLNet'">
+    <NoWarn>$(NoWarn);CS0618;CS1030</NoWarn>
+  </PropertyGroup>
 
 </Project>

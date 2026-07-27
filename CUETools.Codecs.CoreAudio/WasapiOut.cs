@@ -25,7 +25,6 @@ namespace CUETools.Codecs.CoreAudio
 		AudioBuffer[] readBuffers;
         volatile PlaybackState playbackState;
         Thread playThread;
-		private long _sampleOffset;
 		private NAudio.Wave.WaveFormatExtensible outputFormat;
 		WaitHandle[] waitHandles;
         Codecs.WAV.EncoderSettings m_settings;
@@ -476,7 +475,8 @@ namespace CUETools.Codecs.CoreAudio
 
         #region IAudioDest Members
 
-        public long Position => _sampleOffset;
+        // This playback sink has never exposed a sample cursor.
+        public long Position => 0;
 
 		public long FinalSampleCount
 		{

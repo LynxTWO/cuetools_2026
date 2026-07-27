@@ -491,10 +491,13 @@ policy suite passes 18/18, the full WPF suite passes 352/352, and SCSI builds pa
 for net8/net47/net20. The bounded K: probes pass at the exact relative sector and
 at the real window boundary/speed. The end-to-end rerun remains.
 
-### Remove obsolete legacy SCSI build warnings
+### Remove obsolete legacy resource-build warnings
 
 **Exact files:** `Bwg.Scsi/Bwg.Scsi.csproj`,
 `CUETools.Ripper.SCSI/CUETools.Ripper.SCSI.csproj`,
+`CUEControls/CUEControls.csproj`,
+`CUETools.Codecs.Flake/CUETools.Codecs.Flake.csproj`,
+`CUETools.Codecs.WMA/CUETools.Codecs.WMA.csproj`,
 `CUETools.Ripper.SCSI/SCSIDrive.cs`,
 `eng/ci/warning-baseline.json`, and the R60 review record.
 
@@ -507,21 +510,145 @@ Do not add a source workaround for MSB3088: that message was a stale resource
 cache produced by invoking the unsupported `dotnet` build host for `net20`, and a
 full-MSBuild rebuild clears it.
 
-**Checks:** rebuild `net20` through the installed full Visual Studio MSBuild host
-without command-line overrides and require zero warnings; build the SCSI project
-for net47 and net8; run the modern ripper and WPF suites; run the checked warning
-gate; and confirm all staged vendor worktrees remain clean.
+**Checks:** scan every `net20` project for source resources, rebuild all five
+resource-bearing projects through the installed full Visual Studio MSBuild host
+without command-line overrides, and require zero AL1053 warnings. Build the SCSI
+project for net47 and net8; run the modern ripper and WPF suites; run the checked
+warning gate; and confirm all staged vendor worktrees remain clean.
 
-**Rollback:** restore both target-local metadata properties, the dead field, and
-its baseline fingerprint together. No persisted setting, SCSI command, audio data,
-or release artifact format changes.
+**Rollback:** restore the five target-local metadata properties, the dead field,
+and its baseline fingerprint together. No persisted setting, SCSI command, audio
+data, or release artifact format changes.
 
 **Observability:** no runtime telemetry changes. Build receipts continue to carry
 the source identity; the old `net20` satellite assembly receives the same numeric
 product version as its parent assembly.
 
-**Status:** implemented and verified on 2026-07-27. Full Visual Studio MSBuild
-rebuilds the net20 SCSI graph with zero warnings and zero errors, and net47/net8
-builds are also clean. The ripper suite passes 20/20, the WPF suite passes 358/358,
-and the checked modern warning budget passes with 34 unchanged fingerprints and
-no new warnings. All staged vendor worktrees remain clean.
+**Status:** implemented and verified on 2026-07-27. Of 36 `net20` projects, five
+contain source resources and all five rebuild through full Visual Studio MSBuild
+with zero AL1053 warnings. The SCSI net47/net8 builds are also clean. The ripper
+suite passes 20/20, the WPF suite passes 358/358, and the checked modern build now
+emits zero warnings against an empty baseline. All staged vendor worktrees remain
+clean.
+
+### Remove obsolete managed-codec warning paths
+
+**Exact files:** `CUETools.Codecs.ALAC/ALACSubframe.cs`,
+`CUETools.Codecs.ALAC/RiceContext.cs`,
+`CUETools.Codecs.ALAC/ALACWriter.cs`,
+`CUETools.Codecs.Flake/AudioEncoder.cs`,
+`CUETools.Codecs.libFLAC/libFLAC.cs`,
+`CUETools.Compression.Zip/SeekableZipStream.cs`,
+`CUEControls/MediaSlider.cs`, and the R61 review record.
+
+**Safety and unchanged behavior:** remove ALAC's `cbits` and `porder` only after
+searching all 13 project C# files and finding declarations but no live reads or
+writes. Collapse ALAC's unconditional one-iteration window block without changing
+the executed statements. Remove Flake's never-assigned `sr_code1` branch while
+retaining its existing rejection of sample rates outside the FLAC table. Remove
+no public ZIP member: retain the compatibility-only stream password event while
+documenting that the owning provider must request the password before opening an
+encrypted stream. Do not delete or fake-write libFLAC frame fields: native
+libFLAC populates them through the decoder callback, so suppress CS0649 only
+around that documented interop packet.
+Retain the legacy media slider's public `Dispose()` member and mark its inherited
+member hiding explicitly; disposal behavior and binary surface stay unchanged.
+
+**Checks:** build each touched codec for its modern target; run ALAC and FLAC
+verify-on-encode tests plus the full WPF suite; run the warning gate; publish and
+probe the native plugin contract.
+
+**Rollback:** revert each codec-local cleanup with its matching warning-baseline
+fingerprint. The libFLAC interop layout and field visibility must remain unchanged.
+
+**Observability:** none. No logging, output format, encoder setting, or persisted
+contract changes.
+
+**Status:** implemented and verified on 2026-07-27. Touched codec projects build
+warning-free for their applicable netstandard2.0, net47, and net20 targets.
+The public ZIP event and native-owned libFLAC packet remain intact. The full WPF
+suite passes 358/358, and the checked modern build emits zero warnings.
+
+### Make the modern WPF null contracts explicit
+
+**Exact files:** `CUETools.Wpf/Accuracy/DriveCalibrationService.cs`,
+`CUETools.Wpf/Accuracy/TestAndCopyLog.cs`,
+`CUETools.Wpf/Accuracy/TestAndCopyResolver.cs`,
+`CUETools.Wpf/Accuracy/VerifyHistory.cs`, `CUETools.Wpf/App.xaml.cs`,
+`CUETools.Wpf/Controls/DiscTray.cs`,
+`CUETools.Wpf/Converters/BoolToBrushConverter.cs`,
+`CUETools.Wpf/Models/DriveDetails.cs`,
+`CUETools.Wpf/Services/DriveService.cs`,
+`CUETools.Wpf/Services/NamingContextMapper.cs`,
+`CUETools.Wpf/Services/NamingEngine.cs`,
+`CUETools.Wpf/Services/OutputLayout.cs`,
+`CUETools.Wpf/Services/RipService.cs`,
+`CUETools.Wpf.Tests/GzJsonTests.cs`, `eng/ci/warning-baseline.json`, and the R62
+review record.
+
+**Safety and unchanged behavior:** annotate optional returns and corrupt persisted
+values as nullable instead of hiding them. Preserve existing empty-string display
+fallbacks. Add explicit TOC and metadata invariant failures at points that already
+failed by null dereference. Test & Copy must reject a completed phase that lacks
+its required checksum record before building the comparison list. Mark
+`IsCurrent` as proving a non-null calibration so the compiler follows the same
+gate the runtime already uses.
+
+**Checks:** focused naming, calibration, persistence, history, Test & Copy, layout,
+and codec tests; the full WPF suite; a no-incremental WPF and fuzz build with zero
+warnings; an empty checked warning baseline; clean publish and artifact contract;
+and clean staged vendor worktrees.
+
+**Rollback:** revert nullable annotations and guards by subsystem. Restore the
+warning fingerprints only if a warning is deliberately accepted with new evidence.
+
+**Observability:** no new values are logged. New missing-record failures use a
+phase-only message and contain no paths, titles, checksums, or sector payloads.
+
+**Status:** implemented and verified on 2026-07-27. The 34 baseline fingerprints
+expanded to 51 source locations. The WPF and fuzz no-incremental builds now emit
+zero warnings, the checked baseline is empty, and the full WPF suite passes
+358/358. Test & Copy now stops at the phase boundary if checksum evidence is
+missing.
+
+### Close the separately discovered classic managed warning set
+
+**Exact files:** `ProgressODoom/HSV.cs`,
+`ProgressODoom/MetalProgressPainter.cs`,
+`CUETools.Codecs.CoreAudio/WasapiOut.cs`,
+`CUETools.DSP.Resampler/Internal/rate_t.cs`,
+`CUETools.Codecs.LossyWAV/analysis_rec.cs`,
+`CUETools.Codecs.FLACCL/FLACCLWriter.cs`,
+`CUETools.FLACCL.cmd/Program.cs`, `CUETools.ARCUE/CUETools.ARCUE.csproj`,
+`CUETools.eac3to/CUETools.eac3to.csproj`,
+`CUETools.Converter/CUETools.Converter.csproj`, `Directory.Build.targets`,
+and the R63 review record.
+
+**Safety and unchanged behavior:** add the equality members required by HSV's
+existing operators and mark intentional member hiding. Remove only private or
+internal fields and locals with no live write or read. Preserve FLACCL's mapped
+task layout because OpenCL kernels populate those fields, and suppress CS0649
+only around that packet. Keep the advertised `--ignore-chunk-sizes` option and
+apply it to file input as documented. Replace unsupported netcoreapp2.0 targets
+with net8.0 while retaining net47. Suppress only the pinned OpenCLNet project's
+known compatibility warnings: its OpenCL 1.1 fallback calls and unimplemented
+DirectX 9 extension.
+
+**Checks:** rebuild the affected projects, exercise FLACCL with an available
+OpenCL device, run the codec and WPF suites, and rebuild the full classic solution
+through Visual Studio with zero managed warnings.
+
+**Rollback:** revert by subsystem. Do not remove FLACCL mapped task fields or
+rewrite OpenCL calls without cross-vendor device evidence.
+
+**Observability:** no new runtime logging. The FLACCL command now honors an
+existing option that its help text already promised.
+
+**Status:** implemented and verified on 2026-07-27. Release Any CPU rebuilt 58
+projects with zero managed warnings and no failures; Release x64 and Win32 each
+rebuilt their nine selected projects with zero managed warnings and no failures.
+The native warning baseline remains separate and unchanged. FLACCL verify passed
+on the NVIDIA RTX 3060 through OpenCL 3.0 with the repaired option enabled.
+The net47 codec suite passes 112/113 with its one pre-existing skip, the WPF suite
+passes 358/358, and all three new net8 command-line outputs start with their
+dependency closures present.

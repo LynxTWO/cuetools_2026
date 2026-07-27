@@ -104,6 +104,8 @@ public static class NamingEngine
         string ta = Normalize(FirstNonEmpty(c.Artist, c.AlbumArtist, "Unknown Artist"), s, 80, swapArticles: true, isArtist: true);
         string album = Normalize(FirstNonEmpty(c.Album, "Unknown Album"), s, 100, swapArticles: false);
         string title = Normalize(FirstNonEmpty(c.Title, "Untitled"), s, 100, swapArticles: false);
+        string year = c.Year ?? "";
+        string originalYear = c.OriginalYear ?? "";
 
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -114,7 +116,7 @@ public static class NamingEngine
             // NeutralizeSeparators on every one of these: Render splits on '/' AFTER substitution, so a
             // separator arriving from a value - not just from the template - silently becomes a new
             // directory level. Normalize() already does this for the text fields; these five bypassed it.
-            ["year"] = NeutralizeSeparators((c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : c.Year ?? ""),
+            ["year"] = NeutralizeSeparators(year.Length >= 4 ? year.Substring(0, 4) : year),
             ["tracknumber"] = c.TrackNumber.ToString("00"),
             // padded to the set's width for the same sort reason as the %disc% folder (see
             // DiscNumberPadded); a single-disc release still renders a bare "1"
@@ -129,8 +131,9 @@ public static class NamingEngine
             ["barcode"] = Normalize(c.Barcode ?? "", s, 40, swapArticles: false),
             ["country"] = Normalize(c.Country ?? "", s, 40, swapArticles: false),
             ["genre"] = Normalize(c.Genre ?? "", s, 40, swapArticles: false),
-            ["originalyear"] = NeutralizeSeparators((c.OriginalYear ?? "").Length >= 4 ? c.OriginalYear.Substring(0, 4)
-                                : (c.Year ?? "").Length >= 4 ? c.Year.Substring(0, 4) : ""),
+            ["originalyear"] = NeutralizeSeparators(originalYear.Length >= 4
+                ? originalYear.Substring(0, 4)
+                : year.Length >= 4 ? year.Substring(0, 4) : ""),
             ["isrc"] = Normalize(c.Isrc ?? "", s, 40, swapArticles: false),
             ["releasetype"] = NeutralizeSeparators(ReleaseTypeText(c)),
             ["releasestatus"] = NeutralizeSeparators(TitleCase(c.ReleaseStatus ?? "")),
@@ -307,7 +310,8 @@ public static class NamingEngine
         else if (status == "bootleg") sb.Append(" [Bootleg]");
         else if (status == "pseudo-release") sb.Append(" [Pseudo]");
 
-        if ((c.Year ?? "").Length >= 4) sb.Append($" ({c.Year.Substring(0, 4)})");
+        string year = c.Year ?? "";
+        if (year.Length >= 4) sb.Append($" ({year.Substring(0, 4)})");
 
         string primary = (c.PrimaryType ?? "album").ToLowerInvariant();
         if (primary == "single") sb.Append(" [Single]");
