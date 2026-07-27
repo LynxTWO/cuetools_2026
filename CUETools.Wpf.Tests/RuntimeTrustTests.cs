@@ -337,6 +337,48 @@ public sealed class PluginManifestTrustTests
     }
 
     [TestMethod]
+    public void Manifest_AcceptsByteIdenticalProjectReferenceCopyInApplicationRoot()
+    {
+        using var tree = new TempTree("cuetools-plugin-trust");
+        string applicationRoot = Path.Combine(tree.Root, "app");
+        string pluginRoot = Path.Combine(applicationRoot, "plugins");
+        Directory.CreateDirectory(pluginRoot);
+
+        string source = typeof(PluginTrustManifest).Assembly.Location;
+        string rootCopy = Path.Combine(
+            applicationRoot,
+            "CUETools.Processor.dll");
+        string approvedCopy = Path.Combine(
+            pluginRoot,
+            "CUETools.Processor.dll");
+        File.Copy(source, rootCopy);
+        File.Copy(source, approvedCopy);
+        File.WriteAllText(
+            Path.Combine(pluginRoot, PluginTrustManifest.ManifestFileName),
+            Hash(approvedCopy) + "\tCUETools.Processor.dll" +
+            Environment.NewLine);
+        ApprovedPlugin entry =
+            PluginTrustManifest.ReadApprovedPlugins(pluginRoot).Single();
+
+        var loadContext = new System.Runtime.Loader.AssemblyLoadContext(
+            "approved-root-copy-" + Guid.NewGuid().ToString("N"),
+            isCollectible: true);
+        try
+        {
+            System.Reflection.Assembly loaded =
+                loadContext.LoadFromAssemblyPath(rootCopy);
+
+            PluginTrustManifest.EnsureLoadedAssemblyMatchesApprovedPlugin(
+                loaded,
+                entry);
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+    }
+
+    [TestMethod]
     public void Manifest_RequiresExactNativeDependencyForEachImportedNativePlugin()
     {
         using var tree = new TempTree("cuetools-plugin-trust");

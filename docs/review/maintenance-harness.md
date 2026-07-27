@@ -82,6 +82,10 @@ From `00-conventions.md` plus repo specifics verified this session:
   lanes. Repeat H: Test & Copy against final source after the `SecureSectorVote`
   extraction; add cross-vendor, TLS/certificate, and deliberate hardware-failure
   cases.
+- Preserve the K: 24-track damaged-disc lane as the completed-rip CTDB repair oracle:
+  final lossless proof must succeed before publication, the Rip page must expose the
+  recoverable sector count, repair must publish a verified sibling, and the original
+  top-level aggregate hash must remain unchanged.
 - Finish the frozen classic artifact/receipt and direct CUEPlayer checks, then repeat
   the passing local AnyCPU/x64/Win32/TTA/MSI matrix on the pinned hosted VS2022 image.
   The local route used the Visual Studio 18 resolver with the VS2022 v143 toolset.

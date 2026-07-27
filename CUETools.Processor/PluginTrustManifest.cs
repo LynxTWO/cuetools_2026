@@ -479,7 +479,7 @@ namespace CUETools.Processor
             internal static extern bool FreeLibrary(IntPtr module);
         }
 
-        private static void EnsureLoadedAssemblyMatchesApprovedPlugin(
+        internal static void EnsureLoadedAssemblyMatchesApprovedPlugin(
             Assembly assembly,
             ApprovedPlugin plugin)
         {
@@ -507,10 +507,12 @@ namespace CUETools.Processor
                 Path.DirectorySeparatorChar == '\\'
                     ? StringComparison.OrdinalIgnoreCase
                     : StringComparison.Ordinal;
-            if (!string.Equals(
-                Path.GetFullPath(plugin.FullPath),
-                loadedPath,
-                pathComparison))
+            string approvedPath = Path.GetFullPath(plugin.FullPath);
+            if (!string.Equals(approvedPath, loadedPath, pathComparison) &&
+                !IsApprovedApplicationRootDuplicate(
+                    approvedPath,
+                    loadedPath,
+                    pathComparison))
                 throw new PluginTrustException(
                     "The runtime resolved an approved packaged plugin from a different location: " +
                     plugin.RelativePath);
@@ -535,6 +537,36 @@ namespace CUETools.Processor
                 throw new PluginTrustException(
                     "The loaded plugin bytes do not match the approved manifest hash: " +
                     plugin.RelativePath);
+        }
+
+        private static bool IsApprovedApplicationRootDuplicate(
+            string approvedPath,
+            string loadedPath,
+            StringComparison pathComparison)
+        {
+            string pluginDirectory = Path.GetDirectoryName(approvedPath);
+            if (string.IsNullOrEmpty(pluginDirectory) ||
+                !string.Equals(
+                    Path.GetFileName(pluginDirectory),
+                    "plugins",
+                    pathComparison))
+                return false;
+
+            string applicationDirectory = Path.GetDirectoryName(pluginDirectory);
+            if (string.IsNullOrEmpty(applicationDirectory))
+                return false;
+
+            // SDK-style project references put a second copy in the app root before the
+            // plugin registrar runs. Assembly.LoadFrom then returns that already-loaded
+            // assembly. Accept only that exact sibling layout; the hash check below still
+            // requires the loaded bytes to match the approved plugins\ copy.
+            string expectedRootCopy = Path.Combine(
+                applicationDirectory,
+                Path.GetFileName(approvedPath));
+            return string.Equals(
+                Path.GetFullPath(expectedRootCopy),
+                loadedPath,
+                pathComparison);
         }
 
         private static void ValidateRelativePluginPath(string relativePath)

@@ -114,4 +114,6 @@ are the known integration snags to clear.
 - [ ] Phase 4: light/dark theme toggle; speed graph on Rip; packaging + CI. Live disc
   rip/encode is no longer an evidence gap: H: completed the full 11-track FLAC path on
   2026-07-26 plus a clean same-drive Test & Copy, while K: completed a separate
-  12-track full-disc read. Hosted CI and the optional UI enhancements remain.
+  12-track full-disc read. K: also completed a damaged 24-track FLAC rip and the
+  post-rip CTDB six-sector repair flow, publishing an independently verified sibling
+  without changing the source set. Hosted CI and the optional UI enhancements remain.

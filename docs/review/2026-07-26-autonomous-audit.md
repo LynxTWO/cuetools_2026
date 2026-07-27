@@ -114,10 +114,11 @@ The classic required-file contract contains 97 paths.
 - frame/finalization verification: managed Flake, ALAC, and libFLAC;
 - no independent whole-output oracle for raw WAV;
 - FLACCL: classic/net47 OpenCL path with per-frame decode/compare. Its exact-length
-  verifier uses a per-task zero-lookahead buffer and passed on an RTX 3060 across
-  OpenCL modes 0-8, two CPU workers, 24-bit input, and the exact 4096-sample
-  boundary. The app performs a one-time migration to enable verify; the standalone
-  CLI remains explicitly opt-in through `--verify`.
+  verifier now uses BitReader logical remaining-bit bounds and passes the exact encoded
+  frame extent directly. The RTX 3060 rerun passed OpenCL modes 0-8, two CPU workers,
+  24-bit input, and the exact 4096-sample boundary; verify-on/off output remained
+  byte-identical. The app performs a one-time migration to enable verify; the
+  standalone CLI remains explicitly opt-in through `--verify`.
 
 No generic lookahead padding was added to ALAC. Its buffer shape differs from FLAC;
 copying FLAC's padding contract would corrupt normal ALAC operation.
@@ -259,8 +260,14 @@ were fixed; legacy Freedb/SCSI construction style remains cleanup debt.
   disagreement/failure injection, concurrent publication, and preserved incomplete-stage
   retry.
 - CTDB staged repair is observed on a deliberately damaged known image, including
-  independent post-repair verification and unchanged source hashes. Server TLS remains
-  an external operator boundary.
+  independent post-repair verification and unchanged source hashes. The completed-rip
+  route is also observed on K: with a real damaged 24-track CD: three recovery windows
+  exhausted rereads, final FLAC proof passed, the Rip page immediately offered repair
+  for six sectors, and repair published a separately verified `album - repaired`
+  sibling. FFmpeg `-xerror` decoded all 24 repaired FLACs; the original 29 top-level
+  files retained aggregate SHA-256
+  `56B8701EEF43A3A368DE5E65801D503EC24E807EFCABB68A301B39921F9C212B`.
+  Server TLS remains an external operator boundary.
 - Icecast 2.5.0 source/auth/metadata/listener/flush/teardown is observed. Certificate
   rejection, a real HTTPS endpoint, user.config migration, and the supported Mono
   matrix remain separate checks.

@@ -16,8 +16,8 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Where:** `CUETools.Codecs\BitReader.cs` (`fill`, `read_unary`, `read_rice_block`).
 - **Why:** no bounds check vs the buffer length - `buffer_len_m` was stored but never read, so the check had been optimized out. A crafted/truncated FLAC frame (oversized blocksize, or an unbounded zero-run in the rice/unary path) drove `bptr_m` past the managed 128 KB frame buffer: an out-of-bounds read (CWE-125) reachable through the Flake `AudioDecoder`, a user-selectable decoder for untrusted `.flac`. DoS at minimum, potential info-disclosure into decoded output.
 - **Exploitability (the C step, done):** the Flake decoder feeds a fixed 128 KB ring buffer and hands `DecodeFrame` the remaining length, which the reader ignored. Reachable at EOF (truncated last frame) or via a crafted long zero-run; the OOB was confirmed by fuzzing the managed decoder from a `MemoryStream` (harness in scratchpad, not committed).
-- **Fix (the A step):** track `end_m = buffer + pos + len`; the speculative cache top-up (`fill`, and `read_rice_block`'s `have_bits<56` loop) reads zero past `end_m` (byte-identical - those bits are discarded), and the unbounded unary scans (`read_unary`, `read_rice_block`'s `bits==8` loop) throw at `end_m`. Commit `624879c` on branch `r1-bitreader-bounds`.
-- **Verified:** decoded-PCM SHA-256 identical to the pre-fix decoder on a 16-bit (test.flac) and a 24-bit (hires1.flac) seed; encoders unaffected (they use `BitReader` only for static tables/log2i); mutation + truncation fuzzing of both seeds (tens of thousands of malformed inputs) yields clean exceptions, no crash or hang. TestCodecs is the standing byte-identity gate (run via the documented net47 recipe).
+- **Fix (the A step):** track `end_m = buffer + pos + len`; speculative cache top-up reads zero without dereferencing past `end_m`. A later real-disc run exposed that bounding unary scans by the speculative pointer falsely rejected a legal Rice terminator already held in the cache. The final fix also tracks logical `remaining_bits_m`: fixed-width, unary, and Rice reads reject only after genuine input exhaustion, independent of cache lookahead.
+- **Verified:** exact-buffer tests accept a cached terminator and reject the same stream when the terminator is absent; fixed-width over-read rejects; the malformed corpus remains bounded; 24 real FLAC tracks, including both former false rejections, decode to their declared sample counts; FFmpeg independently accepts all 24. Managed Flake modes and the FLACCL RTX 3060 modes 0-8/24-bit/exact-boundary matrix pass without lookahead padding.
 - **Follow-up (new):** the R1 finding said "FLAC/ALAC/lossyWAV"; in fact only the **Flake FLAC decoder** consumes the shared `BitReader` for decode. **ALAC decode uses its own inline bit reader** (`ALACDotNet.cs` `readbits`/`basterdised_rice_decompress`, borrowing only `BitReader`'s static table) and was NOT covered here - tracked as R15. lossyWAV has no managed decoder (encode-side preprocessor only).
 
 ### R2. MOTD image fetched over HTTP and rendered via GDI+ - DONE 2026-07-26, risk medium
@@ -301,7 +301,11 @@ does not relax evidence, rollback, or verification requirements.
   rips now gather CTDB status immediately and offer the same repair transaction when
   recoverable errors remain. Track sets resolve through their album cue, image rips
   use their sole audio file, and ambiguous or escaping paths fail closed. Fifteen
-  focused transaction and post-rip routing tests pass.
+  focused transaction and post-rip routing tests pass. A live K: damaged-disc rip
+  subsequently proved the completed-rip route: 24 final-output-proven FLACs were
+  published, the Rip page offered six-sector CTDB repair, and the separately verified
+  sibling was published without changing the source aggregate hash. FFmpeg independently
+  decoded every repaired FLAC.
 
 ### R21. Modern WPF exposes known-dead safety controls - bucket A, risk high
 
