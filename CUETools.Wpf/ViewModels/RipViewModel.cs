@@ -1333,8 +1333,8 @@ public sealed class RipViewModel : PageViewModel
         {
             RepairLastRipText =
                 "CTDB parity can recover this lossless rip, but the output has no unambiguous " +
-                "album input. Keep album.cue enabled for multi-track repair.";
-            StatusText += "  CTDB repair is available, but this multi-track output has no album.cue.";
+                "album input. Keep cue-sheet creation enabled for multi-track repair.";
+            StatusText += "  CTDB repair is available, but this multi-track output has no album cue.";
             return;
         }
 
@@ -1363,8 +1363,8 @@ public sealed class RipViewModel : PageViewModel
         if (string.IsNullOrWhiteSpace(source))
         {
             RepairLastRipText =
-                "CTDB parity can recover this lossless Test & Copy output, but it has no unambiguous album input. Keep album.cue enabled for multi-track repair.";
-            StatusText += "  CTDB repair is available, but this multi-track output has no album.cue.";
+                "CTDB parity can recover this lossless Test & Copy output, but it has no unambiguous album input. Keep cue-sheet creation enabled for multi-track repair.";
+            StatusText += "  CTDB repair is available, but this multi-track output has no album cue.";
             return;
         }
 

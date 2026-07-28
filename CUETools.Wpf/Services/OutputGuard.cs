@@ -22,11 +22,13 @@ namespace CUETools.Wpf.Services;
 /// </summary>
 public static class OutputGuard
 {
-    /// <summary>The fixed-name artifacts a finished rip leaves behind. Any one of them means the folder
-    /// already holds a rip, even if the audio format differs.</summary>
-    private static readonly string[] Artifacts =
-        { "album.cue", "album.log", "album.accurip", "folder.jpg", "rip.verify",
-          "Test & Copy.log", AlbumOutputTransaction.CompletionMarkerName };
+    /// <summary>The machine-stable artifacts a finished rip leaves behind. Human-facing cue and log
+    /// sidecars carry the album identity and are detected by extension below.</summary>
+    private static readonly string[] ExactArtifacts =
+        { "folder.jpg", "rip.verify", AlbumOutputTransaction.CompletionMarkerName };
+
+    private static readonly string[] SidecarExtensions =
+        { ".cue", ".log", ".accurip" };
 
     /// <summary><paramref name="albumRel"/> when nothing would be overwritten under
     /// <paramref name="baseDir"/>, else the same name with " (2)", " (3)" ... appended until free.
@@ -85,8 +87,12 @@ public static class OutputGuard
             SearchOption.TopDirectoryOnly))
         {
             string name = Path.GetFileName(entry);
-            foreach (string artifact in Artifacts)
+            foreach (string artifact in ExactArtifacts)
                 if (string.Equals(name, artifact, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            foreach (string extension in SidecarExtensions)
+                if (string.Equals(Path.GetExtension(name), extension,
+                    StringComparison.OrdinalIgnoreCase))
                     return true;
             if (!string.IsNullOrWhiteSpace(format) &&
                 string.Equals(Path.GetExtension(name), "." + format,

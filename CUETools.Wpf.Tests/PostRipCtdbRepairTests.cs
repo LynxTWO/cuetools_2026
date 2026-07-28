@@ -53,6 +53,35 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void TrackSetUsesItsPortableNamedCue()
+        {
+            string first = Write("01.flac");
+            string second = Write("02.flac");
+            Write("Artist - Album (1997).cue");
+
+            string relative = RipService.FindRepairSourceRelativePath(
+                _root,
+                new[] { first, second });
+
+            Assert.AreEqual("Artist - Album (1997).cue", relative);
+        }
+
+        [TestMethod]
+        public void MultipleAlbumCuesAreAmbiguousAndRefused()
+        {
+            string first = Write("01.flac");
+            string second = Write("02.flac");
+            Write("album.cue");
+            Write("Artist - Album.cue");
+
+            string relative = RipService.FindRepairSourceRelativePath(
+                _root,
+                new[] { first, second });
+
+            Assert.AreEqual("", relative);
+        }
+
+        [TestMethod]
         public void SingleImageWithoutExternalCueUsesTheOnlyAudioFile()
         {
             string image = Write("disc-image.flac");

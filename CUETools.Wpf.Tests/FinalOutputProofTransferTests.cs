@@ -229,6 +229,7 @@ public sealed class FinalOutputProofTransferTests
             HeldTracks = new[] { 0 },
             CopyStagingDir = source,
             OutputRelDir = Path.Combine("Box Set", "Disc 1"),
+            ArtifactStem = "Artist - Box Set (Disc 1)",
             Format = "wav",
             OutputVerificationKnown = true,
             LosslessOutput = true,
@@ -246,7 +247,9 @@ public sealed class FinalOutputProofTransferTests
             ReadDiagnosticLog());
         proof.VerifyFile(published);
         Assert.IsTrue(
-            File.Exists(Path.Combine(published, "Test & Copy.log")));
+            File.Exists(Path.Combine(
+                published,
+                "Artist - Box Set (Disc 1) - Test & Copy.log")));
     }
 
     [TestMethod]
@@ -274,6 +277,7 @@ public sealed class FinalOutputProofTransferTests
             HeldTracks = new[] { 0 },
             CopyStagingDir = source,
             OutputRelDir = "Window Race Album",
+            ArtifactStem = "Artist - Window Race Album",
             Format = "wav",
             OutputVerificationKnown = true,
             LosslessOutput = true,
@@ -304,7 +308,9 @@ public sealed class FinalOutputProofTransferTests
                     AlbumOutputTransaction.ProofFailureMarkerName)));
         StringAssert.Contains(
             File.ReadAllText(
-                Path.Combine(incomplete[0], "Test & Copy.log")),
+                Path.Combine(
+                    incomplete[0],
+                    "Artist - Window Race Album - Test & Copy.log")),
             "verification invalidated");
     }
 

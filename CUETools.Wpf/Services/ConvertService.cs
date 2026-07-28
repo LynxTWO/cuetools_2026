@@ -140,8 +140,15 @@ public sealed class ConvertService : IConvertService
 
             cue.Action = CUEAction.Encode;
             cue.OutputStyle = CUEStyle.GapsAppended;
+            string artifactStem = AlbumArtifactNames.CreateStem(
+                cue.Metadata,
+                Safe,
+                Path.GetFileNameWithoutExtension(inputPath) ?? "");
             cue.GenerateFilenames(IsLossy(format) ? AudioEncoderType.Lossy : AudioEncoderType.Lossless,
-                format, Path.Combine(stagingDir, "album.cue"));
+                format,
+                Path.Combine(
+                    stagingDir,
+                    AlbumArtifactNames.CueFileName(artifactStem)));
 
             onProgress(0, $"Converting to {format}...");
             string status = _runEngine(cue);

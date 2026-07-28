@@ -217,6 +217,11 @@ device cache, boundary read, media property, or persisted calibration.
   it. Keep composite assurance separate from phase completion. Retain the owned,
   validated stage in an explicit held or pending state with bounded user resolution;
   never promote it automatically.
+- Separate machine-stable control artifacts from human-facing sidecars. Control
+  markers, receipts, and discovery keys keep contract-stable names. Human exports
+  should carry a sanitized, length-bounded identity that remains meaningful when
+  copied alone. During migration, accept legacy names, reject ambiguous duplicates,
+  and keep overwrite and repair discovery extension-aware without guessing.
 - Bind every displayed or persisted hardware result to the exact physical device
   that produced it. On multi-device systems, make selection explicit, invalidate
   stale identity and evidence immediately when it changes, and prevent a settings

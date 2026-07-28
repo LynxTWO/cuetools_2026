@@ -315,5 +315,17 @@ namespace CUETools.Ripper.Tests
                 0x24,
                 0x00));
         }
+
+        [TestMethod]
+        public void CacheDefeatChunkFallbackTerminatesAtOneSector()
+        {
+            int chunk = 16;
+            int[] expected = { 8, 4, 2, 1, 0 };
+            foreach (int next in expected)
+            {
+                chunk = PayloadReadFailurePolicy.NextCacheDefeatChunkSize(chunk);
+                Assert.AreEqual(next, chunk);
+            }
+        }
     }
 }

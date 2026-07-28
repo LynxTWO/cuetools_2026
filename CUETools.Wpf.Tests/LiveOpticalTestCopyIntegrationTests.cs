@@ -34,6 +34,8 @@ namespace CUETools.Wpf.Tests
             "CUETOOLS_OPTICAL_PROBE_CACHE_BYTES";
         private const string CorrectionQualityEnvironmentVariable =
             "CUETOOLS_OPTICAL_PROBE_CORRECTION_QUALITY";
+        private const string DeepRecoveryEnvironmentVariable =
+            "CUETOOLS_OPTICAL_PROBE_DEEP_RECOVERY";
         private const string OwnershipMarker = ".cuetools-live-testcopy-owner";
 
         [TestMethod]
@@ -68,7 +70,17 @@ namespace CUETools.Wpf.Tests
                     $"{CorrectionQualityEnvironmentVariable} must be 0, 1, or 2.");
             }
             reader.CorrectionQuality = correctionQuality;
-            reader.DeepRecovery = false;
+            string deepRecoveryText =
+                Environment.GetEnvironmentVariable(
+                    DeepRecoveryEnvironmentVariable) ?? "";
+            bool deepRecovery = false;
+            if (!string.IsNullOrWhiteSpace(deepRecoveryText))
+            {
+                Assert.IsTrue(
+                    bool.TryParse(deepRecoveryText, out deepRecovery),
+                    $"{DeepRecoveryEnvironmentVariable} must be true or false.");
+            }
+            reader.DeepRecovery = deepRecovery;
             int cacheBytes = 0;
             string cacheBytesText =
                 Environment.GetEnvironmentVariable(
@@ -104,7 +116,10 @@ namespace CUETools.Wpf.Tests
                 "The optical reader returned no samples for the configured window.");
             TestContext.WriteLine(
                 $"PASS drive={drive}: relative-sector={sector} samples={read} " +
-                $"cq={correctionQuality} cacheBytes={cacheBytes}");
+                $"cq={correctionQuality} cacheBytes={cacheBytes} " +
+                $"deepRecovery={deepRecovery} " +
+                $"cacheRetries={reader.CacheDefeatRetryCount} " +
+                $"cacheChunkFallbacks={reader.CacheDefeatChunkFallbackCount}");
         }
 
         [TestMethod]

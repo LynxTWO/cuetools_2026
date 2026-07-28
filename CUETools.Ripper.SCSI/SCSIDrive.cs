@@ -68,6 +68,7 @@ namespace CUETools.Ripper.SCSI
 		private bool _cacheDefeatJustFlushed;
 		private string _cacheDefeatFailure = "no cache-defeat attempt recorded";
 		private int _cacheDefeatRetryCount;
+		private int _cacheDefeatChunkFallbackCount;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _payloadBatchFallbackCount;
@@ -76,6 +77,7 @@ namespace CUETools.Ripper.SCSI
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
+		public int CacheDefeatChunkFallbackCount => _cacheDefeatChunkFallbackCount;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
@@ -1787,6 +1789,7 @@ namespace CUETools.Ripper.SCSI
 			string failure = "no usable in-program cache-defeat region";
 			int attemptedRegions = 0;
 			int transientRetries = 0;
+			int chunkFallbacks = 0;
 			try
 			{
 				void ReadFailureIdentity(
@@ -1813,14 +1816,13 @@ namespace CUETools.Ripper.SCSI
 					}
 				}
 
-				int chunk = Math.Max(1, m_max_sectors);
+				int preferredChunk = Math.Max(1, m_max_sectors);
 				int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
 				int perSector = 4 * 588 + c2Size;
-				if (_flushScratch == null || _flushScratch.Length < chunk * perSector) _flushScratch = new byte[chunk * perSector];
+				if (_flushScratch == null || _flushScratch.Length < preferredChunk * perSector) _flushScratch = new byte[preferredChunk * perSector];
 				uint firstStart = (uint)_toc[_toc.FirstAudio][0].Start;
 				uint len = (uint)_toc.AudioLength;
 				int sectorsNeeded = Math.Max(1, (_cacheDefeatBytes + 2351) / 2352);
-				int chunksNeeded = Math.Max(1, (sectorsNeeded + chunk - 1) / chunk);
 				int currentMiddle = _currentStart + Math.Max(0, _currentEnd - _currentStart) / 2;
 				// Try several well-separated regions, farthest first. A scratch/read defect in one
 				// part of a damaged disc must not make cache defeat unusable when another clean region
@@ -1835,75 +1837,121 @@ namespace CUETools.Ripper.SCSI
 							candidates[i] = candidates[j];
 							candidates[j] = swap;
 						}
-				fixed (byte* p = _flushScratch)
+				if (sectorsNeeded > len)
 				{
-					foreach (int candidate in candidates)
+					failure =
+						$"required-sectors={sectorsNeeded}, audio-program-sectors={len}";
+				}
+				else fixed (byte* p = _flushScratch)
+				{
+					int cacheChunk = preferredChunk;
+					while (cacheChunk > 0)
 					{
-						int relBase = Math.Max(0, Math.Min((int)len - chunksNeeded * chunk, candidate));
-						int relEnd = relBase + chunksNeeded * chunk;
-						bool overlapsCurrent = relBase < _currentEnd && relEnd > _currentStart;
-						if (overlapsCurrent) continue;
-						attemptedRegions++;
-						bool complete = true;
-						for (int i = 0; i < chunksNeeded; i++)
+						bool sawFailure = false;
+						bool everyFailureWasInvalidShape = true;
+						foreach (int candidate in candidates)
 						{
-							uint lba = firstStart + (uint)(relBase + i * chunk);
-							if (lba + (uint)chunk > firstStart + len)
+							int relBase = Math.Max(
+								0,
+								Math.Min((int)len - sectorsNeeded, candidate));
+							int relEnd = relBase + sectorsNeeded;
+							bool overlapsCurrent =
+								relBase < _currentEnd && relEnd > _currentStart;
+							if (overlapsCurrent) continue;
+							attemptedRegions++;
+							bool complete = true;
+							for (int offset = 0; offset < sectorsNeeded; offset += cacheChunk)
 							{
-								failure = $"relative-sector={relBase + i * chunk}, sectors={chunk}, outside audio program";
-								complete = false;
-								break;
-							}
-							var st = _readCDCommand == ReadCDCommand.ReadCdBEh
-								? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
-								: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
-							if (st != Device.CommandStatus.Success)
-							{
-								ReadFailureIdentity(
-									st,
-									out Device.SenseKeyType senseKey,
-									out byte asc,
-									out byte ascq);
-								failure =
-									$"relative-sector={relBase + i * chunk}, sectors={chunk}, " +
-									$"status={st}, sense={senseKey}, ASC={asc:X2}, ASCQ={ascq:X2}";
-								if (transientRetries == 0 &&
-									PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
-										st,
-										senseKey,
-										asc,
-										ascq))
+								int readCount = Math.Min(
+									cacheChunk,
+									sectorsNeeded - offset);
+								uint lba =
+									firstStart + (uint)(relBase + offset);
+								if (lba + (uint)readCount > firstStart + len)
 								{
-									Thread.Sleep(80);
-									transientRetries++;
-									_cacheDefeatRetryCount++;
-									st = _readCDCommand == ReadCDCommand.ReadCdBEh
-										? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
-										: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
-									if (st != Device.CommandStatus.Success)
-									{
-										ReadFailureIdentity(
+									failure =
+										$"relative-sector={relBase + offset}, " +
+										$"sectors={readCount}, outside audio program";
+									complete = false;
+									break;
+								}
+								var st = _readCDCommand == ReadCDCommand.ReadCdBEh
+									? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)readCount, (IntPtr)p, _timeout)
+									: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)readCount, (IntPtr)p, _timeout);
+								Device.SenseKeyType senseKey =
+									Device.SenseKeyType.NoSense;
+								byte asc = 0;
+								byte ascq = 0;
+								if (st != Device.CommandStatus.Success)
+								{
+									ReadFailureIdentity(
+										st,
+										out senseKey,
+										out asc,
+										out ascq);
+									bool invalidShape =
+										PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
 											st,
-											out senseKey,
-											out asc,
-											out ascq);
-										failure =
-											$"relative-sector={relBase + i * chunk}, sectors={chunk}, " +
-											$"retry-status={st}, retry-sense={senseKey}, " +
-											$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+											senseKey,
+											asc,
+											ascq);
+									failure =
+										$"relative-sector={relBase + offset}, " +
+										$"sectors={readCount}, chunk-shape={cacheChunk}, " +
+										$"status={st}, sense={senseKey}, " +
+										$"ASC={asc:X2}, ASCQ={ascq:X2}";
+									if (transientRetries == 0 && invalidShape)
+									{
+										Thread.Sleep(80);
+										transientRetries++;
+										_cacheDefeatRetryCount++;
+										st = _readCDCommand == ReadCDCommand.ReadCdBEh
+											? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)readCount, (IntPtr)p, _timeout)
+											: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)readCount, (IntPtr)p, _timeout);
+										if (st != Device.CommandStatus.Success)
+										{
+											ReadFailureIdentity(
+												st,
+												out senseKey,
+												out asc,
+												out ascq);
+											failure =
+												$"relative-sector={relBase + offset}, " +
+												$"sectors={readCount}, chunk-shape={cacheChunk}, " +
+												$"retry-status={st}, retry-sense={senseKey}, " +
+												$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+										}
 									}
 								}
+								if (st != Device.CommandStatus.Success)
+								{
+									sawFailure = true;
+									everyFailureWasInvalidShape &=
+										PayloadReadFailurePolicy
+											.ShouldRetryCacheDefeatRead(
+												st,
+												senseKey,
+												asc,
+												ascq);
+									complete = false;
+									break;
+								}
 							}
-							if (st != Device.CommandStatus.Success)
+							if (complete)
 							{
-								complete = false;
-								break;
+								_cacheDefeatJustFlushed = true;
+								return true;
 							}
 						}
-						if (complete)
+						if (!sawFailure || !everyFailureWasInvalidShape)
+							break;
+						cacheChunk =
+							PayloadReadFailurePolicy.NextCacheDefeatChunkSize(
+								cacheChunk);
+						if (cacheChunk > 0)
 						{
-							_cacheDefeatJustFlushed = true;
-							return true;
+							chunkFallbacks++;
+							_cacheDefeatChunkFallbackCount++;
 						}
 					}
 				}
@@ -1913,7 +1961,8 @@ namespace CUETools.Ripper.SCSI
 				failure = "exception=" + ex.GetType().Name;
 			}
 			_cacheDefeatFailure =
-				$"{failure}; attempted-regions={attemptedRegions}; transient-retries={transientRetries}";
+				$"{failure}; attempted-regions={attemptedRegions}; " +
+				$"transient-retries={transientRetries}; chunk-fallbacks={chunkFallbacks}";
 			return false;
 		}
 
