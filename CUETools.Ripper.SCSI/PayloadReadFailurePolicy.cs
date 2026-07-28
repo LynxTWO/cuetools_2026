@@ -187,5 +187,24 @@ namespace CUETools.Ripper.SCSI
                 asc == 0x24 &&
                 ascq == 0x00;
         }
+
+        /// <summary>
+        /// The ASUS BW-16D1HT has intermittently rejected valid in-range READ CD
+        /// commands with 24/00 during long reads. Cache eviction uses the same
+        /// payload command. If that exact rejection occurs here, a caller may
+        /// settle and retry once. This does not cover medium errors, readiness
+        /// failures, transport errors, or a repeat.
+        /// </summary>
+        public static bool ShouldRetryCacheDefeatRead(
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.IllegalRequest &&
+                asc == 0x24 &&
+                ascq == 0x00;
+        }
     }
 }

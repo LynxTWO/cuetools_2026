@@ -136,6 +136,17 @@ public sealed class RipViewModel : PageViewModel
         get => _selectedDrive;
         set
         {
+            if (IsRipping)
+            {
+                // This page remains bound to the immutable drive snapshot owned by
+                // the active job. Choosing another attached drive uses the same
+                // selector to open an isolated worker instead of retargeting Stop,
+                // status, metadata, or CRC evidence in this window.
+                if (value != _selectedDrive && Drives.Contains(value))
+                    OpenParallelDrive(value);
+                OnPropertyChanged(nameof(SelectedDrive));
+                return;
+            }
             if (!Set(ref _selectedDrive, value)) return;
             // publish the choice so the Drive & Read page detects and CALIBRATES this same drive - it
             // used to act on GetDrives()[0], so calibrating there while ripping a different drive left
@@ -173,7 +184,22 @@ public sealed class RipViewModel : PageViewModel
     public bool ShowDiscArea => IsDiscPresent || RipDone;
 
     private bool _isBusy;
-    public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (Set(ref _isBusy, value))
+                OnPropertyChanged(nameof(DriveSelectorEnabled));
+        }
+    }
+
+    /// <summary>
+    /// A disc-identification or repair transaction cannot change drives. During
+    /// an optical read the selector stays available, but another drive opens in
+    /// its own process and this window remains pinned to the active job.
+    /// </summary>
+    public bool DriveSelectorEnabled => !IsBusy;
 
     // physical tray/media state, polled live from the drive (open / closed-empty / closed-disc)
     private DriveTrayState _tray = DriveTrayState.Unknown;
@@ -235,11 +261,10 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
-    /// <summary>False while a rip/verify runs. Bound to the IsEnabled of the controls whose value is
-    /// SNAPSHOTTED when the job starts - the drive picker and accuracy mode. Letting them
-    /// move mid-run produced a job that half-obeyed the change: the disc was read one way while the saved
-    /// report claimed another, and switching drive mid-rip filed the results against a different album.
-    /// The honest fix is to snapshot the value AND stop offering the change.</summary>
+    /// <summary>
+    /// False while a rip or verify runs. The accuracy mode is a job input and
+    /// cannot change after its snapshot is taken.
+    /// </summary>
     public bool ControlsUnlocked => !IsRipping;
 
     // The codec dropdown stays editable through a Test read (a change there is honored - see
@@ -464,7 +489,7 @@ public sealed class RipViewModel : PageViewModel
         AcceptCopyAnywayCommand = new RelayCommand(_ => AcceptCopyAnyway(), _ => _heldResult != null);
         DiscardHeldCommand = new RelayCommand(_ => DiscardHeld(), _ => _heldResult != null);
         OpenParallelDriveCommand = new RelayCommand(
-            _ => OpenParallelDrive(),
+            _ => OpenParallelDrive(ParallelDrive),
             _ => IsRipping && ParallelDrive != '\0' &&
                  ParallelDrives.Contains(ParallelDrive));
 
@@ -1196,7 +1221,11 @@ public sealed class RipViewModel : PageViewModel
                     : "");
             TestCopyIsWarning = false;
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
-            CtdbText = result.CtdbConfidence > 0 ? $"match . conf {result.CtdbConfidence}" : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+            CtdbText = result.CtdbConfidence > 0
+                ? $"match . conf {result.CtdbConfidence}"
+                : result.CtdbCanRecover
+                    ? $"recoverable damage . {result.CtdbRepairSectors} sector(s)"
+                    : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             ApplyHistoryStatus(result.HistoryRecorded, result.HistoryKnown,
                 result.HistoryMatches, result.HistoryPriorReads, result.HistoryDiffTracks);
@@ -1212,6 +1241,7 @@ public sealed class RipViewModel : PageViewModel
                         : "; WARNING: final output not verified"
                     : "");
             StatusText = $"Test & Copy verified -> {result.OutputDir}";
+            SetPostRipRepair(result);
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
             // the most carefully verified rips ever happened.
@@ -1234,8 +1264,20 @@ public sealed class RipViewModel : PageViewModel
             _heldResult = result;
             TestCopyHeld = true;
             TestCopyIsWarning = true;
-            TestCopyText = $"Held - the reads disagree on track(s) {string.Join(", ", System.Array.ConvertAll(result.HeldTracks, x => (x + 1).ToString()))}. Nothing was written. Re-run for another read, accept the copy anyway, or discard.";
-            StatusText = "Test & Copy held - tracks disagree.";
+            string tracks = string.Join(
+                ", ",
+                System.Array.ConvertAll(
+                    result.HeldTracks,
+                    x => (x + 1).ToString()));
+            string reason = string.IsNullOrWhiteSpace(result.HoldReason)
+                ? ""
+                : result.HoldReason + " ";
+            TestCopyText =
+                $"Held - {reason}The Test and Copy CRCs disagree on track(s) {tracks}. " +
+                "Nothing was written. The completed Copy is retained; re-run, accept it anyway, or discard.";
+            StatusText = string.IsNullOrWhiteSpace(result.HoldReason)
+                ? "Test & Copy held - tracks disagree."
+                : "Test & Copy held - confirming read did not finish; completed Copy retained.";
         }
         else
         {
@@ -1301,6 +1343,36 @@ public sealed class RipViewModel : PageViewModel
         RepairLastRipText =
             $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
             "Repair creates and independently verifies a sibling copy; this rip stays unchanged.";
+    }
+
+    private void SetPostRipRepair(
+        TestCopyRunResult result,
+        string? publishedDirectory = null)
+    {
+        CanRepairLastRip = false;
+        RepairLastRipText = "";
+        _lastRepairSource = "";
+        if (!result.CtdbHasErrors || !result.CtdbCanRecover)
+            return;
+
+        string source = string.IsNullOrWhiteSpace(publishedDirectory)
+            ? result.RepairSourcePath
+            : RipService.RebindRepairSource(
+                publishedDirectory,
+                result.RepairSourceRelativePath);
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            RepairLastRipText =
+                "CTDB parity can recover this lossless Test & Copy output, but it has no unambiguous album input. Keep album.cue enabled for multi-track repair.";
+            StatusText += "  CTDB repair is available, but this multi-track output has no album.cue.";
+            return;
+        }
+
+        _lastRepairSource = source;
+        CanRepairLastRip = true;
+        RepairLastRipText =
+            $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
+            "Repair creates and independently verifies a sibling copy; this output stays unchanged.";
     }
 
     private async Task RepairLastRipAsync()
@@ -1403,6 +1475,7 @@ public sealed class RipViewModel : PageViewModel
         // used to get (no eject, and no RipDone so the "Open folder" panel never appeared).
         if (ok)
         {
+            SetPostRipRepair(held, dir);
             // held.CorrectionQuality, not the live dropdown: the reads happened earlier, possibly at a
             // different setting, and the archived report must name the mode they were actually made at
             PublishReport($"Test & Copy (accepted, NOT verified, {held.ReadsUsed} reads)",
@@ -1547,9 +1620,8 @@ public sealed class RipViewModel : PageViewModel
             _settingsStore.Save(_config, _settings);
     }
 
-    private void OpenParallelDrive()
+    private void OpenParallelDrive(char drive)
     {
-        char drive = ParallelDrive;
         if (!IsRipping || drive == '\0' || !ParallelDrives.Contains(drive))
             return;
 
@@ -1570,6 +1642,18 @@ public sealed class RipViewModel : PageViewModel
             _log.Error("drive",
                 $"secondary drive window launch failed requestedDrive={drive}",
                 ex);
+        }
+        finally
+        {
+            // A running job never changes this window's selected drive. Reassert
+            // the source value after the ComboBox finishes its target update.
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher != null)
+                _ = dispatcher.BeginInvoke(
+                    new Action(() => OnPropertyChanged(nameof(SelectedDrive))),
+                    DispatcherPriority.DataBind);
+            else
+                OnPropertyChanged(nameof(SelectedDrive));
         }
     }
 

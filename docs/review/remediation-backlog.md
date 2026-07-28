@@ -1071,13 +1071,10 @@ does not relax evidence, rollback, or verification requirements.
   consumed the end-of-disc path, and passed in 2 minutes 53 seconds. The WPF suite
   passes 350/350, ripper suites pass net8 8/8 and net47 17/17, and SCSI builds for
   net8/net47/net20. After an elevated device restart and tray cycle, K: reopened
-  and started a real Paranoid Test & Copy. Its first read found a stuck window with
-  two errors at 60 percent, slowed, and converged to zero remaining errors on pass
-  9 while the measured 786,432-byte flush was active. Final Test/Copy agreement and
-  CTDB repair remain pending until that live job completes. The live run also proved
-  that named Test CRC evidence was held inside the synchronous composite result
-  throughout Copy; the next build now publishes immutable Test and Copy snapshots
-  immediately after their respective reads.
+  and completed real Paranoid Test and Copy phases. Named Test and Copy CRC snapshots
+  appeared after their respective reads. Mismatches on two tracks correctly triggered
+  a confirming third read. That later read failed its cache-defeat assurance after
+  953 seconds; R66 tracks the failure identity and staging outcome.
 
 ### R54. Multiple drives cannot rip concurrently under one safe job controller - bucket B, risk high
 
@@ -1121,8 +1118,10 @@ does not relax evidence, rollback, or verification requirements.
   passes 358/358, release safety passes 41 checks, all five staged vendor worktrees
   remain clean, and a separate clean self-contained artifact passed its 36-file,
   14-entry runtime-trust, 19-registration, and five-native-probe contract.
-  Simultaneous H:/K:, same-drive denial, independent Stop, and crash-release hardware
-  proof remain.
+  The first live run showed that the separate launcher was not discoverable through
+  the disabled active-drive selector. R67 now makes that selector launch another
+  attached drive without retargeting the current job. Simultaneous H:/K:, same-drive
+  denial, independent Stop, and crash-release hardware proof remain.
 
 ### R55. Payload medium errors bypass damaged-sector recovery - bucket A, risk high
 
@@ -1478,6 +1477,93 @@ does not relax evidence, rollback, or verification requirements.
   rebuild completes with zero warnings. Full Visual Studio receipt verification
   remains paired with the post-rip classic release run.
 
+### R66. A failed confirming read deleted a completed Test & Copy result - bucket A, risk high
+
+- **Area or slice:** secure cache defeat, Test & Copy confirmation, staging
+  ownership, and phase evidence.
+- **Why it matters:** Test and Copy can finish and disagree on a damaged disc, then
+  a later confirming read can fail. Treating the whole operation as an ordinary
+  failure deletes the completed encoded Copy and forces another hour-long read.
+- **Evidence found:** the K: diagnostic completed Test and Copy, published both CRC
+  roles, started read 3, and failed after 953 seconds with only the generic
+  cache-independence message. `FlushCache` discarded command status and sense.
+  `RunTestAndCopy` returned an error for every failed confirming read, so its final
+  cleanup deleted the owned Copy staging.
+- **Confidence:** verified from the production diagnostic, screenshot, and source
+  trace. The exact failed cache command sense remains unknown because the old code
+  discarded it.
+- **Approval needed:** no; the user requested the correction and damaged-disc
+  completion.
+- **Smallest safe next step:** retain strict independent-read assurance, retry only
+  an exact transient `DeviceFailed/IllegalRequest/24/00` cache command once, report
+  the final command identity, and hold a completed Copy when confirmation cannot
+  finish.
+- **Verification plan:** classifier negatives, ripper and WPF suites, all SCSI
+  targets, loaded-drive cache probe, then the exact K: damaged window and full
+  Test & Copy after media is loaded.
+- **Owner:** repo owner.
+- **Status:** implemented and software/H:-hardware verified 2026-07-27. The cache
+  retry is bounded to one exact 24/00 per flush and is counted in completion logs.
+  A final command rejection reports relative sector, transfer size, status, sense,
+  ASC/ASCQ, region count, and retry count; an unexpected exception reports its type.
+  A failed confirmation returns Held, preserves the completed Copy, writes nothing
+  to the destination, and keeps Accept/Discard/Re-run as explicit choices. Ripper
+  tests pass 21/21, WPF tests pass 359/359, SCSI builds pass net8/net47/net20, and H:
+  passed a Paranoid 786,432-byte cache-defeat window at 4224 kB/s in 15 seconds. K:
+  is healthy but Windows currently reports no loaded media, so its exact hardware
+  rerun remains.
+
+### R67. The active drive selector hid the safe parallel-drive path - bucket A, risk high
+
+- **Area or slice:** Rip-page drive selection, process-per-drive launch, immutable
+  job ownership, and independent Stop/status state.
+- **Why it matters:** an alternate launcher does not help when the visible drive
+  selector is disabled and the user cannot discover how to start the second drive.
+  Re-enabling ordinary selection without a job snapshot would instead retarget the
+  current window's evidence and cancellation state.
+- **Evidence found:** the Rip selector bound `IsEnabled` to `ControlsUnlocked`,
+  which becomes false for the full optical job. The safe secondary process,
+  physical-drive lease, and bottom action-row launcher already existed.
+- **Confidence:** verified from the live UI and source trace.
+- **Approval needed:** no; the user explicitly requested concurrent multi-drive
+  operation.
+- **Smallest safe next step:** keep the active job pinned, leave the selector
+  available, and interpret another attached drive as a request to launch the
+  existing isolated worker. Reassert the owned drive in the current ComboBox.
+- **Verification plan:** XAML and launch-contract tests, full WPF suite, then a live
+  H:/K: run proving different-drive launch, same-drive denial, and independent Stop.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. The top
+  selector remains available during Rip, Verify, and Test & Copy. Choosing another
+  drive launches only a validated drive letter in a secondary process and restores
+  the current selector to the immutable job drive. The WPF suite passes 359/359.
+  Live simultaneous H:/K: proof remains.
+
+### R68. Test & Copy outputs dropped CTDB repair reachability - bucket A, risk high
+
+- **Area or slice:** Test & Copy result transfer, held acceptance, committed output,
+  and post-rip CTDB repair.
+- **Why it matters:** the Copy read already computes recoverable CTDB damage, but a
+  verified or manually accepted Test & Copy output could not offer the same repair
+  button as an ordinary lossless rip.
+- **Evidence found:** `VerifyResult` carried repair assessment and source identity,
+  while `TestCopyRunResult` carried only CTDB confidence totals. The Test & Copy
+  completion and Accept paths never called `SetPostRipRepair`.
+- **Confidence:** verified from source trace.
+- **Approval needed:** no; the user requested post-rip CTDB repair for completed
+  damaged output.
+- **Smallest safe next step:** carry the Copy or selected committed read's repair
+  assessment, store only its contained relative source during staging, rebind it
+  against the exact published album, and use the existing source-preserving repair
+  transaction.
+- **Verification plan:** contained/missing/traversal path tests, full WPF suite,
+  then the K: damaged-disc completion and repair route.
+- **Owner:** repo owner.
+- **Status:** implemented and deterministic-test verified 2026-07-27. Passed and
+  accepted Test & Copy outputs now expose CTDB repair only when the published repair
+  source exists inside the committed album. Missing and traversal candidates fail
+  closed. The WPF suite passes 359/359; K: remains the live repair proof.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1486,8 +1572,8 @@ dependency:
 1. Finish and adversarially review any open R44-R49 follow-ups.
 2. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Run R59's final-source K: damaged-disc CTDB repair/Test & Copy lane. Retain the
-   passing H: cache-defeat, WMA,
+3. Load the damaged disc in K:, then run R59/R66/R68's final-source CTDB
+   repair/Test & Copy lane. Retain the passing H: cache-defeat, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
    and crash release without shared-state collisions.

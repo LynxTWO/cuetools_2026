@@ -66,6 +66,8 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatBytes;
 		private byte[] _flushScratch;
 		private bool _cacheDefeatJustFlushed;
+		private string _cacheDefeatFailure = "no cache-defeat attempt recorded";
+		private int _cacheDefeatRetryCount;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _payloadBatchFallbackCount;
@@ -73,6 +75,7 @@ namespace CUETools.Ripper.SCSI
 		private int _corroboratedUnreadablePinpointCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
+		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
@@ -1780,8 +1783,36 @@ namespace CUETools.Ripper.SCSI
 		private unsafe bool FlushCache()
 		{
 			if (_cacheDefeatBytes <= 0 || _toc == null) return true;
+			_cacheDefeatJustFlushed = false;
+			string failure = "no usable in-program cache-defeat region";
+			int attemptedRegions = 0;
+			int transientRetries = 0;
 			try
 			{
+				void ReadFailureIdentity(
+					Device.CommandStatus status,
+					out Device.SenseKeyType senseKey,
+					out byte asc,
+					out byte ascq)
+				{
+					senseKey = Device.SenseKeyType.NoSense;
+					asc = 0;
+					ascq = 0;
+					if (status != Device.CommandStatus.DeviceFailed)
+						return;
+					try
+					{
+						senseKey = m_device.GetSenseKey();
+						asc = m_device.GetSenseAsc();
+						ascq = m_device.GetSenseAscq();
+					}
+					catch
+					{
+						// Missing or malformed sense data must not prevent the
+						// remaining in-program regions from being attempted.
+					}
+				}
+
 				int chunk = Math.Max(1, m_max_sectors);
 				int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
 				int perSector = 4 * 588 + c2Size;
@@ -1812,18 +1843,57 @@ namespace CUETools.Ripper.SCSI
 						int relEnd = relBase + chunksNeeded * chunk;
 						bool overlapsCurrent = relBase < _currentEnd && relEnd > _currentStart;
 						if (overlapsCurrent) continue;
+						attemptedRegions++;
 						bool complete = true;
 						for (int i = 0; i < chunksNeeded; i++)
 						{
 							uint lba = firstStart + (uint)(relBase + i * chunk);
 							if (lba + (uint)chunk > firstStart + len)
 							{
+								failure = $"relative-sector={relBase + i * chunk}, sectors={chunk}, outside audio program";
 								complete = false;
 								break;
 							}
 							var st = _readCDCommand == ReadCDCommand.ReadCdBEh
 								? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
 								: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+							if (st != Device.CommandStatus.Success)
+							{
+								ReadFailureIdentity(
+									st,
+									out Device.SenseKeyType senseKey,
+									out byte asc,
+									out byte ascq);
+								failure =
+									$"relative-sector={relBase + i * chunk}, sectors={chunk}, " +
+									$"status={st}, sense={senseKey}, ASC={asc:X2}, ASCQ={ascq:X2}";
+								if (transientRetries == 0 &&
+									PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+										st,
+										senseKey,
+										asc,
+										ascq))
+								{
+									Thread.Sleep(80);
+									transientRetries++;
+									_cacheDefeatRetryCount++;
+									st = _readCDCommand == ReadCDCommand.ReadCdBEh
+										? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)chunk, (IntPtr)p, _timeout)
+										: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)chunk, (IntPtr)p, _timeout);
+									if (st != Device.CommandStatus.Success)
+									{
+										ReadFailureIdentity(
+											st,
+											out senseKey,
+											out asc,
+											out ascq);
+										failure =
+											$"relative-sector={relBase + i * chunk}, sectors={chunk}, " +
+											$"retry-status={st}, retry-sense={senseKey}, " +
+											$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+									}
+								}
+							}
 							if (st != Device.CommandStatus.Success)
 							{
 								complete = false;
@@ -1838,7 +1908,12 @@ namespace CUETools.Ripper.SCSI
 					}
 				}
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				failure = "exception=" + ex.GetType().Name;
+			}
+			_cacheDefeatFailure =
+				$"{failure}; attempted-regions={attemptedRegions}; transient-retries={transientRetries}";
 			return false;
 		}
 
@@ -1937,7 +2012,8 @@ namespace CUETools.Ripper.SCSI
 				// not the cached copy of pass 0 (which would make the secure comparison meaningless)
 				if (_cacheDefeatBytes > 0 && pass >= 1 && !FlushCache())
 					throw new ReadCDException(
-						"Drive-cache flush failed; the secure re-read could not be proven independent.");
+						"Drive-cache flush failed; the secure re-read could not be proven independent. " +
+						_cacheDefeatFailure);
 				DateTime PassTime = DateTime.Now, LastFetch = DateTime.Now;
 
 				for (int sector = _currentStart; sector < _currentEnd; sector += m_max_sectors)

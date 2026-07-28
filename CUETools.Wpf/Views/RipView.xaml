@@ -26,7 +26,9 @@
         </Grid.ColumnDefinitions>
         <TextBlock Grid.Column="0" Text="Drive" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <ComboBox Grid.Column="1" Width="80" VerticalAlignment="Center"
-                  ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}" IsEnabled="{Binding ControlsUnlocked}"/>
+                  ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive, Mode=TwoWay}"
+                  IsEnabled="{Binding DriveSelectorEnabled}"
+                  ToolTip="Choose the drive for this window. While a read is active, choosing another drive opens an isolated CUETools window and leaves this job here."/>
         <!-- real drive model, read from INQUIRY (no disc needed) -->
         <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
                    Text="{Binding DriveModel}" ToolTip="{Binding DriveModel}"

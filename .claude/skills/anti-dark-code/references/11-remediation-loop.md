@@ -212,6 +212,11 @@ device cache, boundary read, media property, or persisted calibration.
   until a later Copy, publication, or tie-break finishes. Label phase evidence
   separately from the final composite outcome, preserve prior roles not replaced by
   the new phase, and isolate presentation callbacks from the producer.
+- If a later confirmation, tie-break, publication, or indexing phase fails, do not
+  collapse an already completed recoverable stage into a generic failure and delete
+  it. Keep composite assurance separate from phase completion. Retain the owned,
+  validated stage in an explicit held or pending state with bounded user resolution;
+  never promote it automatically.
 - Bind every displayed or persisted hardware result to the exact physical device
   that produced it. On multi-device systems, make selection explicit, invalidate
   stale identity and evidence immediately when it changes, and prevent a settings

@@ -290,5 +290,30 @@ namespace CUETools.Ripper.Tests
                 0x24,
                 0x00));
         }
+
+        [TestMethod]
+        public void CacheDefeatRetriesOnlyTheObservedTransientInvalidField()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.MediumError,
+                0x11,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.NotReady,
+                0x04,
+                0x01));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                Device.CommandStatus.IoctlFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
     }
 }
