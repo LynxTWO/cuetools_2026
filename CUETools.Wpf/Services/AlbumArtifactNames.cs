@@ -30,7 +30,17 @@ public static class AlbumArtifactNames
         if (!string.IsNullOrWhiteSpace(metadata?.Year))
             stem += " (" + metadata.Year.Trim() + ")";
         if (!string.IsNullOrWhiteSpace(metadata?.DiscNumberAndName))
-            stem += " (Disc " + metadata.DiscNumberAndName.Trim() + ")";
+        {
+            string disc = metadata.DiscNumber01;
+            if (!string.IsNullOrWhiteSpace(metadata.TotalDiscs) &&
+                !string.Equals(metadata.TotalDiscs, "1", StringComparison.Ordinal))
+            {
+                disc += " of " + metadata.TotalDiscs.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(metadata.DiscName))
+                disc += " - " + metadata.DiscName.Trim();
+            stem += " (Disc " + disc + ")";
+        }
 
         stem = cleanse(stem) ?? "";
         foreach (char invalid in Path.GetInvalidFileNameChars())

@@ -24,7 +24,7 @@ public sealed class AlbumArtifactNamesTests
         string stem = AlbumArtifactNames.CreateStem(metadata, value => value);
 
         Assert.AreEqual(
-            "Genesis - ...Calling All Stations... (1997) (Disc 2_2 - Bonus)",
+            "Genesis - ...Calling All Stations... (1997) (Disc 2 of 2 - Bonus)",
             stem);
         Assert.AreEqual(stem + ".cue", AlbumArtifactNames.CueFileName(stem));
         Assert.AreEqual(
