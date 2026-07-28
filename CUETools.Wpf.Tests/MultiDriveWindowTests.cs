@@ -82,6 +82,18 @@ public sealed class MultiDriveWindowTests
 
         XDocument rip = XDocument.Load(
             Path.Combine(repoRoot, "CUETools.Wpf", "Views", "RipView.xaml"));
+        XElement activeDrivePicker = rip
+            .Descendants(Presentation + "ComboBox")
+            .Single(element =>
+                element.Attribute("ItemsSource")?.Value ==
+                "{Binding Drives}");
+        Assert.AreEqual(
+            "{Binding DriveSelectorEnabled}",
+            activeDrivePicker.Attribute("IsEnabled")?.Value);
+        StringAssert.Contains(
+            activeDrivePicker.Attribute("ToolTip")?.Value ?? "",
+            "choosing another drive opens an isolated CUETools window");
+
         XElement drivePicker = rip
             .Descendants(Presentation + "ComboBox")
             .Single(element =>

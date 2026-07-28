@@ -92,6 +92,11 @@ public sealed class TestCopyRunResult
 {
     public bool Ok { get; init; }
     public string Error { get; init; } = "";
+    /// <summary>
+    /// Why a completed Copy was held instead of committed. Empty means all requested
+    /// reads completed and their checksum disagreement alone caused the hold.
+    /// </summary>
+    public string HoldReason { get; init; } = "";
     public CUETools.Wpf.Accuracy.TestCopyOutcome Outcome { get; init; }
     public int ReadsUsed { get; init; }
     public int[] HeldTracks { get; init; } = System.Array.Empty<int>();
@@ -101,6 +106,12 @@ public sealed class TestCopyRunResult
     public int ArTotal { get; init; }
     public int CtdbConfidence { get; init; }
     public int CtdbTotal { get; init; }
+    public bool CtdbHasErrors { get; init; }
+    public bool CtdbCanRecover { get; init; }
+    public int CtdbRepairSectors { get; init; }
+    public string CtdbRepairRanges { get; init; } = "";
+    public string RepairSourcePath { get; init; } = "";
+    internal string RepairSourceRelativePath { get; init; } = "";
     public bool Accurate { get; init; }
     public bool HistoryRecorded { get; init; }
     public bool HistoryKnown { get; init; }
@@ -918,6 +929,7 @@ public sealed class RipService : IRipService
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
+                    $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
                     $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
                     $"pinpoint_retries={reader.PinpointRetryCount} " +
                     $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
@@ -1088,6 +1100,35 @@ public sealed class RipService : IRipService
         return IsSafeRepairSource(candidate, rootPrefix) ? candidate : "";
     }
 
+    internal static string RebindRepairSource(
+        string publishedDirectory,
+        string relativePath) =>
+        ResolvePublishedRepairSource(
+            publishedDirectory,
+            relativePath);
+
+    private static string GetRepairSourceRelativePath(
+        VerifyResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.OutputDir) ||
+            string.IsNullOrWhiteSpace(result.RepairSourcePath))
+            return "";
+        string root;
+        string source;
+        try
+        {
+            root = Path.GetFullPath(result.OutputDir);
+            source = Path.GetFullPath(result.RepairSourcePath);
+        }
+        catch { return ""; }
+        string rootPrefix = root.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!IsSafeRepairSource(source, rootPrefix))
+            return "";
+        return Path.GetRelativePath(root, source);
+    }
+
     private string Safe(string s) => string.IsNullOrEmpty(s) ? "" : _config.CleanseString(s);
 
 
@@ -1217,13 +1258,22 @@ public sealed class RipService : IRipService
                 { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
                 ThrowIfStopRequested();
                 var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
-                if (!thirdResult.Ok) return new TestCopyRunResult { Error = thirdResult.Error };
+                if (!thirdResult.Ok)
+                {
+                    if (thirdResult.Error == "Stopped.")
+                        return new TestCopyRunResult { Error = thirdResult.Error };
+                    _log.Warn(
+                        "rip",
+                        "confirming read failed after a complete staged Copy; holding the Copy instead of deleting it");
+                    return BuildHeld(
+                        resolve.HeldTracks,
+                        "Confirming read failed: " + thirdResult.Error);
+                }
                 VerifyRecord? thirdRecord = thirdResult.Record;
                 if (thirdRecord == null)
-                    return new TestCopyRunResult
-                    {
-                        Error = "Confirming read completed without checksum evidence."
-                    };
+                    return BuildHeld(
+                        resolve.HeldTracks,
+                        "Confirming read completed without checksum evidence.");
 
                 reads.Add(thirdRecord);
                 PublishCrcEvidence(reads, sourceReadIndex: 2);
@@ -1241,7 +1291,9 @@ public sealed class RipService : IRipService
 
             // Held: write nothing to outputBaseDir. Retain staging for the VM's Accept anyway /
             // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
-            TestCopyRunResult BuildHeld(int[] heldTracks)
+            TestCopyRunResult BuildHeld(
+                int[] heldTracks,
+                string holdReason = "")
             {
                 ThrowIfStopRequested();   // do not commit an album the user cancelled
                 keepStaging = true;
@@ -1250,6 +1302,7 @@ public sealed class RipService : IRipService
                 {
                     Ok = true,
                     Outcome = TestCopyOutcome.Held,
+                    HoldReason = holdReason,
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
@@ -1265,6 +1318,12 @@ public sealed class RipService : IRipService
                     ArTotal = last?.ArTotal ?? 0,
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
+                    CtdbHasErrors = copyResult.CtdbHasErrors,
+                    CtdbCanRecover = copyResult.CtdbCanRecover,
+                    CtdbRepairSectors = copyResult.CtdbRepairSectors,
+                    CtdbRepairRanges = copyResult.CtdbRepairRanges,
+                    RepairSourceRelativePath =
+                        GetRepairSourceRelativePath(copyResult),
                     Accurate = (last?.ArConfidence ?? 0) > 0,
                     OutputVerificationKnown = copyResult.OutputVerificationKnown,
                     LosslessOutput = copyResult.LosslessOutput,
@@ -1345,6 +1404,17 @@ public sealed class RipService : IRipService
                     ArTotal = last?.ArTotal ?? 0,
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
+                    CtdbHasErrors = committedEncoded.CtdbHasErrors,
+                    CtdbCanRecover = committedEncoded.CtdbCanRecover,
+                    CtdbRepairSectors =
+                        committedEncoded.CtdbRepairSectors,
+                    CtdbRepairRanges =
+                        committedEncoded.CtdbRepairRanges,
+                    RepairSourceRelativePath =
+                        GetRepairSourceRelativePath(committedEncoded),
+                    RepairSourcePath = RebindRepairSource(
+                        outDir,
+                        GetRepairSourceRelativePath(committedEncoded)),
                     Accurate = (last?.ArConfidence ?? 0) > 0,
                     HistoryRecorded = historyRecorded,
                     HistoryKnown = history.KnownDisc,

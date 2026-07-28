@@ -30,6 +30,10 @@ namespace CUETools.Wpf.Tests
             "CUETOOLS_OPTICAL_PROBE_SECTOR";
         private const string SpeedEnvironmentVariable =
             "CUETOOLS_OPTICAL_PROBE_SPEED_KBPS";
+        private const string CacheBytesEnvironmentVariable =
+            "CUETOOLS_OPTICAL_PROBE_CACHE_BYTES";
+        private const string CorrectionQualityEnvironmentVariable =
+            "CUETOOLS_OPTICAL_PROBE_CORRECTION_QUALITY";
         private const string OwnershipMarker = ".cuetools-live-testcopy-owner";
 
         [TestMethod]
@@ -49,8 +53,34 @@ namespace CUETools.Wpf.Tests
             Assert.IsTrue(
                 reader.Open(drive),
                 "The loaded audio disc could not be opened.");
-            reader.CorrectionQuality = 0;
+            int correctionQuality = 0;
+            string correctionQualityText =
+                Environment.GetEnvironmentVariable(
+                    CorrectionQualityEnvironmentVariable) ?? "";
+            if (!string.IsNullOrWhiteSpace(correctionQualityText))
+            {
+                Assert.IsTrue(
+                    int.TryParse(
+                        correctionQualityText,
+                        out correctionQuality) &&
+                    correctionQuality >= 0 &&
+                    correctionQuality <= 2,
+                    $"{CorrectionQualityEnvironmentVariable} must be 0, 1, or 2.");
+            }
+            reader.CorrectionQuality = correctionQuality;
             reader.DeepRecovery = false;
+            int cacheBytes = 0;
+            string cacheBytesText =
+                Environment.GetEnvironmentVariable(
+                    CacheBytesEnvironmentVariable) ?? "";
+            if (!string.IsNullOrWhiteSpace(cacheBytesText))
+            {
+                Assert.IsTrue(
+                    int.TryParse(cacheBytesText, out cacheBytes) &&
+                    cacheBytes > 0,
+                    $"{CacheBytesEnvironmentVariable} must be a positive integer.");
+                reader.SetCacheDefeat(cacheBytes);
+            }
             string speedText =
                 Environment.GetEnvironmentVariable(
                     SpeedEnvironmentVariable) ?? "";
@@ -73,7 +103,8 @@ namespace CUETools.Wpf.Tests
                 read > 0,
                 "The optical reader returned no samples for the configured window.");
             TestContext.WriteLine(
-                $"PASS drive={drive}: relative-sector={sector} samples={read}");
+                $"PASS drive={drive}: relative-sector={sector} samples={read} " +
+                $"cq={correctionQuality} cacheBytes={cacheBytes}");
         }
 
         [TestMethod]

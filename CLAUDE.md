@@ -68,10 +68,16 @@ progress documents for it belong here, under `docs/review/`.
   lease for the complete operation. A second claimant for either identity fails before
   touching the hardware. Each window owns its Stop/status state and collision-safe log;
   secondary windows do not publish shared settings. Launch arguments carry only the
-  window role and validated drive letter.
+  window role and validated drive letter. While a job runs, choosing another drive in
+  the active selector launches that isolated window; it must not retarget the current
+  window's immutable drive, Stop command, metadata, CRC evidence, or status.
 - Publish immutable named evidence at the end of each completed phase. In Test &
   Copy, Test CRC appears before Copy starts and Copy CRC appears before any
   tie-break; a later phase must not erase a prior role it did not replace.
+- If a Test & Copy confirmation fails after Copy completed, keep the staged Copy in
+  an explicit Held state. Do not publish it automatically, but do not delete the only
+  completed encoded result. Test & Copy outputs must carry CTDB repair evidence to
+  the same source-preserving post-rip repair path as ordinary lossless rips.
 - READ CD payload medium errors are untrusted media evidence, not proof that the
   drive is dead. Split a failed batch to isolate sectors and feed persistent
   single-sector medium errors into the existing flagged vote and retry policy.
