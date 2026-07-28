@@ -94,6 +94,10 @@ From `00-conventions.md` plus repo specifics verified this session:
   recoverable sector count, and repair must publish a verified sibling. The repaired
   audio basenames, standard and unknown tags, and embedded artwork must match their
   source representation. The original top-level aggregate hash must remain unchanged.
+  Require `repair.verify`, the named `.accurip` and CTDB repair reports, and
+  `.cuetools-complete`; recompute every recorded source and output SHA-256. Damaged
+  Test and Copy agreement must say `CONSISTENT` and retain CTDB presence instead of
+  claiming a clean pass or `not found`.
 - Retain the passing frozen classic receipt and exact 97-file artifact, then repeat
   the local AnyCPU/x64/Win32/TTA/MSI matrix on the pinned hosted VS2022 image.
   The local route used Visual Studio 18.8 with the VS2022 v143 toolset. The exact

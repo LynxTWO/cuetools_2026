@@ -71,6 +71,7 @@ namespace CUETools.Wpf.Tests
         [DataRow("Genesis - Calling All Stations (1997) - Test & Copy.log")]
         [DataRow("folder.jpg")]
         [DataRow("rip.verify")]
+        [DataRow("repair.verify")]
         [DataRow("Test & Copy.log")]
         [DataRow(".cuetools-complete")]
         public void AnyFixedNameArtifact_CountsAsARip(string artifact)

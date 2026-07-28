@@ -51,7 +51,9 @@ progress documents for it belong here, under `docs/review/`.
   copy, reject destination-name collisions before writing, and leave the source set
   byte-for-byte unchanged. Preserve source CDTOC identity, but drop stale
   AccurateRip/CTDB payload-proof tags unless an independent post-repair result
-  explicitly regenerates them.
+  explicitly regenerates them. Publication requires a fresh named AccurateRip report,
+  a named CTDB repair report, `repair.verify` with source and output SHA-256 proofs,
+  and `.cuetools-complete` written last. Revalidate the proofs before the atomic move.
 - Drive calibration is a versioned prerequisite. The first Rip, Verify, or Test &
   Copy refreshes missing/stale capability data. Secure and Paranoid operations fail
   closed unless an independent reread strategy is established. Once a drive has
@@ -82,7 +84,9 @@ progress documents for it belong here, under `docs/review/`.
 - If a Test & Copy confirmation fails after Copy completed, keep the staged Copy in
   an explicit Held state. Do not publish it automatically, but do not delete the only
   completed encoded result. Test & Copy outputs must carry CTDB repair evidence to
-  the same source-preserving post-rip repair path as ordinary lossless rips.
+  the same source-preserving post-rip repair path as ordinary lossless rips. Matching
+  reads with unrecoverable windows are `CONSISTENT`, not cleanly verified; retain
+  database presence even when no exact AccurateRip or CTDB match exists.
 - READ CD payload medium errors are untrusted media evidence, not proof that the
   drive is dead. Split a failed batch to isolate sectors and feed persistent
   single-sector medium errors into the existing flagged vote and retry policy.

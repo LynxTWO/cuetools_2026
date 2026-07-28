@@ -20,6 +20,7 @@ public sealed class AlbumOutputTransaction : IDisposable
 {
     internal const string ReservationMagic = "CUETOOLS_OUTPUT_RESERVATION_V1";
     internal const string CompletionMarkerName = ".cuetools-complete";
+    internal const string CompletionMarkerMagic = "CUETOOLS_OUTPUT_COMPLETE_V1";
     internal const string OwnershipMarkerName = ".cuetools-stage-owner";
     internal const string ProofPendingMarkerName =
         ".cuetools-output-proof-pending";
@@ -199,7 +200,7 @@ public sealed class AlbumOutputTransaction : IDisposable
             FileShare.Read))
         using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
         {
-            writer.WriteLine("CUETOOLS_OUTPUT_COMPLETE_V1");
+            writer.WriteLine(CompletionMarkerMagic);
             writer.Flush();
             stream.Flush(true);
         }

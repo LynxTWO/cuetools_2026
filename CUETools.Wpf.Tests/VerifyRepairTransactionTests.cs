@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using CUETools.Processor;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -33,8 +34,53 @@ public sealed class VerifyRepairTransactionTests
             File.ReadAllText(Path.Combine(result.OutputPath, "album.cue")));
         Assert.IsFalse(File.Exists(Path.Combine(
             result.OutputPath, RepairWorkspace.OwnershipMarkerName)));
+        string receiptPath = Path.Combine(
+            result.OutputPath,
+            RepairEvidence.ReceiptFileName);
+        Assert.IsTrue(File.Exists(receiptPath));
+        RepairReceipt receipt = JsonSerializer.Deserialize<RepairReceipt>(
+            File.ReadAllText(receiptPath));
+        Assert.IsNotNull(receipt);
+        Assert.AreEqual("CUETOOLS_REPAIR_RECEIPT_V1", receipt.Schema);
+        Assert.IsTrue(receipt.RepairApplied);
+        Assert.IsTrue(receipt.IndependentlyVerified);
+        Assert.AreEqual(12, receipt.RepairSamples);
+        Assert.AreEqual(1, receipt.RepairSectors);
+        Assert.AreEqual(5, receipt.CtdbConfidence);
+        Assert.AreEqual(1, receipt.SourceFiles.Length);
+        Assert.AreEqual(2, receipt.OutputFiles.Length);
+        Assert.IsTrue(File.Exists(Path.Combine(result.OutputPath, "album.accurip")));
+        Assert.IsTrue(File.Exists(Path.Combine(
+            result.OutputPath,
+            "album - CTDB Repair.log")));
+        Assert.AreEqual(
+            AlbumOutputTransaction.CompletionMarkerMagic,
+            File.ReadAllText(Path.Combine(
+                result.OutputPath,
+                AlbumOutputTransaction.CompletionMarkerName)).Trim());
         Assert.AreEqual(1, engine.VerifyCalls);
         Assert.AreEqual(0, temp.StagingDirectories().Length);
+    }
+
+    [TestMethod]
+    public void Repair_DiagnosticRecordsPublishedVerificationWithoutPrivatePaths()
+    {
+        using var temp = new TempDirectory();
+        string source = temp.WriteSource("album.cue", "ORIGINAL");
+        var log = new FakeLog();
+        var service = CreateService(new CUEConfig(), new FakeRepairEngine(), log);
+
+        VerifyFilesResult result = service.Repair(source, (_, _) => { });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        string line = log.Infos.Single(
+            value => value.Contains("repair published", StringComparison.Ordinal));
+        StringAssert.Contains(line, "independently_verified=1");
+        StringAssert.Contains(line, "samples=12");
+        StringAssert.Contains(line, "sectors=1");
+        StringAssert.Contains(line, "ctdb_conf=5/5");
+        StringAssert.Contains(line, "evidence=1");
+        Assert.IsFalse(line.Contains(temp.Path, StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]
@@ -132,6 +178,41 @@ public sealed class VerifyRepairTransactionTests
         Assert.AreEqual("ORIGINAL", File.ReadAllText(source));
         Assert.AreEqual(0, temp.StagingDirectories().Length);
         Assert.IsFalse(Directory.Exists(Path.Combine(temp.Path, "album - repaired")));
+    }
+
+    [TestMethod]
+    public void Repair_SourceChangedDuringVerification_IsNotPublished()
+    {
+        using var temp = new TempDirectory();
+        string source = temp.WriteSource("album.cue", "ORIGINAL");
+        var engine = new FakeRepairEngine { MutateSourceDuringVerify = true };
+        var service = CreateService(new CUEConfig(), engine);
+
+        VerifyFilesResult result = service.Repair(source, (_, _) => { });
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(result.Error, "repair source changed");
+        Assert.IsFalse(Directory.Exists(Path.Combine(temp.Path, "album - repaired")));
+        Assert.AreEqual(0, temp.StagingDirectories().Length);
+    }
+
+    [TestMethod]
+    public void Repair_OutputChangedAfterIndependentVerification_IsNotPublished()
+    {
+        using var temp = new TempDirectory();
+        string source = temp.WriteSource("album.cue", "ORIGINAL");
+        var engine = new FakeRepairEngine { TamperAfterVerification = true };
+        var service = CreateService(new CUEConfig(), engine);
+
+        VerifyFilesResult result = service.Repair(source, (_, _) => { });
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(
+            result.Error,
+            "independently verified repaired output changed");
+        Assert.AreEqual("ORIGINAL", File.ReadAllText(source));
+        Assert.IsFalse(Directory.Exists(Path.Combine(temp.Path, "album - repaired")));
+        Assert.AreEqual(0, temp.StagingDirectories().Length);
     }
 
     [TestMethod]
@@ -306,8 +387,11 @@ public sealed class VerifyRepairTransactionTests
         Assert.AreEqual("KEEP", File.ReadAllText(sentinel));
     }
 
-    private static VerifyService CreateService(CUEConfig config, IRepairEngine engine)
-        => new(config, new FakeLog(), engine);
+    private static VerifyService CreateService(
+        CUEConfig config,
+        IRepairEngine engine,
+        FakeLog log = null)
+        => new(config, log ?? new FakeLog(), engine);
 
     private sealed class FakeRepairEngine : IRepairEngine
     {
@@ -315,10 +399,13 @@ public sealed class VerifyRepairTransactionTests
         public bool EmptyAudio { get; init; }
         public bool ThrowAfterWriting { get; init; }
         public bool VerificationSucceeds { get; init; } = true;
+        public bool MutateSourceDuringVerify { get; init; }
+        public bool TamperAfterVerification { get; init; }
         public string ExpectedAudioOverride { get; init; }
         public int RepairCalls { get; private set; }
         public int VerifyCalls { get; private set; }
         public List<CUEConfig> Configs { get; } = new();
+        private string _sourcePath = "";
 
         public RepairEngineResult Repair(
             string sourcePath,
@@ -328,6 +415,10 @@ public sealed class VerifyRepairTransactionTests
         {
             RepairCalls++;
             Configs.Add(config);
+            _sourcePath = sourcePath;
+            string sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+            RepairFileProof sourceProof =
+                RepairFileProof.Capture(sourceRoot, sourcePath);
             string cue = Path.Combine(stagingDirectory, "album.cue");
             string audio = Path.Combine(stagingDirectory, "album.flac");
             File.WriteAllText(cue, "repaired cue");
@@ -340,6 +431,7 @@ public sealed class VerifyRepairTransactionTests
                 Applied = Applied,
                 StagedCuePath = cue,
                 ExpectedAudioPaths = new[] { ExpectedAudioOverride ?? audio },
+                SourceProofs = new[] { sourceProof },
                 Result = new VerifyFilesResult
                 {
                     Ok = true,
@@ -361,9 +453,28 @@ public sealed class VerifyRepairTransactionTests
         {
             VerifyCalls++;
             Configs.Add(config);
+            string stage = Path.GetDirectoryName(stagedCuePath);
+            string audio = Path.Combine(stage, "album.flac");
+            RepairFileProof[] outputProofs = VerificationSucceeds
+                ? new[] { RepairFileProof.Capture(stage, audio) }
+                : Array.Empty<RepairFileProof>();
+            string accurateRipLogPath = "";
+            if (VerificationSucceeds)
+            {
+                accurateRipLogPath = Path.Combine(stage, "album.accurip");
+                File.WriteAllText(
+                    accurateRipLogPath,
+                    "fresh post-repair AccurateRip and CTDB evidence");
+            }
+            if (TamperAfterVerification)
+                File.WriteAllText(audio, "tampered after verification");
+            if (MutateSourceDuringVerify)
+                File.WriteAllText(_sourcePath, "CHANGED");
             return new RepairVerificationResult
             {
                 Verified = VerificationSucceeds,
+                AccurateRipLogPath = accurateRipLogPath,
+                VerifiedOutputProofs = outputProofs,
                 Result = new VerifyFilesResult
                 {
                     Ok = true,
@@ -379,8 +490,10 @@ public sealed class VerifyRepairTransactionTests
 
     private sealed class FakeLog : IDiagnosticLog
     {
+        public List<string> Infos { get; } = new();
         public string LogPath => "";
-        public void Info(string category, string message) { }
+        public void Info(string category, string message)
+            => Infos.Add(category + ": " + message);
         public void Warn(string category, string message) { }
         public void Error(string category, string message, Exception ex = null) { }
         public void Redact(params string[] sensitive) { }

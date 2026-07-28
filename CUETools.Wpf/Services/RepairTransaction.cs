@@ -12,12 +12,17 @@ internal sealed class RepairEngineResult
     public required VerifyFilesResult Result { get; init; }
     public required string StagedCuePath { get; init; }
     public required IReadOnlyList<string> ExpectedAudioPaths { get; init; }
+    public IReadOnlyList<RepairFileProof> SourceProofs { get; init; } =
+        Array.Empty<RepairFileProof>();
     public bool Applied { get; init; }
 }
 
 internal sealed class RepairVerificationResult
 {
     public required VerifyFilesResult Result { get; init; }
+    public string AccurateRipLogPath { get; init; } = "";
+    public IReadOnlyList<RepairFileProof> VerifiedOutputProofs { get; init; } =
+        Array.Empty<RepairFileProof>();
     public bool Verified { get; init; }
 }
 
@@ -63,6 +68,17 @@ internal sealed class CueRepairEngine : IRepairEngine
             cue.CUEToolsSelection += (_, e) => e.selection = 0;
             cue.Open(sourcePath);
 
+            string sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath))
+                ?? throw new InvalidDataException("The repair source has no parent directory.");
+            RepairFileProof[] sourceProofs = cue.SourcePaths
+                .Append(sourcePath)
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                // Capture before ExecuteScript reads and converts the payload. Publication later
+                // re-hashes these exact inputs so repair cannot silently modify its source.
+                .Select(path => RepairFileProof.Capture(sourceRoot, path))
+                .ToArray();
+
             if (!config.scripts.TryGetValue("repair", out CUEToolsScript? repair))
                 throw new InvalidOperationException("Repair script not available.");
 
@@ -100,6 +116,7 @@ internal sealed class CueRepairEngine : IRepairEngine
                 Result = result,
                 StagedCuePath = stagedCue,
                 ExpectedAudioPaths = expectedAudio,
+                SourceProofs = sourceProofs,
                 Applied = applied
             };
         }
@@ -130,7 +147,34 @@ internal sealed class CueRepairEngine : IRepairEngine
             // This is a fresh decode of the staged files. Exact agreement with either database
             // proves the repaired copy. CTDB may contain other variants; those are not failure.
             bool verified = result.ArConfidence > 0 || result.CtdbConfidence > 0;
-            return new RepairVerificationResult { Result = result, Verified = verified };
+            string accurateRipLogPath = "";
+            RepairFileProof[] verifiedOutputProofs = Array.Empty<RepairFileProof>();
+            if (verified)
+            {
+                string stagingDirectory = Path.GetDirectoryName(stagedCuePath)
+                    ?? throw new InvalidDataException(
+                        "The repaired cue has no staging directory.");
+                verifiedOutputProofs = cue.SourcePaths
+                    .Select(Path.GetFullPath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    // Capture the exact audio bytes that this fresh Verify pass decoded.
+                    .Select(path => RepairFileProof.Capture(stagingDirectory, path))
+                    .ToArray();
+                string stem = Path.GetFileNameWithoutExtension(stagedCuePath);
+                accurateRipLogPath = Path.Combine(
+                    stagingDirectory,
+                    AlbumArtifactNames.AccurateRipFileName(stem));
+                RepairEvidence.WriteDurableText(
+                    accurateRipLogPath,
+                    CUESheetLogWriter.GetAccurateRipLog(cue));
+            }
+            return new RepairVerificationResult
+            {
+                Result = result,
+                AccurateRipLogPath = accurateRipLogPath,
+                VerifiedOutputProofs = verifiedOutputProofs,
+                Verified = verified
+            };
         }
         finally
         {
@@ -164,6 +208,9 @@ internal sealed class RepairWorkspace : IDisposable
     private bool _ownsStaging;
     private string? _validatedCuePath;
     private string[]? _validatedAudioPaths;
+    private RepairFileProof[]? _sourceProofs;
+    private RepairFileProof[]? _sealedOutputProofs;
+    private RepairFileProof[]? _sealedEvidenceProofs;
 
     private RepairWorkspace(string parentDirectory, string sourceName, string stagingDirectory,
         string ownerToken)
@@ -258,6 +305,101 @@ internal sealed class RepairWorkspace : IDisposable
         _validatedAudioPaths = audioPaths;
     }
 
+    /// <summary>
+    /// Bind the independently verified database result to the source and repaired bytes. The
+    /// completion marker is written last and publication re-hashes both sets before the rename.
+    /// </summary>
+    public RepairReceipt SealEvidence(
+        IReadOnlyList<RepairFileProof> sourceProofs,
+        IReadOnlyList<RepairFileProof> verifiedOutputProofs,
+        string accurateRipLogPath,
+        VerifyFilesResult repaired,
+        VerifyFilesResult verified)
+    {
+        if (_validatedCuePath == null || _validatedAudioPaths == null)
+            throw new InvalidOperationException(
+                "Repair output was not validated before its evidence was sealed.");
+        if (sourceProofs == null || sourceProofs.Count == 0)
+            throw new InvalidOperationException(
+                "Repair source hashes were not captured before conversion.");
+        if (verifiedOutputProofs == null || verifiedOutputProofs.Count == 0)
+            throw new InvalidOperationException(
+                "The independent verify pass did not bind any repaired audio.");
+        if (!repaired.RepairApplied)
+            throw new InvalidOperationException(
+                "The repair result did not prove that CTDB correction was applied.");
+        if (verified.ArConfidence <= 0 && verified.CtdbConfidence <= 0)
+            throw new InvalidOperationException(
+                "The independent verify result did not match AccurateRip or CTDB.");
+
+        RequireOwnership();
+        foreach (RepairFileProof proof in sourceProofs)
+            proof.RequireUnchanged();
+        if (sourceProofs
+            .Select(proof => proof.Receipt.RelativePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() != sourceProofs.Count)
+        {
+            throw new InvalidOperationException(
+                "Repair source receipt paths are ambiguous.");
+        }
+        var expectedAudio = new HashSet<string>(
+            _validatedAudioPaths.Select(Path.GetFullPath),
+            StringComparer.OrdinalIgnoreCase);
+        var verifiedAudio = new HashSet<string>(
+            verifiedOutputProofs.Select(proof => Path.GetFullPath(proof.FullPath)),
+            StringComparer.OrdinalIgnoreCase);
+        if (!expectedAudio.SetEquals(verifiedAudio))
+            throw new InvalidOperationException(
+                "The independently verified audio set does not match the repaired output set.");
+        foreach (RepairFileProof proof in verifiedOutputProofs)
+            proof.RequireUnchanged("independently verified repaired output");
+        RequireNonemptyOwnedFile(accurateRipLogPath, "post-repair AccurateRip log");
+
+        RepairFileProof[] outputProofs = verifiedOutputProofs
+            .Append(RepairFileProof.Capture(StagingDirectory, _validatedCuePath))
+            .ToArray();
+        string stem = Path.GetFileNameWithoutExtension(_validatedCuePath);
+        string repairLogName = AlbumArtifactNames.RepairLogFileName(stem);
+        string repairLogPath = Path.Combine(StagingDirectory, repairLogName);
+        string receiptPath = Path.Combine(
+            StagingDirectory,
+            RepairEvidence.ReceiptFileName);
+        string completionPath = Path.Combine(
+            StagingDirectory,
+            AlbumOutputTransaction.CompletionMarkerName);
+
+        var receipt = RepairEvidence.Create(
+            sourceProofs,
+            outputProofs,
+            repaired,
+            verified,
+            Path.GetFileName(accurateRipLogPath),
+            repairLogName);
+        RepairEvidence.WriteDurableText(
+            receiptPath,
+            RepairEvidence.ToJson(receipt));
+        RepairEvidence.WriteDurableText(
+            repairLogPath,
+            RepairEvidence.HumanLog(receipt));
+        // The stable completion marker is the commit record for a complete repaired tree. It is
+        // deliberately last, after the database log, human report, and machine receipt.
+        RepairEvidence.WriteDurableText(
+            completionPath,
+            AlbumOutputTransaction.CompletionMarkerMagic + Environment.NewLine);
+
+        _sourceProofs = sourceProofs.ToArray();
+        _sealedOutputProofs = outputProofs;
+        _sealedEvidenceProofs = new[]
+        {
+            accurateRipLogPath,
+            receiptPath,
+            repairLogPath,
+            completionPath
+        }.Select(path => RepairFileProof.Capture(StagingDirectory, path)).ToArray();
+        return receipt;
+    }
+
     internal static void RequireDistinctAudioPaths(
         IReadOnlyList<string> expectedAudioPaths)
     {
@@ -280,11 +422,38 @@ internal sealed class RepairWorkspace : IDisposable
     {
         if (_validatedCuePath == null || _validatedAudioPaths == null)
             throw new InvalidOperationException("Repair output was not validated before publication.");
+        if (_sourceProofs == null
+            || _sealedOutputProofs == null
+            || _sealedEvidenceProofs == null)
+        {
+            throw new InvalidOperationException(
+                "Repair evidence was not sealed before publication.");
+        }
 
         RequireOwnership();
         // Recheck after independent verification so a changed or swapped staging tree cannot be
         // published on the strength of an earlier validation.
         RequireNonemptyOutputs(_validatedCuePath, _validatedAudioPaths);
+        foreach (RepairFileProof proof in _sourceProofs)
+            proof.RequireUnchanged();
+        foreach (RepairFileProof proof in _sealedOutputProofs)
+            proof.RequireUnchanged("repaired output");
+        foreach (RepairFileProof proof in _sealedEvidenceProofs)
+        {
+            proof.RequireUnchanged("repair evidence");
+            RequireNonemptyOwnedFile(proof.FullPath, "repair evidence");
+        }
+        string completion = File.ReadAllText(Path.Combine(
+            StagingDirectory,
+            AlbumOutputTransaction.CompletionMarkerName)).Trim();
+        if (!string.Equals(
+                completion,
+                AlbumOutputTransaction.CompletionMarkerMagic,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The repair completion marker is invalid.");
+        }
         RequireSafeStagingDirectory(StagingDirectory);
         if (ContainsReparsePoint())
             throw new InvalidOperationException(

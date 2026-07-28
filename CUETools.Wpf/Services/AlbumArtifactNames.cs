@@ -56,6 +56,12 @@ public static class AlbumArtifactNames
     public static string TestCopyLogFileName(string stem) =>
         RequireStem(stem) + " - Test & Copy.log";
 
+    public static string RepairLogFileName(string stem) =>
+        RequireStem(stem) + " - CTDB Repair.log";
+
+    public static string AccurateRipFileName(string stem) =>
+        RequireStem(stem) + ".accurip";
+
     private static string RequireStem(string stem) =>
         string.IsNullOrWhiteSpace(stem) ? "Unknown Album" : stem;
 }

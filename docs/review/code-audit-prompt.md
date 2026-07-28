@@ -121,6 +121,15 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     keep stable machine names. When migrating, accept the legacy human names, detect new names by
     type, reject ambiguous candidates, and test repair, overwrite, cleanup, and publication consumers
     before removing any literal-name compatibility.
+19. CONSISTENCY IS NOT CORRECTNESS. Repeated reads or transforms can agree because they share damaged
+    input, stale cache, the same dependency defect, or the same deterministic bug. Name the property
+    actually proved. Report consistent or repeatable evidence separately from pristine, accurate,
+    repaired, or independently verified evidence, and do not let a success label erase known damage.
+20. REPAIR RECEIPTS BIND BOTH SIDES OF THE CHANGE. Hash the selected source set before repair and
+    recheck it after independent output verification. Bind the receipt to the exact finalized output
+    set that was decoded and verified, then recheck source, output, and evidence immediately before
+    atomic publication. Write the stable completion marker last and reject missing, ambiguous, changed,
+    linked, or out-of-scope evidence instead of publishing a partial proof.
 
 ### How to choose the extraction
 

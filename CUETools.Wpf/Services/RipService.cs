@@ -112,6 +112,9 @@ public sealed class TestCopyRunResult
     public bool CtdbCanRecover { get; init; }
     public int CtdbRepairSectors { get; init; }
     public string CtdbRepairRanges { get; init; } = "";
+    /// <summary>Recovery windows that exhausted every optical reread. A passed checksum vote with
+    /// this value above zero proves repeatability, not pristine media.</summary>
+    public int FailedWindows { get; init; }
     public string RepairSourcePath { get; init; } = "";
     internal string RepairSourceRelativePath { get; init; } = "";
     public bool Accurate { get; init; }
@@ -1353,6 +1356,7 @@ public sealed class RipService : IRipService
                     CtdbCanRecover = copyResult.CtdbCanRecover,
                     CtdbRepairSectors = copyResult.CtdbRepairSectors,
                     CtdbRepairRanges = copyResult.CtdbRepairRanges,
+                    FailedWindows = failedWindows,
                     RepairSourceRelativePath =
                         GetRepairSourceRelativePath(copyResult),
                     Accurate = (last?.ArConfidence ?? 0) > 0,
@@ -1419,8 +1423,24 @@ public sealed class RipService : IRipService
                     committedEncoded);
                 keepStaging = false;   // committed - the staging is now redundant
                 var last = reads[reads.Count - 1];
-                _log.Info("rip", $"testcopy disc={discId} reads={resolve.ReadsUsed} passed=1 heldTracks=0");
-                _log.Info("rip", $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s reads={resolve.ReadsUsed} outcome=passed");
+                bool repairableDamage =
+                    committedEncoded.CtdbHasErrors &&
+                    committedEncoded.CtdbCanRecover &&
+                    committedEncoded.CtdbRepairSectors > 0;
+                string completedOutcome = repairableDamage
+                    ? "consistent-repairable"
+                    : failedWindows > 0
+                        ? "consistent-damaged"
+                        : "verified";
+                _log.Info(
+                    "rip",
+                    $"testcopy disc={discId} reads={resolve.ReadsUsed} consistency=1 " +
+                    $"heldTracks=0 failedWindows={failedWindows} " +
+                    $"repairable={(repairableDamage ? 1 : 0)}");
+                _log.Info(
+                    "rip",
+                    $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s " +
+                    $"reads={resolve.ReadsUsed} outcome={completedOutcome}");
                 return new TestCopyRunResult
                 {
                     Ok = true,
@@ -1442,6 +1462,7 @@ public sealed class RipService : IRipService
                         committedEncoded.CtdbRepairSectors,
                     CtdbRepairRanges =
                         committedEncoded.CtdbRepairRanges,
+                    FailedWindows = failedWindows,
                     RepairSourceRelativePath =
                         GetRepairSourceRelativePath(committedEncoded),
                     RepairSourcePath = RebindRepairSource(
@@ -1659,7 +1680,17 @@ public sealed class RipService : IRipService
 
         string testCopyLogName =
             AlbumArtifactNames.TestCopyLogFileName(encodedResult.ArtifactStem);
-        string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
+        string logText = TestAndCopyLog.Format(
+            resolve,
+            reads,
+            discId,
+            drive,
+            offset,
+            failedWindows,
+            encodedResult.CtdbHasErrors,
+            encodedResult.CtdbCanRecover,
+            encodedResult.CtdbRepairSectors,
+            encodedResult.CtdbRepairRanges);
         if (encodedResult.OutputVerificationKnown)
             logText += "\nEncoded-output verification: " +
                 encodedResult.OutputVerificationDetail + "\n";

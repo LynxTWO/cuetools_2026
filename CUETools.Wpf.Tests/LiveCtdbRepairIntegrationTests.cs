@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using CUETools.Codecs;
 using CUETools.Processor;
 using CUETools.Wpf.Services;
@@ -72,6 +73,33 @@ namespace CUETools.Wpf.Tests
                 expectedNames,
                 actualNames,
                 "CTDB repair did not preserve the source audio basenames.");
+
+            string receiptPath = Path.Combine(
+                repaired.OutputPath,
+                RepairEvidence.ReceiptFileName);
+            Assert.IsTrue(File.Exists(receiptPath));
+            RepairReceipt receipt = JsonSerializer.Deserialize<RepairReceipt>(
+                File.ReadAllText(receiptPath));
+            Assert.IsNotNull(receipt);
+            Assert.IsTrue(receipt.RepairApplied);
+            Assert.IsTrue(receipt.IndependentlyVerified);
+            int expectedSourceProofs = sourceAudioPaths
+                .Append(source)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            Assert.AreEqual(expectedSourceProofs, receipt.SourceFiles.Length);
+            Assert.AreEqual(actualNames.Length + 1, receipt.OutputFiles.Length);
+            Assert.IsTrue(File.Exists(Path.Combine(
+                repaired.OutputPath,
+                receipt.AccurateRipLog)));
+            Assert.IsTrue(File.Exists(Path.Combine(
+                repaired.OutputPath,
+                receipt.RepairLog)));
+            Assert.AreEqual(
+                AlbumOutputTransaction.CompletionMarkerMagic,
+                File.ReadAllText(Path.Combine(
+                    repaired.OutputPath,
+                    AlbumOutputTransaction.CompletionMarkerName)).Trim());
 
             CollectionAssert.AreEquivalent(
                 before.Select(pair => pair.Key + "=" + pair.Value).ToArray(),
