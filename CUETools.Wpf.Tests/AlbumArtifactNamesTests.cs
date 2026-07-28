@@ -30,6 +30,12 @@ public sealed class AlbumArtifactNamesTests
         Assert.AreEqual(
             stem + " - Test & Copy.log",
             AlbumArtifactNames.TestCopyLogFileName(stem));
+        Assert.AreEqual(
+            stem + " - CTDB Repair.log",
+            AlbumArtifactNames.RepairLogFileName(stem));
+        Assert.AreEqual(
+            stem + ".accurip",
+            AlbumArtifactNames.AccurateRipFileName(stem));
     }
 
     [TestMethod]

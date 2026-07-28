@@ -786,3 +786,36 @@ present only in the user-selected output folder and its human-facing files.
 
 **Status:** implemented and software verified on 2026-07-27. Focused tests pass
 45/45 and the full WPF suite passes 367/367. Live output proof remains.
+
+### Seal CTDB repair evidence and report damaged Test & Copy honestly
+
+**Exact files:** `CUETools.Wpf/Services/RepairEvidence.cs`,
+`RepairTransaction.cs`, `VerifyService.cs`, `AlbumArtifactNames.cs`,
+`OutputGuard.cs`, `RipService.cs`, `Accuracy/TestAndCopyLog.cs`,
+`ViewModels/RipViewModel.cs`, focused WPF tests, the opt-in CTDB test, steering,
+and the R71 review record.
+
+**Safety and unchanged behavior:** keep the source-preserving sibling transaction.
+Capture SHA-256 proofs before repair, independently decode and query the staged
+result, then recheck the source, repaired audio, cue, and evidence immediately
+before publication. Write `repair.verify`, the named AccurateRip and repair
+reports, and `.cuetools-complete` in that order, with the completion marker last.
+Treat agreeing reads with unrecoverable windows as consistent damaged evidence,
+not a clean pass.
+
+**Checks:** mutate a source during repair, mutate a verified output before
+publication, remove or alter evidence, and require every case to fail closed. Test
+clean, damaged-repairable, and damaged-unrecoverable result wording. Run the full
+WPF suite and opt-in live damaged-image repair.
+
+**Rollback:** remove the receipt and presentation changes together. Do not weaken
+the pre-publication source/output proof checks or publish a partial evidence set.
+
+**Observability:** successful repair diagnostics contain only counts, confidence,
+and evidence state. The machine receipt stores portable relative names, lengths,
+and SHA-256 values inside the user-selected repaired directory.
+
+**Status:** implemented and live-verified on 2026-07-28. Focused tests pass 45/45
+and the WPF suite passes 375/375. The live K: fixture corrected 86 samples in six
+sectors, published all required evidence, matched AccurateRip 55/82 and CTDB
+207/234, and left all 25 source hashes unchanged.

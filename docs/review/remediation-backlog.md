@@ -1563,10 +1563,12 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** contained/missing/traversal path tests, full WPF suite,
   then the K: damaged-disc completion and repair route.
 - **Owner:** repo owner.
-- **Status:** implemented and deterministic-test verified 2026-07-27. Passed and
+- **Status:** implemented and live-verified 2026-07-28. Passed and
   accepted Test & Copy outputs now expose CTDB repair only when the published repair
   source exists inside the committed album. Missing and traversal candidates fail
-  closed. The WPF suite passes 359/359; K: remains the live repair proof.
+  closed. The K: damaged-disc output offered and completed a six-sector repair. Its
+  independently decoded sibling matched AccurateRip at 55/82 and CTDB at 207/234,
+  while all 25 source hashes remained unchanged.
 
 ### R69. Cache defeat used only the drive's rejected 16-sector command shape - bucket A, risk high
 
@@ -1621,6 +1623,36 @@ does not relax evidence, rollback, or verification requirements.
   with optional disc identity. Legacy `album.*` remains supported. Multiple cues
   fail repair discovery closed. WPF tests pass 367/367. Live output proof remains.
 
+### R71. Damaged Test & Copy and repaired outputs overstated their evidence - bucket A, risk high
+
+- **Area or slice:** Test & Copy result wording, CTDB status, repair publication,
+  user receipts, and diagnostics.
+- **Why it matters:** two agreeing reads prove repeatability, not pristine media,
+  when both contain unrecoverable windows. A published repaired sibling also needs
+  durable proof of the source, repaired payload, database result, and completion
+  order.
+- **Evidence found:** K: produced matching Test and Copy CRCs with six repairable
+  sectors, but its log said `Test & Copy PASSED` and `CTDB: not found`. The first
+  repaired sibling verified correctly but contained no completion marker, machine
+  receipt, AccurateRip report, repair report, or success diagnostic.
+- **Confidence:** verified from the K: output, logs, null comparison, and source
+  trace.
+- **Approval needed:** no; the user requested correction of all observed issues.
+- **Smallest safe next step:** classify clean verification separately from damaged
+  consistency, report database presence separately from exact-match confidence,
+  and seal a repair receipt from SHA-256 source/output proofs before atomic
+  publication. Write the completion marker last.
+- **Verification plan:** damaged/clean wording tests, source and output mutation
+  tests, receipt/artifact tests, full WPF suite, and the opt-in live CTDB repair.
+- **Owner:** repo owner.
+- **Status:** fixed and live-verified 2026-07-28. Damaged agreement is reported as
+  `CONSISTENT`, with repair-required wording and CTDB presence retained. Repair
+  publication now requires unchanged source proofs, unchanged independently decoded
+  output proofs, a fresh AccurateRip report, a human CTDB repair report,
+  `repair.verify`, and a final `.cuetools-complete` marker. Focused tests pass 45/45,
+  the WPF suite passes 375/375, and the live 86-sample/six-sector repair published
+  all evidence with AccurateRip 55/82 and CTDB 207/234.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1629,7 +1661,8 @@ dependency:
 1. Finish and adversarially review any open R44-R49 follow-ups.
 2. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Run R59/R66/R68/R69's final-source K: CTDB repair/Test & Copy lane. Retain the
+3. Run R59/R66/R69/R71's final-source K: Test & Copy lane. The CTDB repair half of
+   R68/R71 is complete; retain the
    passing H: cache-defeat, simultaneous-drive, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,

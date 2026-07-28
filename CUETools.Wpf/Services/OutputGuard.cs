@@ -25,7 +25,8 @@ public static class OutputGuard
     /// <summary>The machine-stable artifacts a finished rip leaves behind. Human-facing cue and log
     /// sidecars carry the album identity and are detected by extension below.</summary>
     private static readonly string[] ExactArtifacts =
-        { "folder.jpg", "rip.verify", AlbumOutputTransaction.CompletionMarkerName };
+        { "folder.jpg", "rip.verify", RepairEvidence.ReceiptFileName,
+            AlbumOutputTransaction.CompletionMarkerName };
 
     private static readonly string[] SidecarExtensions =
         { ".cue", ".log", ".accurip" };

@@ -186,9 +186,34 @@ public sealed class VerifyService : IVerifyService
                 throw new InvalidOperationException(
                     "The repaired copy could not be independently verified against AccurateRip or CTDB.");
 
+            RepairReceipt receipt = workspace.SealEvidence(
+                repaired.SourceProofs,
+                verified.VerifiedOutputProofs,
+                verified.AccurateRipLogPath,
+                repaired.Result,
+                verified.Result);
             string published = workspace.Publish();
             workspace = null;
-            string status = "Repaired copy verified and saved to " + published;
+            string status =
+                "Repaired copy independently verified with durable evidence and saved to " +
+                published;
+            try
+            {
+                _log.Info(
+                    "verify",
+                    "repair published applied=1 independently_verified=1 " +
+                    $"tracks={receipt.TrackCount} samples={receipt.RepairSamples} " +
+                    $"sectors={receipt.RepairSectors} " +
+                    $"ar_conf={receipt.AccurateRipConfidence}/{receipt.AccurateRipTotal} " +
+                    $"ctdb_conf={receipt.CtdbConfidence}/{receipt.CtdbTotal} " +
+                    $"source_files={receipt.SourceFiles.Length} " +
+                    $"output_files={receipt.OutputFiles.Length} evidence=1");
+            }
+            catch
+            {
+                // Publication is committed. A diagnostic sink must not turn a verified repair into
+                // a reported failure or invite a duplicate repair.
+            }
             // Publication already happened. A UI progress callback must not turn that committed
             // success into a reported failure.
             try { onProgress(1, status); }

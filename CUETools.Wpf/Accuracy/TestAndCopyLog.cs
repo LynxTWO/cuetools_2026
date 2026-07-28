@@ -9,7 +9,9 @@ namespace CUETools.Wpf.Accuracy
     public static class TestAndCopyLog
     {
         public static string Format(TestCopyResult result, IReadOnlyList<VerifyRecord> reads,
-            string discId, string drive, int readOffset, int failedWindows)
+            string discId, string drive, int readOffset, int failedWindows,
+            bool ctdbHasErrors = false, bool ctdbCanRecover = false,
+            int ctdbRepairSectors = 0, string ctdbRepairRanges = "")
         {
             var sb = new StringBuilder();
             sb.AppendLine("Test & Copy log");
@@ -35,8 +37,26 @@ namespace CUETools.Wpf.Accuracy
             }
             sb.AppendLine();
 
-            if (result.Outcome == TestCopyOutcome.Passed)
-                sb.AppendLine("Test & Copy PASSED - every track verified by >=2 independent reads.");
+            bool damagedAgreement = result.Outcome == TestCopyOutcome.Passed
+                && (failedWindows > 0 || ctdbHasErrors);
+            if (result.Outcome == TestCopyOutcome.Passed && !damagedAgreement)
+                sb.AppendLine(
+                    "Test & Copy PASSED - every track verified by >=2 independent reads.");
+            else if (result.Outcome == TestCopyOutcome.Passed)
+            {
+                sb.AppendLine(
+                    "Test & Copy CONSISTENT - every track agreed across >=2 independent reads.");
+                if (ctdbCanRecover)
+                {
+                    sb.AppendLine(
+                        "Outcome: CTDB repair required for database-verified audio.");
+                }
+                else
+                {
+                    sb.AppendLine(
+                        "Outcome: agreement proves consistency only; read damage remains.");
+                }
+            }
             else
             {
                 var oneBased = new List<string>();
@@ -45,9 +65,27 @@ namespace CUETools.Wpf.Accuracy
             }
 
             VerifyRecord? last = reads.Count > 0 ? reads[reads.Count - 1] : null;
-            int arConf = last?.ArConfidence ?? 0, ctConf = last?.CtdbConfidence ?? 0;
-            sb.AppendLine("AccurateRip: " + (arConf > 0 ? "accurate, confidence " + arConf : "not found"));
-            sb.AppendLine("CTDB:        " + (ctConf > 0 ? "match, confidence " + ctConf : "not found"));
+            int arConf = last?.ArConfidence ?? 0, arTotal = last?.ArTotal ?? 0;
+            int ctConf = last?.CtdbConfidence ?? 0, ctTotal = last?.CtdbTotal ?? 0;
+            sb.AppendLine(
+                "AccurateRip: " +
+                (arConf > 0
+                    ? "accurate, confidence " + arConf
+                    : arTotal > 0
+                        ? "found, no exact match"
+                        : "not found"));
+            sb.AppendLine(
+                "CTDB:        " +
+                (ctConf > 0
+                    ? "match, confidence " + ctConf
+                    : ctTotal > 0
+                        ? ctdbCanRecover
+                            ? "found, no exact match; repairable (" +
+                              ctdbRepairSectors + " sector(s))"
+                            : "found, no exact match"
+                        : "not found"));
+            if (ctdbCanRecover && !string.IsNullOrWhiteSpace(ctdbRepairRanges))
+                sb.AppendLine("CTDB repair sectors: " + ctdbRepairRanges);
             if (failedWindows > 0)
                 sb.AppendLine("WARNING: " + failedWindows + " unrecoverable sector window(s) during reads - " +
                               "agreement over damaged media is consistency, not proof the region is pristine.");

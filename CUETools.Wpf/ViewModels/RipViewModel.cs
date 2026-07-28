@@ -11,6 +11,13 @@ using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.ViewModels;
 
+internal enum TestCopyCompletionState
+{
+    Verified,
+    ConsistentRepairable,
+    ConsistentDamaged
+}
+
 /// <summary>
 /// Rip page: enumerate drives, read the inserted disc (TOC + metadata + releases), rip or verify
 /// with live visuals (3D disc, VU, speed, re-read), embed the hi-res cover, and keep the
@@ -18,6 +25,20 @@ namespace CUETools.Wpf.ViewModels;
 /// </summary>
 public sealed class RipViewModel : PageViewModel
 {
+    internal static TestCopyCompletionState ClassifyTestCopyCompletion(
+        TestCopyRunResult result)
+    {
+        if (result.CtdbHasErrors
+            && result.CtdbCanRecover
+            && result.CtdbRepairSectors > 0)
+        {
+            return TestCopyCompletionState.ConsistentRepairable;
+        }
+        return result.FailedWindows > 0 || result.CtdbHasErrors
+            ? TestCopyCompletionState.ConsistentDamaged
+            : TestCopyCompletionState.Verified;
+    }
+
     private readonly IDriveService _drives;
     private readonly IRipService _rip;
     private readonly IVerifyService _verify;
@@ -1211,15 +1232,33 @@ public sealed class RipViewModel : PageViewModel
         {
             LastOutputDir = result.OutputDir;
             TestCopyHeld = false; _heldResult = null;
-            TestCopyText = $"Test & Copy verified after {result.ReadsUsed} reads; "
-                + "at least two agreed per track."
-                + (result.Accurate ? $"  Also AccurateRip-accurate (confidence {result.ArConfidence})." : "  Not in AccurateRip.")
+            TestCopyCompletionState completion =
+                ClassifyTestCopyCompletion(result);
+            bool repairRequired =
+                completion == TestCopyCompletionState.ConsistentRepairable;
+            bool damagedAgreement =
+                completion != TestCopyCompletionState.Verified;
+            TestCopyText = damagedAgreement
+                ? $"Test & Copy consistent after {result.ReadsUsed} reads; " +
+                  "at least two agreed per track." +
+                  (repairRequired
+                      ? $"  CTDB found recoverable damage in {result.CtdbRepairSectors} " +
+                        "sector(s); repair is required for database-verified audio."
+                      : "  WARNING: read damage remains without an exact database match.")
+                : $"Test & Copy verified after {result.ReadsUsed} reads; " +
+                  "at least two agreed per track.";
+            TestCopyText +=
+                (result.Accurate
+                    ? $"  Also AccurateRip-accurate (confidence {result.ArConfidence})."
+                    : result.ArTotal > 0
+                        ? "  AccurateRip found the disc but no exact match."
+                        : "  Not in AccurateRip.")
                 + (result.LosslessOutput
                     ? result.OutputVerificationPerformed
                         ? "  Final output PCM was decoded and verified after metadata finalization."
                         : "  WARNING: final output was not independently verified."
                     : "");
-            TestCopyIsWarning = false;
+            TestCopyIsWarning = damagedAgreement;
             ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0
                 ? $"match . conf {result.CtdbConfidence}"
@@ -1233,14 +1272,24 @@ public sealed class RipViewModel : PageViewModel
             // was selected when the button was pressed - otherwise a mid-verify codec switch makes
             // this summary name the wrong format
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
-            RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, verified after "
+            RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, "
+                + (damagedAgreement ? "consistent after " : "verified after ")
                 + $"{result.ReadsUsed} reads (at least 2 agreed per track)"
+                + (repairRequired
+                    ? $"; CTDB repair required for {result.CtdbRepairSectors} sector(s)"
+                    : damagedAgreement
+                        ? "; read damage remains"
+                        : "")
                 + (result.LosslessOutput
                     ? result.OutputVerificationPerformed
                         ? "; final output PCM verified after metadata"
                         : "; WARNING: final output not verified"
                     : "");
-            StatusText = $"Test & Copy verified -> {result.OutputDir}";
+            StatusText = damagedAgreement
+                ? repairRequired
+                    ? $"Test & Copy consistent; CTDB repair required -> {result.OutputDir}"
+                    : $"Test & Copy consistent; read damage remains -> {result.OutputDir}"
+                : $"Test & Copy verified -> {result.OutputDir}";
             SetPostRipRepair(result);
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
@@ -1251,7 +1300,9 @@ public sealed class RipViewModel : PageViewModel
             PublishReport($"Test & Copy ({result.ReadsUsed} reads)", result.CorrectionQuality,
                 result.ArConfidence, result.ArTotal,
                 result.CtdbConfidence, result.CtdbTotal, result.Accurate,
-                $"verified after {result.ReadsUsed} optical reads; at least 2 agreed per track",
+                (damagedAgreement ? "consistent" : "verified") +
+                $" after {result.ReadsUsed} optical reads; at least 2 agreed per track" +
+                (repairRequired ? "; CTDB repair required" : ""),
                 result.OutputDir, result.FileCount, result.Format, result.ReadsUsed, 2,
                 result.OutputVerificationKnown, result.LosslessOutput,
                 result.OutputVerificationPerformed, result.OutputVerificationDetail);
@@ -1421,8 +1472,10 @@ public sealed class RipViewModel : PageViewModel
             _lastRepairSource = "";
             LastOutputDir = repaired.OutputPath;
             RepairLastRipText =
-                "CTDB repaired copy independently verified and published. The original rip remains unchanged.";
-            RipSummary += "  .  CTDB repaired copy independently verified";
+                "CTDB repaired copy independently verified and published with repair.verify, " +
+                "an AccurateRip report, and a CTDB repair log. The original rip remains unchanged.";
+            RipSummary +=
+                "  .  CTDB repaired copy independently verified with durable evidence";
             StatusText = "CTDB repaired copy verified -> " + repaired.OutputPath;
             RipProgress = 1;
             _status.Report(AppActivity.Done);
