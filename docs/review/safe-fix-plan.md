@@ -659,9 +659,9 @@ dependency closures present.
 `eng/ci/native-warning-baseline.json`, `eng/ci/VendorSourceStaging.ps1`,
 `docs/review/remediation-backlog.md`, `docs/review/safe-fix-plan.md`, and the
 R64 review record. The vendor patch payload changes `bitwriter.c`, `fixed.c`,
-`format.c`, `lpc.c`,
-`metadata_object.c`, `stream_decoder.c`, and `stream_encoder.c` in the staged
-libFLAC 1.5.0 source. The `ThirdParty/flac` gitlink stays immutable.
+`format.c`, `lpc.c`, `metadata_object.c`, `stream_decoder.c`,
+`stream_encoder.c`, `libFLAC++/metadata.cpp`, and `share/getopt/getopt.c` in
+the staged libFLAC 1.5.0 source. The `ThirdParty/flac` gitlink stays immutable.
 
 **Safety and unchanged behavior:** take the bit-writer capacity calculation from
 current upstream libFLAC, where capacity is compared in words and the old
@@ -676,6 +676,8 @@ placing them in the 32-bit output buffer so malformed frames cannot wrap before
 the existing bounds check. Make the apodization default a `FLAC__real` value
 without changing its value. Read the UTF-8 vendor ownership manifest explicitly
 as UTF-8 so Windows PowerShell 5.1 preserves non-ASCII upstream paths.
+Let the Windows CRT own its `getenv` declaration, and include the CRT math
+definitions before libFLAC's fallback constants in the C++ metadata target.
 
 **Checks:** rebuild staged libFLAC for Win32 and x64 with the checked native
 warning gate; require an empty native baseline; run native-backed FLAC encode,
@@ -696,12 +698,13 @@ Windows PowerShell 5.1 and PowerShell 7.
 
 **Status:** implemented and locally verified on 2026-07-27. All six native
 dependency builds complete with zero warnings against an empty baseline. The
-focused native-backed FLAC tests pass 25/25, upstream libFLAC and libFLAC++ tests
-pass 2/2, the classic codec suite passes 112/113 with its established skip, and
-the WPF suite passes 358/358. Vendor staging passes 15 checks, reproduces the
-same seven compiled source files under PowerShell 5.1 and 7, and leaves all five
-submodules clean. The source-bound classic receipt remains pending until the
-active rip releases the running application.
+focused native-backed FLAC tests pass 25/25. The clean upstream CMake test build
+emits zero warnings, and its libFLAC and libFLAC++ tests pass 2/2. The classic
+codec suite passes 112/113 with its established skip, and the WPF suite passes
+358/358. Vendor staging passes 15 checks, reproduces the same patched source
+under PowerShell 5.1 and 7, and leaves all five submodules clean. The source-bound
+classic receipt remains pending until the active rip releases the running
+application.
 
 ### Keep Visual Studio rulesets out of Core MSBuild
 
