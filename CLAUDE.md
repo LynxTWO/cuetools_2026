@@ -74,6 +74,11 @@ progress documents for it belong here, under `docs/review/`.
 - Publish immutable named evidence at the end of each completed phase. In Test &
   Copy, Test CRC appears before Copy starts and Copy CRC appears before any
   tie-break; a later phase must not erase a prior role it did not replace.
+- Keep machine control artifacts (`.cuetools-complete`, `rip.verify`, ownership and
+  proof markers) contract-stable. Human-facing cue, rip, AccurateRip, and Test &
+  Copy logs carry one sanitized, length-bounded artist/album stem. Repair and
+  overwrite discovery must accept legacy `album.*` names, detect the new names by
+  type, and reject multiple cue candidates instead of guessing.
 - If a Test & Copy confirmation fails after Copy completed, keep the staged Copy in
   an explicit Held state. Do not publish it automatically, but do not delete the only
   completed encoded result. Test & Copy outputs must carry CTDB repair evidence to
@@ -97,6 +102,11 @@ progress documents for it belong here, under `docs/review/`.
   child command shapes may then mark only that address untrusted. Never consume a
   rejected payload. Every different child failure remains fatal with its exact sector
   and sense context. Count successful batch fallbacks and corroborated pinpoints.
+- Cache defeat is complete or explicit. If every unrelated region rejects the
+  normal multi-sector `READ CD` shape with exact `IllegalRequest / 24/00`, reduce
+  the transfer chunk deterministically down to one sector while preserving the
+  requested byte count and in-program range. Only a fully completed eviction
+  authorizes the next secure read; every other failure remains fatal and diagnostic.
 - Preserve nested SCSI identity. When a batch reports medium error, snapshot each
   failed pinpoint sector before another command overwrites device sense. A pinpoint
   `IllegalRequest / 24/00` may retry once only with that parent medium-error

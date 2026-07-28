@@ -79,6 +79,9 @@ namespace CUETools.Wpf.Tests
             Assert.AreEqual(1,
                 Directory.GetFiles(result.OutputDir, "*.flac",
                     SearchOption.AllDirectories).Length);
+            Assert.IsTrue(
+                File.Exists(Path.Combine(result.OutputDir, "source.cue")),
+                "The human-facing cue did not carry the source album identity.");
         }
 
         [TestMethod]

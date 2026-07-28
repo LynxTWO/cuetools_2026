@@ -206,5 +206,17 @@ namespace CUETools.Ripper.SCSI
                 asc == 0x24 &&
                 ascq == 0x00;
         }
+
+        /// <summary>
+        /// Decompose a rejected cache-defeat transfer without changing its address
+        /// range or required byte count. Zero means the one-sector shape was already
+        /// attempted and no weaker proof is available.
+        /// </summary>
+        public static int NextCacheDefeatChunkSize(int currentSectorCount)
+        {
+            if (currentSectorCount <= 1)
+                return 0;
+            return System.Math.Max(1, currentSectorCount / 2);
+        }
     }
 }

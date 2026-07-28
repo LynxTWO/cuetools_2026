@@ -115,6 +115,12 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     workers read-only toward shared preferences, keep sensitive job data out of command lines, and
     prove same-resource denial, independent Stop, crash release, log uniqueness, and output
     collision behavior before claiming concurrency.
+18. HUMAN SIDECARS AND MACHINE MARKERS HAVE DIFFERENT NAME CONTRACTS. A cue, report, or exported
+    log should remain identifiable when copied away from its parent directory, using one sanitized,
+    bounded subject identity. Transaction markers, receipts, discovery keys, and ownership sentinels
+    keep stable machine names. When migrating, accept the legacy human names, detect new names by
+    type, reject ambiguous candidates, and test repair, overwrite, cleanup, and publication consumers
+    before removing any literal-name compatibility.
 
 ### How to choose the extraction
 

@@ -730,3 +730,59 @@ ruleset declarations while full Visual Studio still resolves them.
 `CUETools.TestHelpers` rebuilds through Core MSBuild with zero warnings. The
 full Visual Studio receipt check remains paired with the post-rip classic
 release run.
+
+### Decompose only the observed cache-defeat command-shape rejection
+
+**Exact files:** `CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
+`CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
+`CUETools.Wpf/Services/RipService.cs`,
+`CUETools.Wpf.Tests/LiveOpticalTestCopyIntegrationTests.cs`, steering, and the
+R69 review record.
+
+**Safety and unchanged behavior:** retain strict cache independence. Try the
+normal measured transfer shape and all unrelated regions first. Only exact
+`DeviceFailed/IllegalRequest/24/00` can reduce the chunk through 8/4/2/1
+sectors. Preserve the required sector count, audio-program bounds, scratch-only
+destination, and complete-or-fail result. Never use a rejected payload.
+
+**Checks:** run the classifier/ripper suite, all SCSI targets, the full WPF
+suite, and a K: CQ2/deep-recovery probe at the observed damaged window with the
+measured 786,432-byte eviction volume. Repeat full Test & Copy only after the
+bounded probe passes.
+
+**Rollback:** remove the chunk ladder and its diagnostic counter together. Do
+not replace the strict failure with a warning or unverified continuation.
+
+**Observability:** completion logs count chunk fallbacks. A terminal failure
+reports the final chunk shape, exact sector, status, sense, ASC/ASCQ, attempted
+regions, transient retry count, and fallback count.
+
+**Status:** implemented and software verified on 2026-07-27. Ripper tests pass
+22/22. K: hardware evidence remains.
+
+### Give human-facing album sidecars a portable identity
+
+**Exact files:** `CUETools.Wpf/Services/AlbumArtifactNames.cs`,
+`RipService.cs`, `ConvertService.cs`, `RepairTransaction.cs`, `OutputGuard.cs`,
+their focused tests, steering, the anti-dark-code remediation reference, and
+the R70 review record.
+
+**Safety and unchanged behavior:** derive one sanitized, 180-character maximum
+artist/album/year/disc stem. Use it for cue, rip, AccurateRip, and Test & Copy
+logs. Keep transaction ownership, completion, proof, and `rip.verify` names
+stable. Accept legacy `album.cue`, require exactly one top-level cue for repair,
+and detect old or new human sidecars by file type for overwrite protection.
+
+**Checks:** run naming, conversion publication, proof transfer, overwrite,
+legacy repair, named repair, ambiguous-cue, and full WPF tests. Confirm the next
+real output has identifiable sidecars and still exposes CTDB repair.
+
+**Rollback:** restore generic human sidecar names together with literal cue
+discovery. Do not rename the machine-stable markers.
+
+**Observability:** no metadata is added to diagnostic logs. Album identity is
+present only in the user-selected output folder and its human-facing files.
+
+**Status:** implemented and software verified on 2026-07-27. Focused tests pass
+45/45 and the full WPF suite passes 367/367. Live output proof remains.

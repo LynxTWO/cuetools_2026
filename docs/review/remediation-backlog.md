@@ -1510,8 +1510,10 @@ does not relax evidence, rollback, or verification requirements.
   to the destination, and keeps Accept/Discard/Re-run as explicit choices. Ripper
   tests pass 21/21, WPF tests pass 359/359, SCSI builds pass net8/net47/net20, and H:
   passed a Paranoid 786,432-byte cache-defeat window at 4224 kB/s in 15 seconds. K:
-  is healthy but Windows currently reports no loaded media, so its exact hardware
-  rerun remains.
+  later reproduced a first-Test cache-defeat failure after 1,227 seconds of damaged
+  media recovery. All three 16-sector eviction regions ended in exact
+  `IllegalRequest 24/00` after the bounded retry. R69 owns that new command-shape
+  evidence.
 
 ### R67. The active drive selector hid the safe parallel-drive path - bucket A, risk high
 
@@ -1533,11 +1535,13 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** XAML and launch-contract tests, full WPF suite, then a live
   H:/K: run proving different-drive launch, same-drive denial, and independent Stop.
 - **Owner:** repo owner.
-- **Status:** implemented and deterministic-test verified 2026-07-27. The top
+- **Status:** implemented and hardware verified 2026-07-27. The top
   selector remains available during Rip, Verify, and Test & Copy. Choosing another
   drive launches only a validated drive letter in a secondary process and restores
-  the current selector to the immutable job drive. The WPF suite passes 359/359.
-  Live simultaneous H:/K: proof remains.
+  the current selector to the immutable job drive. H: completed an 11-track Test &
+  Copy while the isolated K: process performed its damaged-disc Test read. The
+  current-window CRCs, status, and completion output remained bound to H:. Same-drive
+  denial, independent Stop, and crash release remain separate live checks.
 
 ### R68. Test & Copy outputs dropped CTDB repair reachability - bucket A, risk high
 
@@ -1564,6 +1568,59 @@ does not relax evidence, rollback, or verification requirements.
   source exists inside the committed album. Missing and traversal candidates fail
   closed. The WPF suite passes 359/359; K: remains the live repair proof.
 
+### R69. Cache defeat used only the drive's rejected 16-sector command shape - bucket A, risk high
+
+- **Area or slice:** secure reread cache eviction and damaged-disc recovery.
+- **Why it matters:** K: can accept the normal cache-defeat command for many
+  minutes, then reject every unrelated 16-sector region with `IllegalRequest
+  24/00`. Stopping at that shape discards an otherwise valuable long read, while
+  ignoring the failure would falsely claim an independent reread.
+- **Evidence found:** the 2026-07-27 K: diagnostic reached two damaged windows,
+  performed up to 63 recovery passes, then failed the first Test after 1,227
+  seconds. The final diagnostic recorded relative sector 246134, 16 sectors,
+  three attempted regions, one transient retry, and exact `24/00`.
+- **Confidence:** verified from the published-build diagnostic and screenshot.
+- **Approval needed:** no; this preserves the existing fail-closed contract.
+- **Smallest safe next step:** after all normal regions reject only the proven
+  command shape, retry the same required eviction volume with deterministic
+  8/4/2/1-sector chunks. Consume no rejected payload and authorize the next secure
+  read only after the full byte count succeeds.
+- **Verification plan:** classifier and SCSI suites, net8/net47/net20 builds, then
+  a K: deep-recovery probe at the damaged window with the measured 786,432-byte
+  cache volume and the full Test & Copy repeat.
+- **Owner:** repo owner.
+- **Status:** implemented and software verified 2026-07-27. The fallback is
+  limited to exact `DeviceFailed/IllegalRequest/24/00`, preserves the requested
+  sector count and in-program bounds, stops after one-sector commands, and reports
+  both transient retries and chunk fallbacks. Ripper tests pass 22/22. K: hardware
+  proof remains.
+
+### R70. Human-facing rip sidecars were not identifiable outside their folder - bucket A, risk medium
+
+- **Area or slice:** rip, convert, Test & Copy, repair discovery, and overwrite
+  protection.
+- **Why it matters:** `album.cue`, `album.log`, `album.accurip`, and `Test &
+  Copy.log` lose their identity when attached, indexed, or copied away from the
+  album directory. Blindly renaming every artifact would also break transaction
+  ownership and legacy repair discovery.
+- **Evidence found:** the successful H: output used all four generic names beside
+  eleven FLAC files. `GenerateFilenames` derives the rip and AccurateRip log stems
+  from the cue output path. Repair discovery required literal `album.cue`, and the
+  overwrite guard listed only fixed names.
+- **Confidence:** verified from the published output and source trace.
+- **Approval needed:** no; the user requested identifiable sidecar names.
+- **Smallest safe next step:** use one sanitized, bounded artist/album/year/disc
+  stem for human-facing cue and logs. Keep `.cuetools-complete`, `rip.verify`, and
+  ownership/proof markers stable. Accept legacy cues, require exactly one cue for
+  repair, and detect named sidecars by extension.
+- **Verification plan:** naming, legacy compatibility, ambiguity, overwrite,
+  repair, convert, proof-transfer, and full WPF tests, followed by a real rip.
+- **Owner:** repo owner.
+- **Status:** implemented and software verified 2026-07-27. New outputs use
+  `<artist> - <album> (<year>).cue/.log/.accurip` and `<stem> - Test & Copy.log`,
+  with optional disc identity. Legacy `album.*` remains supported. Multiple cues
+  fail repair discovery closed. WPF tests pass 367/367. Live output proof remains.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1572,8 +1629,8 @@ dependency:
 1. Finish and adversarially review any open R44-R49 follow-ups.
 2. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Load the damaged disc in K:, then run R59/R66/R68's final-source CTDB
-   repair/Test & Copy lane. Retain the passing H: cache-defeat, WMA,
+3. Run R59/R66/R68/R69's final-source K: CTDB repair/Test & Copy lane. Retain the
+   passing H: cache-defeat, simultaneous-drive, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
    and crash release without shared-state collisions.
@@ -1639,3 +1696,6 @@ dependency:
   64-bit missing-frame gap narrowed before its repair cap.
 - 2026-07-27 - added R65 after the native verification lane exposed a dead
   `AllRules.ruleset` reference under Core MSBuild.
+- 2026-07-27 - proved simultaneous H:/K: jobs in isolated windows, added R69 from
+  K:'s exact late cache-defeat command-shape rejection, and added R70 for portable
+  human-facing album sidecar names with legacy repair compatibility.

@@ -69,7 +69,10 @@ internal sealed class CueRepairEngine : IRepairEngine
             // Always create a portable external cue in staging. Preserve an image source as one
             // image; otherwise use the engine's established gaps-appended track layout.
             cue.OutputStyle = cue.HasSingleFilename ? CUEStyle.SingleFile : CUEStyle.GapsAppended;
-            string stagedCue = Path.Combine(stagingDirectory, "album.cue");
+            string sourceStem = Path.GetFileNameWithoutExtension(sourcePath);
+            string stagedCue = Path.Combine(
+                stagingDirectory,
+                AlbumArtifactNames.CueFileName(sourceStem));
             cue.GenerateFilenames(AudioEncoderType.Lossless, "flac", stagedCue);
             string[] expectedAudio = (cue.DestPaths ?? Array.Empty<string>())
                 .Where(path => !string.IsNullOrWhiteSpace(path))

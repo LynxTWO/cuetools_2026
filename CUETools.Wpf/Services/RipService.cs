@@ -24,6 +24,8 @@ public sealed class VerifyResult
     public bool Accurate { get; init; }
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
+    /// <summary>Portable artist/album identity used for human-facing cue and log sidecars.</summary>
+    public string ArtifactStem { get; init; } = "";
     /// <summary>Codec the files were written as. Reported rather than assumed, so a certificate for an
     /// m4a rip does not claim FLAC. Empty on a verify-only pass, which writes nothing.</summary>
     public string Format { get; init; } = "";
@@ -71,9 +73,9 @@ public sealed class VerifyResult
     public int CtdbRepairSectors { get; init; }
     public string CtdbRepairRanges { get; init; } = "";
     /// <summary>
-    /// Exact published input for the source-preserving repair transaction. This is album.cue for
-    /// track sets, or the sole lossless audio file for image mode. Empty means the output cannot be
-    /// reconstructed unambiguously.
+    /// Exact published input for the source-preserving repair transaction. This is the album's sole
+    /// top-level cue for track sets, or the sole lossless audio file for image mode. Empty means the
+    /// output cannot be reconstructed unambiguously.
     /// </summary>
     public string RepairSourcePath { get; init; } = "";
 
@@ -136,6 +138,7 @@ public sealed class TestCopyRunResult
     /// <summary>The rendered album folder relative to the output base (see VerifyResult.OutputRelDir).
     /// Accepting a held read must re-home the staging with THIS, not its last path segment.</summary>
     public string OutputRelDir { get; init; } = "";
+    public string ArtifactStem { get; init; } = "";
 
     /// <summary>The accuracy mode the reads were actually performed at (forced to at least Secure). The
     /// caller must report THIS when it later commits a held result: by then the dropdown may say
@@ -541,6 +544,7 @@ public sealed class RipService : IRipService
 
             string outDir = "";
             string outRelDir = "";   // the album folder relative to baseDir - see VerifyResult.OutputRelDir
+            string artifactStem = "";
             var outputAssurance = new OutputVerificationAssurance(
                 known: false, lossless: false, performed: false, detail: "");
             IReadOnlyList<LosslessOutputProof> outputProofs =
@@ -583,7 +587,11 @@ public sealed class RipService : IRipService
                 selectedEncoder = fmtInfo == null
                     ? null
                     : outputLossy ? fmtInfo.encoderLossy : fmtInfo.encoderLossless;
-                cue.GenerateFilenames(outputLossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless, format, Path.Combine(outDir, "album.cue"));
+                artifactStem = AlbumArtifactNames.CreateStem(cue.Metadata, Safe);
+                cue.GenerateFilenames(
+                    outputLossy ? AudioEncoderType.Lossy : AudioEncoderType.Lossless,
+                    format,
+                    Path.Combine(outDir, AlbumArtifactNames.CueFileName(artifactStem)));
                 // DestPaths includes a preserved HTOA file when one is emitted; TrackCount does not.
                 expectedAudioFiles = cue.DestPaths?.Length ?? 0;
                 string displayDir = publication?.DestinationDirectory ?? outDir;
@@ -930,6 +938,7 @@ public sealed class RipService : IRipService
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
                     $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
+                    $"cache_defeat_chunk_fallbacks={reader.CacheDefeatChunkFallbackCount} " +
                     $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
                     $"pinpoint_retries={reader.PinpointRetryCount} " +
                     $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
@@ -957,6 +966,7 @@ public sealed class RipService : IRipService
                 Accurate = arConf > 0,
                 OutputDir = outDir,
                 FileCount = files,
+                ArtifactStem = artifactStem,
                 Format = encode ? format : "",
                 OutputVerificationKnown = encode && outputAssurance.Known,
                 LosslessOutput = encode && outputAssurance.Lossless,
@@ -1031,9 +1041,11 @@ public sealed class RipService : IRipService
     }
 
     /// <summary>
-    /// Pick the exact input the existing file-repair transaction must reopen. A cue is authoritative
-    /// for a track set. With no cue, only a single image is unambiguous. Never infer an album from
-    /// several loose tracks because a partial or unrelated sibling set could then be repaired.
+    /// Pick the exact input the existing file-repair transaction must reopen. One top-level cue is
+    /// authoritative for a track set, whether it uses the legacy album.cue name or the portable
+    /// artist/album name. Multiple cues are ambiguous. With no cue, only a single image is
+    /// unambiguous. Never infer an album from several loose tracks because a partial or unrelated
+    /// sibling set could then be repaired.
     /// </summary>
     internal static string FindRepairSourceRelativePath(
         string outputDirectory,
@@ -1047,9 +1059,27 @@ public sealed class RipService : IRipService
         string rootPrefix = root.TrimEnd(
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        string cuePath = Path.Combine(root, "album.cue");
-        if (IsSafeRepairSource(cuePath, rootPrefix))
-            return "album.cue";
+        try
+        {
+            string? cuePath = null;
+            foreach (string cueCandidate in Directory.EnumerateFiles(
+                root,
+                "*.cue",
+                SearchOption.TopDirectoryOnly))
+            {
+                if (!IsSafeRepairSource(cueCandidate, rootPrefix))
+                    continue;
+                if (cuePath != null)
+                    return "";
+                cuePath = cueCandidate;
+            }
+            if (cuePath != null)
+                return Path.GetRelativePath(root, cuePath);
+        }
+        catch
+        {
+            return "";
+        }
 
         if (audioPaths == null || audioPaths.Count != 1)
             return "";
@@ -1306,6 +1336,7 @@ public sealed class RipService : IRipService
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
+                    ArtifactStem = copyResult.ArtifactStem,
                     CorrectionQuality = rq,   // the mode the reads were really made at
                     // What the Copy read actually staged. Never left unset: it is what the history row
                     // and the certificate report if the user accepts this held result anyway.
@@ -1397,6 +1428,7 @@ public sealed class RipService : IRipService
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
+                    ArtifactStem = committedEncoded.ArtifactStem,
                     CorrectionQuality = rq,   // the mode the reads were really made at
                     OutputDir = outDir,
                     FileCount = fileCount,
@@ -1625,11 +1657,15 @@ public sealed class RipService : IRipService
                 encodedResult.OutputVerificationDetail,
         };
 
+        string testCopyLogName =
+            AlbumArtifactNames.TestCopyLogFileName(encodedResult.ArtifactStem);
         string logText = TestAndCopyLog.Format(resolve, reads, discId, drive, offset, failedWindows);
         if (encodedResult.OutputVerificationKnown)
             logText += "\nEncoded-output verification: " +
                 encodedResult.OutputVerificationDetail + "\n";
-        File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), logText);
+        File.WriteAllText(
+            Path.Combine(publication.StagingDirectory, testCopyLogName),
+            logText);
         File.WriteAllText(Path.Combine(publication.StagingDirectory, "rip.verify"),
             VerifyHistoryStore.ToJson(committedRecord));
         ThrowIfStopRequested();
@@ -1641,7 +1677,7 @@ public sealed class RipService : IRipService
                 committedRecord,
                 Path.Combine(
                     publication.StagingDirectory,
-                    "Test & Copy.log"))
+                    testCopyLogName))
             : publication.Publish();
 
         // History follows publication so a failed copy cannot masquerade as a retained verified rip.
@@ -1756,7 +1792,11 @@ public sealed class RipService : IRipService
                     ? "Encoded-output verification: " +
                         held.OutputVerificationDetail + "\n"
                     : "");
-            File.WriteAllText(Path.Combine(publication.StagingDirectory, "Test & Copy.log"), log);
+            string testCopyLogName =
+                AlbumArtifactNames.TestCopyLogFileName(held.ArtifactStem);
+            File.WriteAllText(
+                Path.Combine(publication.StagingDirectory, testCopyLogName),
+                log);
             string outDir = transferProofs != null
                 ? PublishProofBoundOutput(
                     publication,
@@ -1765,7 +1805,7 @@ public sealed class RipService : IRipService
                     null,
                     Path.Combine(
                         publication.StagingDirectory,
-                        "Test & Copy.log"))
+                        testCopyLogName))
                 : publication.Publish();
 
             try
