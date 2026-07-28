@@ -241,6 +241,8 @@ public sealed class DriveService : IDriveService
                 TotalLength = TimeSpan.FromSeconds(toc.AudioLength / 75.0),
                 TocId = toc.ToString() ?? "",
                 DiscId = toc.TOCID ?? "",
+                MusicBrainzDiscId = toc.MusicBrainzId ?? "",
+                MusicBrainzToc = toc.MusicBrainzTOC ?? "",
                 ReleaseMatches = matches.ConvertAll(m => m.Header),
                 Releases = matches
             };
@@ -300,7 +302,10 @@ public sealed class DriveService : IDriveService
             HasCover = cover,
             Score = score,
             Why = $"{source}: matches the disc layout; {string.Join(", ", q)}",
-            Metadata = m
+            Metadata = m,
+            ProviderKey = e.ImageKey ?? "",
+            ProviderId = e.ProviderId ?? "",
+            InfoUrl = e.InfoUrl ?? ""
         };
     }
 

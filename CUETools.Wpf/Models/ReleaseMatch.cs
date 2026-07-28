@@ -22,6 +22,9 @@ public sealed class ReleaseMatch
     public int Score { get; init; }
     public string Why { get; init; } = "";
     public bool IsBest { get; set; }
+    public string ProviderKey { get; init; } = "";
+    public string ProviderId { get; init; } = "";
+    public string InfoUrl { get; init; } = "";
 
     /// <summary>The underlying metadata, so choosing this release applies it to the rip.</summary>
     public CUEMetadata? Metadata { get; init; }

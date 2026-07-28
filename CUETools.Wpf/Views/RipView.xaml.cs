@@ -24,4 +24,47 @@ public partial class RipView : UserControl
         EncoderSettingsWindow.Open(Window.GetWindow(this)!,
             sp.GetRequiredService<CUEConfig>(), sp.GetRequiredService<EncoderCatalog>(), vm.SelectedFormat);
     }
+
+    private void Artwork_Click(object sender, RoutedEventArgs e)
+    {
+        var services = App.Services;
+        if (services == null || DataContext is not RipViewModel viewModel) return;
+        var window = new ArtworkBrowserWindow(
+            viewModel,
+            services.GetRequiredService<IAlbumArtService>())
+        {
+            Owner = Window.GetWindow(this)
+        };
+        window.ShowDialog();
+    }
+
+    private void Artwork_DragEnter(object sender, DragEventArgs e)
+    {
+        e.Effects = HasOneDroppedFile(e.Data)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void Artwork_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (!HasOneDroppedFile(e.Data))
+        {
+            MessageBox.Show(
+                "Drop exactly one JPEG, PNG, or BMP image.",
+                "Cover not accepted",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+        if (DataContext is not RipViewModel viewModel)
+            return;
+        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+        await viewModel.ImportLocalArtworkAsync(files[0]);
+    }
+
+    private static bool HasOneDroppedFile(IDataObject data) =>
+        data.GetDataPresent(DataFormats.FileDrop) &&
+        data.GetData(DataFormats.FileDrop) is string[] { Length: 1 };
 }

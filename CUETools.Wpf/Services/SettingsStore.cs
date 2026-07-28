@@ -17,12 +17,18 @@ public sealed class SettingsStore
     private const string AppName = "CUETools2026";
     private const string FileName = "settings.txt";
     private const string ProtectedProxyPasswordKey = "WpfProxyPasswordProtected";
+    private const string ProtectedTheAudioDbApiKey = "WpfTheAudioDbApiKeyProtected";
     private readonly IDiagnosticLog _log;
     private readonly string? _appPath;   // null = the real %AppData% profile; set only by tests
-    private readonly ISecretProtector _secretProtector;
+    private readonly ISecretProtector _proxySecretProtector;
+    private readonly ISecretProtector _theAudioDbSecretProtector;
 
     public SettingsStore(IDiagnosticLog log)
-        : this(log, null, new WindowsDpapiSecretProtector()) { }
+        : this(
+            log,
+            null,
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose)) { }
 
     /// <summary>Test seam. <paramref name="appPath"/> follows the engine's own portable-mode convention
     /// (see SettingsShared.GetProfileDir): it is a FILE path, and the profile is redirected to
@@ -30,13 +36,27 @@ public sealed class SettingsStore
     /// Null (the DI path) means the real %AppData%\CUETools2026\settings.txt. A round-trip test needs
     /// this so it never reads or writes the user's own settings file.</summary>
     public SettingsStore(IDiagnosticLog log, string? appPath)
-        : this(log, appPath, new WindowsDpapiSecretProtector()) { }
+        : this(
+            log,
+            appPath,
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose)) { }
 
     internal SettingsStore(IDiagnosticLog log, string? appPath, ISecretProtector secretProtector)
+        : this(log, appPath, secretProtector, secretProtector) { }
+
+    internal SettingsStore(
+        IDiagnosticLog log,
+        string? appPath,
+        ISecretProtector proxySecretProtector,
+        ISecretProtector theAudioDbSecretProtector)
     {
         _log = log;
         _appPath = appPath;
-        _secretProtector = secretProtector ?? throw new ArgumentNullException(nameof(secretProtector));
+        _proxySecretProtector = proxySecretProtector ??
+            throw new ArgumentNullException(nameof(proxySecretProtector));
+        _theAudioDbSecretProtector = theAudioDbSecretProtector ??
+            throw new ArgumentNullException(nameof(theAudioDbSecretProtector));
     }
 
     /// <summary>The file this store reads and writes. Taken from the reader's OWN resolved profile
@@ -60,6 +80,9 @@ public sealed class SettingsStore
             if (config.AdvancedSettingsRejected)
                 _log.Warn("settings", "advanced settings were rejected; previous/default values retained");
             LoadProxyCredential(sr, config);
+            app.TheAudioDbEnabled =
+                sr.LoadBoolean("WpfTheAudioDbEnabled") ?? false;
+            LoadTheAudioDbCredential(sr, app);
             HealEncoderChoices(config);
             app.PreventSleepDuringRip = sr.LoadBoolean("WpfPreventSleep") ?? app.PreventSleepDuringRip;
             app.LockTrayDuringRip = sr.LoadBoolean("WpfLockTray") ?? app.LockTrayDuringRip;
@@ -109,7 +132,7 @@ public sealed class SettingsStore
         {
             try
             {
-                string secret = _secretProtector.Unprotect(protectedValue);
+                string secret = _proxySecretProtector.Unprotect(protectedValue);
                 config.advanced.ProxyPassword = secret;
                 _log.Redact(secret);
             }
@@ -128,6 +151,28 @@ public sealed class SettingsStore
         {
             _log.Redact(legacyPlaintext);
             _log.Info("settings", "legacy proxy credential loaded; it will be protected on next save");
+        }
+    }
+
+    private void LoadTheAudioDbCredential(SettingsReader reader, AppSettings app)
+    {
+        string protectedValue = reader.Load(ProtectedTheAudioDbApiKey);
+        app.TheAudioDbApiKey = "";
+        if (string.IsNullOrEmpty(protectedValue))
+            return;
+        try
+        {
+            app.TheAudioDbApiKey =
+                _theAudioDbSecretProtector.Unprotect(protectedValue);
+            _log.Redact(app.TheAudioDbApiKey);
+        }
+        catch (Exception ex)
+        {
+            app.TheAudioDbEnabled = false;
+            _log.Warn(
+                "settings",
+                "protected TheAudioDB API key unavailable; clear and set it again (" +
+                ex.GetType().Name + ")");
         }
     }
 
@@ -176,7 +221,12 @@ public sealed class SettingsStore
             _log.Redact(proxyPassword);
             string protectedProxyPassword = string.IsNullOrEmpty(proxyPassword)
                 ? ""
-                : _secretProtector.Protect(proxyPassword);
+                : _proxySecretProtector.Protect(proxyPassword);
+            string theAudioDbApiKey = app.TheAudioDbApiKey ?? "";
+            _log.Redact(theAudioDbApiKey);
+            string protectedTheAudioDbApiKey = string.IsNullOrEmpty(theAudioDbApiKey)
+                ? ""
+                : _theAudioDbSecretProtector.Protect(theAudioDbApiKey);
 
             using var sw = new SettingsWriter(AppName, FileName, _appPath);
             // CUEConfig owns the legacy JSON shape, so clear only while it serializes. The live
@@ -192,6 +242,8 @@ public sealed class SettingsStore
             }
             if (!string.IsNullOrEmpty(protectedProxyPassword))
                 sw.Save(ProtectedProxyPasswordKey, protectedProxyPassword);
+            if (!string.IsNullOrEmpty(protectedTheAudioDbApiKey))
+                sw.Save(ProtectedTheAudioDbApiKey, protectedTheAudioDbApiKey);
             sw.Save("WpfPreventSleep", app.PreventSleepDuringRip);
             sw.Save("WpfLockTray", app.LockTrayDuringRip);
             sw.Save("WpfStopOnUnrecoverable", app.StopOnUnrecoverable);
@@ -210,6 +262,8 @@ public sealed class SettingsStore
             sw.Save("WpfNamingHandleArticles", app.NamingHandleArticles);
             sw.Save("WpfNamingStripIllegal", app.NamingStripIllegal);
             sw.Save("WpfNamingReleaseDescriptor", app.NamingReleaseDescriptor);
+            sw.Save("WpfTheAudioDbEnabled",
+                app.TheAudioDbEnabled && !string.IsNullOrEmpty(theAudioDbApiKey));
             sw.Close();
             _log.Info("settings", "settings saved");
         }

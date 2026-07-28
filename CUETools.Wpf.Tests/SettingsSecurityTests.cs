@@ -118,6 +118,71 @@ public sealed class SettingsSecurityTests
     }
 
     [TestMethod]
+    public void TheAudioDbApiKey_RoundTripsProtectedAndCanBeCleared()
+    {
+        using var profile = new IsolatedProfile();
+        var log = new FakeLog();
+        SettingsStore store = profile.CreateStore(log);
+        var source = new AppSettings
+        {
+            TheAudioDbEnabled = true,
+            TheAudioDbApiKey = Secret
+        };
+
+        store.Save(new CUEConfig(), source);
+
+        string saved = File.ReadAllText(store.SettingsFilePath);
+        Assert.IsFalse(saved.Contains(Secret, StringComparison.Ordinal));
+        StringAssert.Contains(saved, "WpfTheAudioDbApiKeyProtected=");
+        StringAssert.Contains(saved, "WpfTheAudioDbEnabled=1");
+
+        var loaded = new AppSettings();
+        store.Load(new CUEConfig(), loaded);
+        Assert.IsTrue(loaded.TheAudioDbEnabled);
+        Assert.AreEqual(Secret, loaded.TheAudioDbApiKey);
+        CollectionAssert.Contains(log.Redactions, Secret);
+
+        loaded.TheAudioDbApiKey = "";
+        loaded.TheAudioDbEnabled = false;
+        store.Save(new CUEConfig(), loaded);
+        saved = File.ReadAllText(store.SettingsFilePath);
+        Assert.IsFalse(saved.Contains(
+            "WpfTheAudioDbApiKeyProtected=", StringComparison.Ordinal));
+        Assert.IsTrue(saved.Contains(
+            "WpfTheAudioDbEnabled=0", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void CorruptTheAudioDbApiKey_DisablesProviderWithoutLeakingCiphertext()
+    {
+        using var profile = new IsolatedProfile();
+        var log = new FakeLog();
+        SettingsStore store = profile.CreateStore(log);
+        store.Save(
+            new CUEConfig(),
+            new AppSettings
+            {
+                TheAudioDbEnabled = true,
+                TheAudioDbApiKey = Secret
+            });
+        string text = Regex.Replace(
+            File.ReadAllText(store.SettingsFilePath),
+            "^WpfTheAudioDbApiKeyProtected=.*$",
+            "WpfTheAudioDbApiKeyProtected=test-v1:not-base64",
+            RegexOptions.Multiline);
+        File.WriteAllText(store.SettingsFilePath, text);
+
+        var loaded = new AppSettings();
+        store.Load(new CUEConfig(), loaded);
+
+        Assert.IsFalse(loaded.TheAudioDbEnabled);
+        Assert.AreEqual("", loaded.TheAudioDbApiKey);
+        string messages = string.Join("\n", log.Messages);
+        StringAssert.Contains(messages, "protected TheAudioDB API key unavailable");
+        Assert.IsFalse(messages.Contains("not-base64", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void LegacyPlaintext_IsMigratedAndRemovedOnNextSave()
     {
         using var profile = new IsolatedProfile();
@@ -437,6 +502,38 @@ public sealed class SettingsSecurityTests
             protector.Protect(new string('x', 16385)));
         Assert.ThrowsException<CryptographicException>(() =>
             protector.Unprotect("dpapi-v1:" + new string('A', 131072)));
+
+        var providerProtector = new WindowsDpapiSecretProtector(
+            WindowsDpapiSecretProtector.TheAudioDbPurpose);
+        string providerValue = providerProtector.Protect(Secret);
+        Assert.AreEqual(Secret, providerProtector.Unprotect(providerValue));
+        Assert.ThrowsException<CryptographicException>(
+            () => protector.Unprotect(providerValue));
+    }
+
+    [TestMethod]
+    public void SettingsViewModel_ExposesSetClearButNoReadableApiKey()
+    {
+        var app = new AppSettings();
+        var log = new FakeLog();
+        var viewModel = new SettingsViewModel(
+            new CUEConfig(),
+            app,
+            log,
+            new EncoderCatalog(log, app));
+
+        Assert.IsNull(typeof(SettingsViewModel).GetProperty("TheAudioDbApiKey"));
+        Assert.IsTrue(viewModel.SetTheAudioDbApiKey(Secret));
+        Assert.IsTrue(viewModel.HasTheAudioDbApiKey);
+        Assert.AreEqual(Secret, app.TheAudioDbApiKey);
+        Assert.IsFalse(viewModel.SetTheAudioDbApiKey("not/a/key"));
+        CollectionAssert.Contains(log.Redactions, Secret);
+
+        viewModel.TheAudioDbEnabled = true;
+        Assert.IsTrue(app.TheAudioDbEnabled);
+        viewModel.ClearTheAudioDbApiKey();
+        Assert.IsFalse(app.TheAudioDbEnabled);
+        Assert.AreEqual("", app.TheAudioDbApiKey);
     }
 
     [TestMethod]

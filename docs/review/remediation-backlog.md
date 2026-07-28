@@ -1,6 +1,6 @@
 # Remediation Backlog
 
-Current-state refresh, 2026-07-26. This ledger began in pass 11 on 2026-07-02 and
+Current-state refresh, 2026-07-28. This ledger began in pass 11 on 2026-07-02 and
 consolidates the anti-dark-code coverage, logging, adversarial, scenario, and
 unknowns passes. Closed entries remain here as dated evidence; status lines are the
 current authority. The implementation and local-gate evidence for the 2026-07-26
@@ -1653,23 +1653,101 @@ does not relax evidence, rollback, or verification requirements.
   the WPF suite passes 375/375, and the live 86-sample/six-sector repair published
   all evidence with AccurateRip 55/82 and CTDB 207/234.
 
+### R72. Album art selection loses release identity and uses an unsuitable Apple path - bucket B, risk high
+
+- **Area or slice:** WPF metadata selection, artwork networking, image decoding,
+  settings, Rip UI, and output publication.
+- **Why it matters:** the current service selects the first Apple result, downloads
+  an undocumented high-resolution URL, and embeds it without showing alternatives
+  or proving the release edition. Apple documents Search API art as store
+  promotional content. A separate processor CTDB fallback can choose different art
+  from the UI.
+- **Evidence found:** `AlbumArtService` is Apple-only, bypasses the app proxy, and
+  collapses all failures to null. `CUEMetadata.FillFromCtdb`,
+  `CUEMetadataEntry`, and `ReleaseMatch` drop CTDB source IDs before WPF lookup.
+  `CUESheet.LoadAndResizeAlbumArt` is a second hidden selection path. Apple,
+  MusicBrainz/Cover Art Archive, and TheAudioDB provider contracts were checked on
+  2026-07-28.
+- **Confidence:** verified from source and current official provider documents.
+- **Approval needed:** yes; this intentionally changes provider behavior and adds
+  a network/image trust boundary. The owner requested the feature and delegated
+  ranking logic, so implementation may start after review of the recorded plan.
+- **Smallest safe next step:** execute Slice A in
+  `docs/review/album-art-discovery-plan.md`: preserve source-specific release IDs,
+  commit bounded provider fixtures, and add pure candidate/ranking contracts
+  without changing the visible provider result.
+- **Verification plan:** pure rank and parser tests; response, redirect, byte,
+  pixel, proxy, cache, cancellation, privacy, and secret tests; responsive and
+  accessible selector tests; full WPF/publish gates; then real Rip and Test & Copy
+  inspection of embedded bytes.
+- **Owner:** repo owner and WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. Provider identity,
+  CTDB/Cover Art Archive discovery, MusicBrainz throttled disc/fuzzy lookup,
+  release-group labeling, deterministic rank, shared proxy/bounds/redirect/pixel
+  controls, the sortable selector, immutable job selection, and removal of the
+  hidden processor fallback are in place. Apple artwork has no runtime reach.
+  WPF tests pass 395/395, the warning gate is empty, the self-contained x64
+  artifact contract passes, and live CAA/MusicBrainz/TheAudioDB probes return
+  HTTP 200. Dark/light/high-contrast/DPI captures and real embedded-output
+  inspection remain before release closure. TheAudioDB is available only as an
+  off-by-default user-key provider pending a distribution-tier/default decision.
+
+### R73. Local artwork import and optional provider credentials need explicit trust boundaries - bucket B, risk high
+
+- **Area or slice:** WPF artwork importer, selector, app settings, secret
+  persistence, and TheAudioDB provider.
+- **Why it matters:** a retained local path can change between preview and Rip;
+  an unbounded image can exhaust memory; a non-front image can become an automatic
+  choice; and collecting an account password would violate TheAudioDB's documented
+  API-key contract.
+- **Evidence found:** the first selector slice accepts network JPEG/PNG only,
+  shows no local drop target, retains only front Cover Art Archive results, and
+  has no optional-provider credential setting. The existing DPAPI helper uses
+  proxy-specific entropy. Official TheAudioDB documentation describes V1 path
+  keys and V2 header keys, not username/password authentication.
+- **Confidence:** verified from source and current official provider documents.
+- **Approval needed:** approved by the owner's request for autonomous
+  implementation and protected user-supplied provider settings.
+- **Smallest safe next step:** add purpose-separated secret protection, one-read
+  bounded local image import, a release-scoped local override, and deterministic
+  provider fixtures before enabling any live TheAudioDB request.
+- **Verification plan:** local format/size/pixel/TOCTOU tests; override and frozen
+  job tests; protected-key/redaction tests; provider parser, error, cancellation,
+  rate, host, and response-bound tests; selector filter/sort/drop/theme tests;
+  warning, publish, and real embedded-output gates.
+- **Owner:** WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. Local JPEG/PNG/BMP
+  import reads one regular file once under 30 MiB and 100-megapixel limits,
+  applies quality-92 JPEG conversion and RIOT resizing, binds the override to the
+  release generation, and clones job bytes. TheAudioDB accepts only a
+  purpose-separated DPAPI-protected API key, stays off by default, labels source
+  and match class, validates text fallback identity, host-binds requests, rate
+  gates calls, and retries one bounded 429. Front/All filtering keeps non-front
+  art out of automatic selection. WPF tests pass 395/395, zero warnings and the
+  x64 artifact contract pass, live provider probes return HTTP 200, and the
+  local anti-dark-code skill validates. Interactive capture and independent
+  embedded-output inspection remain the release evidence gap.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
 dependency:
 
-1. Finish and adversarially review any open R44-R49 follow-ups.
-2. Refresh the classic receipt after the source commit and retain its exact
+1. Finish R72's interactive dark/light/responsive capture and real
+   automatic/manual embedded-output proof. The core path does not wait on optional
+   Apple or TheAudioDB policy decisions.
+2. Finish and adversarially review any open R44-R49 follow-ups.
+3. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-3. Run R59/R66/R69/R71's final-source K: Test & Copy lane. The CTDB repair half of
+4. Run R59/R66/R69/R71's final-source K: Test & Copy lane. The CTDB repair half of
    R68/R71 is complete; retain the
    passing H: cache-defeat, simultaneous-drive, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
-4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
+5. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
    and crash release without shared-state collisions.
-5. Run the pinned hosted workflows and compare them with the local receipts.
-6. Choose and implement a publisher signing/attestation identity and policy.
-7. Continue R5/R8/R12/R13 modernization and lock-file rollout.
+6. Run the pinned hosted workflows and compare them with the local receipts.
+7. Choose and implement a publisher signing/attestation identity and policy.
+8. Continue R5/R8/R12/R13 modernization and lock-file rollout.
 
 ## Holes / external boundaries
 
@@ -1681,6 +1759,10 @@ dependency:
   immutable gitlinks, patches, and staged source manifests are hash-bound and
   inventoried.
 - MusicBrainz/gnudb/AccurateRip/CTDB servers are external; their behavior can change independent of this repo.
+- Apple artwork embedding lacks a documented Search API permission for this use.
+  TheAudioDB remains optional until a production account and attribution placement
+  are selected. Cover Art Archive images remain copyrighted and are used at the
+  user's risk.
 - The local classic build, frozen receipt, exact collection, and MSI matrix pass, but
   hosted image parity remains. External FLAC/TAK pairs, Icecast
   HTTPS/certificate/Mono, cross-vendor OpenCL, and deliberate optical failure injection
@@ -1732,3 +1814,10 @@ dependency:
 - 2026-07-27 - proved simultaneous H:/K: jobs in isolated windows, added R69 from
   K:'s exact late cache-defeat command-shape rejection, and added R70 for portable
   human-facing album sidecar names with legacy repair compatibility.
+- 2026-07-28 - added R72 after the multi-provider artwork design traced lost CTDB
+  release IDs, divergent WPF/processor selection paths, missing network/image
+  bounds, and Apple Search API terms that do not document file embedding.
+- 2026-07-28 - added R73 after the artwork adversarial pass defined one-read
+  bounded local JPEG/PNG/BMP import, release-scoped override lifetime,
+  non-front automatic-selection exclusion, provider metadata enrichment, and a
+  DPAPI-protected off-by-default TheAudioDB API-key boundary.

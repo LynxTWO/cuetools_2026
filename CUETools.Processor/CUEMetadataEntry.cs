@@ -7,6 +7,11 @@ namespace CUETools.Processor
         public CUEMetadata metadata { get; set; }
         public CDImageLayout TOC { get; set; }
         public string ImageKey { get; set; }
+        /// <summary>Opaque identifier supplied by <see cref="ImageKey"/>'s provider. Consumers
+        /// must interpret it only through that provider's contract.</summary>
+        public string ProviderId { get; set; }
+        /// <summary>Provider information page for this exact metadata result, when supplied.</summary>
+        public string InfoUrl { get; set; }
         public byte[] cover { get; set; }
 
         public CUEMetadataEntry(CUEMetadata metadata, CDImageLayout TOC, string key)
@@ -14,6 +19,8 @@ namespace CUETools.Processor
             this.metadata = new CUEMetadata(metadata);
             this.TOC = TOC;
             this.ImageKey = key;
+            this.ProviderId = "";
+            this.InfoUrl = "";
         }
 
         public CUEMetadataEntry(CDImageLayout TOC, string key)

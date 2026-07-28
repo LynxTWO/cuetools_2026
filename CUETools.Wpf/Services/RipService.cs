@@ -168,8 +168,9 @@ public interface IRipService
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
     /// given. <paramref name="telemetry"/> receives bounded best-effort RMS and consecutive PCM
     /// samples. <paramref name="onReread"/> reports real sector re-reads (see RunVerify).
-    /// <paramref name="coverArt"/>, when given, is the hi-res cover to embed (already resized); the
-    /// engine's database cover is used when it is null. <paramref name="onEncodeStart"/>, when
+    /// <paramref name="coverArt"/>, when given, is the selected cover to embed (already resized);
+    /// null publishes no downloaded art and cannot trigger a hidden provider fallback.
+    /// <paramref name="onEncodeStart"/>, when
     /// given, fires once right before the actual encode begins (never on a verify-only pass) - the
     /// caller uses it to lock the codec choice at that moment.</summary>
     VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null);
@@ -709,25 +710,31 @@ public sealed class RipService : IRipService
                 }
             };
 
-            // Embed the hi-res Apple cover when we have one; otherwise leave Metadata.AlbumArt intact
-            // so the engine falls back to the CTDB/database cover. Clearing Metadata.AlbumArt stops the
-            // engine re-adding the DB cover on top of ours (LoadAndResizeAlbumArt reads that list).
-            if (encode && (_config.embedAlbumArt || _config.extractAlbumArt) && coverArt != null && coverArt.Length > 0)
+            // WPF owns artwork discovery and selection. Always clear the processor's URI list at
+            // this boundary so a missing or explicitly disabled selection cannot trigger a second,
+            // hidden network choice that disagrees with the preview.
+            if (encode && (_config.embedAlbumArt || _config.extractAlbumArt))
             {
+                CUEMetadata cueMetadata = cue.Metadata ??
+                    throw new InvalidDataException(
+                        "The opened disc did not provide metadata for cover embedding.");
+                cueMetadata.AlbumArt.Clear();
+                cue.AlbumArt.Clear();
+                if (coverArt == null || coverArt.Length == 0)
+                {
+                    _log.Info("rip", "no downloaded cover selected");
+                }
+                else
                 try
                 {
-                    // build the picture FIRST: if construction throws after the lists were cleared,
-                    // the album would ship with NO art at all (not even the database fallback)
                     var pic = new TagLib.Picture(new TagLib.ByteVector(coverArt)) { Type = TagLib.PictureType.FrontCover };
-                    CUEMetadata cueMetadata = cue.Metadata ??
-                        throw new InvalidDataException(
-                            "The opened disc did not provide metadata for cover embedding.");
-                    cueMetadata.AlbumArt.Clear();
-                    cue.AlbumArt.Clear();
                     cue.AlbumArt.Add(pic);
-                    _log.Info("rip", $"embed hi-res cover {coverArt.Length}B");
+                    _log.Info("rip", $"embed selected cover {coverArt.Length}B");
                 }
-                catch (Exception ex) { _log.Warn("rip", "cover inject failed (database cover keeps): " + ex.GetType().Name); }
+                catch (Exception ex)
+                {
+                    _log.Warn("rip", "selected cover injection failed: " + ex.GetType().Name);
+                }
             }
 
             // Fire exactly once and freeze the assurance claim at the same boundary as the format

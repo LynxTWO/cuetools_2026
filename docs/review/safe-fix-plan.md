@@ -819,3 +819,43 @@ and SHA-256 values inside the user-selected repaired directory.
 and the WPF suite passes 375/375. The live K: fixture corrected 86 samples in six
 sectors, published all required evidence, matched AccurateRip 55/82 and CTDB
 207/234, and left all 25 source hashes unchanged.
+
+### Complete the artwork selector with bounded local import and optional TheAudioDB
+
+**Exact files:** `CUETools.Wpf/Services/AppSettings.cs`,
+`SecretProtector.cs`, `SettingsStore.cs`, `AlbumArtService.cs`,
+`Services/Artwork/ArtworkModels.cs`, `ViewModels/SettingsViewModel.cs`,
+`ViewModels/RipViewModel.cs`, `ViewModels/ArtworkCandidateViewModel.cs`,
+`Views/SettingsView.xaml*`, `Views/RipView.xaml*`,
+`Views/ArtworkBrowserWindow.xaml*`, focused WPF tests, artwork review records,
+coverage ledger, and unknowns.
+
+**Safety and unchanged behavior:** preserve CTDB/Cover Art Archive release-first
+ranking, the app proxy, image/network limits, and immutable per-job JPEG bytes.
+Read a dropped file once and retain bytes, not its path. Accept JPEG, PNG, and BMP
+by magic; convert PNG/BMP to JPEG and apply the configured side limit with the
+existing Mitchell resize path. A local override belongs only to the current
+release generation. TheAudioDB remains off by default, accepts an API key rather
+than account credentials, stores it with purpose-separated current-user DPAPI,
+never logs it or a keyed URL, and ranks below exact-release Cover Art Archive.
+Non-front provider art is browser-only.
+
+**Checks:** run importer format, byte, dimension, pixel, malformed input, override
+lifetime, immutable snapshot, protected-key round-trip/corruption/clear/redaction,
+TheAudioDB parser/error/rate/host/cancellation, ranking, selector layout, theme,
+and keyboard tests. Run the full WPF suite, warning gate, publish, provider probes,
+and independently inspect real automatic and local-override embedded output.
+
+**Rollback:** disable TheAudioDB and remove local import UI together with their
+settings. Keep the existing CTDB/Cover Art Archive selector and hidden-fallback
+removal. Never roll back to plaintext secrets or retained local paths.
+
+**Observability:** record only provider, status class, candidate count, match
+tier, dimensions, and encoded byte count. Never record API keys, keyed URLs,
+music identity, local image paths, or response bodies.
+
+**Status:** implemented and software-verified on 2026-07-28 under R73. The WPF
+suite passes 395/395, the WPF/fuzz warning gate is empty, the self-contained x64
+artifact contract passes, all three live provider probes return HTTP 200, and the
+local anti-dark-code skill validates. Interactive theme/DPI captures and
+independent real embedded-output inspection remain.

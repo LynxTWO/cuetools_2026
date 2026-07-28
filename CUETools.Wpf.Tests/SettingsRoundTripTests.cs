@@ -317,6 +317,8 @@ namespace CUETools.Wpf.Tests
                     expected[m.Name] = sentinel;
                 }
                 Assert.IsTrue(problems.Count == 0, "test setup problem(s) - fix the sentinel table:\n" + string.Join("\n", problems));
+                if (sourceApp.TheAudioDbEnabled)
+                    sourceApp.TheAudioDbApiKey = "round-trip-test-key";
 
                 // SettingsStore.Save/Load also touch a CUEConfig in the same file; give it real
                 // (default) config instances on both sides so only the AppSettings half is under test.

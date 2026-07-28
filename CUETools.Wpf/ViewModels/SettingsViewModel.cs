@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using CUETools.Processor;
@@ -114,6 +115,48 @@ public sealed class SettingsViewModel : PageViewModel
         // e.g. 12000, used it for the session, wrote it to settings.txt - and the loader then
         // rejected it, so the page silently showed 1000 again on the next launch.
         set { _c.maxAlbumArtSize = Math.Clamp(value, 100, 10000); Raise(); _app.NotifyArtSizeChanged(); }
+    }
+    public bool TheAudioDbEnabled
+    {
+        get => _app.TheAudioDbEnabled;
+        set
+        {
+            _app.TheAudioDbEnabled =
+                value && !string.IsNullOrEmpty(_app.TheAudioDbApiKey);
+            Raise();
+            Raise(nameof(TheAudioDbStatus));
+            _app.NotifyArtProviderChanged();
+        }
+    }
+    public bool HasTheAudioDbApiKey =>
+        !string.IsNullOrEmpty(_app.TheAudioDbApiKey);
+    public string TheAudioDbStatus => HasTheAudioDbApiKey
+        ? (_app.TheAudioDbEnabled ? "API key set, provider enabled" : "API key set, provider disabled")
+        : "No API key";
+
+    public bool SetTheAudioDbApiKey(string apiKey)
+    {
+        apiKey = (apiKey ?? "").Trim();
+        if (apiKey.Length is < 1 or > 256 ||
+            apiKey.Any(character => char.IsWhiteSpace(character) ||
+                                    character is '/' or '\\' or '?' or '#'))
+            return false;
+        _app.TheAudioDbApiKey = apiKey;
+        _log.Redact(apiKey);
+        Raise(nameof(HasTheAudioDbApiKey));
+        Raise(nameof(TheAudioDbStatus));
+        _app.NotifyArtProviderChanged();
+        return true;
+    }
+
+    public void ClearTheAudioDbApiKey()
+    {
+        _app.TheAudioDbApiKey = "";
+        _app.TheAudioDbEnabled = false;
+        Raise(nameof(TheAudioDbEnabled));
+        Raise(nameof(HasTheAudioDbApiKey));
+        Raise(nameof(TheAudioDbStatus));
+        _app.NotifyArtProviderChanged();
     }
 
     // HDCD

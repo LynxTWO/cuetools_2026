@@ -18,6 +18,8 @@ public sealed class DiscInfo
     public string TocId { get; init; } = "";
     /// <summary>Stable CUETools/CTDB disc identity used by verify history.</summary>
     public string DiscId { get; init; } = "";
+    public string MusicBrainzDiscId { get; init; } = "";
+    public string MusicBrainzToc { get; init; } = "";
     public IReadOnlyList<string> ReleaseMatches { get; init; } = Array.Empty<string>();
 
     /// <summary>The matched releases, ranked best-first with source + why. Empty when offline or
