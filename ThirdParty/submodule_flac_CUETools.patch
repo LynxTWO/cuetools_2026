@@ -930,3 +930,34 @@ index f05d0a9..efe8d0e 100644
  				if(p > 1)
  					p = 1;
  				else if(p < 0)
+diff --git a/src/libFLAC++/metadata.cpp b/src/libFLAC++/metadata.cpp
+index 34dcd73..df5d0fe 100644
+--- a/src/libFLAC++/metadata.cpp
++++ b/src/libFLAC++/metadata.cpp
+@@ -35,11 +35,11 @@
+ #include "config.h"
+ #endif
+ 
++#include <cstdlib> // for malloc(), free()
++#include <cstring> // for memcpy() etc.
+ #include "share/alloc.h"
+ #include "FLAC++/metadata.h"
+ #include "FLAC/assert.h"
+-#include <cstdlib> // for malloc(), free()
+-#include <cstring> // for memcpy() etc.
+ 
+ #ifdef _MSC_VER
+ // warning C4800: 'int' : forcing to bool 'true' or 'false' (performance warning)
+diff --git a/src/share/getopt/getopt.c b/src/share/getopt/getopt.c
+index 509c91d..c755e84 100644
+--- a/src/share/getopt/getopt.c
++++ b/src/share/getopt/getopt.c
+@@ -221,7 +221,7 @@ static char *posixly_correct;
+ /* Avoid depending on library functions or files
+    whose names are inconsistent.  */
+ 
+-#ifndef getenv
++#if !defined getenv && !defined _WIN32
+ extern char *getenv (const char * name);
+ #endif
+ 

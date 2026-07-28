@@ -1430,6 +1430,8 @@ does not relax evidence, rollback, or verification requirements.
   subtraction assigned directly to `uint32_t` before the five-second and
   50-frame caps. Windows PowerShell 5.1 also reads the UTF-8 staging manifest
   with its legacy default encoding, corrupting a non-ASCII libFLAC test path.
+  Expanding verification through upstream CMake exposed three more MSVC warnings:
+  a redundant non-CRT `getenv` declaration and a late CRT math-constant include.
 - **Confidence:** verified from both native build logs, bounded source searches,
   the pinned 1.5.0 source, and current upstream source.
 - **Approval needed:** no; the user explicitly requested the native correctness
@@ -1444,12 +1446,13 @@ does not relax evidence, rollback, or verification requirements.
   vendor-clean gate, then refreshed release receipts after the active rip ends.
 - **Owner:** repo owner.
 - **Status:** fixed and locally verified 2026-07-27. All six native dependency
-  builds emit zero warnings against an empty baseline. Native-backed FLAC tests
-  pass 25/25, upstream libFLAC tests pass 2/2, classic codec tests pass 112/113
-  with one established skip, and WPF tests pass 358/358. Staging passes 15
-  checks under PowerShell 7, the final stage validates under Windows PowerShell
-  5.1, and all five submodules remain clean. The source-bound classic receipt
-  remains pending until the active rip ends.
+  builds emit zero warnings against an empty baseline. The expanded clean CMake
+  build also emits zero warnings. Native-backed FLAC tests pass 25/25, upstream
+  libFLAC tests pass 2/2, classic codec tests pass 112/113 with one established
+  skip, and WPF tests pass 358/358. Staging passes 15 checks under PowerShell 7,
+  the final stage validates under Windows PowerShell 5.1, and all five submodules
+  remain clean. The source-bound classic receipt remains pending until the
+  active rip ends.
 
 ### R65. Core MSBuild cannot resolve legacy Visual Studio rulesets - bucket A, risk low
 
