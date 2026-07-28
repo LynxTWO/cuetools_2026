@@ -957,7 +957,13 @@ namespace CUETools.Processor
                     CUEMetadata metadata = new CUEMetadata(TOC.TOCID, (int)TOC.AudioTracks);
                     metadata.FillFromCtdb(meta, TOC.FirstAudio - 1);
                     CDImageLayout toc = TOC; //  TocFromCDEntry(meta);
-                    Releases.Add(new CUEMetadataEntry(metadata, toc, meta.source));
+                    Releases.Add(new CUEMetadataEntry(metadata, toc, meta.source)
+                    {
+                        // Keep provider identity opaque at this shared boundary. The WPF artwork
+                        // path may interpret a UUID only after the source says it is MusicBrainz.
+                        ProviderId = meta.id ?? "",
+                        InfoUrl = meta.infourl ?? ""
+                    });
                     ctdbFound = true;
                 }
             }

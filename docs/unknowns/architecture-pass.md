@@ -1,10 +1,39 @@
 # Unknowns: Architecture Pass
 
-Current-state refresh: 2026-07-26. This ledger holds architecture questions
+Current-state refresh: 2026-07-28. This ledger holds architecture questions
 that still block an honest claim. Resolved 2026-07-02 findings are retained
 below as history.
 
 ## Entries
+
+### Artwork provider release identifiers and distribution terms
+
+- **Area or file:** `CUETools.CTDB.Types/CTDBResponseMeta.cs`,
+  `CUETools.Processor/CUEMetadata.cs`, `CUETools.Processor/CUEMetadataEntry.cs`,
+  `CUETools.Wpf/Models/ReleaseMatch.cs`, and planned artwork providers.
+- **Concern:** CTDB returns `source`, `id`, and `infourl`, but the client drops
+  their source-specific meaning before artwork selection. Apple does not document
+  Search API album art as permitted input for file embedding. TheAudioDB's
+  production subscription and attribution arrangement for CUETools has not been
+  selected.
+- **Why it matters:** guessing that an opaque ID is a MusicBrainz release can attach
+  the wrong edition. Shipping a provider outside its documented use can make an
+  otherwise correct implementation unsuitable for release.
+- **Evidence found so far:** the client now preserves CTDB provider fields and
+  interprets a UUID only for a MusicBrainz-labeled source. Apple artwork has been
+  removed from runtime discovery. TheAudioDB documents request limits, paid
+  app-store use, and source attribution for paid use. Cover Art Archive indexes
+  images by release MBID and labels release-group art as a canonical fallback.
+- **Confidence:** high for the client data loss and published terms; unknown for
+  CTDB `meta.id` semantics across every metadata source and the intended CUETools
+  distribution tier.
+- **Likely owner:** WPF maintainer plus provider account/license owner.
+- **Next best check:** retain bounded live CTDB metadata fixtures and prove each
+  source ID contract. Keep TheAudioDB off by default behind a protected
+  user-supplied API key, then confirm the distribution tier and attribution
+  placement before changing that default.
+- **Risk level:** high
+- **Status:** open
 
 ### Patch level and provenance of vendored binaries
 

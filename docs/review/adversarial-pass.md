@@ -1,5 +1,97 @@
 # Adversarial Edge-Case Review
 
+## Artwork import and optional-provider addendum - 2026-07-28
+
+This pass challenges the artwork selector before local drag-and-drop and
+TheAudioDB are added. No application code changed during the pass.
+
+### A6. A local image path is not a stable selection snapshot
+
+Keeping a dropped path until Rip would permit the file to change between preview
+and publication. A large file, directory, unsupported image, or decoder bomb
+could also cross the UI boundary before the network loader's limits apply.
+
+The import boundary must accept exactly one regular JPEG, PNG, or BMP file, open
+it once, enforce the encoded-byte cap while reading, validate magic and dimensions
+before full decode, enforce the shared pixel cap, and retain only the resulting
+bytes. The diagnostic log must not record the path. PNG and BMP inputs are always
+encoded as JPEG. JPEG is also re-encoded when it exceeds the configured side
+limit; an in-limit JPEG may remain byte-identical. The frozen JPEG byte array,
+not the path or a mutable bitmap, enters a job.
+
+### A7. A local override needs a release-scoped lifetime
+
+An override that survives a release or disc change can attach the wrong cover.
+An override that disappears on an unrelated provider refresh does not satisfy
+the user's explicit replacement choice.
+
+The override is authoritative only for the current release-selection generation.
+It survives background provider completion and a size-setting change, which
+re-derives it from the retained master bytes. It is cleared by a release or disc
+change, `No cover`, or an explicit return to automatic selection.
+
+### A8. TheAudioDB uses an API key, not an account password
+
+The documented V1 API places a key in the URL path. Premium V2 uses an
+`X-API-KEY` header. The service documentation does not define username/password
+authentication for application calls. Collecting an account password would add
+a credential CUETools cannot use safely or correctly.
+
+The setting must accept only an API key, keep the provider off by default, protect
+the saved value with a purpose-specific DPAPI entropy value, redact it before any
+request, and avoid logging request URLs. V1 support is needed for user-supplied
+free or premium keys; a later V2 mode can use header authentication. Results must
+show TheAudioDB attribution. Rate limiting, 429 handling, response limits, host
+allowlisting, and the shared image loader remain mandatory.
+
+### A9. Browser-only art must not become an automatic cover
+
+The first Cover Art Archive slice retained front images only. Adding back, medium,
+booklet, or other images to meet the `All artwork` browser contract creates a
+ranking trap: a non-front exact-release image could otherwise be selected
+automatically when no front image exists.
+
+Candidates need an explicit automatic-eligibility fact. Only validated front
+images and user imports are eligible. Browser sorting remains independent of that
+gate.
+
+### A10. Unknown image facts need an honest enrichment path
+
+The current table displays `unknown` for dimensions or encoded size that a
+manifest omits. That is honest, but it does not fulfill the intended inspection
+workflow when the provider can supply the facts cheaply.
+
+The loader should enrich candidates with bounded header data where possible.
+It must not download every master simply to fill the table. A bounded thumbnail
+load may populate thumbnail facts, while a selected master must replace them with
+the original dimensions and byte count. Unknown remains a valid value when the
+provider and bounded probe cannot establish the fact.
+
+### A11. Provider refresh and an active Rip are separate ownership domains
+
+Network discovery, thumbnails, and user selection can continue while another
+drive window owns a Rip. A running job must keep the JPEG bytes captured at job
+start. Later selection, refresh, or local import can affect only the next job.
+
+The current byte-array snapshot already provides this separation as long as no
+code mutates that array. Tests must hold a job snapshot while the visible
+selection changes and prove the original bytes remain unchanged.
+
+### Required verification
+
+- malformed, oversized, multi-file, directory, renamed, truncated, and
+  over-pixel local inputs;
+- PNG and BMP conversion, oversized JPEG resizing, alpha flattening, and
+  in-limit JPEG behavior;
+- local override survival, reset, and immutable job capture;
+- protected API-key round trip, corrupt-key recovery, clear behavior, and log
+  redaction;
+- TheAudioDB release-group and text fixtures, 404, 429, malformed JSON, unsafe
+  URLs, response limits, and cancellation;
+- non-front candidates visible under `All artwork` but excluded from automatic
+  selection; and
+- dark, light, narrow, keyboard, drop-target, and real embedded-output evidence.
+
 ## Current-state addendum - 2026-07-26
 
 The body below is preserved as the 2026-07-02 challenge pass. Its formerly open

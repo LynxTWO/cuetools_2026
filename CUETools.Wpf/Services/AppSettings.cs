@@ -61,6 +61,14 @@ public sealed class AppSettings
     public event System.EventHandler? ArtEnabledChanged;
     public void NotifyArtEnabledChanged() => ArtEnabledChanged?.Invoke(this, System.EventArgs.Empty);
 
+    /// <summary>The optional TheAudioDB provider is disabled until the user supplies an API key
+    /// and enables it. The key exists only in memory here; SettingsStore persists a DPAPI value.</summary>
+    public bool TheAudioDbEnabled { get; set; }
+    internal string TheAudioDbApiKey { get; set; } = "";
+    public event System.EventHandler? ArtProviderChanged;
+    public void NotifyArtProviderChanged() =>
+        ArtProviderChanged?.Invoke(this, System.EventArgs.Empty);
+
     // Per-format lossless/lossy choice for two-faced extensions (wma = WMA Lossless vs Standard;
     // m4a = ALAC vs imported AAC). Compact persisted form: "wma=lossy;m4a=lossless".
     public string FormatTypeOverrides { get; set; } = "";

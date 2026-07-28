@@ -77,6 +77,26 @@ Check whether trust changes were mapped honestly. Boundaries include:
 - game client to authoritative server
 - mobile client to secure storage or native bridge
 - infra runner to cloud control plane
+- local file picker or drag-and-drop to decoded content
+- optional third-party provider setting to authenticated request
+- mutable UI selection to a long-running or published job
+
+For these acquisition boundaries, challenge:
+
+- a retained path or URI presented as if it were immutable content
+- validation followed by a second read that can observe replacement bytes
+- encoded-size limits without decoded, expanded, dimension, or object-graph limits
+- extension or `Content-Type` checks without magic and decoder validation
+- a shared credential collected when the API documents a narrower key or token
+- one protection purpose reused across unrelated secrets
+- secrets placed in URL-path cache keys, logs, exceptions, diagnostics, screenshots,
+  tests, or persisted plaintext
+- an optional provider enabled before credentials, attribution, distribution terms,
+  rate policy, and failure isolation are explicit
+- a UI choice that can change after a job starts while the job still reads live
+  view-model state
+- browser-only, low-confidence, alternate, or non-primary candidates entering an
+  automatic-selection path because ranking and eligibility were treated as one rule
 
 ### 3. Protected areas
 

@@ -107,6 +107,7 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
 - For release or generated-source claims, require one shared-writer boundary, non-destructive pre-cleanup intent recovery, archive-wide expansion evidence, explicit hashes for ignored inputs, and policy results from the exact build logs that produced the collected bytes.
 - Build patched pinned dependencies from an owned, identity-bound staging tree. Do not make the dependency worktree itself a build intermediate, and prove every build, test, packaging, and release consumer uses the same staged source.
 - For repair and preservation claims, verify user-visible identity as well as payload correctness: names, metadata, artwork, sidecars, ordering, and collision behavior can be part of the recovered artifact.
+- For user-supplied content and optional providers, verify the documented authentication contract, collect only the credential the protocol uses, purpose-separate protected secrets, read local inputs once into bounded immutable bytes, and freeze the exact UI selection before background work starts.
 - Distinguish a source defect from an unexercised path, missing toolchain, unavailable capability, or missing native dependency.
 - Name out-of-repo boundaries when they affect live behavior.
 - Do not claim whole-repo coverage from one clean path.

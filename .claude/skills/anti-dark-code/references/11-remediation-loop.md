@@ -467,6 +467,42 @@ surfaces, network connection code, or UI claims about side effects:
   every reachable consumer. Ancillary failures must be contained at the boundary
   where product policy says the primary operation should continue.
 
+### External content, provider credentials, and selection snapshots
+
+Use this when a feature imports local files, downloads optional third-party content,
+stores a provider credential, or lets a mutable UI choice feed a long-running job:
+
+- Verify the provider's current authentication contract from its authoritative
+  documentation. Collect the smallest usable secret, such as an API key or token;
+  do not collect an account password when the protocol does not use it.
+- Keep optional providers off until their credential, attribution, distribution
+  terms, rate policy, and user-visible source label are satisfied. One provider's
+  failure must not disable the primary operation or erase other candidates.
+- Protect unrelated secrets with purpose-separated current-user or platform
+  protection. Test round trip, wrong purpose, corrupt value, clear behavior,
+  migration when applicable, and diagnostic redaction.
+- Treat credentials in URL paths as secrets even over HTTPS. Never log the request
+  URI or response body, and hash any persisted or in-memory cache key that would
+  otherwise retain the credential or private query.
+- Accept one local object at a time unless batch semantics are designed explicitly.
+  Reject directories, links or reparse points when they cross the threat model,
+  unsupported magic, oversized encoded input, unsafe decoded shape, and expansion
+  beyond the declared cap before expensive allocation.
+- Open a local input once, enforce the byte cap while reading, validate the retained
+  bytes, and carry those bytes forward. Do not validate one path read and later
+  publish another. Never log a private source path unless product policy explicitly
+  permits it.
+- Separate candidate ranking from automatic eligibility. Low-confidence,
+  alternate-side, auxiliary, watermarked, or browser-only content may remain
+  inspectable without becoming an automatic choice.
+- Bind a user override to the current subject or selection generation. State which
+  events preserve it, re-derive it, return to automatic choice, or clear it.
+- Freeze an immutable content snapshot when a job starts. Later refresh, selection,
+  resize, provider completion, or another window may affect only a later job.
+- Test malformed, truncated, oversized, renamed, replaced, multi-item, cancellation,
+  provider outage, rate limit, stale generation, manual override, automatic fallback,
+  no-selection, and final published-output cases.
+
 Edit rules:
 - keep changes small and single-purpose
 - do not bundle unrelated fixes

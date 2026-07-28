@@ -1,6 +1,6 @@
 # System Map
 
-Current-state refresh: 2026-07-26. This is an evidence-bounded map of the
+Current-state refresh: 2026-07-28. This is an evidence-bounded map of the
 first-party repository. `verified` means the implementation, project file, test
 manifest, or local test result was inspected. `inferred` and `unknown` are used
 where runtime or external-system evidence is incomplete.
@@ -72,8 +72,9 @@ visible and do not silently discard a newly supplied credential.
 | gnudb | freedb-compatible metadata fallback | plain HTTP text protocol in `Freedb/FreedbHelper.cs` |
 | cue.tools MOTD | classic CUETools startup message | exact HTTPS endpoint `https://cue.tools/motd/motd.txt`; bounded strict UTF-8 text with finite timeouts; the former remote-image decode/cache path is gone |
 | Icecast | CUEPlayer streaming source and metadata updates | HTTPS by default through `IcecastEndpointPolicy`; HTTP requires an explicit persisted `AllowInsecureHttp` choice and UI warning. A disposable Icecast 2.5.0 instance passed source/auth rejection, metadata, listener-byte, flush/close, and teardown smoke locally; HTTPS certificate and Mono behavior remain unobserved |
-| Apple artwork search | CUETools 2026 album-art flow | HTTPS in `CUETools.Wpf/Services/AlbumArtService.cs` |
-| MusicBrainz | browser links and tag field names | the legacy client source/project was deleted; direct lookup was retired. Metadata comes through CTDB proxy/freedb paths, while browser links to musicbrainz.org remain |
+| Apple artwork search | no current runtime reach | removed from CUETools 2026 artwork discovery because its Search API terms document album art as store-promotional content rather than art for file embedding |
+| MusicBrainz and Cover Art Archive | CUETools 2026 release-bound artwork discovery plus metadata browser links | selected CTDB provider identity is retained; an exact release MBID goes directly to Cover Art Archive. Missing IDs use a one-request-per-second MusicBrainz disc-ID/fuzzy-TOC lookup, then exact-release or clearly labeled release-group art |
+| TheAudioDB | optional CUETools 2026 artwork fallback | off by default; accepts a user-supplied API key only, protects it with purpose-separated current-user DPAPI, labels the source, applies a process-wide request gate plus bounded 429 retry, and ranks MusicBrainz release-group matches above exact artist/album text. The future default still depends on the applicable distribution tier and accepted attribution |
 | External encoder sites | CUETools 2026 setup flow | the app opens a browser; it does not silently download or execute bytes. A user-picked executable is copied into the managed encoder directory, bound to approval metadata, and rehashed under a retained deny-write/delete lease at launch |
 | GitHub Actions | CI and release control plane | hosted runner and installed-tool behavior are out of repo; workflow definitions are reviewed, but a first hosted run remains required |
 
@@ -81,7 +82,7 @@ visible and do not silently discard a newly supplied credential.
 
 | Boundary | Controls now present | Residual limit |
 | --- | --- | --- |
-| Network bytes to verification/metadata parsers | AccurateRip and MOTD use HTTPS; MOTD input is bounded text; Icecast validates one endpoint authority and defaults to TLS. A local Icecast 2.5.0 source/auth/metadata/listener lifecycle passed | CTDB and gnudb remain unauthenticated HTTP; Icecast HTTPS certificate/interoperability and Mono behavior are not locally observed |
+| Network and local bytes to verification/metadata/artwork parsers | AccurateRip and MOTD use HTTPS; MOTD input is bounded text; Icecast validates one endpoint authority and defaults to TLS. WPF network artwork uses the configured proxy, bounded responses and redirects, provider host policy, public-host checks for metadata URLs, JPEG/PNG header and pixel limits, cancellation, and a bounded in-memory manifest cache. Local JPEG/PNG/BMP import accepts one regular file, reads it once under encoded/pixel limits, and freezes a RIOT-resized JPEG snapshot | CTDB and gnudb metadata transport remains unauthenticated HTTP; artwork UI and embedded-output proof on a real selected disc remains; Icecast HTTPS certificate/interoperability and Mono behavior are not locally observed |
 | Audio/archive bytes to managed, `unsafe`, and native parsers | bounded `BitReader`; codec tests and fuzz smoke; RAR input is read through an in-memory callback rather than extracted to attacker-selected disk paths. Signed UnRAR 7.23 and a committed production-provider RAR5 fixture cover full read/backward seek; the fixture exposed and fixed a rewind/stale-EOF race | exhaustive malformed-input coverage remains incomplete |
 | Metadata to Windows paths | invalid characters, reserved device names, and trailing dot/space cases are cleansed and covered by tests | arbitrary path-length and filesystem-specific behavior is not exhaustively proven |
 | Plugin directory to application process | packaged plugins require `CUETools.PluginManifest.v1` entries with normalized relative path, size, SHA-256, assembly identity, and architecture; managed and native bytes are rehashed at load. Native modules use verified full paths with no bare-name fallback and retained handles | this is an integrity allowlist, not publisher signing. A principal able to replace both manifest and directory can approve new bytes |
