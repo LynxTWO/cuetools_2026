@@ -1586,16 +1586,42 @@ does not relax evidence, rollback, or verification requirements.
 - **Smallest safe next step:** after all normal regions reject only the proven
   command shape, retry the same required eviction volume with deterministic
   8/4/2/1-sector chunks. Consume no rejected payload and authorize the next secure
-  read only after the full byte count succeeds.
+  read only after the full byte count succeeds. Scope the bounded settle/retry to
+  each exact address/shape, calculate the full byte count without overflow, accept
+  only exact transition `24/00` for the post-eviction retry, and make the
+  independent-read gate consume the same positive flush parser as `Run`.
 - **Verification plan:** classifier and SCSI suites, net8/net47/net20 builds, then
   a K: deep-recovery probe at the damaged window with the measured 786,432-byte
   cache volume and the full Test & Copy repeat.
 - **Owner:** repo owner.
-- **Status:** implemented and software verified 2026-07-27. The fallback is
-  limited to exact `DeviceFailed/IllegalRequest/24/00`, preserves the requested
-  sector count and in-program bounds, stops after one-sector commands, and reports
-  both transient retries and chunk fallbacks. Ripper tests pass 22/22. K: hardware
-  proof remains.
+- **Status:** in progress 2026-07-29. The fallback is limited to exact
+  `DeviceFailed/IllegalRequest/24/00`, preserves the requested sector count and
+  in-program bounds, stops after one-sector commands, and reports both transient
+  retries and chunk fallbacks. The 2026-07-29 K: repeat reached 92 percent of
+  Copy, then rejected all three regions at 16/8/4/2/1 sectors. The first rejected
+  command consumed the retry budget for the entire eviction, leaving fourteen
+  distinct address/shape commands without their own bounded retry. Ripper tests
+  passed 22/22 before this narrower route defect was found. The adversarial pass
+  also found unchecked maximum-size arithmetic, a broad post-eviction exception
+  retry, and a malformed-current-calibration fail-open; all are included in the
+  same complete-or-fail correction before another hardware run. The
+  source-bound rerun then proved all fifteen commands received their local
+  retry, but K: rejected all fifteen with exact `24/00` and became unavailable
+  to a new raw handle after release. The next bounded correction is one
+  `START UNIT` on the still-open handle only after full exact-invalid-field
+  exhaustion, followed by readiness and the complete eviction again. The next
+  Copy run exercised that path: `START UNIT` succeeded, but the immediate
+  readiness CDB returned exact `24/00`; CUETools failed closed after one wake.
+  A later source-bound Test reached 92 percent after 946 seconds and disproved
+  the delay-only assumption: both the settled readiness query and its one exact
+  retry returned `24/00`, after which Windows again reported no loaded media.
+  Because readiness is advisory while the complete unrelated-region read is the
+  actual cache-independence proof, the next bounded build attempts that proof
+  once after the two exact indeterminate readiness results. All other readiness
+  failures and any repeated eviction exhaustion remain fatal. Ripper tests pass
+  28/28, WPF tests pass 430/430, net47/net20 full-MSBuild lanes pass, the warning
+  gate is empty, and the production artifact contract passes. A physically
+  reloaded K: full Test & Copy is the remaining evidence.
 
 ### R70. Human-facing rip sidecars were not identifiable outside their folder - bucket A, risk medium
 

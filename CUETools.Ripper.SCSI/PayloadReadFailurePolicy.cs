@@ -191,11 +191,27 @@ namespace CUETools.Ripper.SCSI
         /// <summary>
         /// The ASUS BW-16D1HT has intermittently rejected valid in-range READ CD
         /// commands with 24/00 during long reads. Cache eviction uses the same
-        /// payload command. If that exact rejection occurs here, a caller may
-        /// settle and retry once. This does not cover medium errors, readiness
-        /// failures, transport errors, or a repeat.
+        /// payload command. Each exact LBA/transfer-shape command may settle and
+        /// retry once. A retry used by one command must not suppress the bounded
+        /// retry for a different address or shape. This does not cover medium
+        /// errors, readiness failures, transport errors, or a repeat.
         /// </summary>
         public static bool ShouldRetryCacheDefeatRead(
+            int retriesForCommand,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return retriesForCommand == 0 &&
+                IsCacheDefeatInvalidField(status, senseKey, asc, ascq);
+        }
+
+        /// <summary>
+        /// Classify the one cache-defeat failure that may select another already
+        /// bounded address or transfer shape. This does not grant another retry.
+        /// </summary>
+        public static bool IsCacheDefeatInvalidField(
             Device.CommandStatus status,
             Device.SenseKeyType senseKey,
             byte asc,
@@ -205,6 +221,79 @@ namespace CUETools.Ripper.SCSI
                 senseKey == Device.SenseKeyType.IllegalRequest &&
                 asc == 0x24 &&
                 ascq == 0x00;
+        }
+
+        /// <summary>
+        /// Retry the first target payload after a completed cache eviction only
+        /// for the observed firmware transition rejection. The completed eviction
+        /// remains valid; every other payload failure keeps its normal meaning.
+        /// </summary>
+        public static bool ShouldRetryAfterCacheDefeatTransition(
+            bool transitionPending,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return transitionPending &&
+                IsCacheDefeatInvalidField(status, senseKey, asc, ascq);
+        }
+
+        /// <summary>
+        /// A dormant-drive recovery is permitted once, and only after every
+        /// bounded address and transfer shape ended in the exact invalid-field
+        /// signature. The wake does not itself satisfy cache independence.
+        /// </summary>
+        public static bool ShouldAttemptCacheDefeatWake(
+            int wakeAttempts,
+            bool exhaustedInvalidFieldShapes)
+        {
+            return wakeAttempts == 0 && exhaustedInvalidFieldShapes;
+        }
+
+        /// <summary>
+        /// The first readiness query immediately after a successful START UNIT
+        /// can cross the same ASUS firmware transition as READ CD. Settle and
+        /// retry that exact readiness CDB once; every other failure stays fatal.
+        /// </summary>
+        public static bool ShouldRetryCacheDefeatWakeReadiness(
+            int retriesForTransition,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return retriesForTransition == 0 &&
+                IsCacheDefeatInvalidField(status, senseKey, asc, ascq);
+        }
+
+        /// <summary>
+        /// TEST UNIT READY is advisory after a successful START UNIT; the complete
+        /// cache-eviction read remains the proof of readiness and independence.
+        /// After both bounded readiness attempts return the observed ASUS 24/00
+        /// transition, allow that proof read once. Other readiness failures stay
+        /// fatal, and failure of the proof read still fails cache defeat.
+        /// </summary>
+        public static bool ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+            int retriesForTransition,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return retriesForTransition == 1 &&
+                IsCacheDefeatInvalidField(status, senseKey, asc, ascq);
+        }
+
+        /// <summary>
+        /// Convert a requested eviction byte count to whole CD sectors without
+        /// allowing a corrupt large persisted value to wrap to a smaller proof.
+        /// </summary>
+        public static int RequiredCacheDefeatSectors(int cacheDefeatBytes)
+        {
+            if (cacheDefeatBytes <= 0)
+                return 0;
+            return (int)(((long)cacheDefeatBytes + 2351L) / 2352L);
         }
 
         /// <summary>

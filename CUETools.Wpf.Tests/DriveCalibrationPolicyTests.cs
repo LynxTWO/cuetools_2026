@@ -17,6 +17,25 @@ public sealed class DriveCalibrationPolicyTests
     }
 
     [TestMethod]
+    public void IndependentReadGateRequiresParsedFlushOrExplicitNoCacheProof()
+    {
+        Assert.IsTrue(
+            DriveCalibrationService.HasIndependentReadStrategy("Flush:786432"));
+        Assert.IsTrue(
+            DriveCalibrationService.HasIndependentReadStrategy(
+                "Media re-reads (no cache)"));
+        Assert.IsFalse(
+            DriveCalibrationService.HasIndependentReadStrategy(null));
+        Assert.IsFalse(
+            DriveCalibrationService.HasIndependentReadStrategy("Flush:"));
+        Assert.IsFalse(
+            DriveCalibrationService.HasIndependentReadStrategy("Flush:0"));
+        Assert.IsFalse(
+            DriveCalibrationService.HasIndependentReadStrategy(
+                "Flush:not-a-number"));
+    }
+
+    [TestMethod]
     public void CalibrationVersionGateForcesNewCapabilityProbe()
     {
         Assert.IsFalse(DriveCalibrationService.IsCurrent(null));

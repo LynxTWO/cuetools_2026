@@ -282,8 +282,14 @@ namespace CUETools.Wpf.Tests
                 $"PASS drive={drive}: relative-sector={sector} samples={read} " +
                 $"cq={correctionQuality} cacheBytes={cacheBytes} " +
                 $"deepRecovery={deepRecovery} " +
+                $"readCommand='{reader.CurrentReadCommand}' " +
                 $"cacheRetries={reader.CacheDefeatRetryCount} " +
-                $"cacheChunkFallbacks={reader.CacheDefeatChunkFallbackCount}");
+                $"cacheChunkFallbacks={reader.CacheDefeatChunkFallbackCount} " +
+                $"cacheWakes={reader.CacheDefeatWakeCount} " +
+                $"cacheWakeReadinessRetries=" +
+                $"{reader.CacheDefeatWakeReadinessRetryCount} " +
+                $"cacheWakeReadinessIndeterminate=" +
+                $"{reader.CacheDefeatWakeReadinessIndeterminateCount}");
         }
 
         [TestMethod]
