@@ -318,6 +318,49 @@ Use this for external tools, isolated parser/fuzz children, helpers, and service
 - Fault-test a normal exit, timeout plus successful kill, kill failure, and a child
   that remains alive after the kill deadline where the platform permits injection.
 
+### External executable support and redistribution checklist
+
+Use this when a product discovers, imports, invokes, or packages a codec, compiler,
+helper, converter, or other third-party executable:
+
+- Treat "the product can invoke it" and "the product may redistribute it" as separate
+  findings. Support may stop at a user-selected import when redistribution, patents,
+  runtime dependencies, notification, attribution, or source obligations are not
+  complete.
+- Exercise the exact released executable against the intended stdin, file, stdout,
+  mode, error, and finalization contract. Help text, another version, or a familiar
+  CLI shape is not execution evidence.
+- For a lossless or assurance-bearing transform, require an independent finalized
+  output verifier. Do not infer general decoding support from a private self-verifier.
+- Pin the HTTPS source page, archive byte length and digest, selected entry name and
+  digest, version, license, and any corresponding source archive. Refuse every drift.
+- Keep packaged tools in a distinct directory. Resolve receipt-bound user imports
+  first so intentional updates override the fallback without replacing package bytes.
+- Repeat the executable digest in the release artifact contract and runtime resolver.
+  Immediately before launch, hash and hold the exact file object read-only and
+  non-replaceable through encoder and verifier exit.
+- Generate notices from the same manifest. Test archive drift, entry drift, tampered
+  installed bytes, user override, alternate accepted names, real encode, failure,
+  and package/source completeness.
+
+### Dependency lock and restore checklist
+
+Use this when closing package-manager provenance:
+
+- Discover first-party package-consuming projects from their declarations. Keep an
+  explicit enrolled set and require it to equal the observed set so a new project
+  cannot silently restore unlocked.
+- Commit the complete direct and transitive lock closure beside each enrolled
+  project. Enable locked mode in CI; regenerate only in an intentional review.
+- Exclude immutable vendor submodules and generated dependency stages from root
+  lock policy. Assert their status and file set remain unchanged after a real
+  restore.
+- Run an unlocked force-evaluate only to create or intentionally refresh locks,
+  then repeat representative solution and product closures in locked mode.
+- Treat locks as dependency-resolution evidence, not artifact identity. Keep build
+  receipts, SBOMs, package notices, native-input manifests, and final artifact
+  hashes as their separate proofs.
+
 ### Toolchain and installer coherence checklist
 
 Use this when a build is blocked on an IDE, SDK, compiler, workload, extension, or
@@ -613,6 +656,8 @@ Check whether recent fixes actually closed the targeted holes without creating n
 
 Do:
 - update coverage statuses honestly
+- reconcile every item's status with ordering, "remaining work," and decision
+  summaries; keep historical next-step text only when it is clearly labeled history
 - confirm docs match current code
 - confirm no new hidden entrypoints or control-plane paths were introduced
 - confirm no sensitive data was added to logs, comments, tests, docs, examples, screenshots, or commit text

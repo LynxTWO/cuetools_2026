@@ -113,6 +113,18 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
 - For repair and preservation claims, verify user-visible identity as well as payload correctness: names, metadata, artwork, sidecars, ordering, and collision behavior can be part of the recovered artifact.
 - For UI-selected identity or policy, trace the selected stable value through the job snapshot, execution, output naming and tags, and final receipt. A correct picker label does not prove downstream consumers used the same selection; assert the produced artifact identity at the last publication boundary.
 - For user-supplied content and optional providers, verify the documented authentication contract, collect only the credential the protocol uses, purpose-separate protected secrets, read local inputs once into bounded immutable bytes, and freeze the exact UI selection before background work starts.
+- Separate executable support from redistribution. Exercise the real command-line
+  contract, verification path, and input/output shape before registering a tool.
+  Package it only when license, source obligations, dependency rights, and provenance
+  are complete. Prefer a receipt-bound user import over inventing permission.
+- For curated packaged executables, pin the archive and selected entry, repeat the
+  hash in the artifact contract, verify it again at runtime, and hold the verified
+  file against replacement through process launch. A user-approved import may
+  override the package only through its own exact receipt.
+- For dependency lock rollout, derive the enrolled first-party project set from
+  actual package declarations, require policy and lock files to agree exactly, use
+  locked restore in CI, and prove restore does not write into vendor submodules or
+  generated dependency stages.
 - Distinguish a source defect from an unexercised path, missing toolchain, unavailable capability, or missing native dependency.
 - Name out-of-repo boundaries when they affect live behavior.
 - Do not claim whole-repo coverage from one clean path.
@@ -165,6 +177,9 @@ See `00-conventions.md` for the writing rules. Run `06-writing-hygiene.md` after
 - Default hard stop: `20` commits.
 - Stop sooner if the current slice is complete, a protected area is uncovered, the map is stale, evidence turns soft, or an approval-gated edit becomes next.
 - Keep one commit to one backlog item, one slice checkpoint, or one tightly related docs-plus-code unit.
+- After each batch, reconcile every backlog status with the ordering and remaining-work
+  summary. A fixed item may retain historical evidence, but it must not remain in the
+  executable queue through a stale "next step."
 
 ### No parallel passes
 
