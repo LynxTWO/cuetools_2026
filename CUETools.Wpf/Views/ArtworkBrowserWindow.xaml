@@ -26,6 +26,7 @@
         <Button Content="Recommended sort" Padding="14,6" Margin="0,0,8,0"
                 Click="Recommended_Click"/>
         <CheckBox x:Name="AllArtworkCheckBox" Content="All artwork"
+                  Foreground="{DynamicResource InkDim}"
                   VerticalAlignment="Center" Margin="0,0,12,0"
                   Checked="AllArtwork_Changed" Unchecked="AllArtwork_Changed"/>
         <Button Content="Refresh" Padding="14,6"
@@ -42,11 +43,15 @@
                 AutoGenerateColumns="False"
                 CanUserAddRows="False" CanUserDeleteRows="False"
                 IsReadOnly="True" SelectionMode="Single"
+                SelectionUnit="FullRow"
                 HeadersVisibility="Column"
                 GridLinesVisibility="Horizontal"
+                Background="{DynamicResource Panel}"
                 RowBackground="{DynamicResource Panel}"
                 AlternatingRowBackground="{DynamicResource Glass}"
                 Foreground="{DynamicResource Ink}"
+                HorizontalGridLinesBrush="{DynamicResource Line}"
+                VerticalGridLinesBrush="{DynamicResource Line}"
                 BorderThickness="0"
                 EnableRowVirtualization="True"
                 EnableColumnVirtualization="True"
@@ -60,9 +65,20 @@
             <Setter Property="Padding" Value="9,7"/>
           </Style>
           <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
             <Setter Property="Padding" Value="6,4"/>
+            <Style.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Face}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Teal}"/>
+              </Trigger>
+            </Style.Triggers>
+          </Style>
+          <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
           </Style>
         </DataGrid.Resources>
         <DataGrid.Columns>

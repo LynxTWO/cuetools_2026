@@ -854,11 +854,12 @@ removal. Never roll back to plaintext secrets or retained local paths.
 tier, dimensions, and encoded byte count. Never record API keys, keyed URLs,
 music identity, local image paths, or response bodies.
 
-**Status:** implemented and software-verified on 2026-07-28 under R73. The WPF
-suite passes 395/395, the WPF/fuzz warning gate is empty, the self-contained x64
-artifact contract passes, all three live provider probes return HTTP 200, and the
-local anti-dark-code skill validates. Interactive theme/DPI captures and
-independent real embedded-output inspection remain.
+**Status:** implemented, software-verified, and partially live-verified through
+2026-07-29 under R72/R73. Live provider probes return HTTP 200. The first normal
+dark browser capture exposed a default-white DataGrid body; the repaired browser
+passed dark/light 1040x700 captures at 96 DPI. A real image rip embedded the
+selected cover byte-for-byte. High-contrast and 150/200 percent DPI browser
+captures remain.
 
 ### Align archival defaults, output layouts, read evidence, and themes
 
@@ -894,8 +895,13 @@ dynamic palette resolution.
 layout ids, and numeric evidence counts only. Do not add album identity, output
 paths, drive serials, or executable source paths to diagnostics.
 
-**Status:** software implementation complete on 2026-07-28. The WPF suite
-passes 414/414, the WPF/fuzz warning budget is empty, and the self-contained
-x64 artifact contract passes. Remaining evidence is interactive light/dark
-capture, a live Kenny G metadata rerun, and one live optical image rip with
-embedded-CUE and repair-source inspection.
+**Status:** implementation and the selected live evidence are complete as of
+2026-07-29. Interactive 1590x880 and 1180x740 captures passed in light and dark
+at the host's actual 96 DPI. The H: metadata reread exposed and then closed a
+provider-credit mismatch in the single-disc duplicate check. A Paranoid optical
+rip published one FLAC with matching ten-track embedded/external cue sheets,
+post-metadata decode proof, an exact selected-cover embedding, and an unambiguous
+cue-to-image repair binding.
+The closing gates pass: ripper 22/22, WPF 417/417, zero warning fingerprints,
+and the self-contained x64 artifact contract including all five native-plugin
+probes.

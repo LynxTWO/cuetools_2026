@@ -1618,10 +1618,11 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** naming, legacy compatibility, ambiguity, overwrite,
   repair, convert, proof-transfer, and full WPF tests, followed by a real rip.
 - **Owner:** repo owner.
-- **Status:** implemented and software verified 2026-07-27. New outputs use
+- **Status:** fixed and live-verified 2026-07-29. New outputs use
   `<artist> - <album> (<year>).cue/.log/.accurip` and `<stem> - Test & Copy.log`,
   with optional disc identity. Legacy `album.*` remains supported. Multiple cues
-  fail repair discovery closed. WPF tests pass 367/367. Live output proof remains.
+  fail repair discovery closed. The live image rip published portable album-named
+  cue, log, AccurateRip/CTDB report, and TOC sidecars beside the single FLAC.
 
 ### R71. Damaged Test & Copy and repaired outputs overstated their evidence - bucket A, risk high
 
@@ -1681,16 +1682,17 @@ does not relax evidence, rollback, or verification requirements.
   accessible selector tests; full WPF/publish gates; then real Rip and Test & Copy
   inspection of embedded bytes.
 - **Owner:** repo owner and WPF maintainer.
-- **Status:** implemented and software-verified 2026-07-28. Provider identity,
+- **Status:** implemented and partially live-verified through 2026-07-29. Provider identity,
   CTDB/Cover Art Archive discovery, MusicBrainz throttled disc/fuzzy lookup,
   release-group labeling, deterministic rank, shared proxy/bounds/redirect/pixel
   controls, the sortable selector, immutable job selection, and removal of the
   hidden processor fallback are in place. Apple artwork has no runtime reach.
-  WPF tests pass 395/395, the warning gate is empty, the self-contained x64
-  artifact contract passes, and live CAA/MusicBrainz/TheAudioDB probes return
-  HTTP 200. Dark/light/high-contrast/DPI captures and real embedded-output
-  inspection remain before release closure. TheAudioDB is available only as an
-  off-by-default user-key provider pending a distribution-tier/default decision.
+  The first live dark capture exposed a default-white DataGrid body; the browser
+  now uses only dynamic palette resources and passed dark/light 1040x700 captures
+  at 96 DPI. The live image FLAC contains exactly one selected cover byte-for-byte
+  equal to the published `folder.jpg`. High-contrast and 150/200 percent DPI
+  captures remain. TheAudioDB is available only as an off-by-default user-key
+  provider pending a distribution-tier/default decision.
 
 ### R73. Local artwork import and optional provider credentials need explicit trust boundaries - bucket B, risk high
 
@@ -1716,17 +1718,16 @@ does not relax evidence, rollback, or verification requirements.
   rate, host, and response-bound tests; selector filter/sort/drop/theme tests;
   warning, publish, and real embedded-output gates.
 - **Owner:** WPF maintainer.
-- **Status:** implemented and software-verified 2026-07-28. Local JPEG/PNG/BMP
+- **Status:** implemented and partially live-verified through 2026-07-29. Local JPEG/PNG/BMP
   import reads one regular file once under 30 MiB and 100-megapixel limits,
   applies quality-92 JPEG conversion and RIOT resizing, binds the override to the
   release generation, and clones job bytes. TheAudioDB accepts only a
   purpose-separated DPAPI-protected API key, stays off by default, labels source
   and match class, validates text fallback identity, host-binds requests, rate
   gates calls, and retries one bounded 429. Front/All filtering keeps non-front
-  art out of automatic selection. WPF tests pass 395/395, zero warnings and the
-  x64 artifact contract pass, live provider probes return HTTP 200, and the
-  local anti-dark-code skill validates. Interactive capture and independent
-  embedded-output inspection remain the release evidence gap.
+  art out of automatic selection. Live normal-theme browser captures and
+  independent selected-cover embedding inspection now pass. High-contrast and
+  150/200 percent DPI browser captures remain the release evidence gap.
 
 ### R74. Archival output defaults lag the intended profile - bucket A, risk low
 
@@ -1799,9 +1800,11 @@ does not relax evidence, rollback, or verification requirements.
 - **Why it matters:** a generic two-disc MusicBrainz candidate for the Kenny G disc
   produced a false `[2-CD Set]/Disc 1 - Disc 1` folder even though an exact one-disc
   release with the same barcode and track list exists.
-- **Evidence found:** both candidates receive the same source/completeness score;
-  `List.Sort` then has no semantic tie-break. The retained cue proves the selected
-  candidate asserted `TOTALDISCS 2` and generic `Disc 1`.
+- **Evidence found:** both candidates initially received the same
+  source/completeness score. The first strict tie-break also compared provider
+  track-artist credits, so spelling differences such as featured-artist ordering
+  prevented the physical duplicate from being recognized. The retained cue proves
+  the selected candidate asserted `TOTALDISCS 2` and generic `Disc 1`.
 - **Confidence:** verified for the observed disc; inferred for other duplicate-release shapes.
 - **Approval needed:** no.
 - **Smallest safe next step:** add a narrow duplicate-candidate preference for the
@@ -1810,12 +1813,13 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** Kenny G fixture, genuine uniquely subtitled box set, stable
   tie order, and existing naming tests.
 - **Owner:** metadata and naming maintainer.
-- **Status:** implemented and software-verified 2026-07-28. An otherwise
-  identical generic multi-disc candidate loses a narrow tie-break only when a
-  single-disc candidate has the same artist, album, year, barcode, and every
-  track title and artist. Named box discs and barcode differences remain
-  untouched. A live reread of the Kenny G disc remains the final metadata
-  service check.
+- **Status:** fixed and live-verified 2026-07-29. The duplicate check now binds
+  album identity, year, barcode, track count, and normalized track titles, but
+  does not treat provider credit spelling as physical-disc identity. Named box
+  discs, different barcodes, and different track lists remain untouched. The
+  live H: reread ranked the one-disc MusicBrainz candidate 145 and the generic
+  two-disc candidate 142. The committed output used the single-disc folder with
+  no set descriptor or disc subfolder.
 
 ### R78. Light mode swaps structural brushes but custom controls retain dark constants - bucket A, risk medium
 
@@ -1831,12 +1835,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** palette completeness, no dark-only structural constants
   outside intentional media illustrations, light/dark render samples, and contrast checks.
 - **Owner:** WPF maintainer.
-- **Status:** implemented and software-verified 2026-07-28. One central dark
+- **Status:** fixed and live-verified 2026-07-29. One central dark
   and light palette now owns switch hardware, borders, shadows, and drawing
   control surfaces/text. Codec, conversion, VU, reread, repair, and disc-layer
   drawings resolve live theme resources. Palette type/parity tests and XAML
-  compilation pass. Interactive light/dark captures remain before release
-  closure.
+  compilation pass. Interactive 1590x880 and 1180x740 captures at the host's
+  actual 96 DPI passed in both light and dark modes. Compact mode scrolls the
+  wide evidence table while every job control remains reachable. The artwork
+  browser also passed post-fix dark/light 1040x700 captures after its default
+  DataGrid cell surface was moved onto the central palette.
 
 ### R79. WPF hides the engine's single-FLAC embedded-CUE output - bucket B, risk high
 
@@ -1856,11 +1863,15 @@ does not relax evidence, rollback, or verification requirements.
   embedded CUE tags, optional external cue, final decode proof, repair source
   selection, persistence, and responsive UI.
 - **Owner:** rip pipeline and WPF maintainer.
-- **Status:** implemented and software-verified 2026-07-28. Tracks remains the
+- **Status:** fixed and live-verified 2026-07-29. Tracks remains the
   default. Rip and Test & Copy snapshot a persisted Image + embedded CUE choice
   and map it to `SingleFileWithCUE`; verify-only runs remain `GapsAppended`.
-  Existing processor integration covers embedded-CUE final decode proof. A
-  live optical image rip and repair-source check remain before release closure.
+  A live H: Paranoid rip published one 330,738,757-byte FLAC for ten tracks.
+  The embedded and external cue sheets each contain ten tracks, the managed
+  FLAC decoder reached all 146,313,216 declared samples with CRC checking, and
+  `rip.verify` records post-metadata decode-and-compare. Repair discovery selects
+  the authoritative external cue, which names the single image. The FLAC contains
+  exactly one cover whose 100,222 bytes equal the published `folder.jpg`.
 
 ## Ordering
 

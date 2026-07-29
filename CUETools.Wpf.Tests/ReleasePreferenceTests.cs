@@ -25,6 +25,39 @@ public sealed class ReleasePreferenceTests
     }
 
     [TestMethod]
+    public void ProviderCreditAndApostropheDifferencesStillIdentifyRedundantDisc()
+    {
+        CUEMetadata single = KennyG(totalDiscs: "1", discName: "");
+        single.Tracks[0].Artist = "Kenny G with intro feat. George Benson";
+        single.Tracks[1].Title = "\u2019round Midnight";
+        CUEMetadata multi = KennyG(totalDiscs: "2", discName: "Disc 1");
+        multi.Tracks[0].Artist = "Kenny G feat. George Benson";
+        multi.Tracks[1].Title = "Round Midnight";
+        var singleMatch = Match(single, 100);
+        var multiMatch = Match(multi, 100);
+
+        DriveService.PreferSingleDiscDuplicate(
+            new[] { multiMatch, singleMatch });
+
+        Assert.AreEqual(97, multiMatch.Score);
+        Assert.AreEqual(100, singleMatch.Score);
+    }
+
+    [TestMethod]
+    public void DifferentTrackTitleDoesNotDemoteGenericBoxDisc()
+    {
+        CUEMetadata single = KennyG(totalDiscs: "1", discName: "");
+        CUEMetadata multi = KennyG(totalDiscs: "2", discName: "Disc 1");
+        multi.Tracks[1].Title = "A genuinely different track";
+        var multiMatch = Match(multi, 100);
+
+        DriveService.PreferSingleDiscDuplicate(
+            new[] { multiMatch, Match(single, 100) });
+
+        Assert.AreEqual(100, multiMatch.Score);
+    }
+
+    [TestMethod]
     public void NamedBoxDiscAndDifferentBarcodeRemainUntouched()
     {
         CUEMetadata single = KennyG(totalDiscs: "1", discName: "");

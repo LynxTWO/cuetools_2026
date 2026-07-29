@@ -1,7 +1,8 @@
 # Album Art Discovery and Selection Plan
 
-Status: core implementation complete and software-verified; interactive and
-embedded-output release proof remains.
+Status: core implementation, normal dark/light browser capture, and
+embedded-output proof are complete. High-contrast and 150/200 percent DPI
+captures remain.
 Prepared 2026-07-28 for CUETools 2026.
 
 ## 1. Outcome
@@ -51,6 +52,19 @@ Implementation checkpoint, 2026-07-28:
 - The planned disk cache is not part of this checkpoint. The in-memory cache
   avoids repeat calls during a session without creating a persistent privacy or
   corruption boundary.
+
+Live checkpoint, 2026-07-29:
+
+- The first dark-theme browser capture exposed a default-white DataGrid body and
+  unreadable row text. Body, cell, selection, grid-line, and text colors now
+  resolve through the central dynamic palette.
+- Post-fix dark and light 1040x700 captures at the host's actual 96 DPI show the
+  complete candidate row and reachable selection controls.
+- A real Paranoid image rip embedded exactly one selected cover whose 100,222
+  bytes equal the published `folder.jpg`.
+- Windows high contrast and 150/200 percent DPI browser captures remain open.
+- Closing software gates pass: WPF 417/417, zero WPF/fuzz warning fingerprints,
+  and the self-contained x64 artifact contract with five native-plugin probes.
 
 ## 2. Current path and defects
 
