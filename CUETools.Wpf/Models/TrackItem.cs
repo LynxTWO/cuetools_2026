@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CUETools.Wpf.Mvvm;
 
 namespace CUETools.Wpf.Models;
@@ -28,10 +29,72 @@ public sealed class TrackItem : ViewModelBase
     // Full-range CRC32 evidence. Unlike AccurateRip CRCs these cover the samples at both disc edges.
     // They persist in verify history and are restored when the same disc is inserted again.
     private string _testCrc = "-";
-    public string TestCrc { get => _testCrc; set => Set(ref _testCrc, value); }
+    public string TestCrc { get => _testCrc; private set => Set(ref _testCrc, value); }
 
     private string _copyCrc = "-";
-    public string CopyCrc { get => _copyCrc; set => Set(ref _copyCrc, value); }
+    public string CopyCrc { get => _copyCrc; private set => Set(ref _copyCrc, value); }
+
+    private bool _crcsMatch;
+    public bool CrcsMatch { get => _crcsMatch; private set => Set(ref _crcsMatch, value); }
+
+    private bool _crcsDiffer;
+    public bool CrcsDiffer { get => _crcsDiffer; private set => Set(ref _crcsDiffer, value); }
+
+    private bool _crossDriveCorroborated;
+    public bool CrossDriveCorroborated
+    {
+        get => _crossDriveCorroborated;
+        private set => Set(ref _crossDriveCorroborated, value);
+    }
+
+    private string _crcEvidenceTip = "No Test or Copy CRC evidence yet.";
+    public string CrcEvidenceTip
+    {
+        get => _crcEvidenceTip;
+        private set => Set(ref _crcEvidenceTip, value);
+    }
+
+    public void ApplyCrcEvidence(CUETools.Wpf.Accuracy.TrackCrc? evidence)
+    {
+        uint test = evidence?.TestCrc32 ?? 0;
+        uint copy = evidence?.CopyCrc32 ?? 0;
+        int testCount = Math.Max(0, evidence?.TestMatchCount ?? 0);
+        int copyCount = Math.Max(0, evidence?.CopyMatchCount ?? 0);
+        int testDrives = Math.Max(0, evidence?.TestDriveCount ?? 0);
+        int copyDrives = Math.Max(0, evidence?.CopyDriveCount ?? 0);
+
+        TestCrc = FormatCrc(test, testCount);
+        CopyCrc = FormatCrc(copy, copyCount);
+        CrcsMatch = test != 0 && copy != 0 && test == copy;
+        CrcsDiffer = test != 0 && copy != 0 && test != copy;
+        int distinctDrives = CountDistinctDrives(
+            evidence?.TestDriveFingerprints,
+            evidence?.CopyDriveFingerprints);
+        CrossDriveCorroborated = CrcsMatch && distinctDrives > 1;
+        CrcEvidenceTip =
+            $"Test: {(test == 0 ? "not recorded" : test.ToString("X8"))}, " +
+            $"{testCount} matching job(s), {testDrives} drive(s). " +
+            $"Copy: {(copy == 0 ? "not recorded" : copy.ToString("X8"))}, " +
+            $"{copyCount} matching job(s), {copyDrives} drive(s)." +
+            (CrcsMatch && distinctDrives > 1
+                ? $" Corroborated across {distinctDrives} distinct drives."
+                : "");
+    }
+
+    private static int CountDistinctDrives(params string?[] groups)
+    {
+        var drives = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string? group in groups)
+            foreach (string value in (group ?? "").Split(','))
+                if (value.Length > 0)
+                    drives.Add(value);
+        return drives.Count;
+    }
+
+    private static string FormatCrc(uint crc, int count) =>
+        crc == 0
+            ? "-"
+            : crc.ToString("X8") + (count > 1 ? " x" + count : "");
 
     // Live per-track progress during a rip (0..1), derived from the read head position.
     private double _progress;

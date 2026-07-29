@@ -173,7 +173,7 @@ public interface IRipService
     /// <paramref name="onEncodeStart"/>, when
     /// given, fires once right before the actual encode begins (never on a verify-only pass) - the
     /// caller uses it to lock the codec choice at that moment.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null);
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
@@ -188,7 +188,7 @@ public interface IRipService
     /// codec choice once encoding actually starts. <paramref name="onCrcEvidence"/> receives a
     /// fresh named Test/Copy snapshot after each completed read; it is an ancillary notification
     /// and must not affect the read or final transaction result.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null);
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -215,6 +215,13 @@ public sealed class RipService : IRipService
 
     public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history, CUETools.Wpf.Accuracy.DriveCalibrationService calService)
     { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; _calService = calService; }
+
+    internal static CUEStyle ResolveOutputStyle(
+        bool encode,
+        RipOutputLayout layout) =>
+        encode && layout == RipOutputLayout.ImageWithEmbeddedCue
+            ? CUEStyle.SingleFileWithCUE
+            : CUEStyle.GapsAppended;
 
     /// <summary>Set by Stop(), cleared when a new operation starts. Stop() alone was not enough:
     /// it only forwards to whatever CUESheet is currently running, and a Test & Copy makes 2-3
@@ -286,7 +293,7 @@ public sealed class RipService : IRipService
         return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, telemetry, onReread);
     }
 
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null)
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         using var operationScope = DriveService.TryEnterRip(drive, _log);
         if (operationScope == null)
@@ -301,7 +308,7 @@ public sealed class RipService : IRipService
                 requireIndependentReads: cq > 0,
                 out string error))
             return new VerifyResult { Error = error };
-        return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart);
+        return Run(drive, cq, encode: true, string.IsNullOrWhiteSpace(format) ? "flac" : format, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
     }
 
     private void RedactOutputRoot(string? outputBaseDir)
@@ -329,7 +336,7 @@ public sealed class RipService : IRipService
         try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
     }
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
@@ -544,7 +551,7 @@ public sealed class RipService : IRipService
             cue.UseCUEToolsDB("CUETools 2026", reader.ARName, false, CTDBMetadataSearch.Fast);
             cue.UseAccurateRip();
             cue.ArTestVerify = null;
-            cue.OutputStyle = CUEStyle.GapsAppended;
+            cue.OutputStyle = ResolveOutputStyle(encode, outputLayout);
 
             string outDir = "";
             string outRelDir = "";   // the album folder relative to baseDir - see VerifyResult.OutputRelDir
@@ -865,6 +872,7 @@ public sealed class RipService : IRipService
                     Artist = cue.Metadata?.Artist ?? "",
                     Utc = DateTime.UtcNow,
                     RipperVersion = "2026.1.0",
+                    ReadKind = encode ? "Copy" : "Test",
                     Format = encode ? format : "",
                     OutputVerificationKnown =
                         encode && outputAssurance.Known,
@@ -889,6 +897,16 @@ public sealed class RipService : IRipService
                     _log.Warn(
                         "verify.history",
                         "prior CRC evidence load failed: " + ex.GetType().Name);
+                }
+                try
+                {
+                    _history.PreviewAgreement(built);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn(
+                        "verify.history",
+                        "CRC agreement preview failed: " + ex.GetType().Name);
                 }
             }
             catch (Exception ex)
@@ -1187,7 +1205,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         // Test, Copy, and an optional tie-break are separate Run calls. Keep drive ownership
         // continuous across their calibration, staging, and between-read gaps.
@@ -1248,7 +1266,7 @@ public sealed class RipService : IRipService
             // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
             // against but its checksums still count as an independent read.
             ThrowIfStopRequested();
-            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true);
+            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, outputLayout: outputLayout);
             if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
             VerifyRecord? testRecord = testResult.Record;
             if (testRecord == null)
@@ -1267,7 +1285,7 @@ public sealed class RipService : IRipService
             // file-extension count below, so it stays consistent with what was actually encoded.
             { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
-            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
             if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
             VerifyRecord? copyRecord = copyResult.Record;
             if (copyRecord == null)
@@ -1297,7 +1315,7 @@ public sealed class RipService : IRipService
                 // so this re-poll is just for consistency - it will report the same locked choice.
                 { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
                 ThrowIfStopRequested();
-                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart);
+                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
                 if (!thirdResult.Ok)
                 {
                     if (thirdResult.Error == "Stopped.")
@@ -1430,6 +1448,25 @@ public sealed class RipService : IRipService
                     committedEncoded);
                 keepStaging = false;   // committed - the staging is now redundant
                 var last = reads[reads.Count - 1];
+                TrackCrc[] completedEvidence =
+                    BuildTestCopyCrcEvidence(reads, whole);
+                if (historyRecorded)
+                {
+                    try
+                    {
+                        TrackCrc[] persisted =
+                            _history.GetLatestCrcEvidence(discId);
+                        if (persisted.Length > 0)
+                            completedEvidence = persisted;
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warn(
+                            "verify.history",
+                            "completed CRC evidence reload failed: " +
+                            ex.GetType().Name);
+                    }
+                }
                 bool repairableDamage =
                     committedEncoded.CtdbHasErrors &&
                     committedEncoded.CtdbCanRecover &&
@@ -1489,7 +1526,7 @@ public sealed class RipService : IRipService
                     OutputVerificationDetail =
                         committedEncoded.OutputVerificationDetail,
                     OutputProofs = committedEncoded.OutputProofs,
-                    CrcEvidence = BuildTestCopyCrcEvidence(reads, whole),
+                    CrcEvidence = completedEvidence,
                 };
             }
             else
@@ -1675,6 +1712,7 @@ public sealed class RipService : IRipService
             Artist = newest?.Artist ?? "",
             Utc = DateTime.UtcNow,
             RipperVersion = "2026.1.0",
+            ReadKind = "TestAndCopy",
             Format = format,
             OutputVerificationKnown =
                 encodedResult.OutputVerificationKnown,
@@ -1684,6 +1722,17 @@ public sealed class RipService : IRipService
             OutputVerificationDetail =
                 encodedResult.OutputVerificationDetail,
         };
+        try
+        {
+            _history.PreviewAgreement(committedRecord);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn(
+                "verify.history",
+                "Test & Copy agreement preview failed: " +
+                ex.GetType().Name);
+        }
 
         string testCopyLogName =
             AlbumArtifactNames.TestCopyLogFileName(encodedResult.ArtifactStem);
@@ -1701,6 +1750,7 @@ public sealed class RipService : IRipService
         if (encodedResult.OutputVerificationKnown)
             logText += "\nEncoded-output verification: " +
                 encodedResult.OutputVerificationDetail + "\n";
+        logText += FormatLocalCrcAgreement(committedRecord);
         File.WriteAllText(
             Path.Combine(publication.StagingDirectory, testCopyLogName),
             logText);
@@ -1730,6 +1780,42 @@ public sealed class RipService : IRipService
         catch (Exception ex) { _log.Warn("verify.history", "test&copy upsert failed: " + ex.GetType().Name); }
 
         return (outDir, sourceFileCount, historyRecorded, history);
+    }
+
+    private static string FormatLocalCrcAgreement(VerifyRecord record)
+    {
+        var writer = new System.Text.StringBuilder();
+        writer.AppendLine();
+        writer.AppendLine("Local CRC agreement (including this completed job):");
+        TrackCrc[] tracks = record.Tracks ?? Array.Empty<TrackCrc>();
+        for (int i = 0; i < tracks.Length; i++)
+        {
+            TrackCrc? track = tracks[i];
+            if (track == null)
+                continue;
+            writer.Append("  Track ");
+            writer.Append((i + 1).ToString("00"));
+            writer.Append(": Test ");
+            writer.Append(track.TestCrc32.ToString("X8"));
+            writer.Append(" x");
+            writer.Append(Math.Max(1, track.TestMatchCount));
+            writer.Append(" (");
+            writer.Append(track.TestDriveCount);
+            writer.Append(" drive");
+            if (track.TestDriveCount != 1)
+                writer.Append('s');
+            writer.Append("); Copy ");
+            writer.Append(track.CopyCrc32.ToString("X8"));
+            writer.Append(" x");
+            writer.Append(Math.Max(1, track.CopyMatchCount));
+            writer.Append(" (");
+            writer.Append(track.CopyDriveCount);
+            writer.Append(" drive");
+            if (track.CopyDriveCount != 1)
+                writer.Append('s');
+            writer.AppendLine(")");
+        }
+        return writer.ToString();
     }
 
     /// <summary>

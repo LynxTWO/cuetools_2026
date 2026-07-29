@@ -17,6 +17,42 @@ public partial class App : Application
     private IDiagnosticLog? _log;
     private AppLaunchOptions _launchOptions = new();
 
+    internal static CUEConfig CreateWpfDefaultConfig()
+    {
+        var config = new CUEConfig
+        {
+            detectHDCD = true,
+            decodeHDCD = false,
+            decodeHDCDto24bit = false,
+            maxAlbumArtSize = 1500,
+            writeArTagsOnEncode = true,
+            // Every engine embed/extract site is "embedAlbumArt || CopyAlbumArt".
+            // Keep the WPF setting as the only gate.
+            CopyAlbumArt = false,
+        };
+        config.advanced.CreateTOC = true;
+        config.advanced.DetailedCTDBLog = true;
+        config.advanced.coversSearch =
+            CUEConfigAdvanced.CTDBCoversSearch.Extensive;
+        return config;
+    }
+
+    internal static bool ApplyDefaultsV3(
+        CUEConfig config,
+        AppSettings settings)
+    {
+        if (settings.DefaultsV3Applied)
+            return false;
+        if (config.maxAlbumArtSize == 1000)
+            config.maxAlbumArtSize = 1500;
+        config.advanced.CreateTOC = true;
+        config.advanced.DetailedCTDBLog = true;
+        config.advanced.coversSearch =
+            CUEConfigAdvanced.CTDBCoversSearch.Extensive;
+        settings.DefaultsV3Applied = true;
+        return true;
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         // persist every user setting (engine config + app prefs) on the way out
@@ -40,21 +76,7 @@ public partial class App : Application
         // Explicit factory: CUEConfig has a copy constructor too, and the DI container would
         // otherwise pick it and self-recurse. Force the parameterless ctor, then apply the app's
         // preferred defaults (until settings persistence lands).
-        services.AddSingleton<CUEConfig>(_ =>
-        {
-            var c = new CUEConfig();
-            c.detectHDCD = true;            // flag HDCD discs by default
-            c.decodeHDCD = false;           // but do not alter the audio unless asked
-            c.decodeHDCDto24bit = false;    // 24-bit HDCD output off by default
-            c.maxAlbumArtSize = 1000;       // embed/extract art up to 1000 px
-            c.writeArTagsOnEncode = true;   // AccurateRip tags in the files by default
-            // Every engine embed/extract site is "embedAlbumArt || CopyAlbumArt", and CopyAlbumArt
-            // defaults to true - so turning cover art OFF changed nothing on the Convert path: a source
-            // that already carried a front cover still had it embedded into every output file. Legacy
-            // CUERipper clears it for the same reason. This leaves the real setting as the only gate.
-            c.CopyAlbumArt = false;
-            return c;
-        });
+        services.AddSingleton<CUEConfig>(_ => CreateWpfDefaultConfig());
         services.AddSingleton<AppSettings>();
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<EncoderCatalog>();
@@ -144,6 +166,18 @@ public partial class App : Application
                 _config.trackFilenameFormat = "%tracknumber%. %title%";
                 log.Info("settings", "reset a stale WPF-style trackFilenameFormat to the engine default");
             }
+        }
+
+        // Owner-default migration round 3. Move only the former app-owned cover
+        // default; a non-1000 value is already a user choice. The three engine
+        // advanced values previously defaulted off/Primary, so this one migration
+        // deliberately adopts the new archival defaults. Choices made afterward stick.
+        if (ApplyDefaultsV3(_config, _appSettings))
+        {
+            log.Info(
+                "settings",
+                $"defaults v3 applied: cover max {_config.maxAlbumArtSize}px, " +
+                "TOC on, detailed CTDB on, artwork search Extensive");
         }
 
         // Sweep orphaned Test & Copy staging. Cleanup requires the exact owned marker and directory

@@ -19,6 +19,7 @@ public sealed class ExternalEncoderInfo
     public string FormatName = "";      // human name (e.g. "Musepack")
     public bool Lossless;
     public string ExeName = "";         // the file the user downloads (e.g. "mpcenc.exe")
+    public string[] AcceptedExeNames = Array.Empty<string>();
     public string DownloadUrl = "";     // OFFICIAL project download page
     public string ResolvedPath = "";    // where we found it ("" = not installed)
     public bool Found => ResolvedPath.Length > 0;
@@ -67,6 +68,14 @@ public sealed class EncoderCatalog
         ("opusenc.exe", "opus", "Opus",           false, "opusenc.exe", "https://opus-codec.org/downloads/"),
         ("qaac.exe (tvbr)", "m4a", "AAC (qaac)",  false, "qaac.exe",    "https://github.com/nu774/qaac/releases"),
     };
+
+    private static string[] AcceptedNames(string encoderName, string preferredName) =>
+        encoderName switch
+        {
+            "qaac.exe (tvbr)" => new[] { "qaac.exe", "qaac64.exe" },
+            "oggenc.exe" => new[] { "oggenc.exe", "oggenc2.exe" },
+            _ => new[] { preferredName },
+        };
 
     /// <summary>Register engine-external formats and migrate evidence-backed verifier contracts
     /// (idempotent; call after config load). Formats surface only when their executable and, for
@@ -356,15 +365,20 @@ public sealed class EncoderCatalog
         {
             if (!File.Exists(pickedFile))
                 return "File not found.";
-            if (!Path.GetFileName(pickedFile).Equals(info.ExeName, StringComparison.OrdinalIgnoreCase))
-                return $"Expected {info.ExeName} (got {Path.GetFileName(pickedFile)}).";
-            if (!IsSimpleExecutableName(info.ExeName))
+            string pickedName = Path.GetFileName(pickedFile);
+            string[] accepted = info.AcceptedExeNames.Length == 0
+                ? new[] { info.ExeName }
+                : info.AcceptedExeNames;
+            if (!accepted.Any(
+                    name => pickedName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                return $"Expected {string.Join(" or ", accepted)} (got {pickedName}).";
+            if (!IsSimpleExecutableName(pickedName))
                 return "The expected executable name is invalid.";
             if (IsReparsePoint(pickedFile))
                 return "Symbolic-link and reparse-point imports are not allowed.";
 
             EnsureManagedDirectory();
-            string dest = Path.GetFullPath(Path.Combine(_encodersDir, info.ExeName));
+            string dest = Path.GetFullPath(Path.Combine(_encodersDir, pickedName));
             if (!IsDirectChild(_encodersDir, dest))
                 return "The import destination is invalid.";
             if (File.Exists(dest) && IsReparsePoint(dest))
@@ -372,12 +386,13 @@ public sealed class EncoderCatalog
 
             stagePath = Path.Combine(
                 _encodersDir,
-                "." + Path.GetFileNameWithoutExtension(info.ExeName) + "." +
+                "." + Path.GetFileNameWithoutExtension(pickedName) + "." +
                 Guid.NewGuid().ToString("N") + ".importing.exe");
             CopyToOwnedStage(pickedFile, stagePath);
 
             FileIdentity stagedIdentity = ReadIdentity(stagePath);
-            var approval = CreateApproval(info, pickedFile, stagePath, stagedIdentity);
+            var approval = CreateApproval(
+                info, pickedName, pickedFile, stagePath, stagedIdentity);
             string updatedApprovals = ExternalEncoderApprovalCodec.Upsert(
                 _app.ExternalEncoderApprovals, approval);
             PublishStage(stagePath, dest);
@@ -394,7 +409,7 @@ public sealed class EncoderCatalog
             _app.ExternalEncoderApprovals = updatedApprovals;
             var enc = FindEncoder(config, info);
             if (enc != null) enc.Path = dest;
-            _log.Info("encoders", $"imported {info.ExeName} for {info.Extension}");
+            _log.Info("encoders", $"imported {pickedName} for {info.Extension}");
             Changed?.Invoke(this, EventArgs.Empty);
             return null;
         }
@@ -486,6 +501,7 @@ public sealed class EncoderCatalog
 
     private ExternalEncoderApproval CreateApproval(
         ExternalEncoderInfo info,
+        string publishedFileName,
         string pickedFile,
         string stagedFile,
         FileIdentity identity)
@@ -503,7 +519,7 @@ public sealed class EncoderCatalog
 
         return new ExternalEncoderApproval
         {
-            FileName = info.ExeName,
+            FileName = publishedFileName,
             EncoderName = info.EncoderName,
             Extension = info.Extension,
             Sha256 = identity.Sha256,
@@ -616,12 +632,54 @@ public sealed class EncoderCatalog
         foreach (var (enc, ext, name, lossless, exe, url) in Known)
         {
             var info = new ExternalEncoderInfo
-            { EncoderName = enc, Extension = ext, FormatName = name, Lossless = lossless, ExeName = exe, DownloadUrl = url };
+            {
+                EncoderName = enc,
+                Extension = ext,
+                FormatName = name,
+                Lossless = lossless,
+                ExeName = exe,
+                AcceptedExeNames = AcceptedNames(enc, exe),
+                DownloadUrl = url
+            };
             var vm = FindEncoder(config, info);
-            if (vm != null) info.ResolvedPath = ResolveExe(vm) ?? "";
+            if (vm != null)
+            {
+                string originalPath = vm.Path ?? "";
+                info.ResolvedPath = ResolveExe(vm) ?? "";
+                if (info.ResolvedPath.Length == 0 &&
+                    MayDiscoverManagedAlias(originalPath, info.ExeName))
+                {
+                    foreach (string alias in info.AcceptedExeNames)
+                    {
+                        string candidate = Path.Combine(_encodersDir, alias);
+                        if (!File.Exists(candidate))
+                            continue;
+                        vm.Path = candidate;
+                        info.ResolvedPath = ResolveExe(vm) ?? "";
+                        if (info.ResolvedPath.Length > 0)
+                            break;
+                    }
+                    if (info.ResolvedPath.Length == 0)
+                        vm.Path = originalPath;
+                }
+            }
             list.Add(info);
         }
         return list;
+    }
+
+    private bool MayDiscoverManagedAlias(
+        string configuredPath,
+        string preferredName)
+    {
+        string configured = (configuredPath ?? "").Trim();
+        if (configured.Length > 0 &&
+            !configured.Equals(preferredName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        string preferred = Path.Combine(_encodersDir, preferredName);
+        // A present configured managed file that failed its receipt is a hard
+        // refusal. Do not silently substitute another approved alias.
+        return !File.Exists(preferred);
     }
 
     /// <summary>The owner's default policy: maximum archival compression for lossless, the

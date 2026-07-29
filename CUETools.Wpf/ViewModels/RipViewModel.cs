@@ -78,6 +78,23 @@ public sealed class RipViewModel : PageViewModel
         set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode)); } }
     }
 
+    public string[] OutputLayouts { get; } =
+        { "Tracks", "Image + embedded CUE" };
+    public string SelectedOutputLayout
+    {
+        get => _settings.RipOutputLayout == RipOutputLayout.ImageWithEmbeddedCue
+            ? "Image + embedded CUE"
+            : "Tracks";
+        set
+        {
+            _settings.RipOutputLayout =
+                string.Equals(value, "Image + embedded CUE", StringComparison.Ordinal)
+                    ? RipOutputLayout.ImageWithEmbeddedCue
+                    : RipOutputLayout.Tracks;
+            OnPropertyChanged();
+        }
+    }
+
     /// <summary>What the codec scope should draw for the selected format. A two-faced format is
     /// remapped so the visualization matches the ENCODER that will actually run: wma flipped to
     /// lossless draws WMA Lossless's predictor pipeline (not the MDCT mask), and m4a flipped to an
@@ -769,7 +786,8 @@ public sealed class RipViewModel : PageViewModel
             release?.ProviderId ?? "",
             release?.InfoUrl ?? "",
             generation,
-            _chosenMetadata?.AlbumArt);
+            _chosenMetadata?.AlbumArt,
+            _config.advanced.coversSearch);
         _ = FetchArtAsync(query);
     }
 
@@ -815,7 +833,11 @@ public sealed class RipViewModel : PageViewModel
         _coverBytes = null;
         SelectedArtwork = null;
         ArtworkCandidates.Clear();
-        ArtInfo = "searching selected release and Cover Art Archive...";
+        ArtInfo = query.SearchMode == CUEConfigAdvanced.CTDBCoversSearch.Extensive
+            ? "searching all release-matched artwork sources..."
+            : query.SearchMode == CUEConfigAdvanced.CTDBCoversSearch.Primary
+                ? "searching for release-matched front artwork..."
+                : "automatic artwork search is disabled";
         try
         {
             IReadOnlyList<ArtworkCandidate> candidates =
@@ -828,7 +850,9 @@ public sealed class RipViewModel : PageViewModel
                 ArtworkCandidates.Add(candidate);
             if (candidates.Count == 0)
             {
-                ArtInfo = "no release-matched cover found";
+                ArtInfo = query.SearchMode == CUEConfigAdvanced.CTDBCoversSearch.None
+                    ? "automatic artwork search is disabled; drop an image here to use your own"
+                    : "no release-matched cover found";
                 return;
             }
             ArtworkCandidate[] automatic = candidates.Where(
@@ -1210,6 +1234,7 @@ public sealed class RipViewModel : PageViewModel
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
+        RipOutputLayout outputLayout = _settings.RipOutputLayout;
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
@@ -1222,7 +1247,8 @@ public sealed class RipViewModel : PageViewModel
                 ? _rip.RunEncode(
                     drive, cq, fmt, meta, outBase, Report,
                     telemetry, Reread, cover,
-                    onEncodeStart: LockCodec)
+                    onEncodeStart: LockCodec,
+                    outputLayout: outputLayout)
                 : _rip.RunVerify(
                     drive, cq, meta, Report, telemetry, Reread));
         }
@@ -1381,6 +1407,7 @@ public sealed class RipViewModel : PageViewModel
         string fmt = SelectedFormat;
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
+        RipOutputLayout outputLayout = _settings.RipOutputLayout;
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
@@ -1411,7 +1438,8 @@ public sealed class RipViewModel : PageViewModel
                 drive, cq, fmt, meta, outBase, Report, telemetry,
                 Reread, cover, liveFormat: () => SelectedFormat,
                 onEncodeStart: LockCodec,
-                onCrcEvidence: PublishCrcEvidence));
+                onCrcEvidence: PublishCrcEvidence,
+                outputLayout: outputLayout));
         }
         finally
         {
@@ -1961,14 +1989,7 @@ public sealed class RipViewModel : PageViewModel
                 evidence != null && i < evidence.Count
                     ? evidence[i]
                     : null;
-            Tracks[i].TestCrc =
-                crc != null && crc.TestCrc32 != 0
-                    ? crc.TestCrc32.ToString("X8")
-                    : "-";
-            Tracks[i].CopyCrc =
-                crc != null && crc.CopyCrc32 != 0
-                    ? crc.CopyCrc32.ToString("X8")
-                    : "-";
+            Tracks[i].ApplyCrcEvidence(crc);
         }
     }
 

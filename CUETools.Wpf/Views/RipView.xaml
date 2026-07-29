@@ -296,8 +296,54 @@
               </GridViewColumn.CellTemplate>
             </GridViewColumn>
             <GridViewColumn Header="Len" Width="52" DisplayMemberBinding="{Binding LengthText}"/>
-            <GridViewColumn Header="Test CRC" Width="76" DisplayMemberBinding="{Binding TestCrc}"/>
-            <GridViewColumn Header="Copy CRC" Width="76" DisplayMemberBinding="{Binding CopyCrc}"/>
+            <GridViewColumn Header="Test CRC" Width="102">
+              <GridViewColumn.CellTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding TestCrc}" ToolTip="{Binding CrcEvidenceTip}">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding CrcsMatch}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Good}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding CrossDriveCorroborated}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Teal2}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding CrcsDiffer}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Amber}"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="Copy CRC" Width="102">
+              <GridViewColumn.CellTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding CopyCrc}" ToolTip="{Binding CrcEvidenceTip}">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding CrcsMatch}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Good}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding CrossDriveCorroborated}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Teal2}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding CrcsDiffer}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Amber}"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </DataTemplate>
+              </GridViewColumn.CellTemplate>
+            </GridViewColumn>
             <GridViewColumn Header="AR" Width="48" DisplayMemberBinding="{Binding ArResult}"/>
             <GridViewColumn Header="CTDB" Width="52" DisplayMemberBinding="{Binding CtdbResult}"/>
           </GridView>
@@ -385,6 +431,11 @@
                       ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
                       IsEnabled="{Binding CodecUnlocked}"
                       ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
+            <ComboBox Width="176" Margin="0,0,6,6" VerticalAlignment="Center"
+                      ItemsSource="{Binding OutputLayouts}"
+                      SelectedItem="{Binding SelectedOutputLayout, Mode=TwoWay}"
+                      IsEnabled="{Binding ControlsUnlocked}"
+                      ToolTip="Tracks: one tagged file per track (default). Image + embedded CUE: one continuous audio file with the complete disc layout stored in its tags."/>
             <Button Content="tune" FontFamily="{StaticResource Mono}" FontSize="11"
                     Padding="9,6" Margin="0,0,10,6" VerticalAlignment="Center"
                     Click="EncoderSettings_Click"

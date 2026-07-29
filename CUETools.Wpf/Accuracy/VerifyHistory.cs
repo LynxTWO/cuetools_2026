@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CUETools.Wpf.Services;
 
@@ -18,6 +21,12 @@ namespace CUETools.Wpf.Accuracy
         public uint TestCrc32 { get; set; }
         /// <summary>Most recent rip/Copy-pass full-range CRC for this disc track.</summary>
         public uint CopyCrc32 { get; set; }
+        public int TestMatchCount { get; set; }
+        public int CopyMatchCount { get; set; }
+        public int TestDriveCount { get; set; }
+        public int CopyDriveCount { get; set; }
+        public string TestDriveFingerprints { get; set; } = "";
+        public string CopyDriveFingerprints { get; set; } = "";
     }
 
     /// <summary>One read of one disc: its identity, the per-track checksums, and the context of the read.
@@ -38,6 +47,9 @@ namespace CUETools.Wpf.Accuracy
         public string Artist { get; set; } = "";
         public DateTime Utc { get; set; }
         public string RipperVersion { get; set; } = "";
+        /// <summary>Which named evidence this completed job contributed:
+        /// Test, Copy, or TestAndCopy. Older records leave this empty.</summary>
+        public string ReadKind { get; set; } = "";
         /// <summary>Encoded-file assurance carried in the album's rip.verify sidecar. It is not
         /// consulted for optical-read history matching.</summary>
         public string Format { get; set; } = "";
@@ -117,12 +129,40 @@ namespace CUETools.Wpf.Accuracy
                         outcome.Matches = diff == 0;
                     }
 
+                    EnrichAgreement(r, reads);
                     reads.Add(r);
                     if (reads.Count > MaxPerDisc)
                         reads.RemoveRange(0, reads.Count - MaxPerDisc);
                     all[key] = reads;
                     return (all, outcome);
                 });
+        }
+
+        /// <summary>
+        /// Enrich a staged record with the local agreement counts that would apply
+        /// if it is published. This does not mutate the store. CompareAndUpsert
+        /// recomputes the values atomically after publication.
+        /// </summary>
+        public void PreviewAgreement(VerifyRecord record)
+        {
+            if (record == null)
+                throw new ArgumentNullException(nameof(record));
+            GzJsonLoadResult<Dictionary<string, List<VerifyRecord>>> loaded =
+                GzJson.TryLoad<Dictionary<string, List<VerifyRecord>>>(_path);
+            if (loaded.Status == GzJsonLoadStatus.Failed)
+                throw new InvalidDataException(
+                    "The verify-history store exists but could not be read; it was left unchanged.",
+                    loaded.Error);
+            var reads = new List<VerifyRecord>();
+            if (loaded.Status == GzJsonLoadStatus.Loaded &&
+                loaded.Value!.TryGetValue(
+                    (record.DiscId ?? "").Trim(),
+                    out List<VerifyRecord>? found) &&
+                found != null)
+            {
+                reads = found;
+            }
+            EnrichAgreement(record, reads);
         }
 
         /// <summary>
@@ -156,6 +196,12 @@ namespace CUETools.Wpf.Accuracy
                         Crc32 = track.Crc32,
                         TestCrc32 = track.TestCrc32,
                         CopyCrc32 = track.CopyCrc32,
+                        TestMatchCount = track.TestMatchCount,
+                        CopyMatchCount = track.CopyMatchCount,
+                        TestDriveCount = track.TestDriveCount,
+                        CopyDriveCount = track.CopyDriveCount,
+                        TestDriveFingerprints = track.TestDriveFingerprints ?? "",
+                        CopyDriveFingerprints = track.CopyDriveFingerprints ?? "",
                     };
             }
             return copy;
@@ -174,6 +220,129 @@ namespace CUETools.Wpf.Accuracy
                 if (now[i].CopyCrc32 == 0)
                     now[i].CopyCrc32 = before[i].CopyCrc32;
             }
+        }
+
+        private static void EnrichAgreement(
+            VerifyRecord current,
+            IReadOnlyList<VerifyRecord> prior)
+        {
+            VerifyRecord? previous = prior.Count == 0
+                ? null
+                : prior[prior.Count - 1];
+            TrackCrc[] before = previous?.Tracks ?? Array.Empty<TrackCrc>();
+            TrackCrc[] now = current.Tracks ?? Array.Empty<TrackCrc>();
+            string kind = InferReadKind(current);
+            bool contributesTest =
+                kind is "Test" or "TestAndCopy";
+            bool contributesCopy =
+                kind is "Copy" or "TestAndCopy";
+            string driveFingerprint = DriveFingerprint(current.Drive);
+
+            for (int i = 0; i < now.Length; i++)
+            {
+                TrackCrc? track = now[i];
+                if (track == null)
+                    continue;
+                TrackCrc? old = i < before.Length ? before[i] : null;
+
+                ApplyRoleAgreement(
+                    track.TestCrc32,
+                    old?.TestCrc32 ?? 0,
+                    old?.TestMatchCount ?? 0,
+                    old?.TestDriveFingerprints,
+                    previous?.Drive,
+                    contributesTest,
+                    driveFingerprint,
+                    out int testCount,
+                    out string testDrives,
+                    out int testDriveCount);
+                track.TestMatchCount = testCount;
+                track.TestDriveFingerprints = testDrives;
+                track.TestDriveCount = testDriveCount;
+
+                ApplyRoleAgreement(
+                    track.CopyCrc32,
+                    old?.CopyCrc32 ?? 0,
+                    old?.CopyMatchCount ?? 0,
+                    old?.CopyDriveFingerprints,
+                    previous?.Drive,
+                    contributesCopy,
+                    driveFingerprint,
+                    out int copyCount,
+                    out string copyDrives,
+                    out int copyDriveCount);
+                track.CopyMatchCount = copyCount;
+                track.CopyDriveFingerprints = copyDrives;
+                track.CopyDriveCount = copyDriveCount;
+            }
+        }
+
+        private static string InferReadKind(VerifyRecord record)
+        {
+            if (record.ReadKind is "Test" or "Copy" or "TestAndCopy")
+                return record.ReadKind;
+            TrackCrc[] tracks = record.Tracks ?? Array.Empty<TrackCrc>();
+            bool hasTest = tracks.Any(track => track?.TestCrc32 != 0);
+            bool hasCopy = tracks.Any(track => track?.CopyCrc32 != 0);
+            return hasTest && hasCopy
+                ? "TestAndCopy"
+                : hasTest ? "Test"
+                : hasCopy ? "Copy"
+                : "";
+        }
+
+        private static void ApplyRoleAgreement(
+            uint currentCrc,
+            uint previousCrc,
+            int previousCount,
+            string? previousFingerprints,
+            string? previousDrive,
+            bool contributes,
+            string currentDriveFingerprint,
+            out int count,
+            out string fingerprints,
+            out int driveCount)
+        {
+            var drives = new HashSet<string>(StringComparer.Ordinal);
+            count = 0;
+            if (currentCrc != 0 && currentCrc == previousCrc)
+            {
+                count = Math.Max(1, previousCount);
+                foreach (string value in (previousFingerprints ?? "").Split(','))
+                    if (value.Length > 0)
+                        drives.Add(value);
+                if (drives.Count == 0)
+                {
+                    string legacy = DriveFingerprint(previousDrive);
+                    if (legacy.Length > 0)
+                        drives.Add(legacy);
+                }
+            }
+
+            if (currentCrc != 0 && contributes)
+            {
+                count++;
+                if (currentDriveFingerprint.Length > 0)
+                    drives.Add(currentDriveFingerprint);
+            }
+            else if (currentCrc != 0 && count == 0)
+            {
+                // A carried legacy named CRC is evidence of at least one completed
+                // job, even though its exact role predates ReadKind.
+                count = 1;
+            }
+
+            fingerprints = string.Join(",", drives.OrderBy(value => value));
+            driveCount = drives.Count;
+        }
+
+        private static string DriveFingerprint(string? drive)
+        {
+            string normalized = (drive ?? "").Trim().ToUpperInvariant();
+            if (normalized.Length == 0)
+                return "";
+            byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+            return Convert.ToHexString(digest);
         }
 
         // History must remain comparable across drives and offsets. Prefer v2, then use v1 for older

@@ -40,7 +40,9 @@ public sealed record ArtworkQuery(
     string ProviderId,
     string InfoUrl,
     long Generation,
-    IReadOnlyList<CTDBResponseMetaImage>? MetadataArtwork = null);
+    IReadOnlyList<CTDBResponseMetaImage>? MetadataArtwork = null,
+    CUETools.Processor.CUEConfigAdvanced.CTDBCoversSearch SearchMode =
+        CUETools.Processor.CUEConfigAdvanced.CTDBCoversSearch.Extensive);
 
 /// <summary>Provider-neutral artwork metadata. Image bytes are loaded only by the bounded loader.</summary>
 public sealed record ArtworkCandidate

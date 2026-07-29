@@ -92,6 +92,15 @@ public sealed class SettingsStore
             app.CorrectionQuality = Math.Max(0, Math.Min(2, sr.LoadInt32("WpfCorrectionQuality", 0, 2) ?? 1));
             app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
             app.DefaultsV2Applied = sr.LoadBoolean("WpfDefaultsV2Applied") ?? false;
+            app.DefaultsV3Applied = sr.LoadBoolean("WpfDefaultsV3Applied") ?? false;
+            app.RipOutputLayout =
+                Enum.TryParse(
+                    sr.Load("WpfRipOutputLayout"),
+                    ignoreCase: false,
+                    out RipOutputLayout outputLayout) &&
+                Enum.IsDefined(typeof(RipOutputLayout), outputLayout)
+                    ? outputLayout
+                    : RipOutputLayout.Tracks;
             app.FormatTypeOverrides = sr.Load("WpfFormatTypeOverrides") ?? "";
             app.ExternalEncoderApprovals = sr.Load("WpfExternalEncoderApprovals") ?? "";
             app.AdaptiveReadSpeed = sr.LoadBoolean("WpfAdaptiveReadSpeed") ?? true;
@@ -252,6 +261,8 @@ public sealed class SettingsStore
             sw.Save("WpfCorrectionQuality", app.CorrectionQuality);
             sw.Save("WpfArchivalDefaultsApplied", app.ArchivalDefaultsApplied);
             sw.Save("WpfDefaultsV2Applied", app.DefaultsV2Applied);
+            sw.Save("WpfDefaultsV3Applied", app.DefaultsV3Applied);
+            sw.Save("WpfRipOutputLayout", app.RipOutputLayout.ToString());
             sw.Save("WpfFormatTypeOverrides", app.FormatTypeOverrides);
             sw.Save("WpfExternalEncoderApprovals", app.ExternalEncoderApprovals);
             sw.Save("WpfAdaptiveReadSpeed", app.AdaptiveReadSpeed);

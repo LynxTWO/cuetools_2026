@@ -43,11 +43,20 @@ public sealed class CodecScope : FrameworkElement
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
     public RipTelemetryDisplayFrame? Samples { get => (RipTelemetryDisplayFrame?)GetValue(SamplesProperty); set => SetValue(SamplesProperty, value); }
 
-    private static readonly Color Teal = Color.FromRgb(0x34, 0xCF, 0xC0);
-    private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
-    private static readonly Color Ink = Color.FromRgb(0xED, 0xF1, 0xE9);
-    private static readonly Color Muted = Color.FromRgb(0x7D, 0x88, 0x7C);
-    private static readonly Color Line = Color.FromRgb(0x28, 0x31, 0x2A);
+    private static Color Teal => ThemeColor.Get(
+        "Teal", Color.FromRgb(0x34, 0xCF, 0xC0));
+    private static Color Amber => ThemeColor.Get(
+        "Amber", Color.FromRgb(0xE9, 0xA6, 0x3F));
+    private static Color Ink => ThemeColor.Get(
+        "Ink", Color.FromRgb(0xED, 0xF1, 0xE9));
+    private static Color Muted => ThemeColor.Get(
+        "Muted", Color.FromRgb(0x7D, 0x88, 0x7C));
+    private static Color Line => ThemeColor.Get(
+        "Line", Color.FromRgb(0x28, 0x31, 0x2A));
+    private static Color Card => ThemeColor.Get(
+        "Glass", Color.FromRgb(0x0E, 0x13, 0x11));
+    private static Color Ground => ThemeColor.Get(
+        "Ground", Color.FromRgb(0x0C, 0x0F, 0x0D));
     private static readonly Typeface Face = new("Segoe UI");
     private static readonly Typeface Mono = new("Consolas");
 
@@ -166,7 +175,12 @@ public sealed class CodecScope : FrameworkElement
     // visualization and label it, so a long pause reads as deliberate error recovery, not a hang.
     private void DrawRecoveryVeil(DrawingContext dc, double w, double h)
     {
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xB4, 0x0F, 0x11, 0x15)), null, new Rect(0, 0, w, h));
+        Color ground = Ground;
+        dc.DrawRectangle(
+            new SolidColorBrush(
+                Color.FromArgb(0xD8, ground.R, ground.G, ground.B)),
+            null,
+            new Rect(0, 0, w, h));
         var ft = MakeText("recovering read errors", Mono, 13, Amber);
         dc.DrawText(ft, new Point((w - ft.Width) / 2, h / 2 - 16));
         var ft2 = MakeText("re-reading the disc - audio paused until the window is clean", Face, 10, Muted);
@@ -335,7 +349,10 @@ public sealed class CodecScope : FrameworkElement
 
     private static void DrawCard(DrawingContext dc, Rect r)
     {
-        var bg = new SolidColorBrush(Color.FromArgb(80, 14, 19, 17)); bg.Freeze();
+        Color card = Card;
+        var bg = new SolidColorBrush(
+            Color.FromArgb(190, card.R, card.G, card.B));
+        bg.Freeze();
         var edge = new Pen(new SolidColorBrush(Line), 1); edge.Freeze();
         dc.DrawRoundedRectangle(bg, edge, r, 8, 8);
     }

@@ -19,8 +19,8 @@ public sealed class ReleaseMatch
     public int TrackCount { get; init; }
     public int TitledTracks { get; init; }
     public bool HasCover { get; init; }
-    public int Score { get; init; }
-    public string Why { get; init; } = "";
+    public int Score { get; set; }
+    public string Why { get; set; } = "";
     public bool IsBest { get; set; }
     public string ProviderKey { get; init; } = "";
     public string ProviderId { get; init; } = "";

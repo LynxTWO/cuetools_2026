@@ -48,18 +48,10 @@
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
     <Setter Property="ctl:BendyButton.Enabled" Value="True"/>
-    <Setter Property="BorderBrush" Value="#42FFFFFF"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/>
     <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
     <!-- Tag = the edge (side) brush: a horizontal dark-mid-dark gradient for the extruded look -->
-    <Setter Property="Tag">
-      <Setter.Value>
-        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-          <GradientStop Color="#0A0E0B" Offset="0"/>
-          <GradientStop Color="#1A211B" Offset="0.5"/>
-          <GradientStop Color="#0A0E0B" Offset="1"/>
-        </LinearGradientBrush>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="Tag" Value="{DynamicResource ButtonEdge}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
@@ -68,7 +60,7 @@
                layers just FILL this cell (no cross-element size bindings - those loop and blank). -->
           <Grid ClipToBounds="False" Margin="0,3,0,7">
             <!-- cast shadow: grounds the button on the panel -->
-            <Border x:Name="shadow" CornerRadius="10" Margin="4,5,4,-2" Background="#000000" Opacity="0.5">
+            <Border x:Name="shadow" CornerRadius="10" Margin="4,5,4,-2" Background="{DynamicResource ButtonEdge}" Opacity="0.5">
               <Border.Effect><BlurEffect Radius="13"/></Border.Effect>
             </Border>
 
@@ -230,7 +222,7 @@
                    AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
               <Border Margin="0,4,0,0" CornerRadius="8" Background="{DynamicResource Face}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1"
                       MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Padding="4">
-                <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="3" Opacity="0.5"/></Border.Effect>
+                <Border.Effect><DropShadowEffect Color="{DynamicResource ControlShadowColor}" BlurRadius="14" ShadowDepth="3" Opacity="0.35"/></Border.Effect>
                 <ScrollViewer MaxHeight="260"><ItemsPresenter/></ScrollViewer>
               </Border>
             </Popup>
@@ -301,11 +293,11 @@
         <ControlTemplate TargetType="ToggleButton">
           <Grid>
             <!-- housing: recessed translucent plastic (fixed) -->
-            <Border x:Name="housing" CornerRadius="12" BorderThickness="1" BorderBrush="#0A0F0B">
+            <Border x:Name="housing" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource SwitchHousingBorder}">
               <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                  <GradientStop Color="#0A0E0B" Offset="0"/>
-                  <GradientStop Color="#131A14" Offset="1"/>
+                  <GradientStop Color="{DynamicResource SwitchHousingTopColor}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource SwitchHousingBottomColor}" Offset="1"/>
                 </LinearGradientBrush>
               </Border.Background>
             </Border>
@@ -316,9 +308,9 @@
             <Border x:Name="channel" CornerRadius="11" Margin="1" BorderThickness="1.2">
               <Border.BorderBrush>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                  <GradientStop Color="#B0000000" Offset="0"/>
-                  <GradientStop Color="#40000000" Offset="0.45"/>
-                  <GradientStop Color="#2AFFFFFF" Offset="1"/>
+                  <GradientStop Color="{DynamicResource SwitchChannelTopColor}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource SwitchChannelMidColor}" Offset="0.45"/>
+                  <GradientStop Color="{DynamicResource SwitchChannelBottomColor}" Offset="1"/>
                 </LinearGradientBrush>
               </Border.BorderBrush>
             </Border>
@@ -357,13 +349,13 @@
               <Border x:Name="thumb" Width="21" Height="19" CornerRadius="5">
                 <Border.Background>
                   <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#5A6356" Offset="0"/>
-                    <GradientStop Color="#333C34" Offset="0.5"/>
-                    <GradientStop Color="#242B25" Offset="1"/>
+                    <GradientStop Color="{DynamicResource SwitchThumbTopColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource SwitchThumbMidColor}" Offset="0.5"/>
+                    <GradientStop Color="{DynamicResource SwitchThumbBottomColor}" Offset="1"/>
                   </LinearGradientBrush>
                 </Border.Background>
                 <!-- deeper cast so the cap reads as seated down in the channel, not raised above it -->
-                <Border.Effect><DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="2.2" Direction="270" Opacity="0.7"/></Border.Effect>
+                <Border.Effect><DropShadowEffect Color="{DynamicResource ControlShadowColor}" BlurRadius="4" ShadowDepth="2.2" Direction="270" Opacity="0.55"/></Border.Effect>
               </Border>
 
               <!-- light bleeding through the thick plastic cap, on the lens-facing edge -->
@@ -378,7 +370,7 @@
               </Border>
 
               <!-- specular sheen along the cap top -->
-              <Border x:Name="sheen" Width="15" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,3,0,0" Background="#26FFFFFF"/>
+              <Border x:Name="sheen" Width="15" Height="3" CornerRadius="2" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,3,0,0" Background="{DynamicResource SwitchSheen}"/>
             </Grid>
           </Grid>
           <ControlTemplate.Triggers>
