@@ -62,7 +62,7 @@
     },
     {
       "path": "ThirdParty/WavPack",
-      "commit": "4827b9889665b937b6ed71b9c6c0123152cd7a02"
+      "commit": "5803634a030e2a11dba602ba057b89cc34486c67"
     }
   ],
   "artifacts": [
@@ -93,7 +93,7 @@
         "plugins/win32/wavpackdll.dll",
         "plugins/x64/wavpackdll.dll"
       ],
-      "version": "5.8.1",
+      "version": "5.9.0",
       "sourceStatus": "source-built",
       "upstream": "https://github.com/dbry/WavPack",
       "license": "BSD-3-Clause",
