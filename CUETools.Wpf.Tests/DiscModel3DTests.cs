@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
+using System.Text.Json;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -111,6 +113,117 @@ public sealed class DiscModel3DTests
                 disc.DamageZoom >= unreadableZoom,
                 "Unreadable must hold the damage zoom instead of easing out.");
         });
+    }
+
+    [TestMethod]
+    public void FrameMetricsAreDisabledWithoutAnExplicitOutput()
+    {
+        Assert.IsNull(DiscFrameMetrics.TryCreate(null, renderTier: 2));
+        Assert.IsNull(DiscFrameMetrics.TryCreate("", renderTier: 2));
+        Assert.IsNull(DiscFrameMetrics.TryCreate("   ", renderTier: 2));
+    }
+
+    [TestMethod]
+    public void FrameMetricsWriteNumericStateSpecificReceipt()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "cuetools-frame-metrics-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(directory, "metrics.json");
+        try
+        {
+            DiscFrameMetrics metrics =
+                DiscFrameMetrics.TryCreate(path, renderTier: 2)!;
+            long start = Stopwatch.GetTimestamp();
+            long interval = Math.Max(1, Stopwatch.Frequency / 60);
+            long callback = Math.Max(1, Stopwatch.Frequency / 2000);
+
+            Record(metrics, ref start, interval, callback, DiscFrameState.Idle);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Idle);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Reading);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Reading);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Reread);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Reread);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Unreadable);
+            Record(metrics, ref start, interval, callback, DiscFrameState.Unreadable);
+            metrics.Complete();
+
+            string json = File.ReadAllText(path);
+            Assert.IsFalse(json.Contains(path, StringComparison.OrdinalIgnoreCase));
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            Assert.AreEqual(1, root.GetProperty("SchemaVersion").GetInt32());
+            Assert.AreEqual(2, root.GetProperty("RenderTier").GetInt32());
+            Assert.AreEqual(
+                0,
+                root.GetProperty("TransitionOverflow").GetInt32());
+            Assert.AreEqual(
+                4,
+                root.GetProperty("Transitions").GetArrayLength());
+
+            JsonElement states = root.GetProperty("States");
+            foreach (string state in new[]
+                     {
+                         "idle",
+                         "reading",
+                         "reread",
+                         "unreadable"
+                     })
+            {
+                JsonElement receipt = states.GetProperty(state);
+                Assert.IsTrue(receipt.GetProperty("Frames").GetInt64() > 0);
+                Assert.IsTrue(
+                    receipt.GetProperty("MeanIntervalMilliseconds")
+                        .GetDouble() > 0);
+                Assert.IsTrue(
+                    receipt.GetProperty("P99CallbackMilliseconds")
+                        .GetDouble() >= 0);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void FrameMetricsDoNotAllocatePerFrameAfterWarmup()
+    {
+        string path = Path.Combine(
+            Path.GetTempPath(),
+            "cuetools-frame-metrics-" + Guid.NewGuid().ToString("N"),
+            "metrics.json");
+        DiscFrameMetrics metrics =
+            DiscFrameMetrics.TryCreate(path, renderTier: 2)!;
+        long start = Stopwatch.GetTimestamp();
+        long interval = Math.Max(1, Stopwatch.Frequency / 60);
+        long callback = Math.Max(1, Stopwatch.Frequency / 2000);
+
+        for (int i = 0; i < 100; i++)
+            Record(
+                metrics,
+                ref start,
+                interval,
+                callback,
+                DiscFrameState.Reading);
+
+        _ = GC.GetAllocatedBytesForCurrentThread();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+            Record(
+                metrics,
+                ref start,
+                interval,
+                callback,
+                DiscFrameState.Reading);
+        long allocated =
+            GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.AreEqual(
+            0,
+            allocated,
+            $"The live frame sampler allocated {allocated} bytes over 1000 frames.");
     }
 
     [TestMethod]
@@ -308,6 +421,28 @@ public sealed class DiscModel3DTests
     {
         for (int i = 0; i < frames; i++)
             disc.Advance(0.016);
+    }
+
+    private static void Record(
+        DiscFrameMetrics metrics,
+        ref long start,
+        long interval,
+        long callback,
+        DiscFrameState state)
+    {
+        bool active = state != DiscFrameState.Idle;
+        metrics.RecordFrame(
+            start,
+            start + callback,
+            active,
+            state == DiscFrameState.Reread,
+            state == DiscFrameState.Unreadable,
+            progress: 0.61,
+            rereadFraction: 0.37,
+            zoom: state is DiscFrameState.Reread or DiscFrameState.Unreadable
+                ? 0.92
+                : 0.0);
+        start += interval;
     }
 
     private static void RunSta(Action action)

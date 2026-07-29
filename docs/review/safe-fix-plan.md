@@ -939,3 +939,36 @@ including a 1,000-frame allocation bound. The WPF suite passes 423/423, and the
 warning budget emits zero fingerprints.
 The self-contained x64 artifact contract passes all 19 plugin registrations and
 five native-plugin probes.
+
+### Measure the live CD surface during real damaged-media recovery
+
+**Exact files:** `CUETools.Wpf/Controls/DiscFrameMetrics.cs`,
+`CUETools.Wpf/Controls/DiscModel3D.cs`, focused WPF tests, R12 design notes,
+live release evidence, and R81.
+
+**Safety and unchanged behavior:** keep the sampler disabled unless
+`CUETOOLS_DISC_FRAME_METRICS` names an output file. Observe the existing
+`CompositionTarget.Rendering` callback after it has advanced the model. Do not
+change optical commands, retry policy, progress reporting, damage state, camera
+motion, or output publication. Use fixed histograms after construction so the
+measurement adds no per-frame allocation. Record only numeric timing and visual
+state, never disc identity, drive identity, paths, metadata, or audio.
+
+**Checks:** test disabled-by-default behavior, numeric-only output, independent
+idle/reading/re-reading/unreadable buckets, state transitions, percentile
+calculation, and the post-warmup allocation bound. Run the focused visual suite,
+full WPF suite, warning gate, and self-contained publish. Then run a real
+Paranoid Test & Copy on K: and require at least one measured re-read interval
+before closing the benchmark.
+
+**Rollback:** remove the sampler and its single call site. The committed R80
+visual and its existing state contract remain unchanged.
+
+**Observability:** the opt-in JSON receipt contains schema and product versions,
+process id, UTC state-transition times, frame/callback histograms, progress
+fractions, and zoom values. The normal application log remains the independent
+proof that a measured interval was a real optical re-read.
+
+**Status:** in progress 2026-07-29. WPR and PresentMon both require elevation on
+this host. The source-bound fixed-histogram sampler is the non-administrative
+measurement lane.
