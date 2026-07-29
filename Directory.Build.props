@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    R32: commit the complete NuGet dependency closure for every first-party
+    PackageReference project. Keep the list explicit so a restore never writes
+    generated lock files into pinned vendor submodules.
+
+    CI=true is supplied by GitHub Actions. Locked mode then refuses a project or
+    transitive dependency change until its reviewed packages.lock.json is
+    regenerated intentionally.
+  -->
+  <PropertyGroup>
+    <CUEToolsPackageLockProjects>;CUETools.Codecs.FLACCL;CUETools.Codecs.ffmpeg;CUETools.Codecs;TestRipper;CUETools.Compression.Zip;CUETools.TestParity;CUETools.TestCodecs;CUETools.CTDB;CUETools.Processor;CUETools.Wpf;CUETools.Ripper.Tests;CUETools.TestProcessor;CUETools.Wpf.Tests;</CUEToolsPackageLockProjects>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.String]::Copy('$(CUEToolsPackageLockProjects)').Contains(';$(MSBuildProjectName);'))">
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+</Project>

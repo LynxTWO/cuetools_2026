@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "dependencies": {
+    ".NETFramework,Version=v4.7": {
+      "Newtonsoft.Json": {
+        "type": "Direct",
+        "requested": "[13.0.3, )",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "System.Resources.Extensions": {
+        "type": "Direct",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "psnQ6GRQOvt+evda5C4nD5EuV49mz2Tv0DD2JDVDEbE/TKoMukxSkGJcsBJ0pajpPuFRr67syFYlkJ4Wj6A5Zw==",
+        "dependencies": {
+          "System.Memory": "4.5.5"
+        }
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Direct",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+      },
+      "DeviceId": {
+        "type": "Transitive",
+        "resolved": "4.0.0",
+        "contentHash": "xAKA+I0SE39I4NuXzoD9aYGL7QkMWWumLfx2PZqNVxFpv+gvaOIAcmWlhUEPhAvzCIFpq7y2G2cobwD5VMV5Tg=="
+      },
+      "System.Buffers": {
+        "type": "Transitive",
+        "resolved": "4.5.1",
+        "contentHash": "Rw7ijyl1qqRS0YQD/WycNst8hUUMgrMH4FCn1nNm27M4VxchZ1js3fVjQaANHO5f3sN4isvP4a+Met9Y4YomAg=="
+      },
+      "System.Memory": {
+        "type": "Transitive",
+        "resolved": "4.5.5",
+        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw==",
+        "dependencies": {
+          "System.Buffers": "4.5.1",
+          "System.Numerics.Vectors": "4.5.0",
+          "System.Runtime.CompilerServices.Unsafe": "4.5.3"
+        }
+      },
+      "System.Numerics.Vectors": {
+        "type": "Transitive",
+        "resolved": "4.5.0",
+        "contentHash": "QQTlPTl06J/iiDbJCiepZ4H//BVraReU4O4EoRw1U02H5TLUIT7xn3GnDp9AXPSlJUDyFs4uWjWafNX6WrAojQ=="
+      },
+      "System.Runtime.CompilerServices.Unsafe": {
+        "type": "Transitive",
+        "resolved": "4.5.3",
+        "contentHash": "3TIsJhD1EiiT0w2CcDMN/iSSwnNnsrnbzeVHSKkaEgV85txMprmuO+Yq2AdSbeVGcg28pdNDTPK87tJhX7VFHw=="
+      },
+      "cuetools.accuraterip": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )",
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.cdimage": {
+        "type": "Project",
+        "dependencies": {
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.codecs": {
+        "type": "Project",
+        "dependencies": {
+          "Newtonsoft.Json": "[13.0.3, )",
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.compression": {
+        "type": "Project",
+        "dependencies": {
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.ctdb": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.AccurateRip": "[2.2.6, )",
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.CTDB.Types": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )",
+          "DeviceId": "[4.0.0, )",
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.ctdb.types": {
+        "type": "Project",
+        "dependencies": {
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.parity": {
+        "type": "Project",
+        "dependencies": {
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "cuetools.ripper": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "freedb": {
+        "type": "Project",
+        "dependencies": {
+          "System.Resources.Extensions": "[8.0.0, )"
+        }
+      },
+      "taglibsharp": {
+        "type": "Project"
+      }
+    },
+    ".NETStandard,Version=v2.0": {
+      "NETStandard.Library": {
+        "type": "Direct",
+        "requested": "[2.0.3, )",
+        "resolved": "2.0.3",
+        "contentHash": "st47PosZSHrjECdjeIzZQbzivYBJFv6P2nv4cj2ypdI204DO+vZ7l5raGMiX4eXMJ53RfOIg+/s4DHVZ54Nu2A==",
+        "dependencies": {
+          "Microsoft.NETCore.Platforms": "1.1.0"
+        }
+      },
+      "Newtonsoft.Json": {
+        "type": "Direct",
+        "requested": "[13.0.3, )",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Direct",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg==",
+        "dependencies": {
+          "System.Memory": "4.5.5"
+        }
+      },
+      "DeviceId": {
+        "type": "Transitive",
+        "resolved": "4.0.0",
+        "contentHash": "xAKA+I0SE39I4NuXzoD9aYGL7QkMWWumLfx2PZqNVxFpv+gvaOIAcmWlhUEPhAvzCIFpq7y2G2cobwD5VMV5Tg=="
+      },
+      "Microsoft.NETCore.Platforms": {
+        "type": "Transitive",
+        "resolved": "1.1.0",
+        "contentHash": "kz0PEW2lhqygehI/d6XsPCQzD7ff7gUJaVGPVETX611eadGsA3A877GdSlU0LRVMCTH/+P3o2iDTak+S08V2+A=="
+      },
+      "System.Buffers": {
+        "type": "Transitive",
+        "resolved": "4.5.1",
+        "contentHash": "Rw7ijyl1qqRS0YQD/WycNst8hUUMgrMH4FCn1nNm27M4VxchZ1js3fVjQaANHO5f3sN4isvP4a+Met9Y4YomAg=="
+      },
+      "System.Memory": {
+        "type": "Transitive",
+        "resolved": "4.5.5",
+        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw==",
+        "dependencies": {
+          "System.Buffers": "4.5.1",
+          "System.Numerics.Vectors": "4.4.0",
+          "System.Runtime.CompilerServices.Unsafe": "4.5.3"
+        }
+      },
+      "System.Numerics.Vectors": {
+        "type": "Transitive",
+        "resolved": "4.4.0",
+        "contentHash": "UiLzLW+Lw6HLed1Hcg+8jSRttrbuXv7DANVj0DkL9g6EnnzbL75EB7EWsw5uRbhxd/4YdG8li5XizGWepmG3PQ=="
+      },
+      "System.Runtime.CompilerServices.Unsafe": {
+        "type": "Transitive",
+        "resolved": "4.5.3",
+        "contentHash": "3TIsJhD1EiiT0w2CcDMN/iSSwnNnsrnbzeVHSKkaEgV85txMprmuO+Yq2AdSbeVGcg28pdNDTPK87tJhX7VFHw=="
+      },
+      "cuetools.accuraterip": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )"
+        }
+      },
+      "cuetools.cdimage": {
+        "type": "Project"
+      },
+      "cuetools.codecs": {
+        "type": "Project",
+        "dependencies": {
+          "Newtonsoft.Json": "[13.0.3, )"
+        }
+      },
+      "cuetools.compression": {
+        "type": "Project"
+      },
+      "cuetools.ctdb": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.AccurateRip": "[2.2.6, )",
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.CTDB.Types": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )",
+          "DeviceId": "[4.0.0, )"
+        }
+      },
+      "cuetools.ctdb.types": {
+        "type": "Project"
+      },
+      "cuetools.parity": {
+        "type": "Project"
+      },
+      "cuetools.ripper": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "freedb": {
+        "type": "Project"
+      },
+      "taglibsharp": {
+        "type": "Project"
+      }
+    }
+  }
+}

@@ -48,6 +48,50 @@ public sealed class OpticalDriveLeaseTests
     }
 
     [TestMethod]
+    public async Task DifferentDriveOwnersCanProceedConcurrently()
+    {
+        using var sandbox = new LeaseSandbox();
+        using var firstReady = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        OpticalDriveLease first = null;
+        Exception firstFailure = null;
+        var firstThread = new Thread(() =>
+        {
+            try
+            {
+                first = OpticalDriveLease.TryAcquireForTest(
+                    "drive-a",
+                    sandbox.Path);
+                firstReady.Set();
+                releaseFirst.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                firstFailure = ex;
+                firstReady.Set();
+            }
+            finally
+            {
+                first?.Dispose();
+            }
+        });
+        firstThread.Start();
+        Assert.IsTrue(firstReady.Wait(TimeSpan.FromSeconds(5)));
+        Assert.IsNull(firstFailure);
+        Assert.IsNotNull(first);
+
+        using OpticalDriveLease second =
+            OpticalDriveLease.TryAcquireForTest("drive-b", sandbox.Path);
+        Assert.IsNotNull(
+            second,
+            "A job on one physical drive must not serialize an independent drive.");
+
+        releaseFirst.Set();
+        Assert.IsTrue(await Task.Run(
+            () => firstThread.Join(TimeSpan.FromSeconds(5))));
+    }
+
+    [TestMethod]
     public async Task AnotherProcessOwnerIsDeniedAndReleaseMakesDriveAvailable()
     {
         using var sandbox = new LeaseSandbox();
@@ -118,6 +162,79 @@ public sealed class OpticalDriveLeaseTests
                 helper.WaitForExit(5000);
             }
         }
+    }
+
+    [TestMethod]
+    public async Task CrashedProcessReleasesDriveForNextOwner()
+    {
+        using var sandbox = new LeaseSandbox();
+        string lockPath = OpticalDriveLease.GetLockPathForTest(
+            "drive-crash",
+            sandbox.Path);
+        using var helper = CreateLockHelper(lockPath);
+        bool helperStarted = false;
+        try
+        {
+            helperStarted = helper.Start();
+            Assert.IsTrue(helperStarted);
+            string ready = await helper.StandardOutput
+                .ReadLineAsync()
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            if (!string.Equals("locked", ready, StringComparison.Ordinal))
+                Assert.Fail(
+                    "Drive-lock helper did not start: " +
+                    await helper.StandardError.ReadToEndAsync());
+
+            using OpticalDriveLease denied =
+                OpticalDriveLease.TryAcquireForTest("drive-crash", sandbox.Path);
+            Assert.IsNull(denied);
+
+            helper.Kill(entireProcessTree: true);
+            await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            using OpticalDriveLease acquired =
+                OpticalDriveLease.TryAcquireForTest("drive-crash", sandbox.Path);
+            Assert.IsNotNull(
+                acquired,
+                "Windows must release the cross-process lease if a worker crashes.");
+        }
+        finally
+        {
+            if (helperStarted && !helper.HasExited)
+            {
+                helper.Kill(entireProcessTree: true);
+                helper.WaitForExit(5000);
+            }
+        }
+    }
+
+    private static Process CreateLockHelper(string lockPath)
+    {
+        var helper = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            }
+        };
+        helper.StartInfo.ArgumentList.Add("-NoProfile");
+        helper.StartInfo.ArgumentList.Add("-NonInteractive");
+        helper.StartInfo.ArgumentList.Add("-Command");
+        helper.StartInfo.ArgumentList.Add(
+            "$d=[System.IO.Path]::GetDirectoryName($env:CUETOOLS_TEST_DRIVE_LOCK);" +
+            "[System.IO.Directory]::CreateDirectory($d)|Out-Null;" +
+            "$f=[System.IO.File]::Open($env:CUETOOLS_TEST_DRIVE_LOCK," +
+            "[System.IO.FileMode]::OpenOrCreate," +
+            "[System.IO.FileAccess]::ReadWrite," +
+            "[System.IO.FileShare]::None);" +
+            "try{[Console]::Out.WriteLine('locked');[Console]::Out.Flush();" +
+            "Start-Sleep -Seconds 30}finally{$f.Dispose()}");
+        helper.StartInfo.Environment["CUETOOLS_TEST_DRIVE_LOCK"] = lockPath;
+        return helper;
     }
 
     private sealed class LeaseSandbox : IDisposable

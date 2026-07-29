@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0-windows7.0": {
+      "Microsoft.Extensions.DependencyInjection": {
+        "type": "Direct",
+        "requested": "[8.0.1, )",
+        "resolved": "8.0.1",
+        "contentHash": "BmANAnR5Xd4Oqw7yQ75xOAYODybZQRzdeNucg7kS5wWKd2PNnMdYtJ2Vciy0QLylRmv42DGl5+AFL9izA6F1Rw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2"
+        }
+      },
+      "System.Security.Cryptography.ProtectedData": {
+        "type": "Direct",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "+TUFINV2q2ifyXauQXRwy4CiBhqvDEDZeVJU7qfxya4aRYOKzVBpN+4acx25VcPB9ywUN6C0n8drWl110PhZEg=="
+      },
+      "DeviceId": {
+        "type": "Transitive",
+        "resolved": "4.0.0",
+        "contentHash": "xAKA+I0SE39I4NuXzoD9aYGL7QkMWWumLfx2PZqNVxFpv+gvaOIAcmWlhUEPhAvzCIFpq7y2G2cobwD5VMV5Tg=="
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions": {
+        "type": "Transitive",
+        "resolved": "8.0.2",
+        "contentHash": "3iE7UF7MQkCv1cxzCahz+Y/guQbTqieyxyaWKhrRO91itI9cOKO76OHeQDahqG4MmW5umr3CcCvGmK92lWNlbg=="
+      },
+      "Newtonsoft.Json": {
+        "type": "Transitive",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "bwg.logging": {
+        "type": "Project"
+      },
+      "bwg.scsi": {
+        "type": "Project",
+        "dependencies": {
+          "Bwg.Logging": "[0.0.7.1, )"
+        }
+      },
+      "cuetools.accuraterip": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )"
+        }
+      },
+      "cuetools.cdimage": {
+        "type": "Project"
+      },
+      "cuetools.codecs": {
+        "type": "Project",
+        "dependencies": {
+          "Newtonsoft.Json": "[13.0.3, )"
+        }
+      },
+      "cuetools.codecs.alac": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.flake": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.hdcd": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.libflac": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.libmp3lame": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.libwavpack": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.maclib": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.mpeg": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.codecs.wma": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.compression": {
+        "type": "Project"
+      },
+      "cuetools.ctdb": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.AccurateRip": "[2.2.6, )",
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.CTDB.Types": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Parity": "[2.2.6, )",
+          "DeviceId": "[4.0.0, )"
+        }
+      },
+      "cuetools.ctdb.types": {
+        "type": "Project"
+      },
+      "cuetools.parity": {
+        "type": "Project"
+      },
+      "cuetools.processor": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.AccurateRip": "[2.2.6, )",
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.CTDB": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Compression": "[2.2.6, )",
+          "CUETools.Ripper": "[2.2.6, )",
+          "Freedb": "[1.0.0, )",
+          "Newtonsoft.Json": "[13.0.3, )",
+          "System.Security.Cryptography.ProtectedData": "[8.0.0, )",
+          "TagLibSharp": "[2.3.0, )"
+        }
+      },
+      "cuetools.ripper": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )"
+        }
+      },
+      "cuetools.ripper.scsi": {
+        "type": "Project",
+        "dependencies": {
+          "Bwg.Logging": "[0.0.7.1, )",
+          "Bwg.Scsi": "[0.0.7.1, )",
+          "CUETools.CDImage": "[2.2.6, )",
+          "CUETools.Codecs": "[2.2.6, )",
+          "CUETools.Ripper": "[2.2.6, )"
+        }
+      },
+      "freedb": {
+        "type": "Project"
+      },
+      "taglibsharp": {
+        "type": "Project"
+      }
+    }
+  }
+}
