@@ -258,7 +258,7 @@ Add-LicenseText `
     -Text (Read-TrackedText "ThirdParty\flac\COPYING.Xiph")
 Add-LicenseText `
     -Lines $lines `
-    -Title "WavPack 5.8.1 - BSD-3-Clause" `
+    -Title "WavPack 5.9.0 - BSD-3-Clause" `
     -Source "ThirdParty/WavPack/license.txt" `
     -Text (Read-TrackedText "ThirdParty\WavPack\license.txt")
 Add-LicenseText `
