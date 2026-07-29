@@ -25,6 +25,12 @@ progress documents for it belong here, under `docs/review/`.
   managed, native, classic, CI, and release consumers must use that staged tree.
   Never apply the patches in place or use a submodule worktree as an intermediate.
   Finish a real build with `eng/ci/Test-VendorSubmodulesClean.ps1`.
+- First-party PackageReference projects are enumerated explicitly in
+  `Directory.Build.props` and commit `packages.lock.json`. GitHub's `CI=true`
+  enables locked restore. Regenerate locks only with an intentional
+  `--force-evaluate`, then run `eng/ci/Test-NuGetLockFiles.ps1` and locked
+  solution/WPF/ripper restores. Never generate lock files in `ThirdParty` or
+  `obj/vendor-sources`.
 - Run classic release clean/build/receipt/collect/validate through
   `eng/release/Invoke-ClassicRelease.ps1`. A clean staging directory does not prove
   fresh compiled inputs. The orchestrator holds one repo-wide lease across recovery,
@@ -111,6 +117,19 @@ progress documents for it belong here, under `docs/review/`.
   the transfer chunk deterministically down to one sector while preserving the
   requested byte count and in-program range. Only a fully completed eviction
   authorizes the next secure read; every other failure remains fatal and diagnostic.
+- Curated command encoders are prepared only through
+  `eng/ci/Prepare-ExternalCommandEncoders.ps1` and
+  `eng/release/external-command-encoders.json`. The manifest pins source pages,
+  archive bytes, selected executable hashes, licenses, and source obligations.
+  WPF release and runtime checks repeat the hashes. A receipt-bound user import is
+  resolved first and may override the bundled fallback; never replace or trust a
+  packaged executable by filename alone.
+- Keep executable support separate from redistribution. A working imported codec
+  does not authorize packaging. Real CLI execution, license/source compliance,
+  runtime dependencies, and patent or notification boundaries must all be recorded.
+- Treat `docs/review/remediation-backlog.md` status lines as authoritative. After
+  each batch, reconcile the ordering, remaining-work summary, decisions, and
+  historical next-step text so a closed R-item does not stay in the active queue.
 - Preserve nested SCSI identity. When a batch reports medium error, snapshot each
   failed pinpoint sector before another command overwrites device sense. A pinpoint
   `IllegalRequest / 24/00` may retry once only with that parent medium-error

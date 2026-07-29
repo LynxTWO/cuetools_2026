@@ -130,6 +130,26 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     set that was decoded and verified, then recheck source, output, and evidence immediately before
     atomic publication. Write the stable completion marker last and reject missing, ambiguous, changed,
     linked, or out-of-scope evidence instead of publishing a partial proof.
+21. AN EMPTY FILE SET IS NOT A CLEAN SCAN. Every negative content check records the
+    candidate-file count and finding count. Zero candidates means the check did not
+    examine that implementation. Require a known-positive sentinel before trusting
+    a whole-tree zero, especially when language or extension filters can exclude an
+    entire native wrapper.
+22. CODEC SUPPORT IS NOT REDISTRIBUTION. Prove the exact released CLI contract with
+    a real encode before registering it. Bundle only when archive and executable
+    hashes, license, source obligations, dependencies, patent or notification
+    boundaries, notices, and final package contents are complete. Otherwise keep a
+    receipt-bound user import.
+23. PACKAGED TOOLS KEEP THEIR IDENTITY THROUGH LAUNCH. Pin the archive entry in one
+    preparation manifest, repeat that digest in the release artifact contract and
+    runtime catalog, rehash after installation, and hold the verified executable
+    non-replaceable through the encoder and verifier process lifetime. A user import
+    may override the package only through its own exact approval receipt.
+24. DEPENDENCY LOCK POLICY MUST MATCH THE PROJECT GRAPH. Discover first-party
+    PackageReference projects from source, require one committed transitive lock for
+    every enrolled project, and make CI restore in locked mode. Prove the policy does
+    not generate files inside immutable vendor submodules. Locks prove resolution,
+    while receipts, SBOMs, notices, and hashes retain their distinct artifact roles.
 
 ### How to choose the extraction
 
