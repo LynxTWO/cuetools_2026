@@ -1042,10 +1042,14 @@ an active job.
 cover` structural events show the ordering without recording music identity or
 image content.
 
-**Status:** software-verified 2026-07-29. The focused regression and full WPF
+**Status:** live-verified 2026-07-29. The focused regression and full WPF
 suite pass 431/431, the warning gate is empty, and the production contract
 passes 36 required files, 19 plugin registrations, and five native probes. The
-fast live embed repeat remains.
+live transition trace kept Verify available while encoded jobs were blocked,
+then enabled Rip and Test & Copy after the cover stabilized. An immediate Burst
+rip produced 10 FLAC files. Each file contained one embedded picture whose
+100,222 bytes and SHA-256 matched `folder.jpg`; final output PCM verification
+also passed after metadata.
 
 ### Align archival defaults, output layouts, read evidence, and themes
 

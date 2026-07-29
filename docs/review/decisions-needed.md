@@ -103,22 +103,22 @@ than starting a large program blind.
   - (C) Pick one specific GUI to convert first as a pilot.
   - **Recommend (A) with `CUETools.eac3ui` as the pilot** - it is the smallest GUI.
 
-### R13 decision - codec refresh needs your codec wishlist + a native build/verify path
+### R13 decision - RESOLVED 2026-07-29
 
-- **Current pins and upstream check (2026-07-26):** libFLAC 1.5.0,
+- **Current pins and upstream check:** libFLAC 1.5.0, WavPack 5.9.0,
   Monkey's Audio 13.20, and taglib-sharp 2.3.0.0 match current upstream releases.
-  WavPack 5.8.1 trails 5.9.0, and vendored LAME 3.100 trails the newly
+  Vendored LAME 3.100 trails the newly
   released official 4.0. The standalone, currently unshipped FFmpeg 7.1.1 path
   trails 8.1.2.
-- **Why the remaining bumps are not part of this commit:** WavPack and
-  taglib-sharp contain existing local work that must be preserved; LAME has
+- **Why the remaining bumps are separate:** taglib-sharp contains existing local
+  work that must be preserved; LAME has
   a new major release without a packaged MP3 decode/quality gate; and FFmpeg is
   not part of either primary
   artifact. The current native build/probe gate is available, but it does not
   replace per-codec compatibility and corpus evidence.
-- **Product input still needed for the format-addition half of R13:**
-  1. **Codec wishlist:** which formats to *add* (e.g. Opus? newer ALAC? DSD?). R13 cannot
-     start the "add codecs" half without this list.
+- **Product choice:** add xHE-AAC, OptimFROG, WavPack, and every redistributable
+  encoder available from `C:\_Audio Codecs_`. User-provided newer executables must
+  override bundled copies.
 - **Next safe implementation sequence:** preserve/reconcile the dirty submodule
   work, upgrade one native integration at a time, rebuild both architectures,
   run its independent decode/corpus gate, and update provenance before moving to
