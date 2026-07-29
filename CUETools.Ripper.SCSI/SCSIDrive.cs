@@ -69,6 +69,9 @@ namespace CUETools.Ripper.SCSI
 		private string _cacheDefeatFailure = "no cache-defeat attempt recorded";
 		private int _cacheDefeatRetryCount;
 		private int _cacheDefeatChunkFallbackCount;
+		private int _cacheDefeatWakeCount;
+		private int _cacheDefeatWakeReadinessRetryCount;
+		private int _cacheDefeatWakeReadinessIndeterminateCount;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _payloadBatchFallbackCount;
@@ -78,6 +81,11 @@ namespace CUETools.Ripper.SCSI
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
 		public int CacheDefeatChunkFallbackCount => _cacheDefeatChunkFallbackCount;
+		public int CacheDefeatWakeCount => _cacheDefeatWakeCount;
+		public int CacheDefeatWakeReadinessRetryCount =>
+			_cacheDefeatWakeReadinessRetryCount;
+		public int CacheDefeatWakeReadinessIndeterminateCount =>
+			_cacheDefeatWakeReadinessIndeterminateCount;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
@@ -1776,6 +1784,223 @@ namespace CUETools.Ripper.SCSI
 			}
 		}
 
+		private void ReadFailureIdentity(
+			Device.CommandStatus status,
+			out Device.SenseKeyType senseKey,
+			out byte asc,
+			out byte ascq)
+		{
+			senseKey = Device.SenseKeyType.NoSense;
+			asc = 0;
+			ascq = 0;
+			if (status != Device.CommandStatus.DeviceFailed)
+				return;
+			ReadCurrentSense(out senseKey, out asc, out ascq);
+		}
+
+		private void ReadCurrentSense(
+			out Device.SenseKeyType senseKey,
+			out byte asc,
+			out byte ascq)
+		{
+			senseKey = Device.SenseKeyType.NoSense;
+			asc = 0;
+			ascq = 0;
+			try
+			{
+				senseKey = m_device.GetSenseKey();
+				asc = m_device.GetSenseAsc();
+				ascq = m_device.GetSenseAscq();
+			}
+			catch
+			{
+				// Missing or malformed sense data never authorizes a retry. The caller
+				// preserves the status and tries only other already-bounded regions.
+			}
+		}
+
+		private bool TryWakeCacheDefeatDrive(
+			ref int aggregateReadinessRetries,
+			ref int aggregateIndeterminateReadiness,
+			out string failure)
+		{
+			Device.CommandStatus status = m_device.StartStopUnit(
+				false,
+				Device.PowerControl.NoChange,
+				Device.StartState.StartDisk);
+			if (status != Device.CommandStatus.Success)
+			{
+				ReadFailureIdentity(
+					status,
+					out Device.SenseKeyType senseKey,
+					out byte asc,
+					out byte ascq);
+				failure =
+					$"wake-command=StartDisk, status={status}, " +
+					$"sense={senseKey}, ASC={asc:X2}, ASCQ={ascq:X2}";
+				return false;
+			}
+
+			// Although START UNIT is non-immediate, the ASUS firmware can return
+			// command success before its readiness CDB path leaves the same 24/00
+			// transition state. Settle before the first query.
+			Thread.Sleep(250);
+			int retriesForTransition = 0;
+			while (true)
+			{
+				status = m_device.TestUnitReady(out bool ready);
+				if (status == Device.CommandStatus.Success && ready)
+				{
+					failure = null;
+					return true;
+				}
+
+				Device.SenseKeyType senseKey;
+				byte asc;
+				byte ascq;
+				if (status == Device.CommandStatus.DeviceFailed)
+					ReadFailureIdentity(
+						status,
+						out senseKey,
+						out asc,
+						out ascq);
+				else
+					ReadCurrentSense(
+						out senseKey,
+						out asc,
+						out ascq);
+				failure =
+					$"wake-command=TestUnitReady, status={status}, " +
+					$"ready={ready}, readiness-attempt={retriesForTransition + 1}, " +
+					$"sense={senseKey}, " +
+					$"ASC={asc:X2}, ASCQ={ascq:X2}";
+
+				if (PayloadReadFailurePolicy
+					.ShouldRetryCacheDefeatWakeReadiness(
+						retriesForTransition,
+						status,
+						senseKey,
+						asc,
+						ascq))
+				{
+					Thread.Sleep(250);
+					retriesForTransition++;
+					aggregateReadinessRetries++;
+					_cacheDefeatWakeReadinessRetryCount++;
+					continue;
+				}
+
+				if (PayloadReadFailurePolicy
+					.ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+						retriesForTransition,
+						status,
+						senseKey,
+						asc,
+						ascq))
+				{
+					// This does not treat the unit as ready. The caller repeats the
+					// complete eviction, which is the only operation that can prove
+					// both media access and cache independence.
+					aggregateIndeterminateReadiness++;
+					_cacheDefeatWakeReadinessIndeterminateCount++;
+					failure = null;
+					return true;
+				}
+
+				return false;
+			}
+		}
+
+		private Device.CommandStatus IssueCacheDefeatRead(
+			uint lba,
+			int sectorCount,
+			IntPtr scratch)
+		{
+			return _readCDCommand == ReadCDCommand.ReadCdBEh
+				? m_device.ReadCDAndSubChannel(
+					_mainChannelMode,
+					Device.SubChannelMode.None,
+					_c2ErrorMode,
+					1,
+					false,
+					lba,
+					(uint)sectorCount,
+					scratch,
+					_timeout)
+				: m_device.ReadCDDA(
+					Device.SubChannelMode.None,
+					lba,
+					(uint)sectorCount,
+					scratch,
+					_timeout);
+		}
+
+		private Device.CommandStatus ReadCacheDefeatChunk(
+			int relativeSector,
+			uint lba,
+			int sectorCount,
+			int chunkShape,
+			IntPtr scratch,
+			ref int aggregateRetries,
+			out Device.SenseKeyType senseKey,
+			out byte asc,
+			out byte ascq,
+			out string failure)
+		{
+			int retriesForCommand = 0;
+			Device.CommandStatus status =
+				IssueCacheDefeatRead(lba, sectorCount, scratch);
+			failure = null;
+			senseKey = Device.SenseKeyType.NoSense;
+			asc = 0;
+			ascq = 0;
+
+			while (status != Device.CommandStatus.Success)
+			{
+				ReadFailureIdentity(status, out senseKey, out asc, out ascq);
+				if (retriesForCommand == 0)
+				{
+					failure =
+						$"relative-sector={relativeSector}, sectors={sectorCount}, " +
+						$"chunk-shape={chunkShape}, command={_readCDCommand}, " +
+						$"main={_mainChannelMode}, c2={_c2ErrorMode}, " +
+						$"speed={_appliedSpeedKbps}kB/s, " +
+						$"current-window={_currentStart}-{_currentEnd}, " +
+						$"status={status}, sense={senseKey}, " +
+						$"ASC={asc:X2}, ASCQ={ascq:X2}";
+				}
+				else
+				{
+					failure =
+						$"relative-sector={relativeSector}, sectors={sectorCount}, " +
+						$"chunk-shape={chunkShape}, command={_readCDCommand}, " +
+						$"main={_mainChannelMode}, c2={_c2ErrorMode}, " +
+						$"speed={_appliedSpeedKbps}kB/s, " +
+						$"current-window={_currentStart}-{_currentEnd}, " +
+						$"retry-status={status}, retry-sense={senseKey}, " +
+						$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+				}
+
+				if (!PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+					retriesForCommand,
+					status,
+					senseKey,
+					asc,
+					ascq))
+					return status;
+
+				// This settle belongs to this exact LBA and transfer shape. A different
+				// address or smaller chunk creates a fresh one-retry scope.
+				Thread.Sleep(80);
+				retriesForCommand++;
+				aggregateRetries++;
+				_cacheDefeatRetryCount++;
+				status = IssueCacheDefeatRead(lba, sectorCount, scratch);
+			}
+
+			return status;
+		}
+
 		// Cache defeat: read _cacheDefeatBytes of an unrelated in-program region into scratch to evict
 		// the current window from the drive cache before a secure re-read, so the re-read hits media (a
 		// genuine second read) instead of the cached first read. Bounded strictly inside the audio
@@ -1790,169 +2015,151 @@ namespace CUETools.Ripper.SCSI
 			int attemptedRegions = 0;
 			int transientRetries = 0;
 			int chunkFallbacks = 0;
+			int wakeAttempts = 0;
+			int wakeReadinessRetries = 0;
+			int wakeReadinessIndeterminate = 0;
 			try
 			{
-				void ReadFailureIdentity(
-					Device.CommandStatus status,
-					out Device.SenseKeyType senseKey,
-					out byte asc,
-					out byte ascq)
-				{
-					senseKey = Device.SenseKeyType.NoSense;
-					asc = 0;
-					ascq = 0;
-					if (status != Device.CommandStatus.DeviceFailed)
-						return;
-					try
-					{
-						senseKey = m_device.GetSenseKey();
-						asc = m_device.GetSenseAsc();
-						ascq = m_device.GetSenseAscq();
-					}
-					catch
-					{
-						// Missing or malformed sense data must not prevent the
-						// remaining in-program regions from being attempted.
-					}
-				}
-
 				int preferredChunk = Math.Max(1, m_max_sectors);
 				int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
 				int perSector = 4 * 588 + c2Size;
 				if (_flushScratch == null || _flushScratch.Length < preferredChunk * perSector) _flushScratch = new byte[preferredChunk * perSector];
 				uint firstStart = (uint)_toc[_toc.FirstAudio][0].Start;
 				uint len = (uint)_toc.AudioLength;
-				int sectorsNeeded = Math.Max(1, (_cacheDefeatBytes + 2351) / 2352);
-				int currentMiddle = _currentStart + Math.Max(0, _currentEnd - _currentStart) / 2;
-				// Try several well-separated regions, farthest first. A scratch/read defect in one
-				// part of a damaged disc must not make cache defeat unusable when another clean region
-				// can evict the same cache. Every candidate remains wholly inside the audio program.
-				int[] candidates = { (int)(len / 10), (int)(len / 2), (int)(len * 8 / 10) };
-				for (int i = 0; i < candidates.Length - 1; i++)
-					for (int j = i + 1; j < candidates.Length; j++)
-						if (Math.Abs(candidates[j] - currentMiddle) >
-							Math.Abs(candidates[i] - currentMiddle))
-						{
-							int swap = candidates[i];
-							candidates[i] = candidates[j];
-							candidates[j] = swap;
-						}
-				if (sectorsNeeded > len)
+				int sectorsNeeded =
+					PayloadReadFailurePolicy.RequiredCacheDefeatSectors(
+						_cacheDefeatBytes);
+				if (len > int.MaxValue || sectorsNeeded > (long)len)
 				{
 					failure =
 						$"required-sectors={sectorsNeeded}, audio-program-sectors={len}";
 				}
-				else fixed (byte* p = _flushScratch)
+				else
 				{
-					int cacheChunk = preferredChunk;
-					while (cacheChunk > 0)
-					{
-						bool sawFailure = false;
-						bool everyFailureWasInvalidShape = true;
-						foreach (int candidate in candidates)
-						{
-							int relBase = Math.Max(
-								0,
-								Math.Min((int)len - sectorsNeeded, candidate));
-							int relEnd = relBase + sectorsNeeded;
-							bool overlapsCurrent =
-								relBase < _currentEnd && relEnd > _currentStart;
-							if (overlapsCurrent) continue;
-							attemptedRegions++;
-							bool complete = true;
-							for (int offset = 0; offset < sectorsNeeded; offset += cacheChunk)
+					int programSectors = (int)len;
+					int currentMiddle =
+						_currentStart +
+						Math.Max(0, _currentEnd - _currentStart) / 2;
+					// Try several well-separated regions, farthest first. A scratch/read
+					// defect in one part of a damaged disc must not make cache defeat
+					// unusable when another clean region can evict the same cache. Every
+					// candidate remains wholly inside the audio program.
+					int* candidates = stackalloc int[3];
+					candidates[0] = programSectors / 10;
+					candidates[1] = programSectors / 2;
+					candidates[2] = (int)((long)programSectors * 8L / 10L);
+					for (int i = 0; i < 2; i++)
+						for (int j = i + 1; j < 3; j++)
+							if (Math.Abs(candidates[j] - currentMiddle) >
+								Math.Abs(candidates[i] - currentMiddle))
 							{
-								int readCount = Math.Min(
-									cacheChunk,
-									sectorsNeeded - offset);
-								uint lba =
-									firstStart + (uint)(relBase + offset);
-								if (lba + (uint)readCount > firstStart + len)
+								int swap = candidates[i];
+								candidates[i] = candidates[j];
+								candidates[j] = swap;
+							}
+					fixed (byte* p = _flushScratch)
+					{
+						bool retryAfterWake;
+						do
+						{
+							retryAfterWake = false;
+							bool exhaustedInvalidFieldShapes = false;
+							int cacheChunk = preferredChunk;
+							while (cacheChunk > 0)
+							{
+								bool sawFailure = false;
+								bool everyFailureWasInvalidShape = true;
+								for (int candidateIndex = 0; candidateIndex < 3; candidateIndex++)
 								{
-									failure =
-										$"relative-sector={relBase + offset}, " +
-										$"sectors={readCount}, outside audio program";
-									complete = false;
-									break;
-								}
-								var st = _readCDCommand == ReadCDCommand.ReadCdBEh
-									? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)readCount, (IntPtr)p, _timeout)
-									: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)readCount, (IntPtr)p, _timeout);
-								Device.SenseKeyType senseKey =
-									Device.SenseKeyType.NoSense;
-								byte asc = 0;
-								byte ascq = 0;
-								if (st != Device.CommandStatus.Success)
-								{
-									ReadFailureIdentity(
-										st,
-										out senseKey,
-										out asc,
-										out ascq);
-									bool invalidShape =
-										PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
-											st,
-											senseKey,
-											asc,
-											ascq);
-									failure =
-										$"relative-sector={relBase + offset}, " +
-										$"sectors={readCount}, chunk-shape={cacheChunk}, " +
-										$"status={st}, sense={senseKey}, " +
-										$"ASC={asc:X2}, ASCQ={ascq:X2}";
-									if (transientRetries == 0 && invalidShape)
+									int candidate = candidates[candidateIndex];
+									int relBase = Math.Max(
+										0,
+										Math.Min(programSectors - sectorsNeeded, candidate));
+									int relEnd = relBase + sectorsNeeded;
+									bool overlapsCurrent =
+										relBase < _currentEnd && relEnd > _currentStart;
+									if (overlapsCurrent) continue;
+									attemptedRegions++;
+									bool complete = true;
+									for (int offset = 0; offset < sectorsNeeded; offset += cacheChunk)
 									{
-										Thread.Sleep(80);
-										transientRetries++;
-										_cacheDefeatRetryCount++;
-										st = _readCDCommand == ReadCDCommand.ReadCdBEh
-											? m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, lba, (uint)readCount, (IntPtr)p, _timeout)
-											: m_device.ReadCDDA(Device.SubChannelMode.None, lba, (uint)readCount, (IntPtr)p, _timeout);
-										if (st != Device.CommandStatus.Success)
+										int readCount = Math.Min(
+											cacheChunk,
+											sectorsNeeded - offset);
+										uint lba =
+											firstStart + (uint)(relBase + offset);
+										if (lba + (uint)readCount > firstStart + len)
 										{
-											ReadFailureIdentity(
-												st,
-												out senseKey,
-												out asc,
-												out ascq);
 											failure =
 												$"relative-sector={relBase + offset}, " +
-												$"sectors={readCount}, chunk-shape={cacheChunk}, " +
-												$"retry-status={st}, retry-sense={senseKey}, " +
-												$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+												$"sectors={readCount}, outside audio program";
+											complete = false;
+											break;
+										}
+										Device.CommandStatus st = ReadCacheDefeatChunk(
+											relBase + offset,
+											lba,
+											readCount,
+											cacheChunk,
+											(IntPtr)p,
+											ref transientRetries,
+											out Device.SenseKeyType senseKey,
+											out byte asc,
+											out byte ascq,
+											out string readFailure);
+										if (st != Device.CommandStatus.Success)
+										{
+											failure = readFailure;
+											sawFailure = true;
+											everyFailureWasInvalidShape &=
+												PayloadReadFailurePolicy
+													.IsCacheDefeatInvalidField(
+														st,
+														senseKey,
+														asc,
+														ascq);
+											complete = false;
+											break;
 										}
 									}
+									if (complete)
+									{
+										_cacheDefeatJustFlushed = true;
+										return true;
+									}
 								}
-								if (st != Device.CommandStatus.Success)
+								if (!sawFailure || !everyFailureWasInvalidShape)
+									break;
+								int nextChunk =
+									PayloadReadFailurePolicy.NextCacheDefeatChunkSize(
+										cacheChunk);
+								if (nextChunk == 0)
 								{
-									sawFailure = true;
-									everyFailureWasInvalidShape &=
-										PayloadReadFailurePolicy
-											.ShouldRetryCacheDefeatRead(
-												st,
-												senseKey,
-												asc,
-												ascq);
-									complete = false;
+									exhaustedInvalidFieldShapes = true;
 									break;
 								}
+								cacheChunk = nextChunk;
+								chunkFallbacks++;
+								_cacheDefeatChunkFallbackCount++;
 							}
-							if (complete)
+
+							if (PayloadReadFailurePolicy
+								.ShouldAttemptCacheDefeatWake(
+									wakeAttempts,
+									exhaustedInvalidFieldShapes))
 							{
-								_cacheDefeatJustFlushed = true;
-								return true;
+								wakeAttempts++;
+								_cacheDefeatWakeCount++;
+								if (TryWakeCacheDefeatDrive(
+									ref wakeReadinessRetries,
+									ref wakeReadinessIndeterminate,
+									out string wakeFailure))
+									retryAfterWake = true;
+								else
+									failure = wakeFailure;
 							}
 						}
-						if (!sawFailure || !everyFailureWasInvalidShape)
-							break;
-						cacheChunk =
-							PayloadReadFailurePolicy.NextCacheDefeatChunkSize(
-								cacheChunk);
-						if (cacheChunk > 0)
-						{
-							chunkFallbacks++;
-							_cacheDefeatChunkFallbackCount++;
-						}
+						while (retryAfterWake);
 					}
 				}
 			}
@@ -1962,7 +2169,14 @@ namespace CUETools.Ripper.SCSI
 			}
 			_cacheDefeatFailure =
 				$"{failure}; attempted-regions={attemptedRegions}; " +
-				$"transient-retries={transientRetries}; chunk-fallbacks={chunkFallbacks}";
+				$"transient-retries={transientRetries}; " +
+				$"retry-scope=per-command; max-retries-per-command=1; " +
+				$"chunk-fallbacks={chunkFallbacks}; " +
+				$"wake-attempts={wakeAttempts}; max-wake-attempts=1; " +
+				$"wake-readiness-retries={wakeReadinessRetries}; " +
+				$"max-wake-readiness-retries=1; " +
+				$"wake-readiness-indeterminate={wakeReadinessIndeterminate}; " +
+				$"max-wake-readiness-indeterminate=1";
 			return false;
 		}
 
@@ -2096,15 +2310,22 @@ namespace CUETools.Ripper.SCSI
 						FetchSectors(sector, Sectors2Read, true);
 						_speedChangeJustApplied = false;
 					}
-					catch (SCSIException) when (_cacheDefeatJustFlushed)
+					catch (SCSIException readFailure) when (
+						PayloadReadFailurePolicy
+							.ShouldRetryAfterCacheDefeatTransition(
+								_cacheDefeatJustFlushed,
+								readFailure.Status,
+								readFailure.SenseKey,
+								readFailure.Asc,
+								readFailure.Ascq))
 					{
 						// Some optical firmware briefly rejects the first payload CDB after the long
 						// seek used to evict its cache. One bounded retry after a short settle preserves
 						// independence (the cache is already evicted) without masking persistent CDB
 						// errors or looping forever.
 						Thread.Sleep(40);
-						_cacheDefeatJustFlushed = false;
 						FetchSectors(sector, Sectors2Read, true);
+						_cacheDefeatJustFlushed = false;
 					}
 					_cacheDefeatJustFlushed = false;
 					_speedChangeJustApplied = false;

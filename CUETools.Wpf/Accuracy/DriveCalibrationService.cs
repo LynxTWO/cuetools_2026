@@ -166,6 +166,15 @@ public sealed class DriveCalibrationService
         return bytes;
     }
 
+    internal static bool HasIndependentReadStrategy(string? value)
+    {
+        return ParseFlushBytes(value) > 0 ||
+            string.Equals(
+                value,
+                "Media re-reads (no cache)",
+                StringComparison.Ordinal);
+    }
+
     internal static string SelectConservativeCacheDefeat(
         CDDriveReader.DriveProbe probe,
         DriveCalibration? previous,

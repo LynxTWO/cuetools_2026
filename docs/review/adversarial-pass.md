@@ -1,5 +1,92 @@
 # Adversarial Edge-Case Review
 
+## R69 cache-defeat addendum - 2026-07-29
+
+This pass reviewed only the secure reread cache-eviction slice at commit
+`a82bf88` plus the pending per-command retry change.
+
+### What the earlier work got right
+
+- Cache eviction still completes the full requested sector count or fails. A
+  successful command is the only path that advances the completed range.
+- Rejected scratch bytes never enter the audio vote or output.
+- The final status and sense are captured before another command can overwrite
+  them. A different retry failure stops the 24/00 fallback.
+- The three address candidates and 16/8/4/2/1 shapes stay inside the audio
+  program and outside the current target window.
+
+### What it missed
+
+- The first 24/00 consumed one retry counter shared by the entire eviction.
+  K:'s 2026-07-29 receipt proved that fourteen later address/shape commands did
+  not receive the intended command-local retry. The pending change gives each
+  exact command one retry and keeps the aggregate diagnostic count.
+- `_cacheDefeatBytes + 2351` used unchecked `int` arithmetic. A corrupted
+  `Flush:2147483647` setting wraps the numerator negative and reduces the
+  required eviction to one sector. This violates complete-or-fail even though
+  normal calibration values are small. The calculation must use checked-width
+  arithmetic and fail when the requested sector count exceeds the disc.
+- The first payload read after a completed eviction retries every
+  `SCSIException` while `_cacheDefeatJustFlushed` is set. That is broader than
+  the documented 24/00 transition exception. The retry filter must preserve the
+  exact status, sense, ASC, and ASCQ rule used by the other control transition.
+- Calibration consumption parsed `Flush:` independently from the first-read
+  gate. A current-version corrupt value such as `Flush:not-a-number` satisfied
+  the gate by prefix while installing no cache defeat in `Run`. That is a
+  fail-open independent-read claim. Both decisions must use the same positive
+  flush parser, with malformed and zero values rejected.
+
+### Coverage and remaining proof
+
+The `SetCacheDefeat` call-site search found three candidates: one production WPF
+path and two opt-in hardware tests. No second production cache-eviction
+implementation was found. This is slice coverage, not a claim about all raw
+SCSI commands in `Bwg.Scsi`.
+
+R69 stays high risk until the fixed build passes the configured K: damaged
+window and full Test & Copy. Windows reported K: with no ready media during this
+pass, so the hardware result remains unknown.
+
+No protected-area approval is needed. The changes preserve the existing
+fail-closed read contract and do not publish or repair user data.
+
+### Hardware receipt after the first correction
+
+The source-bound K: rerun proved the per-command scope: all fifteen
+address/shape commands received one retry, and all fifteen still returned exact
+`24/00`. The run failed closed before Copy. After the process released its
+handle, Windows reported no media and a new raw SCSI handle could not open K:.
+The user independently reports that physical media reload wakes this drive
+after read failures.
+
+That evidence permits one narrower recovery experiment: after the complete
+exact-invalid-field ladder is exhausted, send one `START UNIT` through the
+handle that is still open, require readiness, and repeat the full eviction.
+It does not permit a general device reset, tray load, C2 disable, dropped cache
+proof, or unbounded retry. The result remains unknown until the same dormant
+state is crossed in a live run.
+
+The next live Copy crossed that state. `START UNIT` succeeded, but its immediate
+`TEST UNIT READY` returned the same exact `24/00`, and CUETools failed closed.
+This proves the wake command is accepted and that readiness is another bounded
+firmware transition; it does not prove the drive is ready. The next experiment
+may settle before readiness and retry that exact readiness CDB once. A general
+readiness retry or successful-wake assumption remains out of scope.
+
+The following source-bound Test disproved the assumption that one settle and
+retry would make readiness authoritative. After 946 seconds, both readiness
+CDBs returned exact `24/00`; the second followed the bounded settle, and Windows
+again reported no loaded media after the fail-closed result. Repeating the same
+advisory query with a larger time budget has no evidence behind it.
+
+The narrower continuation does not omit proof. Only after successful `START
+UNIT` and those two exact transition results may the code classify readiness as
+indeterminate and repeat the one already-bounded full eviction. That unrelated
+payload read is stronger evidence: it must access media and complete the
+measured cache volume before the target reread can proceed. Any other readiness
+failure or another complete-ladder exhaustion remains fatal. Hardware proof of
+that continuation is still pending.
+
 ## Artwork import and optional-provider addendum - 2026-07-28
 
 This pass challenges the artwork selector before local drag-and-drop and

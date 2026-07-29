@@ -759,7 +759,155 @@ reports the final chunk shape, exact sector, status, sense, ASC/ASCQ, attempted
 regions, transient retry count, and fallback count.
 
 **Status:** implemented and software verified on 2026-07-27. Ripper tests pass
-22/22. K: hardware evidence remains.
+22/22. The 2026-07-29 K: repeat reached 92 percent of Copy, then rejected all
+three regions at 16/8/4/2/1 sectors. The receipt exposed a narrower retry-scope
+defect: the first rejected command consumed the one retry for the entire eviction,
+so the remaining fourteen address/shape combinations received no settle or retry.
+
+### Scope cache-defeat recovery to each exact SCSI command
+
+**Exact files:** `CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
+`CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
+`CUETools.Wpf.Tests/LiveOpticalTestCopyIntegrationTests.cs`, steering, and the
+R69 review record.
+
+**Safety and unchanged behavior:** retain strict cache independence, the three
+unrelated regions, and the 16/8/4/2/1 ladder. Give each exact LBA/sector-count
+command at most one 80 ms retry only for
+`DeviceFailed/IllegalRequest/24/00`. Do not share that consumed retry with a
+different address or transfer shape. Every other failure remains fatal, rejected
+payload is never used, and the required eviction byte count must still complete.
+Calculate that count with widened arithmetic so even a corrupted maximum `int`
+setting either completes the requested eviction or fails for lack of disc space.
+After a completed eviction, retry the first target payload only for the same
+exact `24/00` transition signature, not every `SCSIException`. Treat a stored
+flush strategy as independent-read proof only when the shared parser accepts a
+positive byte count; a malformed `Flush:` value must fail the first-read gate.
+
+**Checks:** add deterministic first/repeat/unrelated-failure, maximum-size
+arithmetic, transition-filter, and malformed-calibration policy tests; run the
+ripper suite and all SCSI target builds, run the full WPF suite, then repeat the
+configured K: damaged-window probe and full Test & Copy.
+
+**Rollback:** revert the per-command retry scope, checked-width calculation,
+shared calibration gate, transition filter, and their diagnostics together. Do
+not weaken the complete-or-fail eviction rule.
+
+**Observability:** retain the aggregate retry and chunk-fallback counters. A
+terminal failure also reports the read opcode, main-channel/C2 mode, applied
+speed, current target window, and the one-retry-per-command policy.
+
+**Status:** in progress 2026-07-29. The source-bound K: Test pass reached the
+damaged zone and then failed after 1,123 seconds. All fifteen address/shape
+commands received their command-local retry (`transient-retries=15`), proving
+the scope correction is active, but the firmware rejected every retry with
+exact `24/00`. After the application released the device, Windows reported no
+media and a new raw SCSI handle could not open K:. This corroborates the user's
+independent observation that the ASUS drive becomes dormant after a failed
+read.
+
+### Wake a dormant drive once without weakening cache independence
+
+**Exact files:** `CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs`,
+`CUETools.Ripper.SCSI/SCSIDrive.cs`,
+`CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs`,
+`CUETools.Wpf/Services/RipService.cs`,
+`CUETools.Wpf.Tests/LiveOpticalTestCopyIntegrationTests.cs`, steering, and the
+R69 review record.
+
+**Safety and unchanged behavior:** only after every usable unrelated region and
+every 16/8/4/2/1 shape has failed after its one retry with exact
+`DeviceFailed/IllegalRequest/24/00`, issue one non-immediate `START UNIT` on the
+already-open device handle. Do not load or eject the tray. Require both command
+success and `TEST UNIT READY`, then repeat the full eviction from the measured
+shape. The successful reread still requires every requested scratch sector; no
+rejected bytes enter the vote or output. A second exhaustion or any different
+status/sense remains fatal.
+
+**Checks:** pure one-wake/exhaustion policy positives and negatives; ripper and
+WPF suites; all SCSI targets; warning and artifact gates; a loaded K: bounded
+window; then a source-bound full Paranoid Test & Copy through the prior
+`current-window=278400-280800` failure.
+
+**Rollback:** revert the wake policy, drive command, counter, and diagnostics
+together. Retain the per-command retry scope, checked-width calculation, shared
+calibration gate, and strict complete-or-fail eviction.
+
+**Observability:** terminal and completion records count wake attempts
+separately from command retries and chunk fallbacks. The wake helper preserves
+command status and readiness without logging disc identity or payload.
+
+**Status:** in progress 2026-07-29. A second source-bound Test & Copy completed
+Test and reached the prior Copy boundary. The exact ladder exhausted, `START
+UNIT` succeeded, and the immediate `TEST UNIT READY` returned
+`DeviceFailed/IllegalRequest/24/00`. The application failed closed with
+`wake-attempts=1`. The wake command is accepted, but readiness has its own
+observed control-transition window.
+
+### Settle and retry the exact post-wake readiness transition once
+
+**Exact files:** the same R69 wake slice.
+
+**Safety and unchanged behavior:** after a successful non-immediate `START
+UNIT`, settle for 250 ms before querying readiness. Retry `TEST UNIT READY` at
+most once after another 250 ms only for
+`DeviceFailed/IllegalRequest/24/00`. Do not retry not-ready, unit-attention,
+transport, removal, hardware, medium, or any different failure. Readiness still
+does not satisfy cache independence: the entire measured eviction must succeed
+afterward, and a repeat readiness rejection remains fatal.
+
+**Checks:** deterministic first/repeat/unrelated readiness-transition tests,
+all prior software/build/artifact gates, a loaded K: `START UNIT` plus exact
+window, and another uninterrupted source-bound Test & Copy.
+
+**Rollback:** remove the two readiness settles, exact classifier, counter, and
+diagnostics together; retain the one-wake and complete-eviction gates.
+
+**Observability:** count readiness-transition retries separately from wake
+attempts and cache READ CD retries.
+
+**Status:** in progress 2026-07-29.
+
+The source-bound run disproved the final assumption in this batch. Test reached
+92 percent after 946 seconds, `START UNIT` succeeded, and both readiness
+attempts returned exact `DeviceFailed/IllegalRequest/24/00`, including the
+settled retry. CUETools failed closed with
+`wake-readiness-retries=1`. Windows then reported K: with no loaded media.
+Another delay-only retry is not supported by this evidence.
+
+### Use the complete eviction as proof after indeterminate wake readiness
+
+**Exact files:** the same R69 wake slice.
+
+**Safety and unchanged behavior:** `TEST UNIT READY` is advisory; it does not
+prove either media access or cache independence. After a successful
+non-immediate `START UNIT` and exactly two bounded readiness results of
+`DeviceFailed/IllegalRequest/24/00`, classify readiness as indeterminate and
+attempt the already-bounded complete eviction once. Do not continue after a
+not-ready, unit-attention, transport, removal, hardware, medium, or different
+failure. Do not consume rejected scratch data. Only every requested eviction
+sector succeeding can authorize the secure reread; another exact exhaustion
+still fails closed.
+
+**Checks:** deterministic first/second/unrelated readiness classifiers; ripper
+and WPF suites; net8, net47, and full-MSBuild net20 SCSI builds; zero-warning
+gate; production publish and plugin contract; then another uninterrupted
+source-bound K: Test & Copy through the same dormant transition.
+
+**Rollback:** remove the indeterminate-readiness classifier, counter, and
+continuation together. Retain the one-wake limit, exact readiness retry,
+per-command cache-read budgets, and complete-or-fail eviction.
+
+**Observability:** count indeterminate readiness separately from wake attempts,
+readiness retries, cache-command retries, and chunk fallbacks. A terminal
+failure retains all five local counts.
+
+**Status:** software verified 2026-07-29. Ripper tests pass 28/28, WPF tests
+pass 430/430, net47 and net20 full-MSBuild builds pass, the warning gate emits
+zero warnings, and the production artifact contract passes 36 required files,
+19 plugin registrations, and five native probes. K: requires a physical reload
+before the decisive hardware repeat.
 
 ### Give human-facing album sidecars a portable identity
 

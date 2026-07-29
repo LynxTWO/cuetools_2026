@@ -474,11 +474,9 @@ public sealed class RipService : IRipService
             // is calibrated as caching, flush the drive-specific calibrated size before each re-read so it
             // hits media. Secure and Paranoid therefore always use it; Deep recovery is no longer an
             // unrelated gate. Scratch-only - it can recover error detection but cannot alter the audio.
-            if ((cq > 0 || forceCacheDefeat) &&
-                cal?.CacheDefeat is string cacheDefeat &&
-                cacheDefeat.StartsWith("Flush:", StringComparison.Ordinal) &&
-                int.TryParse(cacheDefeat.Substring(6), out int flushBytes) &&
-                flushBytes > 0)
+            int flushBytes =
+                DriveCalibrationService.ParseFlushBytes(cal?.CacheDefeat);
+            if ((cq > 0 || forceCacheDefeat) && flushBytes > 0)
             {
                 reader.SetCacheDefeat(flushBytes);
                 _log.Info("rip", $"cache defeat on: flush {flushBytes}B before each secure re-read" +
@@ -967,6 +965,9 @@ public sealed class RipService : IRipService
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
                     $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
                     $"cache_defeat_chunk_fallbacks={reader.CacheDefeatChunkFallbackCount} " +
+                    $"cache_defeat_wakes={reader.CacheDefeatWakeCount} " +
+                    $"cache_defeat_wake_readiness_retries={reader.CacheDefeatWakeReadinessRetryCount} " +
+                    $"cache_defeat_wake_readiness_indeterminate={reader.CacheDefeatWakeReadinessIndeterminateCount} " +
                     $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
                     $"pinpoint_retries={reader.PinpointRetryCount} " +
                     $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
@@ -1666,11 +1667,7 @@ public sealed class RipService : IRipService
         }
 
         bool independent =
-            (cal.CacheDefeat ?? "").StartsWith("Flush:", StringComparison.Ordinal) ||
-            string.Equals(
-                cal.CacheDefeat,
-                "Media re-reads (no cache)",
-                StringComparison.Ordinal);
+            DriveCalibrationService.HasIndependentReadStrategy(cal.CacheDefeat);
         if (requireIndependentReads && !independent)
         {
             error =

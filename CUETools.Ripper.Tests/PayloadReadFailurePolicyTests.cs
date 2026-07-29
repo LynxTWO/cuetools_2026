@@ -295,25 +295,203 @@ namespace CUETools.Ripper.Tests
         public void CacheDefeatRetriesOnlyTheObservedTransientInvalidField()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x24,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.MediumError,
                 0x11,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.NotReady,
                 0x04,
                 0x01));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
                 Device.CommandStatus.IoctlFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x24,
                 0x00));
+            Assert.IsTrue(PayloadReadFailurePolicy.IsCacheDefeatInvalidField(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.IsCacheDefeatInvalidField(
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
+        public void CacheDefeatRetryIsScopedToOneExactCommand()
+        {
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+            Assert.IsFalse(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                1,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+
+            // A different LBA or transfer shape creates a new command-local counter.
+            Assert.IsTrue(PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
+                0,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.IllegalRequest,
+                0x24,
+                0x00));
+        }
+
+        [TestMethod]
+        public void CacheDefeatTransitionRetriesOnlyExactInvalidFieldOnce()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy.ShouldRetryAfterCacheDefeatTransition(
+                    true,
+                    Device.CommandStatus.DeviceFailed,
+                    Device.SenseKeyType.IllegalRequest,
+                    0x24,
+                    0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.ShouldRetryAfterCacheDefeatTransition(
+                    false,
+                    Device.CommandStatus.DeviceFailed,
+                    Device.SenseKeyType.IllegalRequest,
+                    0x24,
+                    0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.ShouldRetryAfterCacheDefeatTransition(
+                    true,
+                    Device.CommandStatus.DeviceFailed,
+                    Device.SenseKeyType.MediumError,
+                    0x11,
+                    0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.ShouldRetryAfterCacheDefeatTransition(
+                    true,
+                    Device.CommandStatus.IoctlFailed,
+                    Device.SenseKeyType.IllegalRequest,
+                    0x24,
+                    0x00));
+        }
+
+        [TestMethod]
+        public void CacheDefeatSectorCountCannotWrapAtMaximumSetting()
+        {
+            Assert.AreEqual(
+                1,
+                PayloadReadFailurePolicy.RequiredCacheDefeatSectors(1));
+            Assert.AreEqual(
+                int.MaxValue / 2352 + 1,
+                PayloadReadFailurePolicy.RequiredCacheDefeatSectors(
+                    int.MaxValue));
+            Assert.AreEqual(
+                0,
+                PayloadReadFailurePolicy.RequiredCacheDefeatSectors(0));
+        }
+
+        [TestMethod]
+        public void CacheDefeatWakeRequiresFullExactExhaustionAndOccursOnce()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy.ShouldAttemptCacheDefeatWake(
+                    0,
+                    exhaustedInvalidFieldShapes: true));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.ShouldAttemptCacheDefeatWake(
+                    0,
+                    exhaustedInvalidFieldShapes: false));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.ShouldAttemptCacheDefeatWake(
+                    1,
+                    exhaustedInvalidFieldShapes: true));
+        }
+
+        [TestMethod]
+        public void CacheDefeatWakeReadinessRetriesOnlyFirstExactTransition()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy
+                    .ShouldRetryCacheDefeatWakeReadiness(
+                        0,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryCacheDefeatWakeReadiness(
+                        1,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryCacheDefeatWakeReadiness(
+                        0,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.NotReady,
+                        0x04,
+                        0x01));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryCacheDefeatWakeReadiness(
+                        0,
+                        Device.CommandStatus.IoctlFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+        }
+
+        [TestMethod]
+        public void CacheDefeatProofMayFollowOnlyTwoExactIndeterminateReadinessResults()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy
+                    .ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+                        1,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+                        0,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+                        1,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.NotReady,
+                        0x04,
+                        0x01));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldAttemptCacheDefeatProofAfterIndeterminateReadiness(
+                        1,
+                        Device.CommandStatus.IoctlFailed,
+                        Device.SenseKeyType.IllegalRequest,
+                        0x24,
+                        0x00));
         }
 
         [TestMethod]
