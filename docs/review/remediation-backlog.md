@@ -1906,6 +1906,34 @@ does not relax evidence, rollback, or verification requirements.
   pass. A 1,000-frame hot-loop test stays below 128 KiB after warmup. The full
   WPF suite passes 423/423 and the warning budget is empty.
 
+### R81. Live damaged-sector frame pacing lacks a source-bound receipt - bucket A, risk medium
+
+- **Area or slice:** WPF `CompositionTarget.Rendering`, the R80 CD model,
+  real optical re-read state, and release evidence.
+- **Why it matters:** deterministic renders prove appearance and state mechanics,
+  but not whether the live UI remains responsive while the optical worker is
+  recovering bad sectors. A renderer can pass snapshots while stalling or
+  allocating during the real workload.
+- **Evidence found:** R80 has dark/light live captures, a ten-frame state matrix,
+  and a post-warmup allocation test. `DiscModel3D.OnTick` is the single animation
+  seam. The application diagnostic log independently timestamps real
+  `rip.reread` and `rip.recovery` events. WPR failed with `0xc5585011`, and
+  PresentMon 2.5.1 exited 6 because this non-administrative account lacks the
+  system performance policy.
+- **Confidence:** verified.
+- **Approval needed:** no. The user explicitly requested the live benchmark on
+  the damaged disc in K:.
+- **Recommended next pass:** pass 11 bounded remediation and verification.
+- **Smallest safe next step:** add an environment-gated, numeric-only sampler at
+  `DiscModel3D.OnTick`, backed by fixed histograms and state-transition receipts,
+  then run K: in Paranoid Test & Copy.
+- **Verification plan:** require zero post-warmup sampling allocations; focused
+  state and receipt tests; full WPF, warning, and publish gates; a real K:
+  run containing at least one independently logged optical re-read; and separate
+  normal-read versus re-read frame percentiles.
+- **Owner:** CUETools WPF maintainers.
+- **Status:** in progress 2026-07-29.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence

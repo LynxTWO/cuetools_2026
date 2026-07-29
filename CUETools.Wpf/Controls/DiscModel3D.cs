@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -128,6 +129,7 @@ public sealed class DiscModel3D : Viewport3D
     private bool _lastVisualRereadActive;
     private bool _lastVisualUnreadable;
     private double _lastTrackOpacity = double.NaN;
+    private DiscFrameMetrics? _frameMetrics;
 
     // camera poses: overview, and the reference the damage-focus is derived from
     private static readonly Point3D OverviewPos = new(0, 95, 96);
@@ -357,23 +359,62 @@ public sealed class DiscModel3D : Viewport3D
 
         Children.Add(new ModelVisual3D { Content = root });
 
-        Loaded += (_, _) =>
-        {
-            RefreshPalette();
-            _last = DateTime.Now;
-            CompositionTarget.Rendering += OnTick;
-        };
-        Unloaded += (_, _) => CompositionTarget.Rendering -= OnTick;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         RefreshPalette();
         PlaceLaser();
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        RefreshPalette();
+        _last = DateTime.Now;
+        _frameMetrics = DiscFrameMetrics.TryCreate(
+            RenderCapability.Tier >> 16);
+        CompositionTarget.Rendering += OnTick;
+        Dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
+        if (Application.Current != null)
+            Application.Current.Exit += OnApplicationExit;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        CompositionTarget.Rendering -= OnTick;
+        Dispatcher.ShutdownStarted -= OnDispatcherShutdownStarted;
+        if (Application.Current != null)
+            Application.Current.Exit -= OnApplicationExit;
+        CompleteFrameMetrics();
+    }
+
+    private void OnApplicationExit(object? sender, ExitEventArgs e) =>
+        CompleteFrameMetrics();
+
+    private void OnDispatcherShutdownStarted(object? sender, EventArgs e) =>
+        CompleteFrameMetrics();
+
+    private void CompleteFrameMetrics()
+    {
+        DiscFrameMetrics? frameMetrics = _frameMetrics;
+        _frameMetrics = null;
+        frameMetrics?.Complete();
+    }
+
     private void OnTick(object? sender, EventArgs e)
     {
+        long callbackStart = Stopwatch.GetTimestamp();
         var now = DateTime.Now;
         double dt = Math.Min(0.05, (now - _last).TotalSeconds);
         _last = now;
         Advance(dt);
+        _frameMetrics?.RecordFrame(
+            callbackStart,
+            Stopwatch.GetTimestamp(),
+            Active,
+            RereadActive,
+            Unreadable,
+            Progress,
+            RereadFrac,
+            _zoom);
     }
 
     internal void Advance(double dt)
