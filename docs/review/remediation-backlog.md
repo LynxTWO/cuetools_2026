@@ -137,7 +137,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Scope (user):** upgrade all codecs to their latest versions/builds, add any missing/wanted ones, and note that FlaCuda has effectively been superseded by FLACCL (OpenCL), which confirms the CUDA path is a dead ancestor rather than a parallel feature.
 - **What this touches:**
- - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0, current upstream), `WavPack` (5.8.1 vs upstream 5.9.0), MAC_SDK (13.20, current upstream, with an adapted CUETools `IAPEIO` wrapper), taglib-sharp (the current 2.3.0.0 release with local changes), `libmp3lame` (3.100 vs the July 2026 upstream 4.0 release), and ffmpeg (standalone/unshipped 7.1.1 path vs upstream 8.1.2). Each bump means re-checking local patches, ABI, packaging, and audio behavior.
+ - ThirdParty submodules and their local patches: `flac` (libFLAC 1.5.0, current upstream), `WavPack` (5.9.0, current upstream), MAC_SDK (13.20, current upstream, with an adapted CUETools `IAPEIO` wrapper), taglib-sharp (the current 2.3.0.0 release with local changes), `libmp3lame` (3.100 vs the July 2026 upstream 4.0 release), and ffmpeg (standalone/unshipped 7.1.1 path vs upstream 8.1.2). Each bump means re-checking local patches, ABI, packaging, and audio behavior.
  - Managed wrappers in S6/S7 that must match new native ABIs (P/Invoke signatures, struct layouts).
  - FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`): DELETED 2026-07-23 (decision D5).
    Confirmed dead first: absent from the sln, referenced by no csproj/cs/sln outside its own two
@@ -146,25 +146,28 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
    runs on an RTX 3060 across OpenCL modes 0-8, CPU workers, 24-bit input, and an exact
    frame boundary. Cross-vendor coverage and managed-SIMD modernization (idea 14)
    remain future work.
- - Missing/desired codecs: enumerate against current CUETools upstream and user wants (e.g. Opus, newer ALAC, DSD?) - needs a requirements list from the user before implementation.
+ - Requested command-line codecs: xHE-AAC, OptimFROG, Musepack, Ogg Vorbis,
+   Opus, qaac, and TAK. Support and bundling are separate decisions because
+   executable contracts, patents, redistribution terms, and dependencies differ.
 - **TTA build evidence:** redirected x64 and Win32 C++/CLI builds pass. Runtime
   workers encode 16-bit stereo and 24-bit six-channel PCM, reproduce every PCM byte
   through both the managed decoder and ffmpeg, and produce identical x64/Win32
   bitstreams. The wrapper independently verifies finalized output before publication.
   The tests also found and fixed `ttalib`'s short-file final-frame length bug.
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
-- **Next step:** preserve and reconcile existing submodule work, then upgrade one
-  codec at a time with native rebuild, ABI/package probes, and round-trip/corpus
-  verification. The format-addition half still needs a product wishlist.
+- **Next step:** add one command-line integration at a time with exact executable,
+  verification, settings, help, precedence, provenance, and packaging contracts.
 - **Confidence:** verified
-- **Status 2026-07-26:** reachability and verification claims are refreshed in
+- **Status through 2026-07-29:** reachability and verification claims are refreshed in
   `docs/review/codec-audit.md`, and the upstream version table is refreshed in
   `codec-refresh-scope.md`. libFLAC and taglib-sharp match current releases.
-  WavPack and LAME have known version drift; the unshipped FFmpeg
+  LAME has known version drift; the unshipped FFmpeg
   path is also behind. Upgrades remain per-codec integration work, not binary
   swaps. Monkey's Audio 13.20 is upgraded and verified on Win32 and x64. FlaCuda
   is deleted. FLACCL has real RTX 3060/OpenCL verification evidence.
-  Format additions still require a product decision.
+  WavPack 5.9.0 is current: both architectures rebuild without warnings and the
+  focused lifecycle plus real round-trip gate passes 2/2. The user supplied the
+  codec wishlist on 2026-07-29.
 
 ### R14. LAME v4 modernization initiative (user request 2026-07-02) - bucket B, large, separate project
 
@@ -2021,32 +2024,36 @@ does not relax evidence, rollback, or verification requirements.
   production publish gates, then a fast real encoded-output check started as
   soon as the disc is identified.
 - **Owner:** CUETools WPF maintainers.
-- **Status:** fixed and software-verified 2026-07-29. Rip and Test & Copy use
+- **Status:** fixed and live-verified 2026-07-29. Rip and Test & Copy use
   one shared encoded-job gate, the private execution paths enforce the same
   condition, and artwork state changes requery both commands. Verify remains
   available. The focused regression passes, the full WPF suite passes 431/431,
   the warning gate emits zero warnings, and the production artifact contract
   passes 36 required files, 19 plugin registrations, and five native probes.
-  A fast live start-before-discovery embed check remains.
+  A live H: transition trace showed Rip and Test & Copy disabled while artwork
+  was searching and loading, Verify available throughout, and both encoded jobs
+  enabled only after the cover became stable. The immediate Burst rip completed
+  10 FLAC files with AccurateRip confidence 28 and CTDB confidence 241. Every
+  FLAC contained exactly one 100,222-byte picture whose SHA-256 matched
+  `folder.jpg`, and final output PCM verification passed after metadata.
 
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
 dependency:
 
-1. Verify R83's encoded-job artwork gate, then repeat a fast real embed check.
-2. Finish R72's interactive dark/light/responsive capture and real
+1. Finish R72's interactive dark/light/responsive capture and remaining
    automatic/manual embedded-output proof. The core path does not wait on optional
    Apple or TheAudioDB policy decisions.
-3. Finish and adversarially review any open R44-R49 follow-ups.
-4. Refresh the classic receipt after the source commit and retain its exact
+2. Finish and adversarially review any open R44-R49 follow-ups.
+3. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-5. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
+4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
    and crash release without shared-state collisions.
-6. Run the pinned hosted workflows and compare them with the local receipts.
-7. Choose and implement a publisher signing/attestation identity and policy.
-8. Continue R5/R8/R12/R13 modernization and lock-file rollout.
-9. Capture R78 in light and dark mode, rerun the Kenny G lookup for R77, and
+5. Run the pinned hosted workflows and compare them with the local receipts.
+6. Choose and implement a publisher signing/attestation identity and policy.
+7. Continue R5/R8/R12/R13 modernization and lock-file rollout.
+8. Capture R78 in light and dark mode, rerun the Kenny G lookup for R77, and
    perform one live FLAC image rip for R79.
 
 ## Holes / external boundaries

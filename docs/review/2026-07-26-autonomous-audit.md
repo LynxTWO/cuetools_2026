@@ -322,13 +322,14 @@ were fixed; legacy Freedb/SCSI construction style remains cleanup debt.
   source/revision/recipe, RareWares' exact LAME source revision and flags, and
   a TTA archive checksum captured contemporaneously with its 2009 import. The
   current official archive and the import's exact local delta are recorded.
-- Plan and validate the remaining codec drift one integration at a time: WavPack
-  5.8.1 to 5.9.0 and LAME 3.100 to the newly released 4.0. Monkey's Audio 13.20
+- Plan and validate the remaining codec drift one integration at a time. WavPack
+  5.9.0 is complete with clean Win32/x64 builds and a focused real round trip.
+  LAME 3.100 to the newly released 4.0 remains separate. Monkey's Audio 13.20
   is complete with a hash-bound SDK, adapted `IAPEIO` wrapper, both-architecture
   native builds, and real 16/24-bit verified round trips. The unshipped FFmpeg
   workflow/wrapper is 7.1.1 while upstream stable is
-  8.1.2. The current local changes inside WavPack/taglib-sharp submodules must be
-  preserved and reconciled, not overwritten.
+  8.1.2. The current local changes inside taglib-sharp must be preserved and
+  reconciled, not overwritten.
 - Continue targeted review of the three playback `NotImplementedException` sites and
   legacy TODOs; neither count alone authorizes behavior changes.
 
