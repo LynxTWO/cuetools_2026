@@ -7,12 +7,10 @@ Current-state refresh: 2026-07-29.
 ### K damaged-disc dormant-drive wake
 
 - **Area or file:** `CUETools.Ripper.SCSI/SCSIDrive.cs`, R69 hardware evidence.
-- **Concern:** The post-wake readiness settle/retry has not yet crossed the
-  firmware state that rejects every cache-defeat command and then rejects the
-  two bounded readiness CDBs.
-- **Why it matters:** software policy tests cannot prove that bounded settling
-  and a complete post-wake eviction after `START UNIT` revive this ASUS firmware
-  without a physical reload.
+- **Concern:** The corrected full Test & Copy passed, but the intermittent
+  post-wake continuation did not activate during that run.
+- **Why it matters:** an end-to-end pass proves the user outcome, not that the
+  bounded wake and indeterminate-readiness branch works on this ASUS firmware.
 - **Evidence found so far:** the source-bound 2026-07-29 Test pass reached the
   damaged zone and proved all fifteen address/shape commands received their
   local retry. All fifteen still returned exact `IllegalRequest/24/00`.
@@ -23,19 +21,21 @@ Current-state refresh: 2026-07-29.
   closed. A later source-bound Test reached 92 percent after 946 seconds and
   proved the 250 ms settle plus one exact readiness retry also returns `24/00`.
   The next bounded build treats only those two results as indeterminate and
-  still requires the complete cache eviction as the authoritative proof. Ripper
-  tests pass 28/28, WPF tests pass 430/430, the legacy builds and warning gate
-  pass, and the production artifact contract passes.
+  still requires the complete cache eviction as the authoritative proof.
+  Commit `5fa2c65` then completed a 2,275-second Test & Copy and a verified
+  six-sector CTDB repair, crossing the former Copy failure boundary. That run
+  recorded zero wake attempts, readiness retries, indeterminate-readiness
+  continuations, command retries, and chunk fallbacks.
 - **Confidence:** unknown.
 - **Likely owner:** repo owner.
-- **Next best check:** physically reload the damaged disc in K:, then run full
-  Test & Copy from the source-bound published build through the dormant
-  transition and prove the post-wake complete eviction succeeds or returns its
-  next exact failure receipt.
-- **Risk level:** high
-- **Status:** blocked
-- **Notes:** 2026-07-29 - the exact production build is ready; blocked only on
-  physically reloading K: after the last failed run.
+- **Next best check:** if the exact dormant transition recurs, retain the
+  positive branch counters and terminal receipt. Otherwise, use only a safe
+  deterministic hardware fault-injection method; do not disturb a passing
+  drive merely to force the state.
+- **Risk level:** medium
+- **Status:** open
+- **Notes:** 2026-07-29 - the observed end-to-end blocker is cleared. Exact
+  hardware branch activation remains unproved.
 
 ### TheAudioDB distribution tier and attribution
 

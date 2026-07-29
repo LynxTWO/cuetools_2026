@@ -1,7 +1,7 @@
 # Live release evidence, 2026-07-29
 
 This record closes the selected interactive theme, metadata, optical-image, and
-disc-visual checks for R77-R82. Local captures and audio outputs remain under the ignored
+disc-visual checks for R77-R83. Local captures and audio outputs remain under the ignored
 `evidence/live-2026-07-29/` tree. They are not release payloads and are not
 committed because they contain user media and metadata.
 
@@ -119,10 +119,37 @@ The clean disc did not require CTDB repair. This run proves image publication
 and repair-source binding. It does not replace the separate damaged-disc K:
 repair evidence recorded under R71.
 
+## Final damaged-disc completion and repair
+
+The source-bound build at commit `5fa2c65` completed an uninterrupted Paranoid
+Test & Copy on K: in 2,275 seconds. Both reads were consistent, the Copy crossed
+the former 92-percent failure boundary, and the final encoded PCM check passed.
+The reader retained three exhausted windows and six suspicious sectors, so the
+result correctly required CTDB repair instead of claiming clean verification.
+
+CTDB published a source-preserving sibling with 25/25 source proofs and 25/25
+output proofs. Independent decoded-PCM comparison found 86 changed channel
+samples in 67 stereo frames across the receipt's six sectors. Only tracks 15,
+16, and 20 changed; the other 21 tracks null exactly. The repaired audio matched
+AccurateRip at 55/82 and CTDB at 207/234. All 24 audio basenames, descriptive
+tags, and stream layouts were preserved. Stale proof tags were intentionally
+replaced by `repair.verify` and fresh human-readable repair reports.
+
+All cache wake, readiness, retry, and chunk-fallback counters were zero. This
+proves the end-to-end outcome and clears the observed R69 blocker, but it does
+not prove activation of the intermittent wake branch.
+
+The run also exposed R83. Test & Copy began 0.711 seconds before asynchronous
+artwork discovery completed, so it froze a null cover even though the UI showed
+the selected cover moments later. Source and repaired files therefore contain
+no pictures. The software fix keeps encoded-job commands disabled until artwork
+loading completes and preserves Verify availability. A fast live embed repeat
+remains; this damaged-disc run is valid CTDB evidence, not artwork proof.
+
 ## Final software and artifact gates
 
-- modern ripper suite: 22/22 passed, no skips;
-- WPF suite: 429/429 passed, no skips;
+- modern ripper suite: 28/28 passed, no skips;
+- WPF suite: 431/431 passed, no skips;
 - WPF/fuzz warning budget: zero emitted warning lines and zero fingerprints;
 - self-contained x64 publish: artifact contract passed, including 19 plugin
   registrations and five native-plugin probes;

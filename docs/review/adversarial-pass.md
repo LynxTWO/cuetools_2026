@@ -87,6 +87,25 @@ measured cache volume before the target reread can proceed. Any other readiness
 failure or another complete-ladder exhaustion remains fatal. Hardware proof of
 that continuation is still pending.
 
+### Final damaged-disc receipt
+
+Commit `5fa2c65` completed an uninterrupted K: Test & Copy in 2,275 seconds.
+Both reads were consistent, the encoded output passed the final PCM check, and
+the run crossed the earlier 92-percent Copy failure boundary. The optical
+reader reported three exhausted windows and six suspicious sectors. CTDB
+published a repaired sibling with source and output receipts covering 25 files
+each. Independent decoded-PCM comparison found 86 changed channel samples in
+67 stereo frames across the same six sectors. The repaired output matched
+AccurateRip at 55/82 and CTDB at 207/234. All 24 audio basenames, descriptive
+tags, and stream layouts were preserved; proof tags were intentionally replaced
+by `repair.verify` and the fresh repair reports.
+
+The run proves the final user outcome, not activation of the intermittent wake
+branch. Every cache-defeat wake, readiness, retry, and chunk-fallback counter
+was zero. Keep the exact dormant-drive branch as a residual hardware unknown
+until a future run records a positive branch counter or a safe deterministic
+fault-injection method exercises it.
+
 ## Artwork import and optional-provider addendum - 2026-07-28
 
 This pass challenges the artwork selector before local drag-and-drop and

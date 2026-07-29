@@ -1,8 +1,9 @@
 # Album Art Discovery and Selection Plan
 
 Status: core implementation, normal dark/light browser capture, and
-embedded-output proof are complete. High-contrast and 150/200 percent DPI
-captures remain.
+embedded-output proof are complete. Encoded jobs now wait for a stable artwork
+snapshot. High-contrast, 150/200 percent DPI, and the fast start-before-discovery
+live repeat remain.
 Prepared 2026-07-28 for CUETools 2026.
 
 ## 1. Outcome
@@ -46,6 +47,9 @@ Implementation checkpoint, 2026-07-28:
   exact artist/album results. Non-front images remain browser-only.
 - The processor's hidden artwork fallback is disabled for WPF jobs. Rip and Test
   & Copy capture the selected byte array before work starts.
+- Rip and Test & Copy remain disabled while release-bound artwork is loading,
+  and their private execution guards enforce the same rule. Verify remains
+  available because it publishes no audio.
 - The full WPF suite passes 395/395. The WPF and fuzz warning gate emits zero
   warnings, the self-contained x64 artifact contract passes, and live Cover Art
   Archive, MusicBrainz, and TheAudioDB contract probes return HTTP 200.
