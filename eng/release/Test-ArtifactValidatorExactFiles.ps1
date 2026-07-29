@@ -62,13 +62,17 @@ try {
 
     function Write-TestManifest(
         [bool]$RequireExactFiles,
-        [string]$PeMachine = "") {
+        [string]$PeMachine = "",
+        [string]$Sha256 = "") {
         $required = [ordered]@{
             path = "managed-root-copy.dll"
             minimumBytes = 1
         }
         if (-not [string]::IsNullOrWhiteSpace($PeMachine)) {
             $required.peMachine = $PeMachine
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Sha256)) {
+            $required.sha256 = $Sha256
         }
         $manifest = [ordered]@{
             schemaVersion = 1
@@ -134,6 +138,28 @@ try {
     Assert-True `
         ($rightMachine.ExitCode -eq 0) `
         "Artifact validation rejected the contracted PE machine: $($rightMachine.Output)"
+
+    $exactHash = (
+        Get-FileHash -LiteralPath $versionAssembly -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    Write-TestManifest $false "" $exactHash
+    $rightHash = Invoke-Validator `
+        -ValidatorAssembly $validatorAssembly `
+        -ArtifactDirectory $artifactDirectory `
+        -ManifestPath $manifestPath
+    Assert-True `
+        ($rightHash.ExitCode -eq 0) `
+        "Artifact validation rejected the contracted SHA-256: $($rightHash.Output)"
+
+    Write-TestManifest $false "" ("0" * 64)
+    $wrongHash = Invoke-Validator `
+        -ValidatorAssembly $validatorAssembly `
+        -ArtifactDirectory $artifactDirectory `
+        -ManifestPath $manifestPath
+    Assert-True `
+        ($wrongHash.ExitCode -eq 1 -and
+            $wrongHash.Output -match "SHA-256 is .* not 000000") `
+        "Artifact validation accepted the wrong SHA-256: $($wrongHash.Output)"
 
     Write-Host "ArtifactValidator exact-file checks passed: $script:checkCount"
 }

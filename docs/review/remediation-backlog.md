@@ -155,8 +155,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   bitstreams. The wrapper independently verifies finalized output before publication.
   The tests also found and fixed `ttalib`'s short-file final-frame length bug.
 - **Why it needs care:** codec upgrades are behavior-affecting (bit-exactness must be preserved; the golden-corpus tests in idea 3 should exist first). Approval-gated where they touch release output.
-- **Next step:** add one command-line integration at a time with exact executable,
-  verification, settings, help, precedence, provenance, and packaging contracts.
+- **Next step:** keep LAME 4 and the unshipped FFmpeg refresh as separate
+  behavior-changing projects. General OptimFROG input decoding remains outside
+  the current receipt-bound command-decoder trust model.
 - **Confidence:** verified
 - **Status through 2026-07-29:** reachability and verification claims are refreshed in
   `docs/review/codec-audit.md`, and the upstream version table is refreshed in
@@ -166,8 +167,20 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   swaps. Monkey's Audio 13.20 is upgraded and verified on Win32 and x64. FlaCuda
   is deleted. FLACCL has real RTX 3060/OpenCL verification evidence.
   WavPack 5.9.0 is current: both architectures rebuild without warnings and the
-  focused lifecycle plus real round-trip gate passes 2/2. The user supplied the
-  codec wishlist on 2026-07-29.
+  focused lifecycle plus real round-trip gate passes 2/2. The WPF catalog now
+  registers Musepack, TAK, Vorbis, Opus, qaac, exhale/xHE-AAC, and OptimFROG
+  with implementation selection, archival defaults, rich help, compatible
+  executable aliases, and hash-bound user-import precedence. The WPF package
+  includes only the redistributable, provenance-complete command encoders:
+  official Opus Tools `opusenc.exe` and RareWares `oggenc2.exe`, with exact
+  archive/executable hashes, notices, and the corresponding Ogg source archive.
+  Release validation and runtime resolution both enforce those hashes. Real
+  stdin encodes passed for the exact packaged binaries; focused external-encoder
+  trust/contract tests pass 21/21. exhale 1.2.2 and OptimFROG 5.100 were built
+  or exercised against their real CLIs, but are import-only because exhale
+  grants no patent rights and OptimFROG redistribution requires author
+  notification. qaac remains import-only because its Apple runtime is not
+  redistributable with this product; TAK remains proprietary/import-only.
 
 ### R14. LAME v4 modernization initiative (user request 2026-07-02) - bucket B, large, separate project
 
