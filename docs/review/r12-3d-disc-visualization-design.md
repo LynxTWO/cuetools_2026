@@ -1,8 +1,8 @@
 # R12: 3D disc + laser optical model - design
 
-Status: design, pending owner review. Not yet built. Implementation is deferred to a session with a
-recovered GPU, because a 3D view cannot be visually verified while the live WPF window is in the
-GPU-compositing-exhausted state reached at the end of the build session on 2026-07-12.
+Status: implemented and visually refreshed through R80 on 2026-07-29. Normal
+light/dark live captures and the offscreen state matrix pass. A formal frame-time
+benchmark remains open.
 
 ## Goal
 
@@ -12,11 +12,27 @@ a standalone lesson.
 
 Decisions already made with the owner (2026-07-12):
 
-- Renderer: WPF 3D (`Viewport3D`, built-in, GPU-rasterized) plus a procedural pit pixel shader.
+- Renderer: WPF 3D (`Viewport3D`, built-in, GPU-rasterized) plus bounded
+  procedural `WriteableBitmap` surface textures.
   Chosen over a full D3D11 interop for maintainability and because it degrades into its own
   weak-hardware fallback with no separate renderer to keep.
 - Scope: both a live disc on the Rip page and an explorable "How a CD works" mode. Built in two
   stages, live first.
+
+Implementation checkpoint, 2026-07-29:
+
+- The live model separates the 15 mm hole, clamp ring, mirrored hub, 25 to
+  58 mm program area, clear outer rim, back, and edge thickness.
+- The pickup lens and representative near-infrared beam sit below the substrate.
+  The focus spot remains at the real equal-area read radius.
+- The data texture is a representative continuous spiral. Narrow curved
+  diffraction highlights replace the earlier broad rainbow wedge.
+- Inner-radius visual spin is faster than outer-radius spin, preserving the CLV
+  relationship at a slowed presentation rate.
+- `RereadActive`, `RereadFrac`, and `Unreadable` still own camera zoom, recovery
+  ease-out, and unreadable hold. The visual layer adds no optical-drive commands.
+- The tier-zero fallback uses the same physical radii and theme tokens, and it
+  does not spin while no rip is active.
 
 ## What it teaches
 
@@ -140,36 +156,27 @@ The live read data drives all three tiers identically; only the surface detail s
 
 ## Verification plan
 
-- Offscreen first: `Viewport3D` renders headless through `RenderTargetBitmap` (unlike
-  `CompositionTarget.Rendering`, 3D content does compose off-screen), so the geometry, camera, laser
-  position, and shader can be verified to PNG without the live window - the technique that carried the
-  whole R12 visualization work. Build a `DiscRender` harness like `RereadRender` / `RepairRender`.
-- Read-position accuracy: assert the laser radius for f = 0, 0.5, 1.0 matches `radius(f)` within a
-  pixel in the offscreen render.
-- Live: once the GPU is recovered, a real rip - the laser should track the progress and back-track on
-  a real re-read (the pin-holed disc forces this on demand).
-- Fallback: force each `RenderCapability.Tier` path and confirm tier 0 shows the 2D map.
+- `RenderTargetBitmap` renders idle, reading, re-reading, unreadable, and
+  tier-zero fallback frames in both palettes.
+- Radius tests cover clamping and the exact f = 0, 0.5, and 1 equal-area values.
+- State tests prove normal pickup movement, re-read back-track and zoom,
+  recovery ease-out, and unreadable hold.
+- A 1,000-frame post-warmup test bounds render-state allocations below 128 KiB.
+- Actual 1180x740 WPF windows were inspected in dark and light mode at 96 DPI.
 
 ## Risks / open questions
 
-- WPF `ShaderEffect` is limited to Shader Model 3 (ps_3_0) and is applied as a 2D post-effect on a
-  material, not a true 3D surface shader. Painting pits correctly in the disc's UV space at extreme
-  zoom may need the pit texture generated procedurally to a `WriteableBitmap` / render target instead
-  of a live pixel-shader if SM3 is too limiting. Resolve during a spike before committing to the
-  shader path; the flat-3D tier does not depend on it.
-- `Viewport3D` performance with a fine disc mesh is fine, but a live auto-orbit plus the rip render
-  loop should be measured (target 60 fps on tier 2, degrade on lower tiers).
-- Placement on the Rip page: whether the 3D disc replaces the 2D map or sits beside it (space in the
-  left column is tight). Lean toward replace, with the 2D map as the tier-0 fallback in the same slot.
+- The shader question is resolved. The control builds bounded procedural
+  textures once and uses WPF materials at render time.
+- A formal live frame-time benchmark is still open. Tier zero retains the
+  software-rendered fallback.
+- Placement is resolved. The 3D control owns the live slot on capable hardware;
+  the 2D map occupies the same slot at tier zero.
 
 ## Build order
 
-1. Spike the pit shader vs. procedural-texture question offscreen (small, decides the surface path).
-2. Stage 1 live disc (geometry, camera, laser, read-position mapping, re-read back-track, tiers),
-   verified offscreen then on a live rip.
-2b. Zoom-to-damage: camera dolly to `radius(RereadFrac)` on `RereadActive`, the outcome states
-   (recovered / reconstructed / unreadable), and the opt-in "stop on unrecoverable damage" setting
-   (new `AppSettings` flag + a failed-sector-triggered `Stop()`), with the stay-zoomed flashing-red
-   held state. Verified on the pin-holed disc, which forces real unrecoverable spots.
-3. Stage 2 explore mode (orbit/zoom, zoom-tier callouts, layer cross-section).
-4. Update the `disc-read-visualization` skill with the 3D approach and the offscreen-3D technique.
+1. Procedural texture selection: done.
+2. Live geometry, read mapping, re-read back-track, and hardware tiers: done.
+3. Damage zoom and outcome markers: done.
+4. Explore mode and layer cross-section: done.
+5. Formal frame-time benchmark: open.

@@ -17,4 +17,13 @@ internal static class ThemeColor
             ? brush.Color
             : fallback;
     }
+
+    internal static Color Get(FrameworkElement owner, string key, Color fallback)
+    {
+        object? resource = owner.TryFindResource(key) ??
+            Application.Current?.TryFindResource(key);
+        return resource is SolidColorBrush brush
+            ? brush.Color
+            : fallback;
+    }
 }

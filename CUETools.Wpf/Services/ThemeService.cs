@@ -111,6 +111,9 @@ public sealed class ThemeService
         ["SwitchChannelBottomColor"] = "#2AFFFFFF", ["SwitchThumbTopColor"] = "#5A6356",
         ["SwitchThumbMidColor"] = "#333C34", ["SwitchThumbBottomColor"] = "#242B25",
         ["SwitchSheen"] = "#26FFFFFF",
+        ["DiscData"] = "#93A39F", ["DiscHub"] = "#BCC8C4",
+        ["DiscEdge"] = "#DDE6E2", ["DiscBack"] = "#303A36",
+        ["DiscTrack"] = "#E5F3EE",
     };
 
     private static readonly Dictionary<string, string> Light = new()
@@ -126,5 +129,8 @@ public sealed class ThemeService
         ["SwitchChannelBottomColor"] = "#B8FFFFFF", ["SwitchThumbTopColor"] = "#7E897A",
         ["SwitchThumbMidColor"] = "#5F695C", ["SwitchThumbBottomColor"] = "#465044",
         ["SwitchSheen"] = "#66FFFFFF",
+        ["DiscData"] = "#74837E", ["DiscHub"] = "#AAB7B2",
+        ["DiscEdge"] = "#4B5954", ["DiscBack"] = "#2E3935",
+        ["DiscTrack"] = "#E8F2EE",
     };
 }
