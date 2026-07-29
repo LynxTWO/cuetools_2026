@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Controls;
 
@@ -14,8 +15,7 @@ namespace CUETools.Wpf.Controls;
 ///
 /// Driven by real rip data: <see cref="Progress"/> (0..1 read fraction) places the laser on the
 /// spiral via the true CD geometry - inner data radius ~25 mm, outer ~58 mm, and an equal-area
-/// mapping so a linear read rate moves the laser at constant data density (the CLV truth). This is
-/// the geometry spike; surface pit detail, the read glow, and the re-read zoom build on top.
+/// mapping so a linear read rate moves the laser at constant data density (the CLV truth).
 /// </summary>
 public sealed class DiscModel3D : Viewport3D
 {
@@ -71,9 +71,17 @@ public sealed class DiscModel3D : Viewport3D
 
     private static double Clamp(double v, double lo, double hi) => v < lo ? lo : v > hi ? hi : v;
 
-    // Real CD geometry, in millimetres (used only as proportions).
-    private const double RHole = 7.5, RData0 = 25.0, RDataN = 58.0, REdge = 60.0;
-    private static double Radius(double f) => Math.Sqrt(RData0 * RData0 + Math.Max(0, Math.Min(1, f)) * (RDataN * RDataN - RData0 * RData0));
+    // Real CD geometry, in millimetres (used only as proportions). The 15 mm centre
+    // hole, 120 mm edge, and 25..58 mm program area stay distinct in the mesh.
+    private const double RHole = 7.5, RStack = 16.5, RData0 = 25.0;
+    private const double RDataN = 58.0, REdge = 60.0;
+    internal static double DataRadius(double f) =>
+        Math.Sqrt(
+            RData0 * RData0 +
+            Math.Max(0, Math.Min(1, f)) *
+            (RDataN * RDataN - RData0 * RData0));
+    internal static double VisualSpinDegreesPerSecond(double f) =>
+        145.0 * RData0 / DataRadius(f);
 
     private static readonly Color Teal = Color.FromRgb(0x34, 0xCF, 0xC0);
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
@@ -82,18 +90,51 @@ public sealed class DiscModel3D : Viewport3D
     private readonly PerspectiveCamera _cam;
     private readonly ImageBrush _tracks;             // data-track rings, opacity rises with zoom
     private readonly RadialGradientBrush _surface;   // the read glow, updated from Progress
+    private readonly GradientStop _readCentre;
+    private readonly GradientStop _readHub;
+    private readonly GradientStop _readBody;
+    private readonly GradientStop _readEdge;
+    private readonly GradientStop _readClear;
+    private readonly GradientStop _readOuter;
+    private readonly AmbientLight _ambient;
+    private readonly DirectionalLight _keyLight;
+    private readonly DirectionalLight _fillLight;
+    private readonly SolidColorBrush _dataBrush;
+    private readonly SolidColorBrush _hubBrush;
+    private readonly SolidColorBrush _rimBrush;
+    private readonly SolidColorBrush _edgeBrush;
+    private readonly SolidColorBrush _backBrush;
+    private readonly SolidColorBrush _trackBrush;
+    private readonly SolidColorBrush _pickupBrush;
     private readonly TranslateTransform3D _laserPos;
     private readonly RotateTransform3D _spin;
     private readonly TranslateTransform3D _markerPos;   // damage marker position
     private readonly ScaleTransform3D _markerScale;     // damage marker pulse
     private readonly SolidColorBrush _markerBrush;      // amber re-reading / red unreadable
+    private readonly SolidColorBrush _markerBackingBrush;
     private double _spinAngle;
     private double _zoom;      // 0 = overview, 1 = dollied in on the damage
     private double _pulse;     // marker pulse phase
     private DateTime _last = DateTime.Now;
+    private Color _lastDataColor;
+    private Color _lastHubColor;
+    private Color _lastEdgeColor;
+    private Color _lastBackColor;
+    private Color _lastTrackColor;
+    private int _palettePollFrame;
+    private double _lastVisualProgress = double.NaN;
+    private double _lastVisualRereadFrac = double.NaN;
+    private bool _lastVisualActive;
+    private bool _lastVisualRereadActive;
+    private bool _lastVisualUnreadable;
+    private double _lastTrackOpacity = double.NaN;
 
     // camera poses: overview, and the reference the damage-focus is derived from
     private static readonly Point3D OverviewPos = new(0, 95, 96);
+
+    internal double DamageZoom => _zoom;
+    internal double LaserRadius => _laserPos.OffsetZ;
+    internal Point3D CameraPosition => _cam.Position;
 
     public DiscModel3D()
     {
@@ -110,11 +151,28 @@ public sealed class DiscModel3D : Viewport3D
         Camera = _cam;
 
         var root = new Model3DGroup();
-        root.Children.Add(new AmbientLight(Color.FromRgb(0x28, 0x2c, 0x2a)));
-        root.Children.Add(new DirectionalLight(Color.FromRgb(0xC8, 0xD2, 0xCC), new Vector3D(-0.35, -1, -0.45)));
+        _ambient = new AmbientLight(Color.FromRgb(0x48, 0x50, 0x4D));
+        _keyLight = new DirectionalLight(
+            Color.FromRgb(0xF0, 0xF6, 0xF3),
+            new Vector3D(-0.35, -1, -0.45));
+        _fillLight = new DirectionalLight(
+            Color.FromRgb(0x74, 0x9A, 0x95),
+            new Vector3D(0.8, -0.45, 0.25));
+        root.Children.Add(_ambient);
+        root.Children.Add(_keyLight);
+        root.Children.Add(_fillLight);
 
-        // the disc surface (top face, +Y): a dark reflective material with a radial read glow. Planar
-        // UVs so a RadialGradientBrush maps to real world radius.
+        _dataBrush = new SolidColorBrush();
+        _hubBrush = new SolidColorBrush();
+        _rimBrush = new SolidColorBrush();
+        _edgeBrush = new SolidColorBrush();
+        _backBrush = new SolidColorBrush();
+        _trackBrush = new SolidColorBrush();
+        _pickupBrush = new SolidColorBrush();
+
+        // The program area owns the optical texture and read glow. The clear hub,
+        // mirrored clamp band, outer rim, back, and two vertical edges are separate
+        // meshes so the object reads as a compact disc rather than a dark platter.
         _surface = new RadialGradientBrush
         {
             GradientOrigin = new Point(0.5, 0.5),
@@ -122,59 +180,191 @@ public sealed class DiscModel3D : Viewport3D
             RadiusX = 0.5,
             RadiusY = 0.5
         };
+        _readCentre = new GradientStop();
+        _readHub = new GradientStop();
+        _readBody = new GradientStop();
+        _readEdge = new GradientStop();
+        _readClear = new GradientStop();
+        _readOuter = new GradientStop();
+        _surface.GradientStops = new GradientStopCollection
+        {
+            _readCentre,
+            _readHub,
+            _readBody,
+            _readEdge,
+            _readClear,
+            _readOuter
+        };
         RebuildSurfaceStops(0);
-        _tracks = MakeTracks(1024);   // data spiral with pit/land dashes, brought up when zoomed in
+        _tracks = MakeTracks(1024);
         var topMaterial = new MaterialGroup
         {
             Children =
             {
-                // a dark grey base so the disc has form under the lights
-                new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0x14, 0x1A, 0x18))),
-                // a subtle diffraction rainbow (the "CD sheen"), spins with the disc
-                new EmissiveMaterial(MakeRainbow(512)),
-                // the data spiral - faint at overview, clearer when the camera zooms toward the surface
+                new DiffuseMaterial(_dataBrush),
+                new EmissiveMaterial(MakeMirrorSweep()),
+                new EmissiveMaterial(MakeOpticalSheen(768)),
                 new EmissiveMaterial(_tracks),
-                // the read glow is emissive (self-lit) so it shows regardless of lighting
                 new EmissiveMaterial(_surface),
-                new SpecularMaterial(new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)), 30)
+                new SpecularMaterial(_trackBrush, 72)
             }
         };
-        // double-sided so the glowing face shows regardless of winding
-        var disc = new GeometryModel3D(Annulus(RHole, REdge, 220, 0, ny: 1), topMaterial) { BackMaterial = topMaterial };
-        // a dark back face so the disc reads as solid from a low angle
-        var discBack = new GeometryModel3D(Annulus(RHole, REdge, 220, -0.4, ny: -1, flip: true),
-            new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0x0C, 0x10, 0x0F))));
+        var backMaterial = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(_backBrush),
+                new SpecularMaterial(_edgeBrush, 34)
+            }
+        };
+        var hubMaterial = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(_hubBrush),
+                new SpecularMaterial(_trackBrush, 58)
+            }
+        };
+        var rimMaterial = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(_rimBrush),
+                new SpecularMaterial(_trackBrush, 68)
+            }
+        };
+        var edgeMaterial = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(_edgeBrush),
+                new SpecularMaterial(_trackBrush, 80)
+            }
+        };
+
+        var dataFace = new GeometryModel3D(
+            Annulus(RData0, RDataN, 256, 0.10, ny: 1, uvRadius: REdge),
+            topMaterial)
+        {
+            BackMaterial = backMaterial
+        };
+        var clearHub = new GeometryModel3D(
+            Annulus(RHole, RStack, 160, 0.08, ny: 1, uvRadius: REdge),
+            rimMaterial);
+        var mirrorBand = new GeometryModel3D(
+            Annulus(RStack, RData0, 192, 0.09, ny: 1, uvRadius: REdge),
+            hubMaterial);
+        var clearRim = new GeometryModel3D(
+            Annulus(RDataN, REdge, 192, 0.08, ny: 1, uvRadius: REdge),
+            rimMaterial);
+        var clampRing = new GeometryModel3D(
+            Annulus(RStack - 0.45, RStack + 0.45, 160, 0.14, ny: 1, uvRadius: REdge),
+            edgeMaterial);
+        var leadInRing = new GeometryModel3D(
+            Annulus(RData0 - 0.22, RData0 + 0.22, 192, 0.14, ny: 1, uvRadius: REdge),
+            edgeMaterial);
+        var leadOutRing = new GeometryModel3D(
+            Annulus(RDataN - 0.18, RDataN + 0.18, 224, 0.14, ny: 1, uvRadius: REdge),
+            edgeMaterial);
+        var discBack = new GeometryModel3D(
+            Annulus(RHole, REdge, 256, -0.55, ny: -1, flip: true, uvRadius: REdge),
+            backMaterial);
+        var outerEdge = new GeometryModel3D(
+            RingWall(REdge, 0.08, -0.55, 256, inward: false),
+            edgeMaterial);
+        var holeEdge = new GeometryModel3D(
+            RingWall(RHole, 0.08, -0.55, 128, inward: true),
+            edgeMaterial);
 
         _spin = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(0, 1, 0), 0));
-        var discModel = new Model3DGroup { Children = { disc, discBack } };
+        var discModel = new Model3DGroup
+        {
+            Children =
+            {
+                discBack,
+                outerEdge,
+                holeEdge,
+                clearHub,
+                mirrorBand,
+                dataFace,
+                clearRim,
+                clampRing,
+                leadInRing,
+                leadOutRing
+            }
+        };
         discModel.Transform = _spin;
         root.Children.Add(discModel);
 
-        // the laser: a bright spot on the surface plus a thin beam up to the pickup. Positioned by a
-        // translate we move each frame; angle fixed toward the camera so it is always visible.
+        // A CD pickup reads through the clear substrate from below. The visible red
+        // cue represents the otherwise near-infrared beam; the lens and radial sled
+        // sit beneath the disc while only the focus spot reaches the data surface.
+        root.Children.Add(new GeometryModel3D(
+            Cylinder(
+                new Point3D(0, -7.0, RData0 - 3),
+                new Point3D(0, -7.0, RDataN + 3),
+                0.75,
+                12),
+            backMaterial));
         _laserPos = new TranslateTransform3D(0, 0, 0);
         var laserGroup = new Model3DGroup();
         var spotColor = Color.FromRgb(0xFF, 0x5A, 0x4A);
-        laserGroup.Children.Add(new GeometryModel3D(Sphere(new Point3D(0, 0.8, 0), 1.7, 16),
+        laserGroup.Children.Add(new GeometryModel3D(
+            Annulus(0, 3.4, 48, 0.42, ny: 1, uvRadius: 3.4),
+            new EmissiveMaterial(MakeLaserHalo())));
+        laserGroup.Children.Add(new GeometryModel3D(
+            Sphere(new Point3D(0, 0.72, 0), 1.05, 16),
             new EmissiveMaterial(new SolidColorBrush(spotColor))));
-        laserGroup.Children.Add(new GeometryModel3D(Cylinder(new Point3D(0, 1.0, 0), new Point3D(0, 26, 0), 0.35, 10),
+        laserGroup.Children.Add(new GeometryModel3D(
+            Cylinder(new Point3D(0, -5.6, 0), new Point3D(0, 0.50, 0), 0.20, 10),
             new EmissiveMaterial(new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0x6A, 0x5A)))));
+        laserGroup.Children.Add(new GeometryModel3D(
+            Sphere(new Point3D(0, -6.0, 0), 2.0, 18),
+            new MaterialGroup
+            {
+                Children =
+                {
+                    new DiffuseMaterial(_pickupBrush),
+                    new SpecularMaterial(_trackBrush, 70)
+                }
+            }));
         laserGroup.Transform = _laserPos;
         root.Children.Add(laserGroup);
 
-        // damage marker: an emissive halo that sits on the re-read spot, pulsing; amber while being
-        // re-read, red when the spot is unreadable. Hidden (scaled to nothing) when there is no damage.
+        // The damage marker is a surface ring, not a claimed physical scratch.
+        // It marks the real re-read outcome and preserves the existing zoom state.
         _markerBrush = new SolidColorBrush(Amber);
+        _markerBackingBrush = new SolidColorBrush(
+            Color.FromArgb(0xE0, 0x12, 0x17, 0x14));
         _markerPos = new TranslateTransform3D(0, 1.2, 0);
         _markerScale = new ScaleTransform3D(0, 0, 0);
         var marker = new Model3DGroup { Transform = new Transform3DGroup { Children = { _markerScale, _markerPos } } };
-        marker.Children.Add(new GeometryModel3D(Sphere(new Point3D(0, 0, 0), 3.2, 18), new EmissiveMaterial(_markerBrush)));
+        var markerMaterial = new MaterialGroup
+        {
+            Children =
+            {
+                new DiffuseMaterial(_markerBackingBrush),
+                new EmissiveMaterial(_markerBrush)
+            }
+        };
+        marker.Children.Add(new GeometryModel3D(
+            Annulus(2.0, 4.1, 48, 0, ny: 1, uvRadius: 4.1),
+            markerMaterial));
+        marker.Children.Add(new GeometryModel3D(
+            Sphere(new Point3D(0, 0.25, 0), 0.9, 14),
+            markerMaterial));
         root.Children.Add(marker);
 
         Children.Add(new ModelVisual3D { Content = root });
 
-        Loaded += (_, _) => { _last = DateTime.Now; CompositionTarget.Rendering += OnTick; };
+        Loaded += (_, _) =>
+        {
+            RefreshPalette();
+            _last = DateTime.Now;
+            CompositionTarget.Rendering += OnTick;
+        };
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnTick;
+        RefreshPalette();
         PlaceLaser();
     }
 
@@ -183,24 +373,36 @@ public sealed class DiscModel3D : Viewport3D
         var now = DateTime.Now;
         double dt = Math.Min(0.05, (now - _last).TotalSeconds);
         _last = now;
+        Advance(dt);
+    }
 
+    internal void Advance(double dt)
+    {
+        dt = Math.Max(0, Math.Min(0.05, dt));
+        // FrameworkElement resource lookup allocates. Polling every 30 frames
+        // keeps live theme changes prompt without adding per-frame GC pressure.
+        if (_palettePollFrame++ % 30 == 0)
+            RefreshPalette();
         // Explore mode: free-orbit camera, a slow idle spin, data tracks that emerge as you zoom in.
         if (Interactive)
         {
             _spinAngle = (_spinAngle + dt * 15) % 360;
             ((AxisAngleRotation3D)_spin.Rotation).Angle = _spinAngle;
             UpdateOrbitCamera();
-            _tracks.Opacity = Math.Max(0.14, Math.Min(0.92, (175 - _dist) / 155));
-            RebuildSurfaceStops(0);
+            SetTrackOpacity(
+                Math.Max(0.14, Math.Min(0.92, (175 - _dist) / 155)));
+            UpdateReadVisuals();
             _markerScale.ScaleX = _markerScale.ScaleY = _markerScale.ScaleZ = 0;
-            _laserPos.OffsetZ = RData0;
             return;
         }
 
         if (Active)
         {
-            // the disc spins (visual cue; CLV would vary with radius, shown once pits give it texture)
-            _spinAngle = (_spinAngle + dt * 120) % 360;
+            // The visible rate is slowed for legibility but keeps the real CLV
+            // relationship: the disc rotates faster at the inner program radius.
+            double f = RereadActive ? RereadFrac : Progress;
+            _spinAngle =
+                (_spinAngle + dt * VisualSpinDegreesPerSecond(f)) % 360;
             ((AxisAngleRotation3D)_spin.Rotation).Angle = _spinAngle;
         }
 
@@ -209,12 +411,10 @@ public sealed class DiscModel3D : Viewport3D
         bool damage = RereadActive || Unreadable;
         _zoom += ((damage ? 1.0 : 0.0) - _zoom) * 0.05;
         _pulse += dt * 4.2;
-        _tracks.Opacity = 0.06 + 0.7 * _zoom;   // data tracks emerge as the camera zooms toward the surface
+        SetTrackOpacity(0.10 + 0.70 * _zoom);
         UpdateCamera();
         UpdateMarker(damage);
-
-        RebuildSurfaceStops(Progress);
-        PlaceLaser();
+        UpdateReadVisuals();
     }
 
     private void UpdateOrbitCamera()
@@ -231,11 +431,17 @@ public sealed class DiscModel3D : Viewport3D
     {
         if (_zoom < 0.002)
         {
-            _cam.Position = OverviewPos;
-            _cam.LookDirection = new Vector3D(-OverviewPos.X, -OverviewPos.Y, -OverviewPos.Z);
+            if (_cam.Position != OverviewPos)
+            {
+                _cam.Position = OverviewPos;
+                _cam.LookDirection = new Vector3D(
+                    -OverviewPos.X,
+                    -OverviewPos.Y,
+                    -OverviewPos.Z);
+            }
             return;
         }
-        double r = Radius(RereadFrac);
+        double r = DataRadius(RereadFrac);
         var damagePt = new Point3D(0, 0, r);                 // the stuck spot, at the front of the disc
         var focusPos = new Point3D(0, 42, r + 34);           // closer, above and in front of it
         var pos = Lerp(OverviewPos, focusPos, _zoom);
@@ -245,7 +451,9 @@ public sealed class DiscModel3D : Viewport3D
 
     private void UpdateMarker(bool damage)
     {
-        _markerPos.OffsetZ = Radius(RereadFrac);
+        if (!damage && _markerScale.ScaleX <= 0)
+            return;
+        _markerPos.OffsetZ = DataRadius(RereadFrac);
         double pulse = 0.7 + 0.3 * Math.Sin(_pulse);
         double s = damage ? pulse * (0.4 + 0.6 * _zoom) : Math.Max(0, _markerScale.ScaleX - 0.06);
         _markerScale.ScaleX = _markerScale.ScaleY = _markerScale.ScaleZ = s;
@@ -259,8 +467,100 @@ public sealed class DiscModel3D : Viewport3D
     // data start.
     private void PlaceLaser()
     {
-        _laserPos.OffsetX = 0;
-        _laserPos.OffsetZ = RereadActive ? Radius(RereadFrac) : Active ? Radius(Progress) : RData0;
+        double radius = RereadActive
+            ? DataRadius(RereadFrac)
+            : Active
+                ? DataRadius(Progress)
+                : RData0;
+        if (_laserPos.OffsetX != 0)
+            _laserPos.OffsetX = 0;
+        if (_laserPos.OffsetZ != radius)
+            _laserPos.OffsetZ = radius;
+    }
+
+    private void UpdateReadVisuals()
+    {
+        if (Progress == _lastVisualProgress &&
+            RereadFrac == _lastVisualRereadFrac &&
+            Active == _lastVisualActive &&
+            RereadActive == _lastVisualRereadActive &&
+            Unreadable == _lastVisualUnreadable)
+            return;
+
+        _lastVisualProgress = Progress;
+        _lastVisualRereadFrac = RereadFrac;
+        _lastVisualActive = Active;
+        _lastVisualRereadActive = RereadActive;
+        _lastVisualUnreadable = Unreadable;
+        RebuildSurfaceStops(Progress);
+        PlaceLaser();
+    }
+
+    private void SetTrackOpacity(double opacity)
+    {
+        if (Math.Abs(opacity - _lastTrackOpacity) < 0.000001)
+            return;
+        _lastTrackOpacity = opacity;
+        _tracks.Opacity = opacity;
+    }
+
+    private void RefreshPalette()
+    {
+        Color data = ThemeColor.Get(
+            this,
+            "DiscData",
+            Color.FromRgb(0x93, 0xA3, 0x9F));
+        Color hub = ThemeColor.Get(
+            this,
+            "DiscHub",
+            Color.FromRgb(0xBC, 0xC8, 0xC4));
+        Color edge = ThemeColor.Get(
+            this,
+            "DiscEdge",
+            Color.FromRgb(0xDD, 0xE6, 0xE2));
+        Color back = ThemeColor.Get(
+            this,
+            "DiscBack",
+            Color.FromRgb(0x30, 0x3A, 0x36));
+        Color track = ThemeColor.Get(
+            this,
+            "DiscTrack",
+            Color.FromRgb(0xE5, 0xF3, 0xEE));
+        if (data == _lastDataColor &&
+            hub == _lastHubColor &&
+            edge == _lastEdgeColor &&
+            back == _lastBackColor &&
+            track == _lastTrackColor)
+            return;
+
+        _lastDataColor = data;
+        _lastHubColor = hub;
+        _lastEdgeColor = edge;
+        _lastBackColor = back;
+        _lastTrackColor = track;
+
+        _dataBrush.Color = data;
+        _hubBrush.Color = WithAlpha(hub, 0xE2);
+        _rimBrush.Color = WithAlpha(hub, 0xA8);
+        _edgeBrush.Color = edge;
+        _backBrush.Color = back;
+        _trackBrush.Color = WithAlpha(track, 0xC8);
+        _pickupBrush.Color = Blend(back, track, 0.42);
+        _ambient.Color = Blend(back, data, 0.58);
+        _keyLight.Color = Blend(track, Colors.White, 0.62);
+        _fillLight.Color = Blend(data, Teal, 0.32);
+    }
+
+    private static Color WithAlpha(Color color, byte alpha) =>
+        Color.FromArgb(alpha, color.R, color.G, color.B);
+
+    private static Color Blend(Color a, Color b, double amount)
+    {
+        amount = Clamp(amount, 0, 1);
+        return Color.FromRgb(
+            (byte)Math.Round(a.R + (b.R - a.R) * amount),
+            (byte)Math.Round(a.G + (b.G - a.G) * amount),
+            (byte)Math.Round(a.B + (b.B - a.B) * amount));
     }
 
     private static Point3D Lerp(Point3D a, Point3D b, double t) =>
@@ -268,25 +568,94 @@ public sealed class DiscModel3D : Viewport3D
 
     // ---- procedural surface textures (built once, planar-UV mapped like the read glow) ----
 
-    // A faint spectral sheen: two rainbow bands swept around the disc, brighter toward the rim, low
-    // alpha. Emissive, so it reads as the diffraction shimmer of a CD; it spins with the disc.
-    private static ImageBrush MakeRainbow(int size)
+    private static Brush MakeMirrorSweep()
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0.08, 0.92),
+            EndPoint = new Point(0.92, 0.08)
+        };
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.00));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x10, 0xD9, 0xEB, 0xE5), 0.30));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x58, 0xFF, 0xFF, 0xFF), 0.46));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x12, 0xC8, 0xE4, 0xDD), 0.58));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.00));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Brush MakeLaserHalo()
+    {
+        var brush = new RadialGradientBrush
+        {
+            Center = new Point(0.5, 0.5),
+            GradientOrigin = new Point(0.5, 0.5),
+            RadiusX = 0.5,
+            RadiusY = 0.5
+        };
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0xC8, 0xFF, 0x86, 0x6F), 0.00));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x60, 0xFF, 0x5A, 0x4A), 0.32));
+        brush.GradientStops.Add(
+            new GradientStop(Color.FromArgb(0x00, 0xFF, 0x5A, 0x4A), 1.00));
+        brush.Freeze();
+        return brush;
+    }
+
+    // Compact-disc diffraction appears as narrow, curved spectral highlights,
+    // not a solid rainbow wedge. This bounded texture creates two low-alpha
+    // lobes inside the physical data band and rotates with the disc.
+    private static ImageBrush MakeOpticalSheen(int size)
     {
         var px = new byte[size * size * 4];
         double c = size / 2.0;
+        double inner = RData0 / REdge;
+        double outer = RDataN / REdge;
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)
             {
                 double dx = x - c, dy = y - c, r = Math.Sqrt(dx * dx + dy * dy) / c;
-                if (r > 1.0 || r < 0.14) continue;                 // outside the disc / inside the hub
-                double ang = (Math.Atan2(dy, dx) + Math.PI) / (2 * Math.PI);
-                double hue = (ang * 2.0 % 1.0) * 360;              // two bands around
-                HsvToRgb(hue, 0.5, 1.0, out byte rr, out byte gg, out byte bb);
-                double a = 0.12 * (0.3 + 0.7 * r);
+                if (r > outer || r < inner)
+                    continue;
+                double ang = Math.Atan2(dy, dx);
+                double curve = ang + (r - inner) * 3.2;
+                double lobeA = Math.Pow(
+                    Math.Max(0, Math.Cos(curve + 0.72)),
+                    10);
+                double lobeB = 0.72 * Math.Pow(
+                    Math.Max(0, Math.Cos(curve - 2.28)),
+                    14);
+                double band = 0.70 + 0.30 * Math.Sin(r * 44 + ang * 3);
+                double edgeFade =
+                    SmoothStep((r - inner) / 0.035) *
+                    SmoothStep((outer - r) / 0.025);
+                double alpha =
+                    (0.012 + 0.24 * Math.Min(1, lobeA + lobeB)) *
+                    band *
+                    edgeFade;
+                double hue = (205 + r * 245 + ang * 29) % 360;
+                if (hue < 0)
+                    hue += 360;
+                HsvToRgb(hue, 0.62, 1.0, out byte rr, out byte gg, out byte bb);
                 int i = (y * size + x) * 4;
-                px[i] = bb; px[i + 1] = gg; px[i + 2] = rr; px[i + 3] = (byte)(a * 255);
+                px[i] = bb;
+                px[i + 1] = gg;
+                px[i + 2] = rr;
+                px[i + 3] = (byte)(Clamp(alpha, 0, 1) * 255);
             }
         return BrushFrom(px, size);
+    }
+
+    private static double SmoothStep(double value)
+    {
+        value = Clamp(value, 0, 1);
+        return value * value * (3 - 2 * value);
     }
 
     // The data spiral, with pit/land structure. Each track carries a hashed run of pits (dark bumps)
@@ -297,30 +666,36 @@ public sealed class DiscModel3D : Viewport3D
     {
         var px = new byte[size * size * 4];
         double c = size / 2.0;
-        const double trackFreq = 0.34;   // tracks per texel of radius (wider, so grooves read on zoom)
+        const double trackFreq = 0.34;
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)
             {
                 double dx = x - c, dy = y - c, rr = Math.Sqrt(dx * dx + dy * dy), r = rr / c;
-                if (r > 0.985 || r < 0.42) continue;               // the 25..58 mm data band
+                if (r > RDataN / REdge || r < RData0 / REdge)
+                    continue;
                 int i = (y * size + x) * 4;
 
-                double tf = rr * trackFreq;                        // which track, and where in its pitch
-                int track = (int)tf;
+                double ang = Math.Atan2(dy, dx);
+                if (ang < 0)
+                    ang += 2 * Math.PI;
+                // Adding one angular turn to the radial phase makes this a
+                // continuous representative spiral rather than concentric rings.
+                double tf = rr * trackFreq + ang / (2 * Math.PI);
+                int track = (int)Math.Floor(tf);
                 double within = tf - track;
-                if (within > 0.6) continue;                        // groove between tracks -> transparent
-                bool trackEdge = within > 0.5;                     // darken the groove edge for definition
+                if (within > 0.20)
+                    continue;
 
-                // pit/land dashes along the track: hashed runs (grouped cells => EFM-like run lengths),
-                // constant density around the turn (more cells further out)
-                double ang = Math.Atan2(dy, dx) + Math.PI;         // 0..2pi
-                int cells = 260 + track * 2;
+                int cells = 300 + track * 2;
                 int cell = (int)(ang / (2 * Math.PI) * cells);
                 bool pit = (Hash((uint)(track * 73856093) ^ (uint)((cell / 3) * 19349663)) & 3u) == 0u;
 
-                byte v = pit || trackEdge ? (byte)0x22 : (byte)0xDE;   // pit / groove-edge dark, land bright
-                double a = pit ? 0.6 : trackEdge ? 0.4 : 0.85;
-                px[i] = v; px[i + 1] = v; px[i + 2] = v; px[i + 3] = (byte)(a * 135);
+                byte v = pit ? (byte)0xA8 : (byte)0xF2;
+                double alpha = pit ? 0.13 : 0.32;
+                px[i] = v;
+                px[i + 1] = v;
+                px[i + 2] = v;
+                px[i + 3] = (byte)(alpha * 255);
             }
         return BrushFrom(px, size);
     }
@@ -352,63 +727,134 @@ public sealed class DiscModel3D : Viewport3D
         r = (byte)((rr + m) * 255); g = (byte)((gg + m) * 255); b = (byte)((bb + m) * 255);
     }
 
-    // Read glow (emissive): teal from the hub out to the laser radius, a bright edge at the laser,
-    // then transparent beyond so only the dark base disc shows in the not-yet-read region. Idle shows
-    // no read region (the disc is not being read).
+    // Read glow (emissive): teal through the completed program area, a bright
+    // edge at the pickup, then transparent media ahead. The existing stops are
+    // mutated in place because this runs on every composition frame.
     private void RebuildSurfaceStops(double f)
     {
-        double hub = RHole / REdge;
-        double v = Active ? Math.Max(hub + 0.02, Radius(f) / REdge) : hub;   // laser radius in planar-UV terms
-        Color glow = Color.FromArgb(0x55, Teal.R, Teal.G, Teal.B);
-        Color edge = Unreadable ? Crit
+        double hub = RData0 / REdge;
+        double v = Active
+            ? Math.Max(hub + 0.002, DataRadius(f) / REdge)
+            : hub;
+        Color clear = Color.FromArgb(0x00, Teal.R, Teal.G, Teal.B);
+        Color glow = Active
+            ? Color.FromArgb(0x50, Teal.R, Teal.G, Teal.B)
+            : clear;
+        Color edge = Unreadable
+            ? Crit
             : RereadActive ? Amber
             : Active ? Color.FromRgb(0xD8, 0xFF, 0xF6)
-            : Color.FromArgb(0x66, Teal.R, Teal.G, Teal.B);
-        Color clear = Color.FromArgb(0x00, Teal.R, Teal.G, Teal.B);
-        var stops = new GradientStopCollection
-        {
-            new GradientStop(Color.FromArgb(0x22, Teal.R, Teal.G, Teal.B), 0.0),
-            new GradientStop(glow, hub),
-            new GradientStop(glow, Math.Max(hub + 0.001, v - 0.03)),
-            new GradientStop(edge, v),
-            new GradientStop(clear, Math.Min(1.0, v + 0.012)),
-            new GradientStop(clear, 1.0)
-        };
-        _surface.GradientStops = stops;
+            : clear;
+        _readCentre.Color = clear;
+        _readCentre.Offset = 0;
+        _readHub.Color = glow;
+        _readHub.Offset = hub;
+        _readBody.Color = glow;
+        _readBody.Offset = Math.Max(hub + 0.001, v - 0.025);
+        _readEdge.Color = edge;
+        _readEdge.Offset = v;
+        _readClear.Color = clear;
+        _readClear.Offset = Math.Min(1.0, v + 0.010);
+        _readOuter.Color = clear;
+        _readOuter.Offset = 1;
     }
 
     // ---- mesh builders ----
 
     // A flat ring in the XZ plane at height y. Planar UVs (0..1 across the bounding square) so a
     // RadialGradientBrush centred at (0.5,0.5) maps to world radius.
-    private static MeshGeometry3D Annulus(double rInner, double rOuter, int seg, double y, int ny = 1, bool flip = false)
+    private static MeshGeometry3D Annulus(
+        double rInner,
+        double rOuter,
+        int seg,
+        double y,
+        int ny = 1,
+        bool flip = false,
+        double uvRadius = 0)
     {
         var m = new MeshGeometry3D();
         var normal = new Vector3D(0, ny, 0);
+        if (uvRadius <= 0)
+            uvRadius = rOuter;
         for (int i = 0; i <= seg; i++)
         {
             double a = 2 * Math.PI * i / seg, c = Math.Cos(a), s = Math.Sin(a);
             m.Positions.Add(new Point3D(rInner * c, y, rInner * s));
             m.Positions.Add(new Point3D(rOuter * c, y, rOuter * s));
             m.Normals.Add(normal); m.Normals.Add(normal);
-            m.TextureCoordinates.Add(new Point(0.5 + 0.5 * (rInner / rOuter) * c, 0.5 + 0.5 * (rInner / rOuter) * s));
-            m.TextureCoordinates.Add(new Point(0.5 + 0.5 * c, 0.5 + 0.5 * s));
+            m.TextureCoordinates.Add(new Point(
+                0.5 + 0.5 * (rInner / uvRadius) * c,
+                0.5 + 0.5 * (rInner / uvRadius) * s));
+            m.TextureCoordinates.Add(new Point(
+                0.5 + 0.5 * (rOuter / uvRadius) * c,
+                0.5 + 0.5 * (rOuter / uvRadius) * s));
         }
         for (int i = 0; i < seg; i++)
         {
             int b = i * 2;
+            // The point order starts at the inner radius and advances around
+            // +Y. Reverse the historical branch so the declared normal and the
+            // visible front face agree.
             if (!flip)
-            {
-                m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 1); m.TriangleIndices.Add(b + 3);
-                m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 3); m.TriangleIndices.Add(b + 2);
-            }
-            else
             {
                 m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 3); m.TriangleIndices.Add(b + 1);
                 m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 2); m.TriangleIndices.Add(b + 3);
             }
+            else
+            {
+                m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 1); m.TriangleIndices.Add(b + 3);
+                m.TriangleIndices.Add(b); m.TriangleIndices.Add(b + 3); m.TriangleIndices.Add(b + 2);
+            }
         }
         return m;
+    }
+
+    private static MeshGeometry3D RingWall(
+        double radius,
+        double yTop,
+        double yBottom,
+        int seg,
+        bool inward)
+    {
+        var mesh = new MeshGeometry3D();
+        for (int i = 0; i <= seg; i++)
+        {
+            double a = 2 * Math.PI * i / seg;
+            double c = Math.Cos(a);
+            double s = Math.Sin(a);
+            var normal = new Vector3D(c, 0, s);
+            if (inward)
+                normal *= -1;
+            mesh.Positions.Add(new Point3D(radius * c, yTop, radius * s));
+            mesh.Positions.Add(new Point3D(radius * c, yBottom, radius * s));
+            mesh.Normals.Add(normal);
+            mesh.Normals.Add(normal);
+            mesh.TextureCoordinates.Add(new Point((double)i / seg, 0));
+            mesh.TextureCoordinates.Add(new Point((double)i / seg, 1));
+        }
+        for (int i = 0; i < seg; i++)
+        {
+            int b = i * 2;
+            if (!inward)
+            {
+                mesh.TriangleIndices.Add(b);
+                mesh.TriangleIndices.Add(b + 3);
+                mesh.TriangleIndices.Add(b + 1);
+                mesh.TriangleIndices.Add(b);
+                mesh.TriangleIndices.Add(b + 2);
+                mesh.TriangleIndices.Add(b + 3);
+            }
+            else
+            {
+                mesh.TriangleIndices.Add(b);
+                mesh.TriangleIndices.Add(b + 1);
+                mesh.TriangleIndices.Add(b + 3);
+                mesh.TriangleIndices.Add(b);
+                mesh.TriangleIndices.Add(b + 3);
+                mesh.TriangleIndices.Add(b + 2);
+            }
+        }
+        return mesh;
     }
 
     private static MeshGeometry3D Sphere(Point3D c, double r, int seg)

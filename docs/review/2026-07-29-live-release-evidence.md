@@ -1,7 +1,7 @@
 # Live release evidence, 2026-07-29
 
-This record closes the selected interactive theme, metadata, and optical-image
-checks for R77-R79. Local captures and audio outputs remain under the ignored
+This record closes the selected interactive theme, metadata, optical-image, and
+disc-visual checks for R77-R80. Local captures and audio outputs remain under the ignored
 `evidence/live-2026-07-29/` tree. They are not release payloads and are not
 committed because they contain user media and metadata.
 
@@ -20,6 +20,20 @@ committed because they contain user media and metadata.
 
 This check does not claim 200 percent DPI or Windows high-contrast coverage.
 Those remain separate artwork-browser accessibility checks under R72.
+
+## Optical disc visual
+
+Actual 1180x740 dark and light windows were captured at 96 DPI. The refreshed
+model exposes the center hole, mirrored hub, clamp ring, program area, clear
+outer rim, and edge thickness. The pickup is below the substrate, and the small
+surface spot replaces the prior above-disc pointer. Theme-owned materials keep
+the edge visible on both backgrounds.
+
+An offscreen matrix rendered idle, reading, re-reading, unreadable, and tier-zero
+fallback states in both themes. The matrix is generated from the production
+controls. It is not a second physical damaged-disc run. Contract tests preserve
+the existing live bindings, equal-area read radius, re-read back-track and zoom,
+recovery ease-out, and unreadable hold.
 
 ## Live metadata correction
 
@@ -76,7 +90,7 @@ repair evidence recorded under R71.
 ## Final software and artifact gates
 
 - modern ripper suite: 22/22 passed, no skips;
-- WPF suite: 417/417 passed, no skips;
+- WPF suite: 423/423 passed, no skips;
 - WPF/fuzz warning budget: zero emitted warning lines and zero fingerprints;
 - self-contained x64 publish: artifact contract passed, including 19 plugin
   registrations and five native-plugin probes;

@@ -21,6 +21,7 @@ public sealed class ThemePaletteTests
         {
             "Ground", "Panel", "Ink", "InkDim", "Muted",
             "ControlBorder", "ButtonEdge", "SwitchHousingBorder",
+            "DiscData", "DiscHub", "DiscEdge", "DiscBack", "DiscTrack",
         };
         foreach (string key in brushKeys)
         {
@@ -54,6 +55,8 @@ public sealed class ThemePaletteTests
         Assert.AreNotEqual(
             Brush(dark, "SwitchHousingBorder"),
             Brush(light, "SwitchHousingBorder"));
+        Assert.AreNotEqual(Brush(dark, "DiscData"), Brush(light, "DiscData"));
+        Assert.AreNotEqual(Brush(dark, "DiscEdge"), Brush(light, "DiscEdge"));
     }
 
     private static Color Brush(ResourceDictionary dictionary, string key) =>

@@ -905,3 +905,37 @@ cue-to-image repair binding.
 The closing gates pass: ripper 22/22, WPF 417/417, zero warning fingerprints,
 and the self-contained x64 artifact contract including all five native-plugin
 probes.
+
+### Rebuild the live CD surface without changing optical-read behavior
+
+**Exact files:** `CUETools.Wpf/Controls/DiscModel3D.cs`,
+`CUETools.Wpf/Controls/DiscReadMap.cs`, `CUETools.Wpf/Services/ThemeColor.cs`,
+`CUETools.Wpf/Services/ThemeService.cs`, focused WPF tests, R12 design notes,
+and R80.
+
+**Safety and unchanged behavior:** retain `Progress`, `Active`, `RereadActive`,
+`RereadFrac`, and `Unreadable` as the only live inputs. Preserve the equal-area
+25 to 58 mm read-radius mapping and the existing re-read/unreadable camera
+target. Keep the bad-sector zoom ease-in, recovery ease-out, and unreadable
+hold behavior. Limit the change to materials, representative surface texture,
+physical layer geometry, pickup presentation, and theme-aware fallback drawing.
+
+**Checks:** assert radius clamping and equal-area values, pickup movement, and
+damage zoom transitions. Require matching typed light/dark palette tokens.
+Render idle, reading, re-reading, and unreadable states offscreen in both themes,
+then inspect live 96-DPI captures. Run the full WPF suite, warning gate, and
+self-contained publish contract.
+
+**Rollback:** revert the material and geometry layer as one unit. The existing
+telemetry bindings and 2D fallback remain available.
+
+**Observability:** none. This changes only local rendering and adds no new
+telemetry, logging, persistence, or optical-drive commands.
+
+**Status:** fixed and visually verified 2026-07-29 under R80. Actual dark/light
+1180x740 windows pass at 96 DPI. A ten-frame offscreen matrix covers the four 3D
+states and tier-zero fallback in both themes. Focused visual contracts pass 8/8,
+including a 1,000-frame allocation bound. The WPF suite passes 423/423, and the
+warning budget emits zero fingerprints.
+The self-contained x64 artifact contract passes all 19 plugin registrations and
+five native-plugin probes.

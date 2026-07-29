@@ -1873,6 +1873,39 @@ does not relax evidence, rollback, or verification requirements.
   the authoritative external cue, which names the single image. The FLAC contains
   exactly one cover whose 100,222 bytes equal the published `folder.jpg`.
 
+### R80. The live CD model reads as a dark platter instead of optical media - bucket A, risk medium
+
+- **Area or slice:** WPF live and fallback disc controls, theme palette, and
+  optical-read presentation.
+- **Why it matters:** the current 3D surface is one dark annulus with a broad
+  rainbow wedge. It loses the clear hub, reflective data layer, clear outer rim,
+  and edge thickness that make a compact disc recognizable, especially in light
+  mode. The visible beam also extends above the disc even though a CD is read
+  through its clear substrate from below.
+- **Evidence found:** inspected 1590x880 dark and light release captures and traced
+  `DiscModel3D` materials, geometry, laser placement, equal-area read radius, and
+  damage-camera inputs.
+- **Confidence:** verified.
+- **Approval needed:** no; the owner requested the visual improvement and required
+  the bad-sector autozoom to remain.
+- **Smallest safe next step:** layer the physical regions with theme-owned
+  materials, use a bounded optical texture, place the pickup beneath the disc,
+  and make the software fallback theme-aware. Do not change the progress,
+  re-read, unreadable, or camera-state bindings.
+- **Verification plan:** radius and damage-camera contracts, palette parity,
+  offscreen light/dark renders, full WPF suite, zero-warning gate, clean publish,
+  and inspected live captures.
+- **Owner:** WPF maintainer.
+- **Status:** fixed and visually verified 2026-07-29. The live model separates
+  the physical hole, hub, clamp ring, program area, clear rim, back, and edge.
+  Its pickup sits below the substrate, the data texture is one representative
+  spiral, and curved spectral highlights replace the broad rainbow wedge.
+  Light/dark 1180x740 live captures pass at 96 DPI. The ten-frame offscreen
+  matrix covers idle, reading, re-reading, unreadable, and tier-zero fallback
+  states in both themes. Radius, CLV, live-binding, and damage-autozoom tests
+  pass. A 1,000-frame hot-loop test stays below 128 KiB after warmup. The full
+  WPF suite passes 423/423 and the warning budget is empty.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
