@@ -1212,3 +1212,33 @@ warning-clean, the artifact contract passes 39 required paths, and third-party
 notices include the binary/source provenance.
 exhale 1.2.2 and OptimFROG 5.100 real CLI contracts were also exercised; their
 documented patent/notification boundaries keep them import-only.
+
+### Lock first-party NuGet dependency closures without dirtying vendors
+
+**Exact files:** root `Directory.Build.props`, one `packages.lock.json` beside
+each first-party `PackageReference` project, the lock inventory test, release
+safety, R32, and the review ordering.
+
+**Safety and unchanged behavior:** enroll only the explicit first-party project
+list. Do not apply root policy to pinned `ThirdParty` projects or generated
+vendor staging. Local restores may regenerate locks intentionally; GitHub's
+existing `CI=true` environment turns on `RestoreLockedMode` and refuses an
+unreviewed direct or transitive dependency change.
+
+**Checks:** discover first-party PackageReference projects from evaluated XML,
+require the policy list and filesystem to agree exactly, parse every lock file,
+and reject a generated vendor lock. Run force-evaluate once to create the
+closures, then repeat solution, WPF-test, and ripper-test restores in locked
+mode. Run the release-safety suite and verify all vendor submodules remain clean.
+
+**Rollback:** remove the root policy and all 13 lock files together. Do not leave
+`RestoreLockedMode` enabled without committed locks or disable it only in the
+release workflow.
+
+**Observability:** restore failures identify the project whose dependency graph
+changed. The policy adds no application logging or runtime data.
+
+**Status:** implemented and verified 2026-07-29. The inventory finds exactly 13
+first-party PackageReference projects and 13 valid lock files. Locked solution,
+WPF-test, and ripper-test restores pass; no vendor submodule or staged vendor
+source was modified.

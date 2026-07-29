@@ -610,17 +610,22 @@ does not relax evidence, rollback, or verification requirements.
 - **Verification plan:** clean restore/build twice, compare manifests, dependency scan, and
   artifact hash verification.
 - **Owner:** repo owner.
-- **Status:** partially closed 2026-07-26. All four actions workflows use immutable
+- **Status:** partially closed through 2026-07-29. All four actions workflows use immutable
   action SHAs; release inputs have native source/build/hash inventory; clean WPF
   artifacts receive a SHA-256 manifest, build receipt, contract snapshot, CycloneDX
   SBOM, and SPDX file inventory. The Microsoft SPDX result must be read as a file
   inventory rather than a complete dependency graph. Provenance now records
   byte-identical RareWares LAME archives, official signed/runtime-tested RARLAB
   UnRAR 7.23 plus the import-era 6.11 evidence, and the official TTA
-  archive/import delta. Remaining: signing, NuGet lock-file rollout, frozen
-  classic-artifact receipts and hosted parity, HDCD's exact
-  source/revision/recipe, RareWares' exact LAME build flags/revision, the historical
-  TTA archive checksum, and reconciliation of the dirty detached submodules.
+  archive/import delta. The local frozen classic receipt and exact collection
+  pass, dirty vendor staging is eliminated, and all 13 first-party
+  `PackageReference` projects now commit their complete dependency closures.
+  `CI=true` enables locked restore; a checked inventory fails when a first-party
+  package project or lock file is added, removed, or drifts. Solution, WPF, and
+  ripper-test locked restores pass without touching vendor submodules. Remaining:
+  signing identity/policy, hosted parity, HDCD's exact source/revision/recipe,
+  RareWares' exact LAME build flags/revision, and the historical TTA archive
+  checksum.
 
 ### R33. Custom WPF job paths can leak through exception diagnostics - bucket A, risk medium
 
@@ -1121,7 +1126,8 @@ does not relax evidence, rollback, or verification requirements.
   history/calibration update, settings-exit, log-uniqueness, worker-crash, Stop,
   CTDB repair, and machine-sleep/tray-lock tests.
 - **Owner:** repo owner.
-- **Status:** implementation staged and focused-test verified 2026-07-27. A running
+- **Status:** fixed, focused-test verified, and live dual-drive verified through
+  2026-07-29. A running
   Rip page offers only other attached drives and opens the selected one in a
   separately titled CUETools process. The job lease holds both drive letter and
   Windows device number across calibration and every child read; nesting is
@@ -1130,10 +1136,13 @@ does not relax evidence, rollback, or verification requirements.
   cross-process serialized, command lines contain only role and drive letter, and
   log names include process identity plus a nonce. Album publication and gzip
   evidence stores retain their existing cross-process transactions. The new lease
-  launch, and settings-writer contracts pass 6/6 focused tests. The full WPF suite
-  passes 358/358, release safety passes 41 checks, all five staged vendor worktrees
-  remain clean, and a separate clean self-contained artifact passed its 36-file,
-  14-entry runtime-trust, 19-registration, and five-native-probe contract.
+  launch, settings-writer, independent-drive ownership, same-drive denial,
+  ordinary release, and forced worker-crash release contracts pass 7/7 focused
+  tests. The live H:/K: run held simultaneous Test & Copy jobs in independently
+  titled processes; H: completed and K:'s separate cache-defeat failure did not
+  alter H:'s CRCs, status, completion output, or publication. The complete WPF
+  suite passes 439/439 and the clean self-contained artifact remains
+  release-gated.
   The first live run showed that the separate launcher was not discoverable through
   the disabled active-drive selector. R67 now makes that selector launch another
   attached drive without retargeting the current job. Simultaneous H:/K:, same-drive
@@ -2052,22 +2061,20 @@ does not relax evidence, rollback, or verification requirements.
 
 ## Ordering
 
-The post-restart assurance batch is active. Remaining work is ordered by evidence
-dependency:
+The locally actionable correctness queue is closed through R83. Remaining work
+is ordered by the authority or evidence it requires:
 
-1. Finish R72's interactive dark/light/responsive capture and remaining
-   automatic/manual embedded-output proof. The core path does not wait on optional
-   Apple or TheAudioDB policy decisions.
-2. Finish and adversarially review any open R44-R49 follow-ups.
-3. Refresh the classic receipt after the source commit and retain its exact
-   AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-4. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
-   and crash release without shared-state collisions.
-5. Run the pinned hosted workflows and compare them with the local receipts.
-6. Choose and implement a publisher signing/attestation identity and policy.
-7. Continue R5/R8/R12/R13 modernization and lock-file rollout.
-8. Capture R78 in light and dark mode, rerun the Kenny G lookup for R77, and
-   perform one live FLAC image rip for R79.
+1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
+   captures. The automatic and local-override embedded-output paths are already
+   byte-proven; TheAudioDB remains explicitly opt-in.
+2. Run the pinned hosted workflows and compare them with the local WPF/classic
+   receipts.
+3. Choose and implement a publisher signing/attestation identity and policy.
+4. Resolve the external provenance holes in R32: exact HDCD source/build recipe,
+   RareWares LAME source revision/build flags, and contemporaneous TTA archive
+   checksum.
+5. Continue the deliberately large R8/R12 SDK/async modernization and the
+   behavior-changing R13/R14 LAME/FFmpeg projects one verified slice at a time.
 
 ## Holes / external boundaries
 
