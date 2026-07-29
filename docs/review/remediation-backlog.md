@@ -1932,7 +1932,37 @@ does not relax evidence, rollback, or verification requirements.
   run containing at least one independently logged optical re-read; and separate
   normal-read versus re-read frame percentiles.
 - **Owner:** CUETools WPF maintainers.
-- **Status:** in progress 2026-07-29.
+- **Status:** fixed and hardware-measured 2026-07-29. Commit `31d839b`
+  recorded 87,832 normal-read frames over 1,249.4 seconds and 49,984 re-read
+  frames over 714.9 seconds at tier 2. Both states held 14.3/14.7/15.0 ms
+  p50/p95/p99. Re-reading had three frames above 33.33 ms and a 40.1 ms
+  maximum. The model callback averaged 0.0227 ms and peaked at 1.1332 ms during
+  re-reading. The independent optical log recorded 385 recovery passes.
+
+### R82. Early Test & Copy failures omit their terminal diagnostic - bucket A, risk medium
+
+- **Area or slice:** `RipService.RunTestAndCopy`, structural diagnostics, and
+  unattended optical evidence.
+- **Why it matters:** Test & Copy can correctly return an early Test or Copy
+  phase failure to the UI while never logging `test&copy failed`. Monitoring
+  cannot distinguish a completed failure from a hung operation and can leave
+  evidence jobs waiting indefinitely.
+- **Evidence found:** the R81 K: run showed the cache-defeat failure in the UI
+  and the nested `RipService.Run` error in the diagnostic log. The outer method
+  returned directly from `!testResult.Ok` and `!copyResult.Ok`, bypassing both
+  terminal catch blocks.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Recommended next pass:** pass 11 bounded remediation.
+- **Smallest safe next step:** route every early calibration, Test, Copy, and
+  stopped confirming-read return through one phase-bound diagnostic helper.
+- **Verification plan:** assert failed/stopped wording, phase identity, original
+  error preservation, and sink-failure isolation; run the full WPF, warning, and
+  publish gates.
+- **Owner:** CUETools WPF maintainers.
+- **Status:** fixed 2026-07-29. Early failures emit one numeric
+  `test&copy failed|stopped ... phase=calibration|test|copy|confirm` line.
+  Diagnostic exceptions remain ancillary and cannot change the returned error.
 
 ## Ordering
 
@@ -1945,7 +1975,9 @@ dependency:
 2. Finish and adversarially review any open R44-R49 follow-ups.
 3. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-4. Run R59/R66/R69/R71's final-source K: Test & Copy lane. The CTDB repair half of
+4. Resolve R69's final-source K: cache-defeat failure, then repeat Test & Copy.
+   The R81 run reached 92 percent of Copy before a one-sector
+   `IllegalRequest 24/00` at relative sector 246134. The CTDB repair half of
    R68/R71 is complete; retain the
    passing H: cache-defeat, simultaneous-drive, WMA,
    FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
@@ -2035,3 +2067,7 @@ dependency:
   theme tokens, and an explicit image-with-embedded-CUE rip layout. The WPF
   suite passes 414/414, the warning budget is empty, and the self-contained x64
   artifact contract passes.
+- 2026-07-29 - closed R80/R81 with refreshed physical disc rendering and a
+  35-minute-54-second source-bound damaged-media frame benchmark. Added and
+  closed R82 after the same run exposed a missing terminal diagnostic on early
+  Test & Copy failure. The run also refreshed R69's exact K: failure evidence.
