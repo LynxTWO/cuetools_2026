@@ -201,7 +201,9 @@ public sealed class DriveService : IDriveService
 
                 // A disc ID can be attached both to the original one-disc release and to a
                 // redundant box-set entry whose only extra fact is "Disc 1". Prefer the simpler
-                // identity only when barcode, album, year, and every track title agree. A
+                // identity only when barcode, album, year, and every track title agree. Provider
+                // credits can legitimately spell featured artists differently for the same
+                // physical track, so they are not part of this structural duplicate test. A
                 // genuinely distinct/subtitled box disc remains untouched and selectable.
                 PreferSingleDiscDuplicate(matches);
 
@@ -361,6 +363,11 @@ public sealed class DriveService : IDriveService
                 (value ?? "").Trim().ToUpperInvariant().Split(
                     (char[]?)null,
                     StringSplitOptions.RemoveEmptyEntries));
+        static string TrackTitle(string? value) =>
+            N((value ?? "")
+                .Replace("'", "", StringComparison.Ordinal)
+                .Replace("\u2018", "", StringComparison.Ordinal)
+                .Replace("\u2019", "", StringComparison.Ordinal));
 
         if (N(left.Artist) != N(right.Artist) ||
             N(left.Title) != N(right.Title) ||
@@ -373,8 +380,8 @@ public sealed class DriveService : IDriveService
             left.Tracks.Count != right.Tracks.Count)
             return false;
         for (int i = 0; i < left.Tracks.Count; i++)
-            if (N(left.Tracks[i]?.Title) != N(right.Tracks[i]?.Title) ||
-                N(left.Tracks[i]?.Artist) != N(right.Tracks[i]?.Artist))
+            if (TrackTitle(left.Tracks[i]?.Title) !=
+                TrackTitle(right.Tracks[i]?.Title))
                 return false;
         return true;
     }

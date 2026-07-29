@@ -2,11 +2,14 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CUETools.Codecs;
 using CUETools.Processor;
 using CUETools.Ripper.SCSI;
 using CUETools.Wpf.Accuracy;
+using CUETools.Wpf.Models;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -36,7 +39,168 @@ namespace CUETools.Wpf.Tests
             "CUETOOLS_OPTICAL_PROBE_CORRECTION_QUALITY";
         private const string DeepRecoveryEnvironmentVariable =
             "CUETOOLS_OPTICAL_PROBE_DEEP_RECOVERY";
+        private const string ImageOutputEnvironmentVariable =
+            "CUETOOLS_OPTICAL_IMAGE_OUTPUT_DIRECTORY";
         private const string OwnershipMarker = ".cuetools-live-testcopy-owner";
+
+        [TestMethod]
+        [TestCategory("Hardware")]
+        public void LoadedDiscReportsReleasePreferenceEvidence()
+        {
+            char drive = ReadDrive();
+            var log = new ProbeLog(TestContext);
+            var service = new DriveService(App.CreateWpfDefaultConfig(), log);
+
+            DiscInfo disc = service.ReadDisc(
+                drive,
+                status => TestContext.WriteLine("STATUS " + status));
+
+            Assert.IsNotNull(disc, "The loaded audio disc could not be identified.");
+            Assert.IsTrue(
+                disc.Releases.Count > 0,
+                "The loaded disc returned no metadata candidates.");
+
+            foreach (ReleaseMatch release in disc.Releases)
+            {
+                CUEMetadata metadata = release.Metadata;
+                TestContext.WriteLine(
+                    $"RELEASE index={release.Index} best={release.IsBest} " +
+                    $"source={release.Source} score={release.Score} " +
+                    $"cover={release.HasCover} totalDiscs='{metadata?.TotalDiscs}' " +
+                    $"discNumber='{metadata?.DiscNumber}' " +
+                    $"discNameGeneric={IsGenericDiscName(metadata?.DiscName)} " +
+                    $"artist={Digest(metadata?.Artist)} title={Digest(metadata?.Title)} " +
+                    $"year={Digest(metadata?.Year)} barcode={Digest(metadata?.Barcode)} " +
+                    $"trackTitles={DigestTracks(metadata, titles: true)} " +
+                    $"trackArtists={DigestTracks(metadata, titles: false)}");
+            }
+        }
+
+        [TestMethod]
+        [TestCategory("Hardware")]
+        public void PublishedImageHasEmbeddedCueReceiptAndRepairBinding()
+        {
+            string outputDirectory =
+                Environment.GetEnvironmentVariable(
+                    ImageOutputEnvironmentVariable) ?? "";
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(outputDirectory),
+                $"Set {ImageOutputEnvironmentVariable} to the committed album directory.");
+            outputDirectory = Path.GetFullPath(outputDirectory);
+            Assert.IsTrue(
+                Directory.Exists(outputDirectory),
+                "The committed image-output directory does not exist.");
+
+            string[] audioPaths = Directory.GetFiles(
+                outputDirectory,
+                "*.flac",
+                SearchOption.TopDirectoryOnly);
+            Assert.AreEqual(
+                1,
+                audioPaths.Length,
+                "Image output must publish exactly one FLAC file.");
+            string imagePath = audioPaths[0];
+
+            string embeddedCue = Tagging.Analyze(imagePath).Get("CUESHEET");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(embeddedCue),
+                "The FLAC does not contain an embedded CUESHEET tag.");
+            Assert.AreEqual(
+                10,
+                CountCueTracks(embeddedCue),
+                "The embedded CUESHEET does not describe all ten physical tracks.");
+
+            string[] cuePaths = Directory.GetFiles(
+                outputDirectory,
+                "*.cue",
+                SearchOption.TopDirectoryOnly);
+            Assert.AreEqual(
+                1,
+                cuePaths.Length,
+                "The requested external cue sidecar is missing or ambiguous.");
+            string externalCue = File.ReadAllText(cuePaths[0]);
+            Assert.AreEqual(
+                10,
+                CountCueTracks(externalCue),
+                "The external cue sidecar does not describe all ten physical tracks.");
+            StringAssert.Contains(
+                externalCue,
+                $"FILE \"{Path.GetFileName(imagePath)}\" WAVE");
+
+            string folderArtPath = Path.Combine(outputDirectory, "folder.jpg");
+            byte[] folderArt = File.ReadAllBytes(folderArtPath);
+            using (TagLib.File tagged = TagLib.File.Create(imagePath))
+            {
+                Assert.AreEqual(
+                    1,
+                    tagged.Tag.Pictures.Length,
+                    "The image FLAC must contain exactly one selected cover.");
+                CollectionAssert.AreEqual(
+                    folderArt,
+                    tagged.Tag.Pictures[0].Data.Data,
+                    "The embedded cover differs from the selected published cover.");
+            }
+
+            string repairSource = RipService.FindRepairSourceRelativePath(
+                outputDirectory,
+                audioPaths);
+            Assert.AreEqual(
+                Path.GetFileName(cuePaths[0]),
+                repairSource,
+                ignoreCase: true,
+                "Post-rip CTDB repair did not bind to the image's authoritative cue.");
+            Assert.AreEqual(
+                Path.GetFullPath(cuePaths[0]),
+                RipService.RebindRepairSource(
+                    outputDirectory,
+                    repairSource),
+                ignoreCase: true);
+
+            string receiptPath = Path.Combine(outputDirectory, "rip.verify");
+            VerifyRecord receipt = JsonSerializer.Deserialize<VerifyRecord>(
+                File.ReadAllText(receiptPath));
+            Assert.IsNotNull(receipt, "The rip.verify receipt did not deserialize.");
+            Assert.AreEqual("flac", receipt.Format, ignoreCase: true);
+            Assert.AreEqual(10, receipt.Tracks.Length);
+            Assert.IsTrue(receipt.OutputVerificationKnown);
+            Assert.IsTrue(receipt.LosslessOutput);
+            Assert.IsTrue(
+                receipt.OutputVerificationPerformed,
+                receipt.OutputVerificationDetail);
+            StringAssert.Contains(
+                receipt.OutputVerificationDetail,
+                "decoded and compared");
+
+            var decoder = new CUETools.Codecs.Flake.AudioDecoder(
+                new CUETools.Codecs.Flake.DecoderSettings(),
+                imagePath);
+            long decodedSamples = 0;
+            try
+            {
+                Assert.AreEqual(16, decoder.PCM.BitsPerSample);
+                Assert.AreEqual(2, decoder.PCM.ChannelCount);
+                Assert.AreEqual(44100, decoder.PCM.SampleRate);
+                var buffer = new AudioBuffer(decoder, 65536);
+                int read;
+                while ((read = decoder.Read(buffer, 65536)) > 0)
+                    decodedSamples += read;
+                Assert.AreEqual(
+                    decoder.Length,
+                    decodedSamples,
+                    "The independent managed FLAC decoder did not reach the declared end.");
+            }
+            finally
+            {
+                decoder.Close();
+            }
+
+            TestContext.WriteLine(
+                $"PASS image={Path.GetFileName(imagePath)} " +
+                $"bytes={new FileInfo(imagePath).Length} " +
+                $"samples={decodedSamples} tracks={receipt.Tracks.Length} " +
+                $"coverBytes={folderArt.Length} " +
+                $"repairSource={repairSource}");
+        }
 
         [TestMethod]
         [TestCategory("Hardware")]
@@ -454,6 +618,47 @@ namespace CUETools.Wpf.Tests
                 outputRoot,
                 "<test-output>",
                 StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsGenericDiscName(string value)
+        {
+            string name = (value ?? "").Trim();
+            if (name.Length == 0)
+                return true;
+            return name.StartsWith("Disc ", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(name.Substring(5).Trim(), out _);
+        }
+
+        private static string DigestTracks(CUEMetadata metadata, bool titles)
+        {
+            if (metadata?.Tracks == null)
+                return Digest("");
+            return Digest(string.Join(
+                "\n",
+                metadata.Tracks.Select(
+                    track => titles ? track?.Title ?? "" : track?.Artist ?? "")));
+        }
+
+        private static string Digest(string value)
+        {
+            string normalized = string.Join(
+                " ",
+                (value ?? "").Trim().ToUpperInvariant().Split(
+                    (char[])null,
+                    StringSplitOptions.RemoveEmptyEntries));
+            if (normalized.Length == 0)
+                return "empty";
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+            return Convert.ToHexString(hash, 0, 6);
+        }
+
+        private static int CountCueTracks(string cueContents) =>
+            cueContents.Split(
+                    new[] { "\r\n", "\n" },
+                    StringSplitOptions.None)
+                .Count(line =>
+                    line.TrimStart().StartsWith(
+                        "TRACK ",
+                        StringComparison.OrdinalIgnoreCase));
 
         private sealed class ProbeLog : IDiagnosticLog
         {
