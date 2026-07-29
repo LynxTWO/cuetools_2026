@@ -21,6 +21,10 @@ public sealed class ExternalEncoderInfo
     public string ExeName = "";         // the file the user downloads (e.g. "mpcenc.exe")
     public string[] AcceptedExeNames = Array.Empty<string>();
     public string DownloadUrl = "";     // OFFICIAL project download page
+    public string Description = "";
+    public string History = "";
+    public string BestUse = "";
+    public string DistributionNote = "";
     public string ResolvedPath = "";    // where we found it ("" = not installed)
     public bool Found => ResolvedPath.Length > 0;
 }
@@ -28,7 +32,7 @@ public sealed class ExternalEncoderInfo
 /// <summary>
 /// App-level encoder catalog. Three jobs:
 ///  1. register formats/encoders the engine does not carry by default when their output assurance
-///     contract is complete (currently Musepack .mpc);
+///     contract is complete;
 ///  2. resolve external encoder exes (the app's own encoders folder, the configured path, PATH)
 ///     and import a user-picked exe into %AppData%\CUETools2026\encoders;
 ///  3. the single "is this encoder actually usable" rule shared by the format lists: in-process
@@ -40,33 +44,107 @@ public sealed class EncoderCatalog
     private readonly IDiagnosticLog _log;
     private readonly AppSettings _app;
     private readonly string _encodersDir;
+    private readonly string _bundledEncodersDir;
     public static string EncodersDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "encoders");
+    internal static string BundledEncodersDir =>
+        Path.Combine(AppContext.BaseDirectory, "encoders");
 
     /// <summary>Raised when an encoder was imported or a format's lossless/lossy type changed,
     /// so format dropdowns can rebuild live.</summary>
     public event EventHandler? Changed;
 
     public EncoderCatalog(IDiagnosticLog log, AppSettings app)
-        : this(log, app, EncodersDir) { }
+        : this(log, app, EncodersDir, BundledEncodersDir) { }
 
     internal EncoderCatalog(IDiagnosticLog log, AppSettings app, string encodersDir)
+        : this(log, app, encodersDir, BundledEncodersDir) { }
+
+    internal EncoderCatalog(
+        IDiagnosticLog log,
+        AppSettings app,
+        string encodersDir,
+        string bundledEncodersDir)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _app = app ?? throw new ArgumentNullException(nameof(app));
         _encodersDir = Path.GetFullPath(
             encodersDir ?? throw new ArgumentNullException(nameof(encodersDir)));
+        _bundledEncodersDir = Path.GetFullPath(
+            bundledEncodersDir ??
+                throw new ArgumentNullException(nameof(bundledEncodersDir)));
     }
 
     // The externally-obtainable encoders this app curates. Download links are the OFFICIAL project
     // pages (never mirrors), and the import copies the exe under the app's own folder.
-    public static readonly (string enc, string ext, string name, bool lossless, string exe, string url)[] Known =
+    public static readonly (
+        string enc,
+        string ext,
+        string name,
+        bool lossless,
+        string exe,
+        string url,
+        string description,
+        string history,
+        string bestUse,
+        string distribution)[] Known =
     {
-        ("mpcenc.exe",  "mpc",  "Musepack",       false, "mpcenc.exe",  "https://www.musepack.net/index.php?pg=win"),
-        ("takc.exe",    "tak",  "TAK",            true,  "takc.exe",    "http://thbeck.de/Tak/Tak.html"),
-        ("oggenc.exe",  "ogg",  "Ogg Vorbis",     false, "oggenc.exe",  "https://www.rarewares.org/ogg-oggenc.php"),
-        ("opusenc.exe", "opus", "Opus",           false, "opusenc.exe", "https://opus-codec.org/downloads/"),
-        ("qaac.exe (tvbr)", "m4a", "AAC (qaac)",  false, "qaac.exe",    "https://github.com/nu774/qaac/releases"),
+        (
+            "mpcenc.exe", "mpc", "Musepack", false, "mpcenc.exe",
+            "https://www.musepack.net/index.php?pg=win",
+            "A subband perceptual music codec tuned for transparent stereo audio at moderate and high bitrates.",
+            "Musepack evolved from the MPEG Layer II family; the current SV8 bitstream and encoder date from 2009.",
+            "Music-focused lossy archives where efficiency matters more than broad hardware-player support.",
+            "The encoder is LGPL-2.1-or-later. This build supports a user-selected official executable; packaged copies require the matching license and source-compliance materials."
+        ),
+        (
+            "takc.exe", "tak", "TAK", true, "takc.exe",
+            "http://thbeck.de/Tak/Tak.html",
+            "Thomas Becker's fast, high-ratio lossless audio codec.",
+            "TAK has been developed as proprietary Windows software since the mid-2000s and is known for an unusually strong speed/compression balance.",
+            "Personal lossless archives when Windows-only proprietary tooling and limited ecosystem support are acceptable.",
+            "TAK is proprietary freeware. CUETools does not bundle it; import a copy obtained from the author's official package."
+        ),
+        (
+            "oggenc.exe", "ogg", "Ogg Vorbis", false, "oggenc.exe",
+            "https://xiph.org/vorbis/",
+            "An open, royalty-free perceptual codec in the Ogg container.",
+            "Xiph.Org introduced Vorbis around 2000 as an open alternative to patent-encumbered music codecs.",
+            "Open-format music distribution and players with mature Vorbis support; Opus is usually stronger at low bitrates.",
+            "oggenc is GPL-2.0. A packaged build must include the license and corresponding-source offer; imported official or user-built copies remain user controlled."
+        ),
+        (
+            "opusenc.exe", "opus", "Opus", false, "opusenc.exe",
+            "https://opus-codec.org/downloads/",
+            "A modern open codec spanning speech, music, low delay, and a very wide bitrate range.",
+            "The IETF standardized Opus as RFC 6716 in 2012 from Xiph.Org CELT and Skype SILK technology.",
+            "Streaming, speech, and compact high-quality music copies; use lossless FLAC or WavPack for preservation masters.",
+            "opusenc is distributed under a two-clause BSD license. CUETools can package a source-pinned build with its notices; imported copies override any packaged copy."
+        ),
+        (
+            "qaac.exe (tvbr)", "m4a", "AAC (qaac)", false, "qaac.exe",
+            "https://github.com/nu774/qaac/releases",
+            "A Windows command-line front end for Apple's CoreAudio AAC encoder, using true-variable-bitrate quality modes.",
+            "qaac has exposed Apple's well-regarded AAC implementation to command-line workflows since 2011.",
+            "High-quality AAC/M4A files for Apple devices and the broad AAC playback ecosystem.",
+            "qaac itself is permissively licensed but requires Apple's CoreAudio components. CUETools never redistributes those Apple components; install them separately and import qaac.exe or qaac64.exe."
+        ),
+        (
+            "exhale.exe", "m4a", "xHE-AAC (exhale)", false, "exhale.exe",
+            "https://gitlab.com/ecodis/exhale",
+            "An open-source encoder for Extended HE-AAC (MPEG-D USAC) in an M4A container.",
+            "exhale was created as a standards-focused xHE-AAC encoder and is strongest in its implemented medium-to-high bitrate modes.",
+            "Modern xHE-AAC playback targets at medium and high bitrates; it is not a substitute for lossless preservation and does not implement every low-rate USAC tool.",
+            "exhale's source license does not grant patent rights. CUETools supports user-supplied builds but does not bundle or imply patent clearance."
+        ),
+        (
+            "ofr.exe", "ofr", "OptimFROG", true, "ofr.exe",
+            "https://losslessaudio.org/Downloads.php",
+            "A lossless codec designed to maximize compression ratio, accepting much slower encoding and decoding to do it.",
+            "Florin Ghido's OptimFROG has pursued extreme lossless compression since the early 2000s.",
+            "Cold archival experiments where storage ratio matters more than speed, portability, or ecosystem support.",
+            "The author permits unmodified CLI redistribution with free software only after notification. Until that project-owner notification is completed, import the official ofr.exe yourself."
+        ),
     };
 
     private static string[] AcceptedNames(string encoderName, string preferredName) =>
@@ -96,6 +174,28 @@ public sealed class EncoderCatalog
                 foreach (var e in config.Encoders)
                     if (e.Extension == ext && e.Name == name) return true;
                 return false;
+            }
+            void AddFormat(
+                string extension,
+                CUEToolsTagger tagger,
+                bool lossless,
+                bool lossy,
+                bool allowEmbed)
+            {
+                if (config.formats.ContainsKey(extension))
+                    return;
+                config.formats.Add(
+                    extension,
+                    new CUEToolsFormat(
+                        extension,
+                        tagger,
+                        lossless,
+                        lossy,
+                        allowEmbed,
+                        true,
+                        lossless ? config.Encoders.GetDefault(extension, true) : null,
+                        lossy ? config.Encoders.GetDefault(extension, false) : null,
+                        config.Decoders.GetDefault(extension)));
             }
 
             // Older profiles predate independent command-output verification. Migrate only exact
@@ -145,9 +245,41 @@ public sealed class EncoderCatalog
             else if (config.formats["mpc"].encoderLossy == null)
                 config.formats["mpc"].encoderLossy = config.Encoders.GetDefault("mpc", false);   // re-wire after load/migration
 
-            // OptimFROG is intentionally not registered. The local SDK is decode-only and the
-            // repository has no primary evidence for a pipe-to-WAV decoder invocation. Advertising
-            // its encoder would bypass the mandatory independent lossless verification contract.
+            // exhale 1.2.x accepts Red Book WAV on stdin and writes standards-compliant M4A.
+            // Modes a..g are deliberately exposed as advanced choices: 0..9 are the conservative
+            // public presets and 9 is the archival-leaning default for a lossy derivative.
+            if (!HasEncoder("m4a", "exhale.exe"))
+                AddEncoder(new CUETools.Codecs.CommandLine.EncoderSettings(
+                    "exhale.exe",
+                    "m4a",
+                    false,
+                    "0 1 2 3 4 5 6 7 8 9 a b c d e f g",
+                    "9",
+                    "exhale.exe",
+                    "%M - %O"));
+
+            // The official OptimFROG 5.100 CLI was exercised against this exact contract:
+            // encode WAV stdin/file to .ofr, then decode the finalized file to WAV stdout. The
+            // latter is the mandatory independent PCM verifier before publication.
+            if (!HasEncoder("ofr", "ofr.exe"))
+            {
+                var optimFrog = new CUETools.Codecs.CommandLine.EncoderSettings(
+                    "ofr.exe",
+                    "ofr",
+                    true,
+                    "0 1 2 3 4 5 6 7 8 9 10 max",
+                    "max",
+                    "ofr.exe",
+                    "--encode --silent --overwrite --preset %M --md5 %I --output %O");
+                ConfigureSelfVerifier(
+                    optimFrog,
+                    "--decode --silent --writefreshheader %I --output -");
+                AddEncoder(optimFrog);
+            }
+            AddFormat("ofr", CUEToolsTagger.APEv2, true, false, true);
+            if (config.formats["ofr"].encoderLossless == null)
+                config.formats["ofr"].encoderLossless =
+                    config.Encoders.GetDefault("ofr", true);
         }
         catch (Exception ex) { _log.Warn("encoders", "external format registration failed: " + ex.GetType().Name); }
     }
@@ -286,6 +418,59 @@ public sealed class EncoderCatalog
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Every actually runnable encoder for one format face. This is the source for the
+    /// encoder picker: missing command-line programs never appear as selectable promises.</summary>
+    public List<AudioEncoderSettingsViewModel> UsableEncoders(
+        CUEConfig config,
+        string extension,
+        bool lossless)
+    {
+        var result = new List<AudioEncoderSettingsViewModel>();
+        foreach (AudioEncoderSettingsViewModel encoder in config.Encoders)
+            if (string.Equals(
+                    encoder.Extension,
+                    extension,
+                    StringComparison.OrdinalIgnoreCase) &&
+                encoder.Lossless == lossless &&
+                IsUsable(encoder))
+                result.Add(encoder);
+        return result
+            .OrderByDescending(encoder => encoder.Settings.Priority)
+            .ThenBy(encoder => encoder.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>Select one concrete implementation for a format face. Selection mutates the
+    /// persisted format model; it never rewrites the executable path or silently changes the
+    /// chosen encoder when another implementation later becomes available.</summary>
+    public void SetFormatEncoder(
+        CUEConfig config,
+        string extension,
+        bool lossless,
+        AudioEncoderSettingsViewModel encoder)
+    {
+        if (!config.formats.TryGetValue(extension, out CUEToolsFormat? format) ||
+            encoder == null ||
+            !string.Equals(
+                encoder.Extension,
+                extension,
+                StringComparison.OrdinalIgnoreCase) ||
+            encoder.Lossless != lossless ||
+            !config.Encoders.Contains(encoder) ||
+            !IsUsable(encoder))
+            throw new InvalidOperationException(
+                "The selected encoder is not usable for this format.");
+
+        if (lossless)
+            format.encoderLossless = encoder;
+        else
+            format.encoderLossy = encoder;
+        _log.Info(
+            "encoders",
+            $"format {extension}: encoder set to {encoder.Name}");
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Find a command-line encoder's exe. Files copied into the app-managed encoders directory
     /// require an exact import receipt match. An explicitly configured absolute path outside that
@@ -321,6 +506,17 @@ public sealed class EncoderCatalog
                     return null;
                 enc.Path = local;
                 return local;
+            }
+
+            // Packaged command-line tools live in an explicit subfolder so they do not mingle with
+            // host binaries. A hash-bound user import above always wins, allowing future codec
+            // updates without waiting for an application release.
+            string bundled = Path.GetFullPath(
+                Path.Combine(_bundledEncodersDir, name));
+            if (File.Exists(bundled))
+            {
+                enc.Path = bundled;
+                return bundled;
             }
 
             string beside = Path.GetFullPath(
@@ -408,7 +604,23 @@ public sealed class EncoderCatalog
 
             _app.ExternalEncoderApprovals = updatedApprovals;
             var enc = FindEncoder(config, info);
-            if (enc != null) enc.Path = dest;
+            if (enc != null)
+            {
+                enc.Path = dest;
+                if (config.formats.TryGetValue(info.Extension, out CUEToolsFormat? format))
+                {
+                    AudioEncoderSettingsViewModel? selected = info.Lossless
+                        ? format.encoderLossless
+                        : format.encoderLossy;
+                    if (!IsUsable(selected))
+                    {
+                        if (info.Lossless)
+                            format.encoderLossless = enc;
+                        else
+                            format.encoderLossy = enc;
+                    }
+                }
+            }
             _log.Info("encoders", $"imported {pickedName} for {info.Extension}");
             Changed?.Invoke(this, EventArgs.Empty);
             return null;
@@ -629,7 +841,17 @@ public sealed class EncoderCatalog
     public List<ExternalEncoderInfo> Snapshot(CUEConfig config)
     {
         var list = new List<ExternalEncoderInfo>();
-        foreach (var (enc, ext, name, lossless, exe, url) in Known)
+        foreach (var (
+            enc,
+            ext,
+            name,
+            lossless,
+            exe,
+            url,
+            description,
+            history,
+            bestUse,
+            distribution) in Known)
         {
             var info = new ExternalEncoderInfo
             {
@@ -639,7 +861,11 @@ public sealed class EncoderCatalog
                 Lossless = lossless,
                 ExeName = exe,
                 AcceptedExeNames = AcceptedNames(enc, exe),
-                DownloadUrl = url
+                DownloadUrl = url,
+                Description = description,
+                History = history,
+                BestUse = bestUse,
+                DistributionNote = distribution,
             };
             var vm = FindEncoder(config, info);
             if (vm != null)
@@ -699,6 +925,13 @@ public sealed class EncoderCatalog
             ["wma|wma lossy"] = "90",          // WMA: quality 90 VBR - efficiency point below max 98
             ["tak|takc.exe"] = "4m",           // TAK: strongest preset (if the exe is imported)
             ["mpc|mpcenc.exe"] = "7",          // Musepack: above-standard archival sweet spot
+            ["wv|libwavpack"] = "high+",        // WavPack: strongest standard mode
+            ["ape|MACLib"] = "insane",          // Monkey's Audio: strongest mode
+            ["ogg|oggenc.exe"] = "8",           // Vorbis: high-quality archival derivative
+            ["opus|opusenc.exe"] = "192",       // Opus: transparent music with ample margin
+            ["m4a|qaac.exe (tvbr)"] = "127",    // qaac: strongest TVBR quality
+            ["m4a|exhale.exe"] = "9",           // xHE-AAC: strongest conservative public preset
+            ["ofr|ofr.exe"] = "max",            // OptimFROG: strongest preset
         };
         try
         {
@@ -712,6 +945,9 @@ public sealed class EncoderCatalog
                 var modes = (e.Settings.SupportedModes ?? "").Split(' ');
                 if (Array.IndexOf(modes, mode) < 0) continue;                  // not offered for this PCM/build
                 e.Settings.EncoderMode = mode;
+                if (e.Settings is
+                    CUETools.Codecs.libwavpack.EncoderSettings wavPack)
+                    wavPack.ExtraMode = 6;
                 _log.Info("encoders", $"archival default applied: {e.Name} -> {mode}");
             }
         }

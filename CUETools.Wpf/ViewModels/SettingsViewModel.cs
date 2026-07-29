@@ -206,13 +206,18 @@ public sealed class ExternalEncoderRow : ViewModelBase
             ? new[] { _info.ExeName }
             : _info.AcceptedExeNames);
     public string StatusText => _info.Found
-        ? "installed"
+        ? "available - Locate replaces it with your selected copy"
         : "not installed - download " + AcceptedNames + ", then Locate it here";
     public bool Found => _info.Found;
-    public string Tip => _info.Found
-        ? $"Using {_info.ResolvedPath}"
-        : $"Get {AcceptedNames} from the official site ({_info.DownloadUrl}), then click Locate to import it. " +
-          "The file is copied into this app's own encoders folder.";
+    public string Tip =>
+        "What: " + _info.Description + "\n\n" +
+        "History: " + _info.History + "\n\n" +
+        "Best use: " + _info.BestUse + "\n\n" +
+        "Licensing / packaging: " + _info.DistributionNote + "\n\n" +
+        (_info.Found
+            ? $"Current executable: {_info.ResolvedPath}\n\nLocate always imports and selects your copy, so it overrides a packaged codec."
+            : $"Get {AcceptedNames} from the official site ({_info.DownloadUrl}), then click Locate. " +
+              "CUETools copies it into a hash-bound per-user encoder folder.");
 
     public System.Windows.Input.ICommand DownloadCommand { get; }
     public System.Windows.Input.ICommand LocateCommand { get; }

@@ -10,10 +10,18 @@ namespace CUETools.Wpf.Views;
 /// with the app settings on exit.</summary>
 public partial class EncoderSettingsWindow : Window
 {
-    public EncoderSettingsWindow(CUEConfig config, string format, bool lossy)
+    public EncoderSettingsWindow(
+        CUEConfig config,
+        Services.EncoderCatalog catalog,
+        string format,
+        bool lossy)
     {
         InitializeComponent();
-        DataContext = new EncoderSettingsViewModel(config, format, lossy);
+        DataContext = new EncoderSettingsViewModel(
+            config,
+            catalog,
+            format,
+            lossy);
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
@@ -28,8 +36,12 @@ public partial class EncoderSettingsWindow : Window
         bool lossy = catalog.IsLossyFormat(config.formats[format]);
         try
         {
-            var w = new EncoderSettingsWindow(config, format, lossy) { Owner = owner };
-            WireTypePicker(w, config, catalog, format, lossy);
+            var w = new EncoderSettingsWindow(
+                config,
+                catalog,
+                format,
+                lossy) { Owner = owner };
+            WirePickers(w, config, catalog, format, lossy);
             w.ShowDialog();
         }
         catch (System.Exception ex)
@@ -40,7 +52,7 @@ public partial class EncoderSettingsWindow : Window
         }
     }
 
-    private static void WireTypePicker(EncoderSettingsWindow w, CUEConfig config,
+    private static void WirePickers(EncoderSettingsWindow w, CUEConfig config,
         Services.EncoderCatalog catalog, string format, bool lossy)
     {
         if (w.DataContext is not EncoderSettingsViewModel vm) return;
@@ -49,8 +61,27 @@ public partial class EncoderSettingsWindow : Window
         vm.TypeChanged += chooseLossy =>
         {
             catalog.SetFormatType(format, chooseLossy);   // persists + rebuilds the format lists
-            w.DataContext = new EncoderSettingsViewModel(config, format, chooseLossy);
-            WireTypePicker(w, config, catalog, format, chooseLossy);
+            Rebuild(w, config, catalog, format, chooseLossy);
         };
+        vm.EncoderChanged += encoder =>
+        {
+            catalog.SetFormatEncoder(config, format, !lossy, encoder);
+            Rebuild(w, config, catalog, format, lossy);
+        };
+    }
+
+    private static void Rebuild(
+        EncoderSettingsWindow window,
+        CUEConfig config,
+        Services.EncoderCatalog catalog,
+        string format,
+        bool lossy)
+    {
+        window.DataContext = new EncoderSettingsViewModel(
+            config,
+            catalog,
+            format,
+            lossy);
+        WirePickers(window, config, catalog, format, lossy);
     }
 }
