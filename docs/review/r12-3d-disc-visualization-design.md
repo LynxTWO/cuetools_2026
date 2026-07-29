@@ -1,8 +1,8 @@
 # R12: 3D disc + laser optical model - design
 
-Status: implemented and visually refreshed through R80 on 2026-07-29. Normal
-light/dark live captures and the offscreen state matrix pass. A formal frame-time
-benchmark remains open.
+Status: implemented, visually refreshed, and hardware-benchmarked through R81
+on 2026-07-29. Normal light/dark captures, the offscreen state matrix, and the
+real damaged-sector frame-time run pass.
 
 ## Goal
 
@@ -163,13 +163,17 @@ The live read data drives all three tiers identically; only the surface detail s
   recovery ease-out, and unreadable hold.
 - A 1,000-frame post-warmup test bounds render-state allocations below 128 KiB.
 - Actual 1180x740 WPF windows were inspected in dark and light mode at 96 DPI.
+- A 35-minute-54-second Paranoid K: run measured 49,984 re-read frames over
+  714.9 seconds. Re-read p50/p95/p99 were 14.3/14.7/15.0 ms on the 69 Hz host,
+  matching normal reading. The re-read maximum was 40.1 ms, with three frames
+  above 33.33 ms. The model callback averaged 0.0227 ms and peaked at 1.1332 ms.
 
 ## Risks / open questions
 
 - The shader question is resolved. The control builds bounded procedural
   textures once and uses WPF materials at render time.
-- A formal live frame-time benchmark is still open. Tier zero retains the
-  software-rendered fallback.
+- The formal tier-2 live benchmark passes. Tier zero retains the
+  software-rendered fallback and its deterministic state renders.
 - Placement is resolved. The 3D control owns the live slot on capable hardware;
   the 2D map occupies the same slot at tier zero.
 
@@ -179,4 +183,4 @@ The live read data drives all three tiers identically; only the surface detail s
 2. Live geometry, read mapping, re-read back-track, and hardware tiers: done.
 3. Damage zoom and outcome markers: done.
 4. Explore mode and layer cross-section: done.
-5. Formal frame-time benchmark: open.
+5. Formal frame-time benchmark: done.

@@ -943,8 +943,9 @@ five native-plugin probes.
 ### Measure the live CD surface during real damaged-media recovery
 
 **Exact files:** `CUETools.Wpf/Controls/DiscFrameMetrics.cs`,
-`CUETools.Wpf/Controls/DiscModel3D.cs`, focused WPF tests, R12 design notes,
-live release evidence, and R81.
+`CUETools.Wpf/Controls/DiscModel3D.cs`,
+`CUETools.Wpf/Services/RipService.cs`, focused WPF tests, R12 design notes,
+live release evidence, R81, and R82.
 
 **Safety and unchanged behavior:** keep the sampler disabled unless
 `CUETOOLS_DISC_FRAME_METRICS` names an output file. Observe the existing
@@ -967,8 +968,14 @@ visual and its existing state contract remain unchanged.
 **Observability:** the opt-in JSON receipt contains schema and product versions,
 process id, UTC state-transition times, frame/callback histograms, progress
 fractions, and zoom values. The normal application log remains the independent
-proof that a measured interval was a real optical re-read.
+proof that a measured interval was a real optical re-read. Every early Test &
+Copy failure now emits one phase-bound terminal diagnostic; a failed sink cannot
+replace the original result.
 
-**Status:** in progress 2026-07-29. WPR and PresentMon both require elevation on
-this host. The source-bound fixed-histogram sampler is the non-administrative
-measurement lane.
+**Status:** fixed and hardware-measured 2026-07-29. WPR and PresentMon both
+require elevation on this host, so the source-bound fixed-histogram sampler
+provided the non-administrative lane. Commit `31d839b` measured 49,984 re-read
+frames over 714.9 seconds during 385 real recovery passes. Normal and re-read
+p99 were both 15.0 ms; re-read callback time averaged 0.0227 ms and peaked at
+1.1332 ms. K:'s Copy phase later failed at 92 percent on the separately tracked
+R69 cache-defeat `IllegalRequest 24/00`; the staging root was empty afterward.

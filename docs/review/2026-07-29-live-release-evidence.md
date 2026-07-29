@@ -1,7 +1,7 @@
 # Live release evidence, 2026-07-29
 
 This record closes the selected interactive theme, metadata, optical-image, and
-disc-visual checks for R77-R80. Local captures and audio outputs remain under the ignored
+disc-visual checks for R77-R82. Local captures and audio outputs remain under the ignored
 `evidence/live-2026-07-29/` tree. They are not release payloads and are not
 committed because they contain user media and metadata.
 
@@ -34,6 +34,38 @@ fallback states in both themes. The matrix is generated from the production
 controls. It is not a second physical damaged-disc run. Contract tests preserve
 the existing live bindings, equal-area read radius, re-read back-track and zoom,
 recovery ease-out, and unreadable hold.
+
+## Damaged-disc frame-time benchmark
+
+The self-contained tier-2 artifact from commit `31d839b` ran a real Paranoid
+Test & Copy against the damaged 68:22 disc in K:. The host used an RTX 3060 at
+2560x1440 and 69 Hz. The opt-in sampler observed the existing
+`CompositionTarget.Rendering` seam with fixed histograms. Its hot loop allocates
+zero bytes after warmup. Raw frame, counter, screenshot, and diagnostic receipts
+remain in the ignored evidence tree because the captures contain media metadata.
+
+The normal and damaged intervals remained effectively identical:
+
+| State | Frames | Time | p50 | p95 | p99 | Maximum | Frames over 33.33 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Normal reading | 87,832 | 1,249.4 s | 14.3 ms | 14.7 ms | 15.0 ms | 46.0 ms | 5 |
+| Re-reading / autozoom | 49,984 | 714.9 s | 14.3 ms | 14.7 ms | 15.0 ms | 40.1 ms | 3 |
+| Unreadable hold | 1,186 | 16.7 s | 14.3 ms | 14.7 ms | 15.0 ms | 19.4 ms | 0 |
+
+The model callback averaged 0.0135 ms during normal reading and 0.0227 ms during
+re-reading. Its re-read maximum was 1.1332 ms. The receipt recorded 29 state
+transitions with no overflow. The normal log independently recorded 385
+recovery-pass lines across the Test and Copy reads. A live capture shows the
+amber marker, zoomed disc, recovery overlay, re-read counter, and reduced drive
+speed at the same 60 percent event.
+
+Frame pacing passed. The Copy phase later failed at 92 percent because K:
+rejected a one-sector cache-defeat read at
+relative sector 246134 with `IllegalRequest 24/00`. No staged directory or album
+was published. This is optical R69 evidence, not a rendering failure. The run
+also proved that an early Test & Copy error returned to the UI without a terminal
+`test&copy failed` diagnostic. R82 adds the missing phase-bound terminal line;
+diagnostic failure remains unable to replace the original result.
 
 ## Live metadata correction
 
@@ -90,7 +122,7 @@ repair evidence recorded under R71.
 ## Final software and artifact gates
 
 - modern ripper suite: 22/22 passed, no skips;
-- WPF suite: 423/423 passed, no skips;
+- WPF suite: 429/429 passed, no skips;
 - WPF/fuzz warning budget: zero emitted warning lines and zero fingerprints;
 - self-contained x64 publish: artifact contract passed, including 19 plugin
   registrations and five native-plugin probes;

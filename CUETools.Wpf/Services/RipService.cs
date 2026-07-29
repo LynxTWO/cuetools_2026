@@ -1222,10 +1222,13 @@ public sealed class RipService : IRipService
         int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        string phase = "calibration";
 
         string stage1 = "", stage2 = "";
         TestCopyStagingWorkspace? stagingWorkspace = null;
         bool keepStaging = false;   // set true only when we return a HELD result the VM must clean up
+        TestCopyRunResult Fail(string error) =>
+            BuildTestCopyFailure(_log, sw.Elapsed, phase, error);
 
         Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
         void PublishCrcEvidence(
@@ -1254,7 +1257,7 @@ public sealed class RipService : IRipService
                     onProgress,
                     requireIndependentReads: true,
                     out string calibrationError))
-                return new TestCopyRunResult { Error = calibrationError };
+                return Fail(calibrationError);
 
             stagingWorkspace = TestCopyStagingWorkspace.Create();
             stage1 = stagingWorkspace.CopyBaseDirectory;
@@ -1265,15 +1268,13 @@ public sealed class RipService : IRipService
 
             // Read 1 (Test, index 0): verify pass, not staged - nothing on disk to compare tracks
             // against but its checksums still count as an independent read.
+            phase = "test";
             ThrowIfStopRequested();
             var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, outputLayout: outputLayout);
-            if (!testResult.Ok) return new TestCopyRunResult { Error = testResult.Error };
+            if (!testResult.Ok) return Fail(testResult.Error);
             VerifyRecord? testRecord = testResult.Record;
             if (testRecord == null)
-                return new TestCopyRunResult
-                {
-                    Error = "Test read completed without checksum evidence."
-                };
+                return Fail("Test read completed without checksum evidence.");
             PublishCrcEvidence(
                 new[] { testRecord },
                 sourceReadIndex: 0);
@@ -1284,15 +1285,13 @@ public sealed class RipService : IRipService
             // read above is honored) and carry it forward - fmt then also drives the final commit's
             // file-extension count below, so it stays consistent with what was actually encoded.
             { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
+            phase = "copy";
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
             var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
-            if (!copyResult.Ok) return new TestCopyRunResult { Error = copyResult.Error };
+            if (!copyResult.Ok) return Fail(copyResult.Error);
             VerifyRecord? copyRecord = copyResult.Record;
             if (copyRecord == null)
-                return new TestCopyRunResult
-                {
-                    Error = "Copy read completed without checksum evidence."
-                };
+                return Fail("Copy read completed without checksum evidence.");
 
             var reads = new System.Collections.Generic.List<VerifyRecord>
             {
@@ -1314,12 +1313,13 @@ public sealed class RipService : IRipService
                 // The codec is locked by the Copy read's onEncodeStart above by the time we get here,
                 // so this re-poll is just for consistency - it will report the same locked choice.
                 { string live = liveFormat?.Invoke() ?? ""; if (!string.IsNullOrWhiteSpace(live)) fmt = live; }
+                phase = "confirm";
                 ThrowIfStopRequested();
                 var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
                 if (!thirdResult.Ok)
                 {
                     if (thirdResult.Error == "Stopped.")
-                        return new TestCopyRunResult { Error = thirdResult.Error };
+                        return Fail(thirdResult.Error);
                     _log.Warn(
                         "rip",
                         "confirming read failed after a complete staged Copy; holding the Copy instead of deleting it");
@@ -1538,12 +1538,17 @@ public sealed class RipService : IRipService
         }
         catch (StopException)
         {
-            _log.Info("rip", $"test&copy stopped by user after {sw.Elapsed.TotalSeconds:0}s");
+            _log.Info(
+                "rip",
+                $"test&copy stopped by user after {sw.Elapsed.TotalSeconds:0}s phase={phase}");
             return new TestCopyRunResult { Error = "Stopped." };
         }
         catch (Exception ex)
         {
-            _log.Error("rip", $"test&copy failed after {sw.Elapsed.TotalSeconds:0}s", ex);
+            _log.Error(
+                "rip",
+                $"test&copy failed after {sw.Elapsed.TotalSeconds:0}s phase={phase}",
+                ex);
             // A throw with keepStaging set means the failure happened DURING the commit, so the
             // verified reads are still on disk. Say where: the audio is proven and re-rippable only at
             // the cost of another 2-3 full reads.
@@ -1570,6 +1575,26 @@ public sealed class RipService : IRipService
             if (!keepStaging)
                 stagingWorkspace?.Dispose();
         }
+    }
+
+    internal static TestCopyRunResult BuildTestCopyFailure(
+        IDiagnosticLog log,
+        TimeSpan elapsed,
+        string phase,
+        string error)
+    {
+        string outcome = error == "Stopped." ? "stopped" : "failed";
+        try
+        {
+            log.Warn(
+                "rip",
+                $"test&copy {outcome} after {elapsed.TotalSeconds:0}s phase={phase}");
+        }
+        catch
+        {
+            // A diagnostic observer cannot turn a completed failure path into a throw.
+        }
+        return new TestCopyRunResult { Error = error };
     }
 
     /// <summary>
