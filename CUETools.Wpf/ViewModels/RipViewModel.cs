@@ -437,7 +437,15 @@ public sealed class RipViewModel : PageViewModel
     private string _artInfo = "";
     public string ArtInfo { get => _artInfo; private set => Set(ref _artInfo, value); }
     private bool _artLoading;
-    public bool ArtLoading { get => _artLoading; private set => Set(ref _artLoading, value); }
+    public bool ArtLoading
+    {
+        get => _artLoading;
+        private set
+        {
+            if (Set(ref _artLoading, value))
+                CommandManager.InvalidateRequerySuggested();
+        }
+    }
     private byte[]? _coverBytes;
     private byte[]? _artMaster;   // the hi-res master as fetched, kept so a size change re-derives without re-fetching
     private string _artLabel = "";
@@ -541,7 +549,11 @@ public sealed class RipViewModel : PageViewModel
         // stays fully enabled during a rip and does nothing when pressed.
         ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose(), _ => !IsRipping && !IsBusy);
         VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
-        RipCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: true); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        // A cover is immutable job input. Do not freeze a null snapshot while release-bound
+        // discovery is still resolving; Verify remains available because it publishes no audio.
+        RipCommand = new RelayCommand(
+            _ => { _ = RunJobAsync(encode: true); },
+            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
@@ -556,7 +568,9 @@ public sealed class RipViewModel : PageViewModel
         RepairLastRipCommand = new RelayCommand(
             _ => { _ = RepairLastRipAsync(); },
             _ => CanRepairLastRip && !IsBusy && !IsRipping);
-        TestCopyCommand = new RelayCommand(_ => { _ = RunTestCopyAsync(); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        TestCopyCommand = new RelayCommand(
+            _ => { _ = RunTestCopyAsync(); },
+            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
         AcceptCopyAnywayCommand = new RelayCommand(_ => AcceptCopyAnyway(), _ => _heldResult != null);
         DiscardHeldCommand = new RelayCommand(_ => DiscardHeld(), _ => _heldResult != null);
         OpenParallelDriveCommand = new RelayCommand(
@@ -1146,7 +1160,7 @@ public sealed class RipViewModel : PageViewModel
 
     private async Task RunJobAsync(bool encode)
     {
-        if (!IsDiscPresent || IsRipping || IsBusy) return;
+        if (!IsDiscPresent || IsRipping || IsBusy || (encode && ArtLoading)) return;
         PersistPrimarySettingsSnapshot();
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
@@ -1316,7 +1330,8 @@ public sealed class RipViewModel : PageViewModel
     // surfacing differs (Passed / Held / failed) instead of a plain rip-or-verify outcome.
     private async Task RunTestCopyAsync()
     {
-        if (!IsDiscPresent || IsRipping || IsBusy) return;
+        if (!CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading))
+            return;
         PersistPrimarySettingsSnapshot();
         // Keep the previous held staging until the NEW run has produced a result. Discarding it up
         // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
@@ -1573,6 +1588,13 @@ public sealed class RipViewModel : PageViewModel
         _baseActivity = AppActivity.Idle;
         _status.Report(AppActivity.Idle);
     }
+
+    internal static bool CanStartEncodedJob(
+        bool isDiscPresent,
+        bool isRipping,
+        bool isBusy,
+        bool artLoading) =>
+        isDiscPresent && !isRipping && !isBusy && !artLoading;
 
     private void ApplyHistoryStatus(
         bool recorded,

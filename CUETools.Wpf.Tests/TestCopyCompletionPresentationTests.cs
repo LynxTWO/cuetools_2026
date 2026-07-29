@@ -40,4 +40,19 @@ public sealed class TestCopyCompletionPresentationTests
             TestCopyCompletionState.ConsistentDamaged,
             RipViewModel.ClassifyTestCopyCompletion(result));
     }
+
+    [TestMethod]
+    public void EncodedJob_WaitsForReleaseBoundArtworkSnapshot()
+    {
+        Assert.IsFalse(RipViewModel.CanStartEncodedJob(
+            isDiscPresent: true,
+            isRipping: false,
+            isBusy: false,
+            artLoading: true));
+        Assert.IsTrue(RipViewModel.CanStartEncodedJob(
+            isDiscPresent: true,
+            isRipping: false,
+            isBusy: false,
+            artLoading: false));
+    }
 }

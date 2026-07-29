@@ -903,11 +903,19 @@ per-command cache-read budgets, and complete-or-fail eviction.
 readiness retries, cache-command retries, and chunk fallbacks. A terminal
 failure retains all five local counts.
 
-**Status:** software verified 2026-07-29. Ripper tests pass 28/28, WPF tests
-pass 430/430, net47 and net20 full-MSBuild builds pass, the warning gate emits
-zero warnings, and the production artifact contract passes 36 required files,
-19 plugin registrations, and five native probes. K: requires a physical reload
-before the decisive hardware repeat.
+**Status:** implemented and end-to-end hardware-verified 2026-07-29 at commit
+`5fa2c65`. The uninterrupted K: Test & Copy finished in 2,275 seconds, produced
+two consistent reads, verified the final encoded PCM, and crossed the former
+92-percent Copy failure boundary. CTDB then repaired six sectors in a
+source-preserving sibling. Independent decode comparison found 86 changed
+channel samples in 67 stereo frames, exactly matching the repair receipt, and
+the repaired result matched AccurateRip at 55/82 and CTDB at 207/234.
+
+This successful run did not enter the dormant-drive branch. Wake attempts,
+readiness retries, indeterminate-readiness continuations, command retries, and
+chunk fallbacks all remained zero. The observed end-to-end blocker is cleared,
+but exact hardware activation of the new wake branch remains an unknown rather
+than an inferred pass.
 
 ### Give human-facing album sidecars a portable identity
 
@@ -1008,6 +1016,36 @@ dark browser capture exposed a default-white DataGrid body; the repaired browser
 passed dark/light 1040x700 captures at 96 DPI. A real image rip embedded the
 selected cover byte-for-byte. High-contrast and 150/200 percent DPI browser
 captures remain.
+
+### Gate encoded jobs on a stable artwork snapshot
+
+**Exact files:** `CUETools.Wpf/ViewModels/RipViewModel.cs`, the focused
+presentation-policy test, and the R83 review record.
+
+**Safety and unchanged behavior:** when release-bound art is loading, disable
+Rip and Test & Copy and enforce the same check inside both execution paths.
+Leave Verify available because it does not publish audio. Requery encoded-job
+commands whenever artwork loading changes. Preserve the existing immutable
+byte-array snapshot once a job starts.
+
+**Checks:** prove the encoded-job policy rejects a loading artwork state and
+accepts the same ready state. Run the full WPF suite, warning gate, and
+self-contained production artifact contract. Repeat a fast real encoded job
+started as soon as disc identification finishes and inspect the embedded
+picture.
+
+**Rollback:** remove the command and execution gates together. Do not move the
+cover snapshot into the optical worker or permit a later UI selection to mutate
+an active job.
+
+**Observability:** the existing `art discovery complete` and `embed selected
+cover` structural events show the ordering without recording music identity or
+image content.
+
+**Status:** software-verified 2026-07-29. The focused regression and full WPF
+suite pass 431/431, the warning gate is empty, and the production contract
+passes 36 required files, 19 plugin registrations, and five native probes. The
+fast live embed repeat remains.
 
 ### Align archival defaults, output layouts, read evidence, and themes
 

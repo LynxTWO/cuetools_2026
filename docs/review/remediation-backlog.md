@@ -1594,7 +1594,8 @@ does not relax evidence, rollback, or verification requirements.
   a K: deep-recovery probe at the damaged window with the measured 786,432-byte
   cache volume and the full Test & Copy repeat.
 - **Owner:** repo owner.
-- **Status:** in progress 2026-07-29. The fallback is limited to exact
+- **Status:** implemented and end-to-end hardware-verified 2026-07-29. The
+  fallback is limited to exact
   `DeviceFailed/IllegalRequest/24/00`, preserves the requested sector count and
   in-program bounds, stops after one-sector commands, and reports both transient
   retries and chunk fallbacks. The 2026-07-29 K: repeat reached 92 percent of
@@ -1620,8 +1621,13 @@ does not relax evidence, rollback, or verification requirements.
   once after the two exact indeterminate readiness results. All other readiness
   failures and any repeated eviction exhaustion remain fatal. Ripper tests pass
   28/28, WPF tests pass 430/430, net47/net20 full-MSBuild lanes pass, the warning
-  gate is empty, and the production artifact contract passes. A physically
-  reloaded K: full Test & Copy is the remaining evidence.
+  gate is empty, and the production artifact contract passes. Commit `5fa2c65`
+  then completed an uninterrupted 2,275-second K: Test & Copy, crossed the
+  former 92-percent Copy boundary, verified the final encoded PCM, and
+  published a verified six-sector CTDB repair. The successful run recorded zero
+  wake, readiness, command-retry, and chunk-fallback counters. The observed
+  end-to-end blocker is cleared; exact hardware activation of the intermittent
+  wake branch remains tracked as an unknown.
 
 ### R70. Human-facing rip sidecars were not identifiable outside their folder - bucket A, risk medium
 
@@ -1990,23 +1996,51 @@ does not relax evidence, rollback, or verification requirements.
   `test&copy failed|stopped ... phase=calibration|test|copy|confirm` line.
   Diagnostic exceptions remain ancillary and cannot change the returned error.
 
+### R83. Encoded jobs can snapshot artwork before discovery finishes - bucket A, risk high
+
+- **Area or slice:** `RipViewModel` artwork discovery and the Rip/Test & Copy
+  job-input snapshot.
+- **Why it matters:** with embedding enabled, a user can start an encoded job
+  while release-bound artwork is still loading. The job freezes a null cover,
+  then the UI shows the selected cover moments later. The published audio and
+  repaired sibling omit the cover without explaining the mismatch.
+- **Evidence found:** the final K: run started Test & Copy 1.089 seconds after
+  disc identification. Artwork discovery completed 0.711 seconds after the job
+  started. The source and repaired FLAC sets contain zero pictures even though
+  the UI later showed the selected cover and embedding remained enabled.
+- **Confidence:** verified from the structural log, output inspection, and
+  source trace.
+- **Approval needed:** no; the user requested release-ready embedding and
+  immutable job artwork.
+- **Recommended next pass:** pass 11 bounded remediation.
+- **Smallest safe next step:** keep only encoded-job commands disabled while
+  release-bound artwork is loading. Leave Verify available, make the early
+  execution guard enforce the same policy, and requery commands when artwork
+  loading changes.
+- **Verification plan:** focused policy test, full WPF suite, warning and
+  production publish gates, then a fast real encoded-output check started as
+  soon as the disc is identified.
+- **Owner:** CUETools WPF maintainers.
+- **Status:** fixed and software-verified 2026-07-29. Rip and Test & Copy use
+  one shared encoded-job gate, the private execution paths enforce the same
+  condition, and artwork state changes requery both commands. Verify remains
+  available. The focused regression passes, the full WPF suite passes 431/431,
+  the warning gate emits zero warnings, and the production artifact contract
+  passes 36 required files, 19 plugin registrations, and five native probes.
+  A fast live start-before-discovery embed check remains.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
 dependency:
 
-1. Finish R72's interactive dark/light/responsive capture and real
+1. Verify R83's encoded-job artwork gate, then repeat a fast real embed check.
+2. Finish R72's interactive dark/light/responsive capture and real
    automatic/manual embedded-output proof. The core path does not wait on optional
    Apple or TheAudioDB policy decisions.
-2. Finish and adversarially review any open R44-R49 follow-ups.
-3. Refresh the classic receipt after the source commit and retain its exact
+3. Finish and adversarially review any open R44-R49 follow-ups.
+4. Refresh the classic receipt after the source commit and retain its exact
    AnyCPU/x64/Win32/TTA/MSI evidence, collection hashes, notices, and SBOM.
-4. Resolve R69's final-source K: cache-defeat failure, then repeat Test & Copy.
-   The R81 run reached 92 percent of Copy before a one-sector
-   `IllegalRequest 24/00` at relative sector 246134. The CTDB repair half of
-   R68/R71 is complete; retain the
-   passing H: cache-defeat, simultaneous-drive, WMA,
-   FLACCL, CTDB-repair, Icecast, and actionlint checks in the release matrix.
 5. Prove R54's simultaneous H:/K: operation, same-drive denial, independent Stop,
    and crash release without shared-state collisions.
 6. Run the pinned hosted workflows and compare them with the local receipts.
@@ -2097,3 +2131,7 @@ dependency:
   35-minute-54-second source-bound damaged-media frame benchmark. Added and
   closed R82 after the same run exposed a missing terminal diagnostic on early
   Test & Copy failure. The run also refreshed R69's exact K: failure evidence.
+- 2026-07-29 - cleared R69's observed hardware blocker with a 2,275-second
+  Test & Copy and independently verified six-sector CTDB repair. Kept exact
+  dormant-branch coverage open because all wake counters were zero. Added R83
+  after the same run exposed an artwork-discovery/job-snapshot race.
