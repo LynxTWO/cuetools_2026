@@ -205,7 +205,7 @@ $lines.Add("Artifact flavor: $Flavor")
 $lines.Add("Inventory: eng/release/native-dependencies.json")
 $lines.Add("")
 $lines.Add(
-    "Scope: native and mixed-mode codec components shipped by this artifact. " +
+    "Scope: native, mixed-mode, and command-line codec components shipped by this artifact. " +
     "Managed-package attribution remains represented by the release SBOM. " +
     "CUETools' own license is in License.txt.")
 $lines.Add("")
@@ -251,6 +251,41 @@ foreach ($artifactId in $artifactIds) {
     $lines.Add("")
 }
 
+if ($Flavor -eq "Wpf") {
+    $externalManifestPath = Join-Path $PSScriptRoot "external-command-encoders.json"
+    $externalManifest =
+        Get-Content -LiteralPath $externalManifestPath -Raw |
+            ConvertFrom-Json
+    if ($externalManifest.schemaVersion -ne 1 -or
+        @($externalManifest.encoders).Count -eq 0) {
+        throw "External command encoder manifest is empty or unsupported."
+    }
+    foreach ($encoder in @($externalManifest.encoders)) {
+        $lines.Add("Component: $($encoder.id)")
+        $lines.Add("Name: $($encoder.displayName)")
+        $lines.Add("Version: $($encoder.version)")
+        $lines.Add("Upstream: $($encoder.upstream)")
+        $lines.Add("License: $($encoder.license)")
+        $lines.Add(
+            "Binary archive: $($encoder.binaryArchive.url) " +
+            "(SHA-256 $($encoder.binaryArchive.sha256))")
+        $lines.Add(
+            "Executable SHA-256: $($encoder.executableSha256)")
+        $lines.Add(
+            "Source archive: $($encoder.sourceArchive.url) " +
+            "(SHA-256 $($encoder.sourceArchive.sha256))")
+        $lines.Add("Package path: $($encoder.packagePath)")
+        if (-not [string]::IsNullOrWhiteSpace(
+                [string]$encoder.sourceArchive.packagePath)) {
+            $lines.Add(
+                "Packaged corresponding source: " +
+                $encoder.sourceArchive.packagePath)
+        }
+        $lines.Add("Provenance: $($encoder.provenanceNote)")
+        $lines.Add("")
+    }
+}
+
 Add-LicenseText `
     -Lines $lines `
     -Title "libFLAC 1.5.0 - BSD-3-Clause" `
@@ -281,6 +316,19 @@ Add-LicenseText `
     -Title "LAME 3.100 - GNU Library General Public License 2.0 or later" `
     -Source "eng/release/licenses/GNU-LGPL-2.0.txt" `
     -Text (Read-TrackedText "eng\release\licenses\GNU-LGPL-2.0.txt")
+
+if ($Flavor -eq "Wpf") {
+    Add-LicenseText `
+        -Lines $lines `
+        -Title "Opus Tools 0.2 opusenc - BSD-2-Clause" `
+        -Source "eng/release/licenses/OpusTools-opusenc-BSD-2-Clause.txt" `
+        -Text (Read-TrackedText "eng\release\licenses\OpusTools-opusenc-BSD-2-Clause.txt")
+    Add-LicenseText `
+        -Lines $lines `
+        -Title "oggenc2 2.88 - GNU General Public License 2.0" `
+        -Source "ttalib-1.1/COPYING (standard GPL-2.0 text)" `
+        -Text (Read-TrackedText "ttalib-1.1\COPYING")
+}
 
 if ($Flavor -eq "Classic") {
     Add-LicenseText `

@@ -53,6 +53,12 @@ Assert-NoReparsePointInExistingPath `
     -Path $ArtifactDirectory `
     -Purpose "Publish artifact directory"
 
+$externalEncoderScript = Join-Path $repoRoot "eng\ci\Prepare-ExternalCommandEncoders.ps1"
+if (-not (Test-Path -LiteralPath $externalEncoderScript -PathType Leaf)) {
+    throw "External command encoder preparation script is missing: $externalEncoderScript"
+}
+& $externalEncoderScript -RepositoryRoot $repoRoot
+
 & dotnet publish (Join-Path $repoRoot "CUETools.Wpf\CUETools.Wpf.csproj") `
     --configuration $Configuration `
     --runtime win-x64 `

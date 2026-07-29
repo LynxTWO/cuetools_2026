@@ -30,5 +30,6 @@ launchSettings.json
 /ThirdParty/*/TTALib.*
 /ThirdParty/*/wavpackdll.*
 /ThirdParty/*/libwavpack.*
+/ThirdParty/encoders/
 /ThirdPartyDebug/
 publish/

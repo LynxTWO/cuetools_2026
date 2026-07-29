@@ -1169,3 +1169,46 @@ frames over 714.9 seconds during 385 real recovery passes. Normal and re-read
 p99 were both 15.0 ms; re-read callback time averaged 0.0227 ms and peaked at
 1.1332 ms. K:'s Copy phase later failed at 92 percent on the separately tracked
 R69 cache-defeat `IllegalRequest 24/00`; the staging root was empty afterward.
+
+### Add provenance-bound command encoders without weakening user override
+
+**Exact files:** `CUEToolsCodecsConfig`, WPF `EncoderCatalog` and tuning/settings
+views, runtime trust tests, WPF project/publish/notices, external encoder
+preparation manifest/script, release artifact validator/manifest/safety tests,
+codec review records, and license text.
+
+**Safety and unchanged behavior:** keep every in-process codec path unchanged.
+Offer a command encoder only when its executable and, for lossless output, its
+independent verifier are usable. Check the receipt-bound per-user directory
+before packaged fallbacks, so an intentionally imported update wins. Bind both
+imports and packaged executables to an exact SHA-256 and length immediately
+before process launch while holding a non-replaceable read lease. Treat
+app-adjacent absolute paths and PATH as explicitly user-managed compatibility
+paths without making an origin claim.
+
+**Checks:** pin HTTPS archive URL, byte length, SHA-256, selected entry hash,
+license, and source archive in one manifest. Refuse download drift, zip-entry
+drift, reparse output, or an unlisted packaged executable. Require artifact
+hashes to agree with preparation and runtime pins. Test tampered imports,
+tampered packaged tools, alias discovery, imported override, lossy defaults,
+lossless verifier contracts, and implementation selection. Run real stdin
+encodes through the exact packaged Opus and Vorbis files, focused WPF trust
+tests, warning-clean release build, notices generation, and the self-contained
+artifact contract.
+
+**Rollback:** remove both packaged files and their artifact entries together.
+The catalog retains user imports; do not remove receipts or weaken lossless
+verification. A licensing/provenance failure disables packaging, not runtime
+trust checks.
+
+**Observability:** bounded diagnostics state the curated executable name and a
+reason code such as hash, location, or approval. They never log imported source
+paths or audio identity.
+
+**Status:** implemented and verified 2026-07-29. Focused external-encoder tests
+pass 21/21 and the complete WPF suite passes 437/437. Official Opus Tools and
+RareWares oggenc2 performed real stdin encodes. The release build is
+warning-clean, the artifact contract passes 39 required paths, and third-party
+notices include the binary/source provenance.
+exhale 1.2.2 and OptimFROG 5.100 real CLI contracts were also exercised; their
+documented patent/notification boundaries keep them import-only.

@@ -75,13 +75,12 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - Do not infer that every old binary is dead: `Freedb.dll` remains reachable in the
   current products, and legacy/package reachability must be checked per artifact.
 
-## R12 / R13 - large programs, need your sequencing call (assessed 2026-07-10)
+## R12 / R13 - large programs (R13 product boundary resolved)
 
 The bucket-A remediation items are now done (R1 + R15 decoder hardening, R11
 CleanseString, R10a TestProcessor fixtures). What is left in R12 (modernization) and
-R13 (codec refresh) is large, behavior-affecting, and gated on either your input or a
-verification step that cannot run headless. Parking the concrete decisions here rather
-than starting a large program blind.
+R13 (codec refresh) is behavior-affecting. The user has now authorized its product
+boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ### R12 decision - which modernization slice next, and how to verify GUIs
 
@@ -119,11 +118,20 @@ than starting a large program blind.
 - **Product choice:** add xHE-AAC, OptimFROG, WavPack, and every redistributable
   encoder available from `C:\_Audio Codecs_`. User-provided newer executables must
   override bundled copies.
-- **Next safe implementation sequence:** preserve/reconcile the dirty submodule
-  work, upgrade one native integration at a time, rebuild both architectures,
-  run its independent decode/corpus gate, and update provenance before moving to
-  the next codec. The UnRAR upgrade and real two-architecture `.rar` round trip are
-  complete.
+- **Completed implementation:** WavPack 5.9.0 is source-built for both
+  architectures. The WPF catalog includes Musepack, TAK, Vorbis, Opus, qaac,
+  exhale/xHE-AAC, and OptimFROG with exact contracts, archival defaults,
+  implementation selection, help, aliases, receipt-bound imports, and user
+  override precedence. The package includes hash-pinned Opus Tools and oggenc2;
+  oggenc2 ships with its exact source archive. Release and runtime checks fail
+  closed on hash drift.
+- **No product decision remains for import-only codecs:** qaac requires an Apple
+  runtime; TAK is proprietary; exhale grants no patent rights; Musepack has not
+  been added to the package until its matching source-compliance set is curated.
+- **One external action remains before OptimFROG can be bundled:** its license
+  requires notification to the author. CUETools supports a user import and a
+  verified lossless encode today; packaging must wait for a project-owner
+  notification rather than inventing an identity or silently violating the term.
 
 ## Resolved / actioned
 

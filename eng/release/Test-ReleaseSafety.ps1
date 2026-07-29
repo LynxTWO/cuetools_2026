@@ -205,6 +205,17 @@ try {
     Assert-True `
         ($publishSource.Contains("Install-CUEToolsPlugin.ps1")) `
         "Publish-Wpf.ps1 does not copy the supported user plugin installer."
+    $externalPrepareIndex = $publishSource.IndexOf(
+        "Prepare-ExternalCommandEncoders.ps1",
+        [StringComparison]::Ordinal)
+    $dotnetPublishIndex = $publishSource.IndexOf(
+        "& dotnet publish",
+        [StringComparison]::Ordinal)
+    Assert-True `
+        ($externalPrepareIndex -ge 0 -and
+            $dotnetPublishIndex -ge 0 -and
+            $externalPrepareIndex -lt $dotnetPublishIndex) `
+        "Publish-Wpf.ps1 does not prepare hash-pinned command encoders before publishing."
     $classicCollectionSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\collect_files.bat") -Raw
     Assert-True `
@@ -236,6 +247,56 @@ try {
         Assert-True `
             (@($contract.requiredFiles.path) -contains "Install-CUEToolsPlugin.ps1") `
             "$contractName does not require the supported user plugin installer."
+    }
+    $wpfContract = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "wpf-win-x64.manifest.json") -Raw |
+        ConvertFrom-Json
+    $externalEncoderContract = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "external-command-encoders.json") -Raw |
+        ConvertFrom-Json
+    $encoderCatalogSource = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "..\..\CUETools.Wpf\Services\EncoderCatalog.cs") -Raw
+    foreach ($externalPath in @(
+        "encoders/opusenc.exe",
+        "encoders/oggenc2.exe",
+        "encoders/source/oggenc2.88srcs.zip")) {
+        $externalEntries = @(
+            $wpfContract.requiredFiles |
+                Where-Object { $_.path -ceq $externalPath })
+        Assert-True `
+            ($externalEntries.Count -eq 1 -and
+                -not [string]::IsNullOrWhiteSpace(
+                    [string]$externalEntries[0].sha256)) `
+            "The WPF artifact does not hash-bind $externalPath."
+    }
+    foreach ($encoder in @($externalEncoderContract.encoders)) {
+        $artifactEntry = @(
+            $wpfContract.requiredFiles |
+                Where-Object { $_.path -ceq $encoder.packagePath })
+        Assert-True `
+            ($artifactEntry.Count -eq 1 -and
+                [string]$artifactEntry[0].sha256 -ieq
+                    [string]$encoder.executableSha256) `
+            "The WPF artifact hash for $($encoder.packagePath) drifted from the external encoder contract."
+        Assert-True `
+            ($encoderCatalogSource.IndexOf(
+                    [string]$encoder.executableSha256,
+                    [StringComparison]::OrdinalIgnoreCase) -ge 0) `
+            "The runtime catalog does not pin $($encoder.packagePath)."
+
+        if (-not [string]::IsNullOrWhiteSpace(
+                [string]$encoder.sourceArchive.packagePath)) {
+            $sourceEntry = @(
+                $wpfContract.requiredFiles |
+                    Where-Object {
+                        $_.path -ceq $encoder.sourceArchive.packagePath
+                    })
+            Assert-True `
+                ($sourceEntry.Count -eq 1 -and
+                    [string]$sourceEntry[0].sha256 -ieq
+                        [string]$encoder.sourceArchive.sha256) `
+                "The packaged source hash for $($encoder.id) drifted from the external encoder contract."
+        }
     }
 
     & (Join-Path $PSScriptRoot "Test-Install-CUEToolsPlugin.ps1")

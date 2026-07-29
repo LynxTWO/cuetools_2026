@@ -84,6 +84,22 @@
     <NativeCodecPlugin Include="..\ThirdParty\x64\MACLibDll.dll" />
   </ItemGroup>
 
+  <!-- Optional command encoders are prepared from hash-pinned upstream archives. They live in a
+       separate package folder and are lower precedence than a hash-bound per-user import. A normal
+       developer build may omit them; the release orchestrator prepares them and the artifact
+       contract requires their exact bytes. -->
+  <ItemGroup>
+    <ExternalCommandEncoder
+      Include="..\ThirdParty\encoders\x64\opusenc.exe"
+      Condition="Exists('..\ThirdParty\encoders\x64\opusenc.exe')" />
+    <ExternalCommandEncoder
+      Include="..\ThirdParty\encoders\x64\oggenc2.exe"
+      Condition="Exists('..\ThirdParty\encoders\x64\oggenc2.exe')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\oggenc2.88srcs.zip"
+      Condition="Exists('..\ThirdParty\encoders\source\oggenc2.88srcs.zip')" />
+  </ItemGroup>
+
   <!-- The engine discovers codec plugins from a "plugins" subdir; put the managed codecs there
        so ripping/converting use them (no external exe needed). Loaded via Assembly.LoadFrom
        after the generated hash allowlist approves the exact bytes. Unmanifested plugins are
@@ -124,6 +140,34 @@
     <Copy SourceFiles="@(_PublishedManagedPlugin)" DestinationFolder="$(PublishDir)plugins" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(NativeCodecPlugin)" DestinationFolder="$(PublishDir)plugins\x64" SkipUnchangedFiles="true" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\tools\Write-PluginManifest.ps1&quot; -PluginDirectory &quot;$(PublishDir)plugins&quot;" />
+  </Target>
+
+  <Target Name="CopyExternalCommandEncoders" AfterTargets="Build">
+    <Delete Files="$(TargetDir)encoders\opusenc.exe;$(TargetDir)encoders\oggenc2.exe;$(TargetDir)encoders\source\oggenc2.88srcs.zip" />
+    <Copy
+      SourceFiles="@(ExternalCommandEncoder)"
+      DestinationFolder="$(TargetDir)encoders"
+      SkipUnchangedFiles="true"
+      Condition="'@(ExternalCommandEncoder)' != ''" />
+    <Copy
+      SourceFiles="@(ExternalCommandSource)"
+      DestinationFolder="$(TargetDir)encoders\source"
+      SkipUnchangedFiles="true"
+      Condition="'@(ExternalCommandSource)' != ''" />
+  </Target>
+
+  <Target Name="PublishExternalCommandEncoders" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)encoders\opusenc.exe;$(PublishDir)encoders\oggenc2.exe;$(PublishDir)encoders\source\oggenc2.88srcs.zip" />
+    <Copy
+      SourceFiles="@(ExternalCommandEncoder)"
+      DestinationFolder="$(PublishDir)encoders"
+      SkipUnchangedFiles="true"
+      Condition="'@(ExternalCommandEncoder)' != ''" />
+    <Copy
+      SourceFiles="@(ExternalCommandSource)"
+      DestinationFolder="$(PublishDir)encoders\source"
+      SkipUnchangedFiles="true"
+      Condition="'@(ExternalCommandSource)' != ''" />
   </Target>
 
 </Project>

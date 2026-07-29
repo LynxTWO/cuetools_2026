@@ -45,6 +45,15 @@ public sealed class EncoderCatalog
     private readonly AppSettings _app;
     private readonly string _encodersDir;
     private readonly string _bundledEncodersDir;
+    private readonly IReadOnlyDictionary<string, string> _packagedEncoderHashes;
+    private static readonly IReadOnlyDictionary<string, string> PackagedEncoderHashes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["opusenc.exe"] =
+                "FA05B15DAFFDC70AD24BADA408F30EAA3E9169BCB97BC9835FE1A6913A1919F0",
+            ["oggenc2.exe"] =
+                "AC2C66F87695501AFD0AA664F2EB38FE84754A978ABB5BC80E90C74E55FF0C19",
+        };
     public static string EncodersDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "encoders");
     internal static string BundledEncodersDir =>
@@ -55,16 +64,24 @@ public sealed class EncoderCatalog
     public event EventHandler? Changed;
 
     public EncoderCatalog(IDiagnosticLog log, AppSettings app)
-        : this(log, app, EncodersDir, BundledEncodersDir) { }
+        : this(log, app, EncodersDir, BundledEncodersDir, PackagedEncoderHashes) { }
 
     internal EncoderCatalog(IDiagnosticLog log, AppSettings app, string encodersDir)
-        : this(log, app, encodersDir, BundledEncodersDir) { }
+        : this(log, app, encodersDir, BundledEncodersDir, PackagedEncoderHashes) { }
 
     internal EncoderCatalog(
         IDiagnosticLog log,
         AppSettings app,
         string encodersDir,
         string bundledEncodersDir)
+        : this(log, app, encodersDir, bundledEncodersDir, PackagedEncoderHashes) { }
+
+    internal EncoderCatalog(
+        IDiagnosticLog log,
+        AppSettings app,
+        string encodersDir,
+        string bundledEncodersDir,
+        IReadOnlyDictionary<string, string> packagedEncoderHashes)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _app = app ?? throw new ArgumentNullException(nameof(app));
@@ -73,6 +90,8 @@ public sealed class EncoderCatalog
         _bundledEncodersDir = Path.GetFullPath(
             bundledEncodersDir ??
                 throw new ArgumentNullException(nameof(bundledEncodersDir)));
+        _packagedEncoderHashes = packagedEncoderHashes ??
+            throw new ArgumentNullException(nameof(packagedEncoderHashes));
     }
 
     // The externally-obtainable encoders this app curates. Download links are the OFFICIAL project
@@ -256,7 +275,7 @@ public sealed class EncoderCatalog
                     "0 1 2 3 4 5 6 7 8 9 a b c d e f g",
                     "9",
                     "exhale.exe",
-                    "%M - %O"));
+                    "%M %O"));
 
             // The official OptimFROG 5.100 CLI was exercised against this exact contract:
             // encode WAV stdin/file to .ofr, then decode the finalized file to WAV stdout. The
@@ -473,9 +492,10 @@ public sealed class EncoderCatalog
 
     /// <summary>
     /// Find a command-line encoder's exe. Files copied into the app-managed encoders directory
-    /// require an exact import receipt match. An explicitly configured absolute path outside that
-    /// directory, an app-adjacent tool, and PATH remain user-managed compatibility paths; the app
-    /// makes no publisher or origin claim for them.
+    /// require an exact import receipt match; files in the packaged encoders directory require an
+    /// exact release hash. An explicitly configured absolute path outside those directories, an
+    /// app-adjacent tool, and PATH remain user-managed compatibility paths; the app makes no
+    /// publisher or origin claim for them.
     /// </summary>
     public string? ResolveExe(AudioEncoderSettingsViewModel enc)
     {
@@ -489,6 +509,9 @@ public sealed class EncoderCatalog
                 if (IsWithinManagedDirectory(absolute) &&
                     !ValidateManagedEncoder(absolute, enc))
                     return null;
+                if (IsWithinBundledDirectory(absolute) &&
+                    !ValidatePackagedEncoder(absolute, enc))
+                    return null;
                 enc.Path = absolute;
                 return absolute;
             }
@@ -496,10 +519,17 @@ public sealed class EncoderCatalog
             string name = exe.Length > 0 ? Path.GetFileName(exe) : enc.Name.Split(' ')[0];
             if (!IsSimpleExecutableName(name))
                 return null;
+            string[] candidateNames = new[] { name }
+                .Concat(AcceptedNames(enc.Name, name))
+                .Where(IsSimpleExecutableName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
-            string local = Path.Combine(_encodersDir, name);
-            if (File.Exists(local))
+            foreach (string candidateName in candidateNames)
             {
+                string local = Path.Combine(_encodersDir, candidateName);
+                if (!File.Exists(local))
+                    continue;
                 // A present but unapproved/changed managed file is a hard refusal. Falling through
                 // to PATH here could silently run a different executable than the user imported.
                 if (!ValidateManagedEncoder(local, enc))
@@ -511,18 +541,24 @@ public sealed class EncoderCatalog
             // Packaged command-line tools live in an explicit subfolder so they do not mingle with
             // host binaries. A hash-bound user import above always wins, allowing future codec
             // updates without waiting for an application release.
-            string bundled = Path.GetFullPath(
-                Path.Combine(_bundledEncodersDir, name));
-            if (File.Exists(bundled))
+            foreach (string candidateName in candidateNames)
             {
+                string bundled = Path.GetFullPath(
+                    Path.Combine(_bundledEncodersDir, candidateName));
+                if (!File.Exists(bundled))
+                    continue;
+                if (!ValidatePackagedEncoder(bundled, enc))
+                    return null;
                 enc.Path = bundled;
                 return bundled;
             }
 
-            string beside = Path.GetFullPath(
-                Path.Combine(AppContext.BaseDirectory, name));
-            if (File.Exists(beside))
+            foreach (string candidateName in candidateNames)
             {
+                string beside = Path.GetFullPath(
+                    Path.Combine(AppContext.BaseDirectory, candidateName));
+                if (!File.Exists(beside))
+                    continue;
                 enc.Path = beside;
                 return beside;
             }
@@ -530,18 +566,23 @@ public sealed class EncoderCatalog
                 .Split(Path.PathSeparator))
             {
                 if (string.IsNullOrWhiteSpace(dir)) continue;
-                try
+                foreach (string candidateName in candidateNames)
                 {
-                    string p = Path.GetFullPath(
-                        Path.Combine(dir.Trim().Trim('"'), name));
-                    if (!File.Exists(p))
-                        continue;
-                    enc.Path = p;
-                    return p;
-                }
-                catch
-                {
-                    // Ignore malformed PATH entries.
+                    try
+                    {
+                        string p = Path.GetFullPath(
+                            Path.Combine(
+                                dir.Trim().Trim('"'),
+                                candidateName));
+                        if (!File.Exists(p))
+                            continue;
+                        enc.Path = p;
+                        return p;
+                    }
+                    catch
+                    {
+                        // Ignore malformed PATH entries.
+                    }
                 }
             }
         }
@@ -693,6 +734,45 @@ public sealed class EncoderCatalog
         return false;
     }
 
+    private bool ValidatePackagedEncoder(
+        string path,
+        AudioEncoderSettingsViewModel enc)
+    {
+        string fileName = Path.GetFileName(path);
+        string reason;
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (!IsDirectChild(_bundledEncodersDir, fullPath))
+                reason = "location";
+            else if (!_packagedEncoderHashes.TryGetValue(
+                         fileName,
+                         out string? expectedSha256))
+                reason = "unlisted";
+            else
+            {
+                FileIdentity identity = ReadIdentity(fullPath);
+                if (!string.Equals(
+                        identity.Sha256,
+                        expectedSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    reason = "hash";
+                else
+                {
+                    BindRuntimeApproval(enc, identity);
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            reason = ex.GetType().Name;
+        }
+
+        _log.Warn("encoders", $"packaged encoder {fileName} refused ({reason})");
+        return false;
+    }
+
     private static void ClearRuntimeApproval(AudioEncoderSettingsViewModel enc)
     {
         if (enc.Settings is not CUETools.Codecs.CommandLine.EncoderSettings settings)
@@ -776,7 +856,17 @@ public sealed class EncoderCatalog
 
     private bool IsWithinManagedDirectory(string path)
     {
-        string root = _encodersDir.TrimEnd(
+        return IsWithinDirectory(path, _encodersDir);
+    }
+
+    private bool IsWithinBundledDirectory(string path)
+    {
+        return IsWithinDirectory(path, _bundledEncodersDir);
+    }
+
+    private static bool IsWithinDirectory(string path, string directory)
+    {
+        string root = directory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
             Path.DirectorySeparatorChar;
         string fullPath = Path.GetFullPath(path);

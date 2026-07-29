@@ -21,6 +21,7 @@ internal sealed class RequiredFile
     public string Path { get; set; } = "";
     public long MinimumBytes { get; set; } = 1;
     public string PeMachine { get; set; } = "";
+    public string Sha256 { get; set; } = "";
 }
 
 internal sealed class PluginProbe
@@ -113,6 +114,20 @@ internal static class Program
                         $"Required file '{required.Path}' is {length} bytes; minimum is {required.MinimumBytes}.");
                 if (!string.IsNullOrWhiteSpace(required.PeMachine))
                     ValidatePeMachine(path, required.Path, required.PeMachine);
+                if (!string.IsNullOrWhiteSpace(required.Sha256))
+                {
+                    if (!IsSha256(required.Sha256))
+                        throw new InvalidDataException(
+                            $"Required file '{required.Path}' has an invalid SHA-256 contract.");
+                    string actualSha256 = ComputeSha256(path);
+                    if (!string.Equals(
+                            actualSha256,
+                            required.Sha256,
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException(
+                            $"Required file '{required.Path}' SHA-256 is {actualSha256}, " +
+                            $"not {required.Sha256}.");
+                }
             }
 
             var forbiddenSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

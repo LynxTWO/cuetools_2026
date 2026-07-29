@@ -26,7 +26,27 @@ FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`) and its CUDA.NET depe
 
 ## Requested codec additions
 
-The user requested xHE-AAC, OptimFROG, WavPack, and all redistributable encoders available in `C:\_Audio Codecs_`. WavPack is packaged in-process. The supplied command-line set contains Musepack, Ogg Vorbis, Opus, qaac, and TAK. Each command encoder still needs an exact executable contract, settings and help text, provenance, and a redistribution decision. A user import can be supported even when bundling is not permitted.
+The user requested xHE-AAC, OptimFROG, WavPack, and all redistributable encoders available in `C:\_Audio Codecs_`. WavPack is packaged in-process. The supplied command-line set contains Musepack, Ogg Vorbis, Opus, qaac, and TAK. The WPF catalog now provides exact encode contracts, selectable implementations, archival defaults, compatible executable aliases, history/best-use help, and receipt-bound user imports for that set plus exhale/xHE-AAC and OptimFROG. User imports take precedence over the packaged fallback.
+
+The WPF package includes two provenance-complete command encoders:
+
+- official Opus Tools 0.2 `opusenc.exe` under its BSD-2-Clause terms;
+- RareWares oggenc2 2.88/libVorbis 1.3.7 with the exact corresponding source
+  archive and GPL-2.0 notice.
+
+`eng/release/external-command-encoders.json` pins the download URL, archive size
+and SHA-256, selected entry SHA-256, license, and source archive. Preparation
+refuses any byte drift. The artifact contract repeats the hashes, and runtime
+resolution binds the executable to the same non-replaceable launch lease used
+for an imported encoder. Real stdin encodes passed with both packaged files.
+
+Musepack and TAK remain import-only due to their distribution boundaries. qaac
+remains import-only because it requires Apple's CoreAudioToolbox runtime. exhale
+1.2.2 was built from its official source and its actual stdin contract was
+verified, but remains import-only because its license explicitly grants no
+patent rights. OptimFROG 5.100 passed a real encode/self-decode round trip and
+has a complete lossless verifier contract, but its redistribution terms require
+notification to the author before an unmodified CLI is packaged.
 
 ## Sequencing / risk
 
@@ -42,9 +62,10 @@ The user requested xHE-AAC, OptimFROG, WavPack, and all redistributable encoders
 
 The historical version survey is retained above. FlaCuda retirement is complete.
 WavPack 5.9.0 and Monkey's Audio 13.20 have both-architecture build and runtime
-evidence. The codec wishlist is resolved and command-line integrations are active
-work. LAME 4 remains a separate major-version project. FFmpeg matters if its
-currently unshipped product path returns.
+evidence. The command-line catalog and the two safe bundled integrations are
+complete; the deliberately import-only boundaries above are recorded rather
+than silently bypassed. LAME 4 remains a separate major-version project. FFmpeg
+matters if its currently unshipped product path returns.
 
 ## Upstream release evidence checked 2026-07-26
 

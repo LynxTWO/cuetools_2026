@@ -779,6 +779,48 @@ public sealed class ExternalEncoderTrustTests
     }
 
     [TestMethod]
+    public void PackagedAlternateBasenameIsDiscoveredWithoutRenamingUpstreamBytes()
+    {
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+        Directory.CreateDirectory(tree.BundledDirectory);
+        string packaged = Path.Combine(
+            tree.BundledDirectory,
+            "oggenc2.exe");
+        File.WriteAllText(packaged, "packaged oggenc2");
+        tree.ApprovePackaged(packaged);
+        AudioEncoderSettingsViewModel ogg = tree.Config.Encoders.Single(
+            item => item.Name == "oggenc.exe");
+        ogg.Path = "oggenc.exe";
+
+        Assert.AreEqual(packaged, tree.Catalog.ResolveExe(ogg));
+        var settings = (CUETools.Codecs.CommandLine.EncoderSettings)ogg.Settings;
+        Assert.AreEqual(
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packaged))),
+            settings.ApprovedExecutableSha256);
+        Assert.AreEqual(new FileInfo(packaged).Length, settings.ApprovedExecutableLength);
+    }
+
+    [TestMethod]
+    public void TamperedPackagedEncoderIsRefusedAtResolution()
+    {
+        using var tree = new EncoderTree();
+        Directory.CreateDirectory(tree.BundledDirectory);
+        string packaged = Path.Combine(
+            tree.BundledDirectory,
+            tree.Info.ExeName);
+        File.WriteAllText(packaged, "approved packaged encoder");
+        tree.ApprovePackaged(packaged);
+        File.WriteAllText(packaged, "changed packaged encoder");
+
+        Assert.IsNull(tree.Catalog.ResolveExe(tree.Encoder));
+        Assert.IsTrue(tree.Log.Messages.Any(message =>
+            message.Contains(
+                "packaged encoder testenc.exe refused (hash)",
+                StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public void CatalogDoesNotSubstituteAliasForTamperedConfiguredExecutable()
     {
         using var tree = new EncoderTree();
@@ -839,6 +881,7 @@ public sealed class ExternalEncoderTrustTests
             tree.BundledDirectory,
             tree.Info.ExeName);
         File.WriteAllText(bundled, "packaged encoder");
+        tree.ApprovePackaged(bundled);
 
         Assert.AreEqual(
             bundled,
@@ -971,6 +1014,10 @@ public sealed class ExternalEncoderTrustTests
             Path.Combine(tree.ManagedDirectory, "exhale.exe"),
             tree.Catalog.ResolveExe(selected));
         Assert.AreEqual("9", selected.Settings.EncoderMode);
+        Assert.AreEqual(
+            "%M %O",
+            ((CUETools.Codecs.CommandLine.EncoderSettings)
+                selected.Settings).Parameters);
     }
 
     [TestMethod]
@@ -1190,6 +1237,8 @@ public sealed class ExternalEncoderTrustTests
     private sealed class EncoderTree : IDisposable
     {
         private readonly string _sourceDirectory;
+        private readonly Dictionary<string, string> _packagedHashes =
+            new(StringComparer.OrdinalIgnoreCase);
 
         public EncoderTree()
         {
@@ -1205,7 +1254,8 @@ public sealed class ExternalEncoderTrustTests
                 Log,
                 App,
                 ManagedDirectory,
-                BundledDirectory);
+                BundledDirectory,
+                _packagedHashes);
             Config = new CUEConfig();
             var settings = new CUETools.Codecs.CommandLine.EncoderSettings(
                 "testenc.exe",
@@ -1250,6 +1300,12 @@ public sealed class ExternalEncoderTrustTests
             string path = Path.Combine(_sourceDirectory, fileName);
             File.WriteAllBytes(path, bytes);
             return path;
+        }
+
+        public void ApprovePackaged(string path)
+        {
+            _packagedHashes[Path.GetFileName(path)] =
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
         }
 
         public void Dispose()

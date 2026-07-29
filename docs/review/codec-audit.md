@@ -36,16 +36,24 @@ Status terms:
 ### WPF / .NET 8 x64
 
 The WPF product has a curated in-process plugin set. Its project copies exactly nine
-managed codec plugins and five x64 native codec libraries. The release contract requires
-36 paths, hash-binds 14 runtime files, expects nine plugin files to register 19 types, and
-runs five native probes. The 19 registrations are nine encoders, nine decoders, and the
-HDCD filter. WAV contributes one encoder and one decoder from the base codec assembly and
-is not part of that plugin count.
+managed codec plugins, five x64 native codec libraries, and two curated command encoders.
+The release contract requires 39 paths, hash-binds the 14 plugin/runtime files plus both
+command executables and the Ogg source archive, expects nine plugin files to register 19
+types, and runs five native probes. The 19 registrations are nine encoders, nine decoders,
+and the HDCD filter. WAV contributes one encoder and one decoder from the base codec
+assembly and is not part of that plugin count.
 
 The nine managed plugins are ALAC, Flake, HDCD, libFLAC, libmp3lame, libwavpack, MACLib,
 MPEG, and WMA. The five native files are `hdcd.dll`, `libFLAC_dynamic.dll`,
 `libmp3lame.dll`, `wavpackdll.dll`, and `MACLibDll.dll`, all under the architecture
 directory inside `plugins`.
+
+The command tools are official Opus Tools `opusenc.exe` and RareWares
+`oggenc2.exe`. The preparation manifest pins their download archives, selected
+executable bytes, licenses, and source obligations. The package includes the
+matching oggenc2 source archive. Artifact validation and runtime resolution
+independently enforce the executable hashes; a receipt-bound per-user import is
+checked first and therefore safely overrides the packaged fallback.
 
 The package is fail-closed by default. `CUEProcessorPlugins` reads the generated hash
 manifest, filters entries for the current architecture, rehashes and preloads each
@@ -106,10 +114,11 @@ classic package graph to observed.
 | TTA | not shipped | encode + decode configured | C++/CLI wrapper over `ttalib-1.1`; x64 and Win32 builds and runtime workers passed 16-bit stereo and 24-bit six-channel encodes, managed and ffmpeg PCM-equality decodes, cross-architecture bitstream identity, and failure-preserving publication checks. The wrapper now independently decodes finalized output before publication. Complete artifact packaging remains unobserved. |
 | DVD-A / Blu-ray LPCM | ATSI, BDLPCM, MPLS decoders registered | same | Managed MPEG plugin. Synthetic BDLPCM decode passed on net8. |
 | HDCD | native decode filter registered and observed | packaged | Managed wrapper plus Christopher Key's vendored native decoder. Discovery requires the complete usable filter contract: `HDCDDotNet`, `IAudioDest`, `IAudioFilter`, `IFormattable`, and a public `(int,int,int,bool)` constructor; valid and constructor-only impostor types are tested. Repository history and `License.txt` establish attribution and redistribution terms; the exact source revision, original download URL, and build recipe remain unknown. |
-| TAK | optional external executable | optional external executable | `takc.exe` encode/decode contract. Lossless output cannot be used without its self-decoder verification contract. |
-| Ogg Vorbis / Opus | optional external encode | optional external encode | `oggenc.exe` and `opusenc.exe`; no in-process implementation or primary-package decoder. |
+| TAK | optional imported executable | optional external executable | `takc.exe` encode/self-decode contract. Lossless output is offered only with the self-verifier. Proprietary distribution keeps it out of this package. |
+| Ogg Vorbis / Opus | packaged external encode | optional external encode | The WPF artifact contains hash-pinned `oggenc2.exe` and `opusenc.exe`; exact real stdin encodes passed. It has no bundled general decoder for either format. A receipt-bound import of `oggenc.exe`/`oggenc2.exe` or `opusenc.exe` takes precedence. |
+| OptimFROG | optional imported lossless encode | optional external executable | The 5.100 CLI contract uses a finalized-file encode and an independent self-decode to stdout; a real round trip passed. General input decoding is not registered. Packaging awaits the author notification required by its redistribution terms. |
 | Musepack | optional WPF import | user-configurable external path | WPF registers `mpcenc.exe` output only when usable; no bundled executable or decoder. |
-| AAC / M4A | optional external lossy encode | optional external lossy encode | WPF curates `qaac.exe`; base config also retains qaac/Nero command entries. ALAC remains the in-process M4A lossless path. |
+| AAC / M4A | optional imported lossy encode | optional external lossy encode | WPF curates `qaac.exe`/`qaac64.exe` and exhale xHE-AAC with their actual CLI contracts. qaac needs Apple's runtime; exhale grants no patent rights, so neither is bundled. ALAC remains the in-process M4A lossless path. |
 
 Availability in the table means the named package or explicit external-executable path.
 It does not mean every format key in `CUEToolsCodecsConfig` has a usable encoder and
