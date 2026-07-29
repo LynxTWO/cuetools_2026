@@ -199,6 +199,12 @@ public sealed class DriveService : IDriveService
                 }
                 catch (Exception ex) { _log.Warn("disc", "cdtext read failed: " + ex.GetType().Name); }
 
+                // A disc ID can be attached both to the original one-disc release and to a
+                // redundant box-set entry whose only extra fact is "Disc 1". Prefer the simpler
+                // identity only when barcode, album, year, and every track title agree. A
+                // genuinely distinct/subtitled box disc remains untouched and selectable.
+                PreferSingleDiscDuplicate(matches);
+
                 // rank best-first by source quality + metadata completeness; apply the best.
                 matches.Sort((a, b) => b.Score.CompareTo(a.Score));
                 if (matches.Count > 0 && matches[0].Metadata != null)
@@ -307,6 +313,70 @@ public sealed class DriveService : IDriveService
             ProviderId = e.ProviderId ?? "",
             InfoUrl = e.InfoUrl ?? ""
         };
+    }
+
+    internal static void PreferSingleDiscDuplicate(IList<ReleaseMatch> matches)
+    {
+        foreach (ReleaseMatch multi in matches)
+        {
+            CUEMetadata? mm = multi.Metadata;
+            if (mm == null ||
+                !int.TryParse(mm.TotalDiscs, out int totalDiscs) ||
+                totalDiscs <= 1 ||
+                !IsGenericDiscName(mm.DiscName))
+                continue;
+
+            bool redundant = matches.Any(single =>
+                !ReferenceEquals(single, multi) &&
+                IsSingleDisc(single.Metadata) &&
+                SameReleaseIdentity(single.Metadata!, mm));
+            if (!redundant)
+                continue;
+
+            multi.Score -= 3;
+            multi.Why +=
+                "; ranked below an otherwise identical single-disc release";
+        }
+    }
+
+    private static bool IsSingleDisc(CUEMetadata? metadata) =>
+        metadata != null &&
+        (string.IsNullOrWhiteSpace(metadata.TotalDiscs) ||
+         string.Equals(metadata.TotalDiscs.Trim(), "1", StringComparison.Ordinal));
+
+    private static bool IsGenericDiscName(string? value)
+    {
+        string name = (value ?? "").Trim();
+        if (name.Length == 0)
+            return true;
+        return name.StartsWith("Disc ", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(name.Substring(5).Trim(), out _);
+    }
+
+    private static bool SameReleaseIdentity(CUEMetadata left, CUEMetadata right)
+    {
+        static string N(string? value) =>
+            string.Join(
+                " ",
+                (value ?? "").Trim().ToUpperInvariant().Split(
+                    (char[]?)null,
+                    StringSplitOptions.RemoveEmptyEntries));
+
+        if (N(left.Artist) != N(right.Artist) ||
+            N(left.Title) != N(right.Title) ||
+            N(left.Year) != N(right.Year) ||
+            string.IsNullOrWhiteSpace(left.Barcode) ||
+            N(left.Barcode) != N(right.Barcode))
+            return false;
+
+        if (left.Tracks == null || right.Tracks == null ||
+            left.Tracks.Count != right.Tracks.Count)
+            return false;
+        for (int i = 0; i < left.Tracks.Count; i++)
+            if (N(left.Tracks[i]?.Title) != N(right.Tracks[i]?.Title) ||
+                N(left.Tracks[i]?.Artist) != N(right.Tracks[i]?.Artist))
+                return false;
+        return true;
     }
 
     private static string PrettySource(string key)

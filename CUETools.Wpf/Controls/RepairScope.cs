@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Controls;
 
@@ -53,8 +54,6 @@ public sealed class RepairScope : FrameworkElement
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
     private static readonly Color Good = Color.FromRgb(0x5C, 0xCB, 0x8B);
-    private static readonly Color Ink = Color.FromRgb(0xD4, 0xDC, 0xD2);
-    private static readonly Color Mut = Color.FromRgb(0x7C, 0x8A, 0x84);
 
     private static readonly string[] Stages = { "syndrome", "locate", "Chien", "Forney", "apply" };
 
@@ -83,6 +82,15 @@ public sealed class RepairScope : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
+        Color ink = ThemeColor.Get(
+            "InkDim",
+            Color.FromRgb(0xD4, 0xDC, 0xD2));
+        Color mut = ThemeColor.Get(
+            "Muted",
+            Color.FromRgb(0x7C, 0x8A, 0x84));
+        Color trackColor = ThemeColor.Get(
+            "Glass",
+            Color.FromRgb(0x10, 0x16, 0x14));
 
         // ---- headline ----
         string headline = Applied
@@ -107,13 +115,13 @@ public sealed class RepairScope : FrameworkElement
         string sub = Npar > 0
             ? $"Reed-Solomon  .  npar={Npar} parity symbols / 10-sector stride  .  GF(2^16)"
             : "Reed-Solomon parity";
-        Text(dc, sub, 1, 20, 10.5, Mut);
+        Text(dc, sub, 1, 20, 10.5, mut);
 
         // ---- damage / repair sector strip (the real AffectedSectorArray) ----
         double bandY = 46, bandH = 22, bandL = 1, bandR = w - 1, bandW = bandR - bandL;
         var track = new RectangleGeometry(new Rect(bandL, bandY, bandW, bandH), 4, 4);
         track.Freeze();
-        dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(0x10, 0x16, 0x14)), null, track);
+        dc.DrawGeometry(new SolidColorBrush(trackColor), null, track);
 
         var map = Map;
         dc.PushClip(track);
@@ -145,11 +153,11 @@ public sealed class RepairScope : FrameworkElement
             }
         }
         dc.Pop();
-        var edge = new Pen(new SolidColorBrush(Color.FromArgb(60, Ink.R, Ink.G, Ink.B)), 1);
+        var edge = new Pen(new SolidColorBrush(Color.FromArgb(60, ink.R, ink.G, ink.B)), 1);
         edge.Freeze();
         dc.DrawGeometry(null, edge, track);
-        Text(dc, "disc  (inside", 1, bandY + bandH + 2, 8.5, Mut);
-        var outFt = MakeText("outside)", 8.5, Mut);
+        Text(dc, "disc  (inside", 1, bandY + bandH + 2, 8.5, mut);
+        var outFt = MakeText("outside)", 8.5, mut);
         dc.DrawText(outFt, new Point(bandR - outFt.Width, bandY + bandH + 2));
 
         // ---- RS pipeline: first four stages computed at verify, "apply" is the repair write ----
@@ -163,17 +171,17 @@ public sealed class RepairScope : FrameworkElement
             // stages 0..3 are done once errors are located (verify pass); apply is done only on repair
             bool done = isApply ? Applied : (Recoverable || Active || Applied);
             bool running = isApply && Active;
-            Color c = done ? (isApply ? Good : Teal) : Mut;
+            Color c = done ? (isApply ? Good : Teal) : mut;
             double pulse = running ? 0.5 + 0.5 * Math.Sin(_phase * 2) : 1.0;
             byte fill = (byte)((done ? 34 : 16) * pulse + 6);
             var chip = new Rect(x, py, chipW, 18);
             dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(fill, c.R, c.G, c.B)),
                 new Pen(new SolidColorBrush(Color.FromArgb((byte)(done ? 150 : 60), c.R, c.G, c.B)), 1), chip, 5, 5);
-            var ft = MakeText(Stages[i], 9.5, done ? c : Mut);
+            var ft = MakeText(Stages[i], 9.5, done ? c : mut);
             dc.DrawText(ft, new Point(x + (chipW - ft.Width) / 2, py + 3));
             if (i < Stages.Length - 1)
             {
-                var ar = new Pen(new SolidColorBrush(Color.FromArgb(120, Mut.R, Mut.G, Mut.B)), 1);
+                var ar = new Pen(new SolidColorBrush(Color.FromArgb(120, mut.R, mut.G, mut.B)), 1);
                 ar.Freeze();
                 double ax = x + chipW + gap / 2;
                 dc.DrawLine(ar, new Point(ax - 2.5, py + 9), new Point(ax + 2.5, py + 9));

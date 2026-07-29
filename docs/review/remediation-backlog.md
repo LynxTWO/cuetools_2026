@@ -1728,6 +1728,140 @@ does not relax evidence, rollback, or verification requirements.
   local anti-dark-code skill validates. Interactive capture and independent
   embedded-output inspection remain the release evidence gap.
 
+### R74. Archival output defaults lag the intended profile - bucket A, risk low
+
+- **Area or slice:** WPF startup defaults, advanced settings, and album-art settings.
+- **Why it matters:** fresh and upgraded profiles currently omit TOC files and
+  detailed CTDB evidence, perform only a primary art search, and cap art at 1000 px.
+- **Evidence found:** `CUEConfigAdvanced` defaults these switches off/Primary,
+  while `App.OnStartup` applies a one-time 1000 px migration.
+- **Confidence:** verified.
+- **Approval needed:** no; the owner explicitly selected the new defaults.
+- **Smallest safe next step:** add one idempotent default migration to enable the
+  two evidence options, select Extensive art search, and move only the prior
+  1000 px default to 1500 px.
+- **Verification plan:** first-run, upgraded-profile, and post-migration user-choice
+  persistence tests.
+- **Owner:** WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. Fresh WPF profiles
+  use TOC, detailed CTDB evidence, Extensive artwork search, and a 1500 px art
+  limit. The one-time migration moves only the former 1000 px owner default and
+  never rewrites later choices. Extensive, Primary, and None now also govern
+  the WPF artwork browser rather than only the processor path.
+
+### R75. Curated AAC and Vorbis imports reject compatible executable names - bucket A, risk medium
+
+- **Area or slice:** `EncoderCatalog` import, approval receipt, and Settings UI.
+- **Why it matters:** official packages can present `qaac64.exe` or `oggenc2.exe`,
+  but the exact-name importer currently rejects them before compatibility can be used.
+- **Evidence found:** the catalog accepts only one `ExeName` per row; qaac releases
+  and RareWares document the requested executable variants.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** curate accepted aliases per encoder, preserve the
+  selected executable name, and bind the existing hash/size receipt to that exact file.
+- **Verification plan:** import, restart resolution, changed-byte refusal, wrong-name
+  refusal, and UI filter tests for every alias.
+- **Owner:** codec and WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. The catalog accepts
+  `qaac.exe`/`qaac64.exe` and `oggenc.exe`/`oggenc2.exe`. Import preserves the
+  selected basename and binds the existing SHA-256/length approval to those
+  exact bytes. Alias import, catalog display, tamper refusal, and settings
+  round-trip tests pass.
+
+### R76. Verify history cannot surface durable per-CRC and cross-drive agreement - bucket B, risk high
+
+- **Area or slice:** verify-history persistence, Test & Copy commit, Rip grid, and logs.
+- **Why it matters:** named CRC values persist, but carried-forward fields make a
+  naive history count overstate independent jobs and the UI cannot distinguish
+  same-drive repetition from cross-drive corroboration.
+- **Evidence found:** records have one current `Crc32` plus carried Test/Copy fields,
+  no read-role id, no durable count, and a five-record retention cap.
+- **Confidence:** verified.
+- **Approval needed:** no; this is additive local evidence.
+- **Smallest safe next step:** persist an explicit read role and aggregate each
+  displayed CRC only when that role actually completed. Retain a non-identifying
+  drive fingerprint set for distinct-drive counts and keep legacy records readable.
+- **Verification plan:** legacy migration, role isolation, repeated same CRC,
+  changed CRC reset, distinct-drive deduplication, Test & Copy two-role counting,
+  grid colors, tooltips, and human log wording.
+- **Owner:** accuracy and WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. Records now identify
+  Test, Copy, and TestAndCopy contributions. Per-role match counts and hashed
+  distinct-drive sets survive the five-record retention window. The Rip grid
+  shows `xN`, matching and mismatching theme colors, cross-drive corroboration,
+  and a detailed tooltip. The Test & Copy log includes the local per-track
+  agreement counts.
+
+### R77. Redundant multi-disc metadata can outrank the physical single-disc release - bucket A, risk medium
+
+- **Area or slice:** release candidate scoring and naming context.
+- **Why it matters:** a generic two-disc MusicBrainz candidate for the Kenny G disc
+  produced a false `[2-CD Set]/Disc 1 - Disc 1` folder even though an exact one-disc
+  release with the same barcode and track list exists.
+- **Evidence found:** both candidates receive the same source/completeness score;
+  `List.Sort` then has no semantic tie-break. The retained cue proves the selected
+  candidate asserted `TOTALDISCS 2` and generic `Disc 1`.
+- **Confidence:** verified for the observed disc; inferred for other duplicate-release shapes.
+- **Approval needed:** no.
+- **Smallest safe next step:** add a narrow duplicate-candidate preference for the
+  fewer-media release when album identity and track metadata agree and the larger
+  set has no meaningful disc subtitle. Keep the alternate in the release selector.
+- **Verification plan:** Kenny G fixture, genuine uniquely subtitled box set, stable
+  tie order, and existing naming tests.
+- **Owner:** metadata and naming maintainer.
+- **Status:** implemented and software-verified 2026-07-28. An otherwise
+  identical generic multi-disc candidate loses a narrow tie-break only when a
+  single-disc candidate has the same artist, album, year, barcode, and every
+  track title and artist. Named box discs and barcode differences remain
+  untouched. A live reread of the Kenny G disc remains the final metadata
+  service check.
+
+### R78. Light mode swaps structural brushes but custom controls retain dark constants - bucket A, risk medium
+
+- **Area or slice:** WPF theme service, shared templates, and drawing controls.
+- **Why it matters:** screenshots show dark switch hardware, shadows, card fills,
+  and light-on-light custom-control text after the structural palette changes.
+- **Evidence found:** `ThemeService` owns separate structural palettes, but shared
+  templates and `CodecScope`/other drawing controls contain dark-only color constants.
+- **Confidence:** verified.
+- **Approval needed:** no.
+- **Smallest safe next step:** expand the central palette with control tokens and
+  resolve drawing-control ink, muted, line, and surface colors from live resources.
+- **Verification plan:** palette completeness, no dark-only structural constants
+  outside intentional media illustrations, light/dark render samples, and contrast checks.
+- **Owner:** WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. One central dark
+  and light palette now owns switch hardware, borders, shadows, and drawing
+  control surfaces/text. Codec, conversion, VU, reread, repair, and disc-layer
+  drawings resolve live theme resources. Palette type/parity tests and XAML
+  compilation pass. Interactive light/dark captures remain before release
+  closure.
+
+### R79. WPF hides the engine's single-FLAC embedded-CUE output - bucket B, risk high
+
+- **Area or slice:** Rip output contract, settings persistence, Test & Copy, CTDB repair,
+  and final-output verification.
+- **Why it matters:** the engine supports `SingleFileWithCUE`, but WPF hardcodes
+  `GapsAppended`, leaving users no preservation-image layout.
+- **Evidence found:** `RipService.Run` assigns `CUEStyle.GapsAppended`; processor
+  integration tests already cover final decode proof for `SingleFileWithCUE`.
+- **Confidence:** verified.
+- **Approval needed:** no for exposing one existing output style.
+- **Smallest safe next step:** add persisted Tracks and Image + embedded CUE choices,
+  freeze the selection into each job, and keep Tracks as the compatibility default.
+  Defer Both until one transaction can bind both output sets without duplicate reads
+  or ambiguous repair ownership.
+- **Verification plan:** Rip and Test & Copy style propagation, one-file count,
+  embedded CUE tags, optional external cue, final decode proof, repair source
+  selection, persistence, and responsive UI.
+- **Owner:** rip pipeline and WPF maintainer.
+- **Status:** implemented and software-verified 2026-07-28. Tracks remains the
+  default. Rip and Test & Copy snapshot a persisted Image + embedded CUE choice
+  and map it to `SingleFileWithCUE`; verify-only runs remain `GapsAppended`.
+  Existing processor integration covers embedded-CUE final decode proof. A
+  live optical image rip and repair-source check remain before release closure.
+
 ## Ordering
 
 The post-restart assurance batch is active. Remaining work is ordered by evidence
@@ -1748,6 +1882,8 @@ dependency:
 6. Run the pinned hosted workflows and compare them with the local receipts.
 7. Choose and implement a publisher signing/attestation identity and policy.
 8. Continue R5/R8/R12/R13 modernization and lock-file rollout.
+9. Capture R78 in light and dark mode, rerun the Kenny G lookup for R77, and
+   perform one live FLAC image rip for R79.
 
 ## Holes / external boundaries
 
@@ -1821,3 +1957,9 @@ dependency:
   bounded local JPEG/PNG/BMP import, release-scoped override lifetime,
   non-front automatic-selection exclusion, provider metadata enrichment, and a
   DPAPI-protected off-by-default TheAudioDB API-key boundary.
+- 2026-07-28 - closed the software portions of R74-R79 with one-time archival
+  defaults, artwork search-mode enforcement, curated encoder aliases,
+  role-aware CRC agreement, narrow single-disc duplicate preference, live
+  theme tokens, and an explicit image-with-embedded-CUE rip layout. The WPF
+  suite passes 414/414, the warning budget is empty, and the self-contained x64
+  artifact contract passes.

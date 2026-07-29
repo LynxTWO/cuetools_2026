@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Media;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Controls;
 
@@ -25,7 +26,10 @@ public sealed class VuMeter : FrameworkElement
     public double LevelL { get => (double)GetValue(LevelLProperty); set => SetValue(LevelLProperty, value); }
     public double LevelR { get => (double)GetValue(LevelRProperty); set => SetValue(LevelRProperty, value); }
 
-    private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
+    private static Color Amber => ThemeColor.Get(
+        "Amber", Color.FromRgb(0xE9, 0xA6, 0x3F));
+    private static Color Muted => ThemeColor.Get(
+        "Muted", Color.FromRgb(0x7D, 0x88, 0x7C));
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
     private const double Attack = 0.35, Decay = 0.06;
 
@@ -87,7 +91,14 @@ public sealed class VuMeter : FrameworkElement
         {
             double a = a0 + (a1 - a0) * i / 10.0;
             bool over = i > 7;
-            var pen = new Pen(new SolidColorBrush(over ? Crit : Color.FromArgb(140, 210, 216, 200)), i % 5 == 0 ? 1.6 : 1);
+            Color muted = Muted;
+            var pen = new Pen(
+                new SolidColorBrush(
+                    over
+                        ? Crit
+                        : Color.FromArgb(
+                            140, muted.R, muted.G, muted.B)),
+                i % 5 == 0 ? 1.6 : 1);
             pen.Freeze();
             dc.DrawLine(pen, Pt(cx, cy, R - R * 0.06, a), Pt(cx, cy, R + R * 0.06, a));
         }
@@ -103,7 +114,10 @@ public sealed class VuMeter : FrameworkElement
         dc.DrawEllipse(new SolidColorBrush(Amber), null, new Point(cx, cy), 2.6, 2.6);
 
         var ft = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Consolas"), 10, new SolidColorBrush(Color.FromArgb(180, 200, 208, 196)), 1.0);
+            new Typeface("Consolas"), 10,
+            new SolidColorBrush(
+                Color.FromArgb(220, Muted.R, Muted.G, Muted.B)),
+            1.0);
         dc.DrawText(ft, new Point(cx - ft.Width / 2, cy + R * 0.05));
     }
 

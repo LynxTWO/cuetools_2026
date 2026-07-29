@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Controls;
 
@@ -18,13 +19,17 @@ public sealed class LayerCrossSection : FrameworkElement
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
     private static readonly Color Good = Color.FromRgb(0x5C, 0xCB, 0x8B);
-    private static readonly Color Ink = Color.FromRgb(0xD4, 0xDC, 0xD2);
-    private static readonly Color Mut = Color.FromRgb(0x7C, 0x8A, 0x84);
 
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
+        Color ink = ThemeColor.Get(
+            "InkDim",
+            Color.FromRgb(0xD4, 0xDC, 0xD2));
+        Color mut = ThemeColor.Get(
+            "Muted",
+            Color.FromRgb(0x7C, 0x8A, 0x84));
 
         double left = 4, right = w - 150, bandW = right - left;   // leave room for labels on the right
         // layer bands from the top (label) down to the reading side
@@ -68,10 +73,10 @@ public sealed class LayerCrossSection : FrameworkElement
         dc.DrawLine(pen, new Point(cx, h - 2), new Point(cx, focusY));
 
         // layer labels (right), with leader lines
-        Label(dc, right, yLabel + hLabel / 2, "label (printed)", Ink);
-        Label(dc, right, yLacq + hLacq / 2, "lacquer", Mut);
+        Label(dc, right, yLabel + hLabel / 2, "label (printed)", ink, mut);
+        Label(dc, right, yLacq + hLacq / 2, "lacquer", mut, mut);
         Label(dc, right, yAlu + hAlu / 2, "aluminium (data)", Teal);
-        Label(dc, right, yPoly + hPoly / 2, "polycarbonate 1.2mm", Mut);
+        Label(dc, right, yPoly + hPoly / 2, "polycarbonate 1.2mm", mut, mut);
 
         // the asymmetry, the real lesson
         Note(dc, left, yLabel - 2, "label side: damage here is fatal", Crit, above: true);
@@ -89,9 +94,21 @@ public sealed class LayerCrossSection : FrameworkElement
         }
     }
 
-    private static void Label(DrawingContext dc, double x, double y, string s, Color c)
+    private static void Label(
+        DrawingContext dc,
+        double x,
+        double y,
+        string s,
+        Color c,
+        Color? leader = null)
     {
-        var pen = new Pen(new SolidColorBrush(Color.FromArgb(0x70, Mut.R, Mut.G, Mut.B)), 1); pen.Freeze();
+        Color line = leader ?? ThemeColor.Get(
+            "Muted",
+            Color.FromRgb(0x7C, 0x8A, 0x84));
+        var pen = new Pen(
+            new SolidColorBrush(Color.FromArgb(0x70, line.R, line.G, line.B)),
+            1);
+        pen.Freeze();
         dc.DrawLine(pen, new Point(x - 6, y), new Point(x + 6, y));
         var ft = Text(s, 10.5, c);
         dc.DrawText(ft, new Point(x + 10, y - ft.Height / 2));

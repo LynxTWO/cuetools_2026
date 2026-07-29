@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using CUETools.Processor;
 using CUETools.Wpf.Services;
 using CUETools.Wpf.Services.Artwork;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -65,6 +66,60 @@ public sealed class AlbumArtServiceTests
         Assert.IsFalse(back.AutomaticEligible);
         Assert.AreEqual("Back", back.ArtworkType);
         Assert.AreEqual(Uri.UriSchemeHttps, candidate.OriginalUri.Scheme);
+    }
+
+    [TestMethod]
+    public async Task PrimarySearchReturnsFrontArtworkButExtensiveIncludesOtherTypes()
+    {
+        const string manifest =
+            """
+            {"images":[
+              {"id":1,"image":"https://coverartarchive.org/release/x/front.jpg",
+               "thumbnails":{},"front":true,"approved":true,"types":["Front"]},
+              {"id":2,"image":"https://coverartarchive.org/release/x/back.jpg",
+               "thumbnails":{},"front":false,"approved":true,"types":["Back"]}
+            ]}
+            """;
+        using var service = new AlbumArtService(
+            new DelegateHandler((_, _) => Json(manifest)),
+            new NullLog());
+        ArtworkQuery query = Query(
+            "musicbrainz",
+            ReleaseId.ToString("D")) with
+        {
+            SearchMode = CUEConfigAdvanced.CTDBCoversSearch.Primary
+        };
+
+        IReadOnlyList<ArtworkCandidate> candidates =
+            await service.FindCandidatesAsync(query);
+
+        Assert.AreEqual(1, candidates.Count);
+        Assert.IsTrue(candidates[0].IsFront);
+    }
+
+    [TestMethod]
+    public async Task NoneSearchPerformsNoProviderRequest()
+    {
+        int requests = 0;
+        using var service = new AlbumArtService(
+            new DelegateHandler((_, _) =>
+            {
+                requests++;
+                return Json("{}");
+            }),
+            new NullLog());
+        ArtworkQuery query = Query(
+            "musicbrainz",
+            ReleaseId.ToString("D")) with
+        {
+            SearchMode = CUEConfigAdvanced.CTDBCoversSearch.None
+        };
+
+        IReadOnlyList<ArtworkCandidate> candidates =
+            await service.FindCandidatesAsync(query);
+
+        Assert.AreEqual(0, candidates.Count);
+        Assert.AreEqual(0, requests);
     }
 
     [TestMethod]

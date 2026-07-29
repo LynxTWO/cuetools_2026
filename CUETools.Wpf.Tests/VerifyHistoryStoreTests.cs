@@ -117,5 +117,91 @@ namespace CUETools.Wpf.Tests
         {
             Assert.AreEqual(0, NewStore().GetLatestCrcEvidence("missing").Length);
         }
+
+        [TestMethod]
+        public void AgreementCountsJobsByRoleAndDistinctDrive()
+        {
+            string path = Path.Combine(
+                Path.GetTempPath(),
+                "vh-" + System.Guid.NewGuid().ToString("N") + ".json.gz");
+            try
+            {
+                var store = new VerifyHistoryStore(path);
+                var test = Rec("D1", 10);
+                test.Drive = "Drive A";
+                test.ReadKind = "Test";
+                test.Tracks[0].TestCrc32 = 0x12345678;
+                store.CompareAndUpsert(test);
+                AssertEvidence(store, testCount: 1, copyCount: 0, testDrives: 1, copyDrives: 0);
+
+                var copy = Rec("D1", 10);
+                copy.Drive = "Drive A";
+                copy.ReadKind = "Copy";
+                copy.Tracks[0].CopyCrc32 = 0x12345678;
+                store.CompareAndUpsert(copy);
+                AssertEvidence(store, testCount: 1, copyCount: 1, testDrives: 1, copyDrives: 1);
+
+                var sameDrivePair = Rec("D1", 10);
+                sameDrivePair.Drive = "Drive A";
+                sameDrivePair.ReadKind = "TestAndCopy";
+                sameDrivePair.Tracks[0].TestCrc32 = 0x12345678;
+                sameDrivePair.Tracks[0].CopyCrc32 = 0x12345678;
+                store.CompareAndUpsert(sameDrivePair);
+                AssertEvidence(store, testCount: 2, copyCount: 2, testDrives: 1, copyDrives: 1);
+
+                var otherDrivePair = Rec("D1", 10);
+                otherDrivePair.Drive = "Drive B";
+                otherDrivePair.ReadKind = "TestAndCopy";
+                otherDrivePair.Tracks[0].TestCrc32 = 0x12345678;
+                otherDrivePair.Tracks[0].CopyCrc32 = 0x12345678;
+                store.CompareAndUpsert(otherDrivePair);
+                AssertEvidence(store, testCount: 3, copyCount: 3, testDrives: 2, copyDrives: 2);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path + ".lock")) File.Delete(path + ".lock");
+            }
+        }
+
+        [TestMethod]
+        public void ChangedRoleCrcResetsOnlyThatRolesAgreement()
+        {
+            var store = NewStore();
+            var pair = Rec("D1", 10);
+            pair.Drive = "Drive A";
+            pair.ReadKind = "TestAndCopy";
+            pair.Tracks[0].TestCrc32 = 10;
+            pair.Tracks[0].CopyCrc32 = 10;
+            store.CompareAndUpsert(pair);
+
+            var changedCopy = Rec("D1", 10);
+            changedCopy.Drive = "Drive B";
+            changedCopy.ReadKind = "Copy";
+            changedCopy.Tracks[0].CopyCrc32 = 11;
+            store.CompareAndUpsert(changedCopy);
+
+            TrackCrc evidence = store.GetLatestCrcEvidence("D1")[0];
+            Assert.AreEqual(1, evidence.TestMatchCount);
+            Assert.AreEqual(1, evidence.TestDriveCount);
+            Assert.AreEqual(1, evidence.CopyMatchCount);
+            Assert.AreEqual(1, evidence.CopyDriveCount);
+            Assert.AreEqual(10u, evidence.TestCrc32);
+            Assert.AreEqual(11u, evidence.CopyCrc32);
+        }
+
+        private static void AssertEvidence(
+            VerifyHistoryStore store,
+            int testCount,
+            int copyCount,
+            int testDrives,
+            int copyDrives)
+        {
+            TrackCrc evidence = store.GetLatestCrcEvidence("D1")[0];
+            Assert.AreEqual(testCount, evidence.TestMatchCount);
+            Assert.AreEqual(copyCount, evidence.CopyMatchCount);
+            Assert.AreEqual(testDrives, evidence.TestDriveCount);
+            Assert.AreEqual(copyDrives, evidence.CopyDriveCount);
+        }
     }
 }

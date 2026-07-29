@@ -730,6 +730,86 @@ public sealed class ExternalEncoderTrustTests
         Assert.AreEqual(tree.Info.Extension, approval.Extension);
     }
 
+    [DataTestMethod]
+    [DataRow("qaac.exe", "qaac64.exe")]
+    [DataRow("oggenc.exe", "oggenc2.exe")]
+    public void Import_AcceptsAndApprovesCuratedAlternateBasename(
+        string preferredName,
+        string alternateName)
+    {
+        using var tree = new EncoderTree();
+        tree.Info.ExeName = preferredName;
+        tree.Info.AcceptedExeNames =
+            new[] { preferredName, alternateName };
+        byte[] bytes = Encoding.ASCII.GetBytes("alternate encoder");
+        string source = tree.WriteSource(bytes, alternateName);
+
+        string error = tree.Catalog.Import(tree.Config, tree.Info, source);
+
+        Assert.IsNull(error);
+        string destination =
+            Path.Combine(tree.ManagedDirectory, alternateName);
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(destination));
+        Assert.AreEqual(destination, tree.Catalog.ResolveExe(tree.Encoder));
+        Assert.IsTrue(tree.App.TryGetExternalEncoderApproval(
+            alternateName,
+            out ExternalEncoderApproval approval));
+        Assert.AreEqual(
+            Convert.ToHexString(SHA256.HashData(bytes)),
+            approval.Sha256);
+    }
+
+    [TestMethod]
+    public void CatalogAdvertisesBothSupportedQaacAndOggEncBasenames()
+    {
+        using var tree = new EncoderTree();
+        ExternalEncoderInfo[] snapshot =
+            tree.Catalog.Snapshot(tree.Config).ToArray();
+        ExternalEncoderInfo qaac = snapshot.Single(
+            item => item.EncoderName == "qaac.exe (tvbr)");
+        ExternalEncoderInfo ogg = snapshot.Single(
+            item => item.EncoderName == "oggenc.exe");
+
+        CollectionAssert.AreEquivalent(
+            new[] { "qaac.exe", "qaac64.exe" },
+            qaac.AcceptedExeNames);
+        CollectionAssert.AreEquivalent(
+            new[] { "oggenc.exe", "oggenc2.exe" },
+            ogg.AcceptedExeNames);
+    }
+
+    [TestMethod]
+    public void CatalogDoesNotSubstituteAliasForTamperedConfiguredExecutable()
+    {
+        using var tree = new EncoderTree();
+        ExternalEncoderInfo qaac = tree.Catalog.Snapshot(tree.Config)
+            .Single(item => item.EncoderName == "qaac.exe (tvbr)");
+
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            qaac,
+            tree.WriteSource(
+                Encoding.ASCII.GetBytes("approved alias"),
+                "qaac64.exe")));
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            qaac,
+            tree.WriteSource(
+                Encoding.ASCII.GetBytes("approved preferred"),
+                "qaac.exe")));
+        File.WriteAllText(
+            Path.Combine(tree.ManagedDirectory, "qaac.exe"),
+            "tampered preferred");
+
+        ExternalEncoderInfo refreshed = tree.Catalog.Snapshot(tree.Config)
+            .Single(item => item.EncoderName == "qaac.exe (tvbr)");
+
+        Assert.IsFalse(refreshed.Found);
+        Assert.AreEqual("", refreshed.ResolvedPath);
+        Assert.IsTrue(tree.Log.Messages.Any(message =>
+            message.Contains("refused (hash)", StringComparison.Ordinal)));
+    }
+
     [TestMethod]
     public void ImportedLosslessEncoderBindsVerifierToApprovedFullExecutable()
     {
@@ -1021,7 +1101,12 @@ public sealed class ExternalEncoderTrustTests
 
         public string WriteSource(byte[] bytes)
         {
-            string path = Path.Combine(_sourceDirectory, Info.ExeName);
+            return WriteSource(bytes, Info.ExeName);
+        }
+
+        public string WriteSource(byte[] bytes, string fileName)
+        {
+            string path = Path.Combine(_sourceDirectory, fileName);
             File.WriteAllBytes(path, bytes);
             return path;
         }

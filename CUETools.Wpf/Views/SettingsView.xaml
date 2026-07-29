@@ -65,6 +65,14 @@
       <Border Style="{StaticResource Row}" ToolTip="Embed the rip log inside the audio file's tags as well as writing it beside the files."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedLog}"/><TextBlock Style="{StaticResource RowLabel}" Text="Embed the rip log in the file"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Prefix the .cue file with a UTF-8 byte-order mark so players reliably detect the text encoding."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteUtf8Bom}"/><TextBlock Style="{StaticResource RowLabel}" Text="UTF-8 byte-order mark in .cue"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Always save the .cue sheet as UTF-8 (rather than the system code page) so non-Latin titles survive."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AlwaysWriteUtf8Cue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Always write .cue as UTF-8"/></DockPanel></Border>
+      <Border Style="{StaticResource Row}" ToolTip="Tracks is the compatible default. Image + embedded CUE writes one continuous audio file and stores the complete disc layout inside it.">
+        <DockPanel>
+          <ComboBox DockPanel.Dock="Right" Width="190"
+                    ItemsSource="{Binding RipOutputLayouts}"
+                    SelectedItem="{Binding RipOutputLayoutChoice, Mode=TwoWay}"/>
+          <TextBlock Style="{StaticResource RowLabel}" Text="Default rip layout"/>
+        </DockPanel>
+      </Border>
       <Border Style="{StaticResource Row}" ToolTip="Fill in missing per-track metadata in the generated .cue from the album-level data where possible."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding FillUpCue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Fill up incomplete .cue metadata"/></DockPanel></Border>
 
       <TextBlock Style="{StaticResource Sec}" Text="GAPS &amp; HTOA"/>
@@ -93,7 +101,7 @@
             <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding TheAudioDbEnabled}"/>
             <StackPanel>
               <TextBlock Style="{StaticResource RowLabel}" Text="Use TheAudioDB artwork fallback"/>
-              <TextBlock Text="Off by default. Results are labeled TheAudioDB."
+              <TextBlock Text="Off by default. No username or account password is needed."
                          Foreground="{DynamicResource Muted}" FontSize="10.5"/>
             </StackPanel>
           </DockPanel>
@@ -110,7 +118,7 @@
                          BorderBrush="{DynamicResource GlassLine}"
                          ToolTip="TheAudioDB API key"/>
             <StackPanel>
-              <TextBlock Style="{StaticResource RowLabel}" Text="TheAudioDB API key"/>
+              <TextBlock Style="{StaticResource RowLabel}" Text="TheAudioDB API key (not login credentials)"/>
               <TextBlock Text="{Binding TheAudioDbStatus}" Foreground="{DynamicResource Muted}"
                          FontSize="10.5"/>
             </StackPanel>
@@ -126,9 +134,9 @@
           <Color x:Key="LampCapCore">#B8EFFBEF</Color><Color x:Key="LampCapMid">#5A7AD89A</Color><Color x:Key="LampCapEdge">#005CCB8B</Color>
         </StackPanel.Resources>
         <TextBlock Style="{StaticResource Sec}" Text="HDCD"/>
-        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect HDCD"/></DockPanel></Border>
-        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to high-resolution"/></DockPanel></Border>
-        <Border Style="{StaticResource Row}"><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Decode HDCD to 24-bit"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}" ToolTip="Detect HDCD control codes and report them without changing the ripped PCM. Safe to leave on."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DetectHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Detect HDCD"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}" ToolTip="Apply HDCD peak extension and gain instructions while ripping. This changes the PCM and remains off by default; use it when you want a decoded listening/mastering copy rather than the original 16-bit CD stream."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Apply HDCD decoding (changes PCM)"/></DockPanel></Border>
+        <Border Style="{StaticResource Row}" ToolTip="Store decoded HDCD output in a 24-bit container at the CD's original 44.1 kHz sample rate. This does not upsample the disc."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding DecodeHdcdTo24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Use a 24-bit container for decoded HDCD"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Read the first ~750 frames before deciding whether the disc is HDCD, so the flag is not missed when the HDCD marker appears slightly late."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Wait750ForHdcd}"/><TextBlock Style="{StaticResource RowLabel}" Text="Wait 750 frames to detect HDCD"/></DockPanel></Border>
       </StackPanel>
 

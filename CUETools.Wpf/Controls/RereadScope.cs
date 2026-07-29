@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using CUETools.Wpf.Services;
 
 namespace CUETools.Wpf.Controls;
 
@@ -40,7 +41,6 @@ public sealed class RereadScope : FrameworkElement
     private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
     private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
     private static readonly Color Good = Color.FromRgb(0x5C, 0xCB, 0x8B);
-    private static readonly Color Ink = Color.FromRgb(0xD4, 0xDC, 0xD2);
 
     private double _alpha;   // fade in/out 0..1
     private double _sweep;   // read-head position 0..1
@@ -79,6 +79,9 @@ public sealed class RereadScope : FrameworkElement
         bool converged = Errors <= 0 && Count > 0;
         double sev = Math.Min(1.0, Count / (double)Math.Max(1, Max));
         Color hot = converged ? Good : Lerp(Amber, Crit, sev);
+        Color ink = ThemeColor.Get(
+            "InkDim",
+            Color.FromRgb(0xD4, 0xDC, 0xD2));
         byte a = (byte)(255 * Math.Min(1, _alpha));
 
         // headline count "x7" - how many times this spot has been re-read
@@ -92,7 +95,7 @@ public sealed class RereadScope : FrameworkElement
             : Errors == 1 ? "1 sector disagrees"
             : Errors + " sectors disagree";
         var subFt = new FormattedText(sub, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Consolas"), 10.5, new SolidColorBrush(Color.FromArgb((byte)(a * 0.85), Ink.R, Ink.G, Ink.B)), 1.0);
+            new Typeface("Consolas"), 10.5, new SolidColorBrush(Color.FromArgb((byte)(a * 0.85), ink.R, ink.G, ink.B)), 1.0);
         dc.DrawText(subFt, new Point(countFt.Width + 9, 8));
 
         // the band = the stuck sector window

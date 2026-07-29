@@ -94,6 +94,22 @@ public sealed class SettingsViewModel : PageViewModel
     public bool WriteUtf8Bom { get => _c.writeUTF8BOM; set { _c.writeUTF8BOM = value; Raise(); } }
     public bool AlwaysWriteUtf8Cue { get => _c.alwaysWriteUTF8CUEFile; set { _c.alwaysWriteUTF8CUEFile = value; Raise(); } }
     public bool FillUpCue { get => _c.fillUpCUE; set { _c.fillUpCUE = value; Raise(); } }
+    public string[] RipOutputLayouts { get; } =
+        { "Tracks", "Image + embedded CUE" };
+    public string RipOutputLayoutChoice
+    {
+        get => _app.RipOutputLayout == RipOutputLayout.ImageWithEmbeddedCue
+            ? "Image + embedded CUE"
+            : "Tracks";
+        set
+        {
+            _app.RipOutputLayout =
+                string.Equals(value, "Image + embedded CUE", StringComparison.Ordinal)
+                    ? RipOutputLayout.ImageWithEmbeddedCue
+                    : RipOutputLayout.Tracks;
+            Raise();
+        }
+    }
 
     // Gaps & HTOA
     public bool DetectGaps { get => _c.detectGaps; set { _c.detectGaps = value; Raise(); } }
@@ -184,11 +200,18 @@ public sealed class ExternalEncoderRow : ViewModelBase
     }
 
     public string Display => $"{_info.FormatName}  (.{_info.Extension}, {(_info.Lossless ? "lossless" : "lossy")})";
-    public string StatusText => _info.Found ? "installed" : "not installed - download " + _info.ExeName + ", then Locate it here";
+    private string AcceptedNames => string.Join(
+        " or ",
+        _info.AcceptedExeNames.Length == 0
+            ? new[] { _info.ExeName }
+            : _info.AcceptedExeNames);
+    public string StatusText => _info.Found
+        ? "installed"
+        : "not installed - download " + AcceptedNames + ", then Locate it here";
     public bool Found => _info.Found;
     public string Tip => _info.Found
         ? $"Using {_info.ResolvedPath}"
-        : $"Get {_info.ExeName} from the official site ({_info.DownloadUrl}), then click Locate to import it. " +
+        : $"Get {AcceptedNames} from the official site ({_info.DownloadUrl}), then click Locate to import it. " +
           "The file is copied into this app's own encoders folder.";
 
     public System.Windows.Input.ICommand DownloadCommand { get; }
@@ -204,8 +227,14 @@ public sealed class ExternalEncoderRow : ViewModelBase
     {
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Locate " + _info.ExeName,
-            Filter = _info.ExeName + "|" + _info.ExeName + "|Programs|*.exe"
+            Title = "Locate " + AcceptedNames,
+            Filter = "Supported encoder|" +
+                string.Join(
+                    ";",
+                    _info.AcceptedExeNames.Length == 0
+                        ? new[] { _info.ExeName }
+                        : _info.AcceptedExeNames) +
+                "|Programs|*.exe"
         };
         if (dlg.ShowDialog() != true) return;
         string? err = _catalog.Import(_config, _info, dlg.FileName);

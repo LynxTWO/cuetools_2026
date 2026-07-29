@@ -21,10 +21,10 @@ public enum AppTheme { Dark, Light }
 ///    the visual tree renders with it (confirmed: existing.IsFrozen==True on the second Apply), so
 ///    the mutation silently failed and fell back to a replace.
 ///
-/// The themeable structural palette is intentionally NOT in Theme.xaml - if it were, Theme.xaml
+/// The themeable structural and custom-control palette is intentionally NOT in Theme.xaml - if it were, Theme.xaml
 /// would be an always-present competing source for the same keys and the swapped-in dictionary
-/// could not win. Accents (Teal/Amber/Good) and the lit switches stay put in both themes on
-/// purpose and live in Theme.xaml.
+/// could not win. Semantic accents (Teal/Amber/Good) stay stable; switch housing, channel, thumb,
+/// border, and shadow colors come from this palette so the control remains legible in both modes.
 /// </summary>
 public sealed class ThemeService
 {
@@ -85,7 +85,9 @@ public sealed class ThemeService
         foreach (var kv in p)
         {
             if (kv.Key is "ButtonFaceTop" or "ButtonFaceBot") continue;
-            d[kv.Key] = new SolidColorBrush(C(kv.Value));
+            d[kv.Key] = kv.Key.EndsWith("Color", StringComparison.Ordinal)
+                ? C(kv.Value)
+                : new SolidColorBrush(C(kv.Value));
         }
         var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
         g.GradientStops.Add(new GradientStop(C(p["ButtonFaceTop"]), 0));
@@ -102,6 +104,13 @@ public sealed class ThemeService
         ["Line"] = "#28312A", ["Ink"] = "#EDF1E9", ["InkDim"] = "#B1BCAE", ["Muted"] = "#7D887C",
         ["Glass"] = "#0E1311", ["GlassLine"] = "#243029", ["ButtonPressed"] = "#0C110E",
         ["ButtonFaceTop"] = "#1B221C", ["ButtonFaceBot"] = "#121813",
+        ["ControlBorder"] = "#42FFFFFF", ["ButtonEdge"] = "#0A0E0B",
+        ["ControlShadowColor"] = "#000000", ["SwitchHousingBorder"] = "#0A0F0B",
+        ["SwitchHousingTopColor"] = "#0A0E0B", ["SwitchHousingBottomColor"] = "#131A14",
+        ["SwitchChannelTopColor"] = "#B0000000", ["SwitchChannelMidColor"] = "#40000000",
+        ["SwitchChannelBottomColor"] = "#2AFFFFFF", ["SwitchThumbTopColor"] = "#5A6356",
+        ["SwitchThumbMidColor"] = "#333C34", ["SwitchThumbBottomColor"] = "#242B25",
+        ["SwitchSheen"] = "#26FFFFFF",
     };
 
     private static readonly Dictionary<string, string> Light = new()
@@ -110,5 +119,12 @@ public sealed class ThemeService
         ["Line"] = "#CAD2C2", ["Ink"] = "#1A211B", ["InkDim"] = "#414A40", ["Muted"] = "#6C766A",
         ["Glass"] = "#E4E9DD", ["GlassLine"] = "#CAD2C2", ["ButtonPressed"] = "#D6DDCC",
         ["ButtonFaceTop"] = "#FBFDF7", ["ButtonFaceBot"] = "#E9EEE1",
+        ["ControlBorder"] = "#6676816F", ["ButtonEdge"] = "#B8C2B2",
+        ["ControlShadowColor"] = "#536057", ["SwitchHousingBorder"] = "#9DAA98",
+        ["SwitchHousingTopColor"] = "#D4DBCE", ["SwitchHousingBottomColor"] = "#EEF2E9",
+        ["SwitchChannelTopColor"] = "#66747D70", ["SwitchChannelMidColor"] = "#33747D70",
+        ["SwitchChannelBottomColor"] = "#B8FFFFFF", ["SwitchThumbTopColor"] = "#7E897A",
+        ["SwitchThumbMidColor"] = "#5F695C", ["SwitchThumbBottomColor"] = "#465044",
+        ["SwitchSheen"] = "#66FFFFFF",
     };
 }

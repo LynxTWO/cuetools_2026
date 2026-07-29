@@ -1,5 +1,11 @@
 namespace CUETools.Wpf.Services;
 
+public enum RipOutputLayout
+{
+    Tracks,
+    ImageWithEmbeddedCue,
+}
+
 /// <summary>
 /// App-level behaviour settings (not CUETools engine config). Persisted alongside the engine
 /// config by <see cref="SettingsStore"/> (loaded at startup, saved on exit). Injected where the
@@ -49,6 +55,15 @@ public sealed class AppSettings
     /// default) -> 1000 px, and AccurateRip tags on encode ON. After it runs once, the user's
     /// choices stick.</summary>
     public bool DefaultsV2Applied { get; set; } = false;
+
+    /// <summary>One-time owner-default migration, round 3: TOC and detailed CTDB
+    /// evidence ON, Extensive artwork search, and the prior 1000 px cover default
+    /// moved to 1500 px. Later user choices are not rewritten.</summary>
+    public bool DefaultsV3Applied { get; set; } = false;
+
+    /// <summary>Physical audio-file layout for a rip. Tracks remains the
+    /// compatibility default; image mode writes one file with an embedded CUE.</summary>
+    public RipOutputLayout RipOutputLayout { get; set; } = RipOutputLayout.Tracks;
 
     /// <summary>Raised when the cover max-size setting changes, so an already-fetched cover is
     /// re-derived from its cached master at the new size (no re-fetch).</summary>

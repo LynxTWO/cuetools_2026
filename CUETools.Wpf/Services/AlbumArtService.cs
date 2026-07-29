@@ -111,6 +111,9 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
         ArtworkQuery query,
         CancellationToken ct = default)
     {
+        if (query.SearchMode == CUEConfigAdvanced.CTDBCoversSearch.None)
+            return Array.Empty<ArtworkCandidate>();
+
         var candidates = new List<ArtworkCandidate>();
         AddMetadataCandidates(query, candidates);
 
@@ -222,7 +225,10 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
         }
 
         candidates.Sort(ArtworkCandidateComparer.Recommended);
-        return candidates
+        IEnumerable<ArtworkCandidate> selected = candidates;
+        if (query.SearchMode == CUEConfigAdvanced.CTDBCoversSearch.Primary)
+            selected = selected.Where(candidate => candidate.IsFront);
+        return selected
             .DistinctBy(candidate => candidate.CandidateId, StringComparer.Ordinal)
             .Take(MaxCandidatesPerProvider * 2)
             .ToArray();

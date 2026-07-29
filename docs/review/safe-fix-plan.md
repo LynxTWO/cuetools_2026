@@ -859,3 +859,43 @@ suite passes 395/395, the WPF/fuzz warning gate is empty, the self-contained x64
 artifact contract passes, all three live provider probes return HTTP 200, and the
 local anti-dark-code skill validates. Interactive theme/DPI captures and
 independent real embedded-output inspection remain.
+
+### Align archival defaults, output layouts, read evidence, and themes
+
+**Exact files:** WPF app/settings persistence, advanced and Rip views,
+`EncoderCatalog`, `VerifyHistory`, `RipService`, naming/release ranking,
+`ThemeService`, shared theme resources, theme-aware drawing controls, focused
+tests, coverage records, and R74-R79.
+
+**Safety and unchanged behavior:** apply the new defaults once to existing
+profiles, then preserve later user choices. Keep the EAC-style rip log separate
+from the detailed CTDB data in the AccurateRip report. Accept only the documented
+qaac and oggenc executable aliases under the existing hash-bound import receipt.
+Count completed Test, Copy, and Test & Copy jobs by their actual role instead of
+counting carried-forward display fields. Keep track files as the default output,
+and expose the engine's already-supported single FLAC with embedded CUE as an
+explicit alternative. Do not implement a dual-output transaction until both
+artifacts can share one atomic assurance contract. Prefer a single-disc metadata
+candidate over a redundant generic multi-disc candidate with the same album and
+track identity, while leaving every candidate selectable.
+
+**Checks:** run settings migration/round-trip tests, CTDB/EAC artifact separation,
+external encoder alias/import/receipt tests, legacy and current history aggregation,
+same-drive and cross-drive CRC presentation, release-ranking fixtures, every
+output-style final-decode proof, responsive XAML checks, palette-token coverage,
+full WPF tests, warning gates, and self-contained publish.
+
+**Rollback:** revert each persisted setting with its migration flag. Keep
+previously stored history fields readable. Removing image output must not change
+the engine's existing `CUEStyle` support. Reverting theme visuals must retain
+dynamic palette resolution.
+
+**Observability:** log setting migration names, curated executable names, output
+layout ids, and numeric evidence counts only. Do not add album identity, output
+paths, drive serials, or executable source paths to diagnostics.
+
+**Status:** software implementation complete on 2026-07-28. The WPF suite
+passes 414/414, the WPF/fuzz warning budget is empty, and the self-contained
+x64 artifact contract passes. Remaining evidence is interactive light/dark
+capture, a live Kenny G metadata rerun, and one live optical image rip with
+embedded-CUE and repair-source inspection.
