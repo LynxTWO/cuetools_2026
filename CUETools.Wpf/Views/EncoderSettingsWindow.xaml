@@ -25,6 +25,20 @@
         </Border>
       </StackPanel>
 
+      <!-- ENCODER: shown when more than one runnable implementation serves the selected format
+           face. Missing external programs are deliberately absent rather than selectable lies. -->
+      <StackPanel Visibility="{Binding HasEncoderChoice, Converter={StaticResource BoolVis}}">
+        <TextBlock Text="ENCODER" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,14,0,6"/>
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="9" Padding="12,10">
+          <StackPanel>
+            <ComboBox ItemsSource="{Binding Encoders}" SelectedItem="{Binding SelectedEncoder}" Width="260" HorizontalAlignment="Left"
+                      ToolTip="Choose the concrete encoder used for this format. Imported user-selected executables override packaged copies and remain selected until you change them."/>
+            <TextBlock Text="Only encoders that can run now are listed. The selection is saved with the format."
+                       Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <!-- COMMON: the compression / quality mode -->
       <StackPanel Visibility="{Binding HasModes, Converter={StaticResource BoolVis}}">
         <TextBlock Text="COMPRESSION / QUALITY" FontSize="10" FontWeight="Bold" Foreground="{StaticResource Teal}" Margin="0,16,0,6"/>

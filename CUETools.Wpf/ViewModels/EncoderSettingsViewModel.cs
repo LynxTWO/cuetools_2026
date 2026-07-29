@@ -159,11 +159,14 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
 
     public string Title { get; }
     public string Subtitle { get; }
+    public ObservableCollection<AudioEncoderSettingsViewModel> Encoders { get; } = new();
     public ObservableCollection<string> Modes { get; } = new();
     public ObservableCollection<EncoderSettingRow> Advanced { get; } = new();
     public string ModeHint { get; }
+    public bool HasEncoderChoice => Encoders.Count > 1;
     public bool HasModes => Modes.Count > 0;
     public bool HasAdvanced => Advanced.Count > 0;
+    public event Action<AudioEncoderSettingsViewModel>? EncoderChanged;
 
     // The lossless/lossy TYPE picker for two-faced formats (wma: WMA Lossless vs Standard; m4a:
     // ALAC vs an imported AAC encoder). Populated by the window's Open path; choosing the other
@@ -180,11 +183,28 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
         set { try { _enc.Settings.EncoderMode = value; } catch { } OnPropertyChanged(); }
     }
 
-    public EncoderSettingsViewModel(CUEConfig config, string format, bool lossy)
+    public AudioEncoderSettingsViewModel SelectedEncoder
+    {
+        get => _enc;
+        set
+        {
+            if (value != null && !ReferenceEquals(value, _enc))
+                EncoderChanged?.Invoke(value);
+        }
+    }
+
+    public EncoderSettingsViewModel(
+        CUEConfig config,
+        Services.EncoderCatalog catalog,
+        string format,
+        bool lossy)
     {
         var f = config.formats[format];
         _enc = (lossy ? f.encoderLossy : f.encoderLossless)
             ?? throw new InvalidOperationException("no encoder for " + format);
+        foreach (AudioEncoderSettingsViewModel encoder in
+            catalog.UsableEncoders(config, format, !lossy))
+            Encoders.Add(encoder);
         var s = _enc.Settings;
 
         var cliSettings =
@@ -223,26 +243,40 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
 
     // Plain-English mode explanations, including WHY the default is what it is (the owner's
     // archival policy: maximum compression for lossless, efficiency-leaning-archival for lossy).
-    private static string ModeHintFor(string format, string encoderName) => format switch
+    private static string ModeHintFor(string format, string encoderName) =>
+        (format, encoderName) switch
     {
-        "flac" => "Compression level 0 (fastest, largest) to 8 (maximum subset compression). FLAC is " +
+        ("flac", _) => "Compression level 0 (fastest, largest) to 8 (maximum subset compression). FLAC is " +
                   "lossless at every level and all levels decode equally fast - higher levels only cost " +
                   "encode time. Default 8: maximum archival compression.",
-        "m4a" => "ALAC compression effort 0 to 10. Lossless at every level; higher levels shrink the " +
+        ("m4a", "qaac.exe (tvbr)") => "qaac true-VBR quality 10 to 127. Default 127: the strongest " +
+                 "archival-leaning AAC setting. It is still lossy and requires Apple's separately " +
+                 "installed CoreAudio components.",
+        ("m4a", "exhale.exe") => "exhale xHE-AAC modes 0 to 9 are the conservative public presets; " +
+                 "a to g expose higher expert modes. Default 9 favors preservation-quality lossy " +
+                 "output without silently opting into expert behavior.",
+        ("m4a", _) => "ALAC compression effort 0 to 10. Lossless at every level; higher levels shrink the " +
                  "file at the cost of encode time. Default 10: maximum archival compression.",
-        "mp3" => "LAME VBR quality from V9 (smallest) to V0 (best). Default V0 (~245 kbps): the top " +
+        ("mp3", _) => "LAME VBR quality from V9 (smallest) to V0 (best). Default V0 (~245 kbps): the top " +
                  "VBR quality, the archival-leaning lossy choice. V2 (~190 kbps) is the classic " +
                  "transparency sweet spot if you want smaller files.",
-        "wma" => "WMA VBR quality from 10 to 98. Default 90: high quality at an efficient size; 98 is " +
+        ("wma", _) => "WMA VBR quality from 10 to 98. Default 90: high quality at an efficient size; 98 is " +
                  "the maximum-quality VBR mode if size does not matter.",
-        "mpc" => "Musepack quality 0 to 10 (5 = the classic 'standard' ~170 kbps). Default 7: leans " +
+        ("mpc", _) => "Musepack quality 0 to 10 (5 = the classic 'standard' ~170 kbps). Default 7: leans " +
                  "archival (~250 kbps). Musepack's VBR is tuned for transparency at mid-high bitrates.",
-        "ofr" => "OptimFROG preset 0 to 10. Lossless at every preset; higher presets compress harder " +
-                 "and encode slower. Default 10: maximum archival compression.",
-        "tak" => "TAK preset 0 to 4; 'e' and 'm' variants use extra/maximum evaluation for a little " +
+        ("ofr", _) => "OptimFROG presets 0 to 10 and max are lossless; stronger presets compress " +
+                 "harder and run much slower. Default max: maximum archival compression. CUETools " +
+                 "decodes the finalized file and compares its PCM before publishing it.",
+        ("tak", _) => "TAK preset 0 to 4; 'e' and 'm' variants use extra/maximum evaluation for a little " +
                  "more compression at slower speed. Default 4m: the strongest setting.",
-        "ogg" => "Ogg Vorbis quality -1 to 8; q6 is roughly 192 kbps.",
-        "opus" => "Opus bitrate in kbps; 128 is transparent for most material, 192 adds margin.",
+        ("ogg", _) => "Ogg Vorbis quality -1 to 8; q6 is roughly 192 kbps. Default q8: a " +
+                 "high-quality, archival-leaning derivative.",
+        ("opus", _) => "Opus bitrate in kbps. Default 192: transparent music quality with ample " +
+                 "margin; 128 is the usual efficiency sweet spot.",
+        ("wv", _) => "WavPack fast through high+ changes only compression effort. Default high+ " +
+                 "with ExtraMode 6: maximum archival compression while remaining bit-exact.",
+        ("ape", _) => "Monkey's Audio fast through insane changes only compression effort. " +
+                 "Default insane: maximum archival compression; all modes are bit-exact.",
         _ => "The encoder's compression or quality mode."
     };
 

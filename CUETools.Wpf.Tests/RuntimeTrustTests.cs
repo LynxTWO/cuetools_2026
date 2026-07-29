@@ -831,6 +831,30 @@ public sealed class ExternalEncoderTrustTests
     }
 
     [TestMethod]
+    public void HashBoundUserImportOverridesPackagedEncoder()
+    {
+        using var tree = new EncoderTree();
+        Directory.CreateDirectory(tree.BundledDirectory);
+        string bundled = Path.Combine(
+            tree.BundledDirectory,
+            tree.Info.ExeName);
+        File.WriteAllText(bundled, "packaged encoder");
+
+        Assert.AreEqual(
+            bundled,
+            tree.Catalog.ResolveExe(tree.Encoder));
+
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            tree.Info,
+            tree.WriteSource(Encoding.ASCII.GetBytes("new user encoder"))));
+
+        Assert.AreEqual(
+            Path.Combine(tree.ManagedDirectory, tree.Info.ExeName),
+            tree.Catalog.ResolveExe(tree.Encoder));
+    }
+
+    [TestMethod]
     public void PathResolvedLosslessEncoderFreezesAbsoluteExecutableIdentity()
     {
         using var tree = new EncoderTree();
@@ -896,10 +920,121 @@ public sealed class ExternalEncoderTrustTests
     }
 
     [TestMethod]
-    public void OptimFrogIsNotAdvertisedWithoutEvidenceBackedDecodeCommand()
+    public void OptimFrogUsesTheExercisedFinalizedFileSelfDecodeContract()
     {
-        Assert.IsFalse(EncoderCatalog.Known.Any(item =>
-            item.ext == "ofr" || item.exe == "ofr.exe"));
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+
+        AudioEncoderSettingsViewModel encoder = tree.Config.Encoders.Single(
+            item => item.Extension == "ofr" && item.Name == "ofr.exe");
+        var settings =
+            (CUETools.Codecs.CommandLine.EncoderSettings)encoder.Settings;
+
+        Assert.IsTrue(settings.Lossless);
+        Assert.AreEqual("max", settings.EncoderMode);
+        Assert.AreEqual(
+            "--encode --silent --overwrite --preset %M --md5 %I --output %O",
+            settings.Parameters);
+        Assert.IsTrue(settings.VerificationRequired);
+        Assert.IsTrue(settings.VerificationUsesEncoder);
+        Assert.AreEqual(
+            "--decode --silent --writefreshheader %I --output -",
+            settings.VerificationParameters);
+        Assert.IsTrue(tree.Config.formats.ContainsKey("ofr"));
+        Assert.AreSame(
+            encoder,
+            tree.Config.formats["ofr"].encoderLossless);
+        Assert.IsFalse(
+            tree.Catalog.IsUsable(encoder),
+            "A registered contract must not surface until ofr.exe resolves.");
+    }
+
+    [TestMethod]
+    public void ExhaleImportBecomesTheRunnableM4aLossyEncoder()
+    {
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+        ExternalEncoderInfo exhale = tree.Catalog.Snapshot(tree.Config)
+            .Single(item => item.EncoderName == "exhale.exe");
+
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            exhale,
+            tree.WriteSource(
+                Encoding.ASCII.GetBytes("user-built exhale"),
+                "exhale.exe")));
+
+        AudioEncoderSettingsViewModel selected =
+            tree.Config.formats["m4a"].encoderLossy;
+        Assert.AreEqual("exhale.exe", selected.Name);
+        Assert.AreEqual(
+            Path.Combine(tree.ManagedDirectory, "exhale.exe"),
+            tree.Catalog.ResolveExe(selected));
+        Assert.AreEqual("9", selected.Settings.EncoderMode);
+    }
+
+    [TestMethod]
+    public void RunnableEncoderPickerPersistsAnExplicitImplementation()
+    {
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+        ExternalEncoderInfo[] known =
+            tree.Catalog.Snapshot(tree.Config).ToArray();
+        ExternalEncoderInfo exhale = known.Single(
+            item => item.EncoderName == "exhale.exe");
+        ExternalEncoderInfo qaac = known.Single(
+            item => item.EncoderName == "qaac.exe (tvbr)");
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            exhale,
+            tree.WriteSource(
+                Encoding.ASCII.GetBytes("user-built exhale"),
+                "exhale.exe")));
+        Assert.IsNull(tree.Catalog.Import(
+            tree.Config,
+            qaac,
+            tree.WriteSource(
+                Encoding.ASCII.GetBytes("user-selected qaac"),
+                "qaac64.exe")));
+
+        List<AudioEncoderSettingsViewModel> usable =
+            tree.Catalog.UsableEncoders(tree.Config, "m4a", false);
+        CollectionAssert.AreEquivalent(
+            new[] { "exhale.exe", "qaac.exe (tvbr)" },
+            usable.Select(item => item.Name).ToArray());
+
+        AudioEncoderSettingsViewModel chosen = usable.Single(
+            item => item.Name == "exhale.exe");
+        tree.Catalog.SetFormatEncoder(
+            tree.Config,
+            "m4a",
+            false,
+            chosen);
+
+        Assert.AreSame(chosen, tree.Config.formats["m4a"].encoderLossy);
+    }
+
+    [TestMethod]
+    public void EveryCuratedExternalEncoderExplainsHistoryUseAndDistribution()
+    {
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+
+        foreach (ExternalEncoderInfo info in tree.Catalog.Snapshot(tree.Config))
+        {
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(info.Description),
+                info.EncoderName + " is missing a description.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(info.History),
+                info.EncoderName + " is missing history.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(info.BestUse),
+                info.EncoderName + " is missing best-use guidance.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(info.DistributionNote),
+                info.EncoderName + " is missing distribution guidance.");
+        }
     }
 
     [TestMethod]
@@ -1062,10 +1197,15 @@ public sealed class ExternalEncoderTrustTests
                 Path.GetTempPath(), "cuetools-encoder-trust-" + Guid.NewGuid().ToString("N"));
             _sourceDirectory = Path.Combine(Root, "source");
             ManagedDirectory = Path.Combine(Root, "managed");
+            BundledDirectory = Path.Combine(Root, "bundled");
             Directory.CreateDirectory(_sourceDirectory);
             App = new AppSettings();
             Log = new FakeLog();
-            Catalog = new EncoderCatalog(Log, App, ManagedDirectory);
+            Catalog = new EncoderCatalog(
+                Log,
+                App,
+                ManagedDirectory,
+                BundledDirectory);
             Config = new CUEConfig();
             var settings = new CUETools.Codecs.CommandLine.EncoderSettings(
                 "testenc.exe",
@@ -1091,6 +1231,7 @@ public sealed class ExternalEncoderTrustTests
         }
 
         public string ManagedDirectory { get; }
+        public string BundledDirectory { get; }
         public string Root { get; }
         public AppSettings App { get; }
         public FakeLog Log { get; }
