@@ -276,6 +276,14 @@ try {
         Assert-True `
             (@($contract.requiredFiles.path) -contains "Install-CUEToolsPlugin.ps1") `
             "$contractName does not require the supported user plugin installer."
+        foreach ($publicPolicy in @(
+            "README.md",
+            "PRIVACY.md",
+            "CODE_SIGNING_POLICY.md")) {
+            Assert-True `
+                (@($contract.requiredFiles.path) -contains $publicPolicy) `
+                "$contractName does not require public policy file $publicPolicy."
+        }
     }
     $wpfContract = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "wpf-win-x64.manifest.json") -Raw |

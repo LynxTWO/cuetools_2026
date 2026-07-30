@@ -544,13 +544,39 @@ namespace CUERipper
                     cueSheet.ArTestVerify = null;
 
                 cueSheet.Go();
-                cueSheet.CTDB.Submit(
-					(int)cueSheet.ArVerify.WorstConfidence() + 1,
-					audioSource.CorrectionQuality == 0 ? 0 :
-					(int)(100 * (1.0 - Math.Log(audioSource.FailedSectors.PopulationCount() + 1) / Math.Log(audioSource.TOC.AudioLength + 1))),
-					cueSheet.Metadata.Artist,
-					cueSheet.Metadata.Title,
-					cueSheet.TOC.Barcode);
+
+                // Ripping is not consent to publish. CTDB verification and repair remain
+                // available with this off; contribution is a separate, explicit preference.
+                bool submitToCtdb =
+                    CtdbSubmissionPolicy.IsEnabled(cueSheet.Config);
+                if (submitToCtdb && cueSheet.Config.advanced.CTDBAsk)
+                {
+                    DialogResult consent = DialogResult.No;
+                    this.Invoke((MethodInvoker)delegate()
+                    {
+                        consent = MessageBox.Show(
+                            this,
+                            "Submit this rip's disc layout, checksums, recovery parity, " +
+                            "drive information, pseudonymous device identifier, artist, " +
+                            "title, and barcode to CTDB?\n\n" +
+                            "CTDB submission currently uses an unencrypted HTTP connection.",
+                            "Submit to CTDB",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question,
+                            MessageBoxDefaultButton.Button2);
+                    });
+                    submitToCtdb = consent == DialogResult.Yes;
+                }
+                if (submitToCtdb)
+                {
+                    cueSheet.CTDB.Submit(
+					    (int)cueSheet.ArVerify.WorstConfidence() + 1,
+					    audioSource.CorrectionQuality == 0 ? 0 :
+					    (int)(100 * (1.0 - Math.Log(audioSource.FailedSectors.PopulationCount() + 1) / Math.Log(audioSource.TOC.AudioLength + 1))),
+					    cueSheet.Metadata.Artist,
+					    cueSheet.Metadata.Title,
+					    cueSheet.TOC.Barcode);
+                }
 				bool canFix = false;
                 if (cueSheet.CTDB.QueryExceptionStatus == WebExceptionStatus.Success && audioSource.FailedSectors.PopulationCount() != 0)
 				{

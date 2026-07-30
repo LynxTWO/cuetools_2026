@@ -1,6 +1,6 @@
 # Logging, Telemetry, and Sensitive-Data Audit
 
-Current-state refresh: 2026-07-26. Scope is first-party logging, local
+Current-state refresh: 2026-07-30. Scope is first-party logging, local
 diagnostics, credential persistence, and credential-bearing network paths.
 Vendored/submodule implementations are outside the code-level audit. Evidence is
 labeled `verified`, `inferred`, or `unknown`.
@@ -8,9 +8,15 @@ labeled `verified`, `inferred`, or `unknown`.
 ## 1. Current telemetry model
 
 No external analytics, crash-reporting, tracing, or telemetry SDK was found in
-the first-party projects. Classic applications use `Trace`, `Console`, and the
-opt-in `Bwg.Logging` framework. CUETools 2026 adds an intentional local
-diagnostic log and global exception handlers.
+the shipped first-party application runtime. Classic applications use `Trace`,
+`Console`, and the opt-in `Bwg.Logging` framework. CUETools 2026 adds an
+intentional local diagnostic log and global exception handlers.
+
+The MSTest toolchain transitively carries Microsoft Testing Platform telemetry
+components. This is a build/test dependency, not an application runtime client.
+All checked GitHub Actions workflows now set
+`DOTNET_CLI_TELEMETRY_OPTOUT=1` and
+`TESTINGPLATFORM_TELEMETRY_OPTOUT=1`.
 
 `CUETools.Wpf/Services/DiagnosticLog.cs` creates one file per run at:
 
@@ -33,6 +39,8 @@ No automatic upload path was found. Retention/purge behavior is not claimed.
 | F7 | `Bwg.Scsi/Device.cs` and `Bwg.Logging` | emits SCSI command, sense, drive, and sector diagnostics when enabled | sampled only; no credential data found, but raw-buffer verbosity is not exhaustively ruled out | open low-risk audit |
 | F8 | CLI and classic GUI traces | progress, drive selection, offsets, file/playlist errors, and exception types | paths and device information may be user-identifying in shared logs; no secret values found in inspected call sites | local disclosure boundary |
 | F9 | Classic MOTD | bounded HTTPS text is held in memory for display; former remote JPEG/text cache is gone | remote input, not telemetry; prior disk-cache/render finding is closed | fixed |
+| F10 | CUERipper CTDB contribution | successful rips previously called `CTDB.Submit` unconditionally, ignoring both advanced submission preferences | disc layout, checksums/parity, drive name, pseudonymous machine-derived ID, barcode, artist, and title were sent over plaintext HTTP | fixed: contribution defaults off, uses one shared policy boundary, and an enabled ask preference displays a detailed yes/no disclosure |
+| F11 | Release/test telemetry | MSTest dependencies include Microsoft Testing Platform telemetry components | build-runner environment and test usage, not end-user audio or application runtime data | fixed for checked hosted workflows with both documented opt-out variables |
 
 ## 3. CUETools 2026 diagnostic content
 
@@ -88,13 +96,16 @@ diagnostic material, not anonymous telemetry.
   user-identifying even when they are not authentication secrets.
 - Any future remote diagnostics must add explicit consent, destination,
   retention, and schema review. The current audit does not authorize upload.
+- Ripping, verification, repair, metadata lookup, and CTDB contribution are
+  separate purposes. Never infer submission consent from use of the first four.
 
 ## 6. Coverage and limits
 
 Verified: first-party credential save/load paths; classic `Trace` call sites
 around credentials and plugin loading; CUETools 2026 diagnostic implementation,
 job-boundary registration, and nested-exception redaction test; current MOTD and
-Icecast policy.
+Icecast policy; all first-party CTDB submission call sites; and telemetry
+opt-outs in every checked GitHub Actions workflow.
 
 Sampled, not exhaustive: all 89-style `Bwg.Scsi/Device.cs` log calls and every
 possible exception message from native/external components.

@@ -1,29 +1,95 @@
-# CUETools
-CUETools is a tool for lossless audio/CUE sheet format conversion. The goal is to make sure the album image is preserved accurately. A lossless disc image must be lossless not only in preserving contents of the audio tracks, but also in preserving gaps and CUE sheet contents. Many applications lose vital information upon conversion, and don't support all possible CUE sheet styles. For example, foobar2000 loses disc pre-gap information when converting an album image, and doesn't support gaps appended (noncompliant) CUE sheets.
-# Supported formats
-Supports WAV, FLAC, APE, LossyWAV, ALAC, TTA, and WavPack audio input/output. Audio must be 16-bit, 44.1kHz samples stereo (i.e. CD PCM). Supports every CUE sheet style (embedded, single file, gaps appended/prepended/left out). It is also possible to process a set of audio files in a directory without a CUE sheet, or use a RAR archive as an input without unpacking it.
-# CUERipper
-CUERipper is a utility for extracting digital audio from CDs, an open-source alternative to EAC. It has a lot fewer configuration options, so is somewhat easier to use, and is included in CUETools package. It supports MusicBrainz and freeDB metadata databases, AccurateRip and CTDB.
-# Installing
-Prebuilt binaries can be downloaded from [CUETools Download](http://cue.tools/wiki/CUETools_Download).
+# CUETools 2026
+
+CUETools 2026 is an independently maintained Windows fork of
+[CUETools](https://github.com/gchudov/cuetools.net) focused on trustworthy CD
+ripping, verification and repair, lossless conversion, and auditable release
+engineering. It preserves disc layout, gaps, CUE-sheet semantics, metadata, and
+audio while making the evidence behind a “verified” result visible.
+
+This repository contains both the modern, self-contained **CUETools 2026**
+desktop application and the classic CUETools/CUERipper applications. It is not
+the official upstream repository or website.
+
+## Downloads and release trust
+
+Public builds for this fork are published on the
+[GitHub Releases page](https://github.com/LynxTWO/cuetools_2026/releases).
+Prereleases are evaluation builds and are explicitly labeled **unsigned**.
+Stable `v...` tags are production-signing boundaries: the release workflow
+fails closed if its approved signing provider is unavailable or any required
+signature cannot be validated and timestamped.
+
+Read the [code-signing policy](CODE_SIGNING_POLICY.md), [privacy policy](PRIVACY.md),
+and the detailed [release-signing implementation](docs/security/release-signing.md)
+before redistributing a build. The project is applying to the SignPath Foundation
+program; no SignPath signature is claimed until approval and a signed stable
+release are both verifiable.
+
+## Capabilities
+
+- Secure and paranoid optical-disc reads, Test & Copy, AccurateRip and CTDB
+  verification, and source-preserving CTDB repair.
+- Track or single-image output with embedded CUE support.
+- WAV, FLAC, APE, ALAC, TTA, WavPack, WMA, MP3, AAC-family, Opus, Vorbis,
+  Musepack, OptimFROG, and external-encoder integration, subject to the codec
+  and platform documented by each release.
+- MusicBrainz and Cover Art Archive discovery, optional TheAudioDB integration,
+  local drag-and-drop artwork, bounded image decoding, and reproducible JPEG
+  preparation.
+- Exact release manifests, native-dependency provenance, SPDX and CycloneDX
+  SBOMs, warning budgets, and release evidence.
+
+Audio processed through the classic conversion engine is normally CD PCM
+(16-bit, 44.1 kHz stereo). Format availability and verification guarantees are
+reported by the active encoder rather than inferred from a filename.
+
+## Privacy and network use
+
+The distributed applications do not contain a first-party analytics or
+automatic crash-reporting client. Verification and metadata features contact
+external services and some legacy services still use plaintext HTTP. CTDB
+contribution is off by default and requires an explicit preference; its prompt
+discloses the data and transport before submission. See [PRIVACY.md](PRIVACY.md)
+for the complete data map and controls.
+
+## Building
+
+Clone this fork and initialize its submodules:
+
+```powershell
+git clone https://github.com/LynxTWO/cuetools_2026.git
+cd cuetools_2026
+git submodule update --init --recursive
+powershell -NoProfile -ExecutionPolicy Bypass -File eng/ci/Prepare-VendorSources.ps1
+```
+
+Build with Visual Studio 2022 or newer. The full classic solution requires the
+.NET Framework 4.7 targeting pack, .NET desktop development, v143 C++ tools,
+C++/CLI support, a Windows SDK, and Microsoft Visual Studio Installer Projects.
+The modern application requires the .NET 8 SDK. Open `CUETools.sln` for the
+classic solution or use the checked scripts under `eng/ci` and `eng/release` for
+the same gated paths used by GitHub Actions.
 
 Third-party codec packages should be enrolled with the release archive's
-`Install-CUEToolsPlugin.ps1`; see [Installing a user plugin](docs/plugin-installation.md).
+`Install-CUEToolsPlugin.ps1`; see
+[Installing a user plugin](docs/plugin-installation.md). External executables
+remain user-controlled and are preferred when the user explicitly imports and
+approves them.
 
-## Installing from sources
-* Get the CUETools sources from GitHub ([https://github.com/gchudov/cuetools.net](https://github.com/gchudov/cuetools.net)):  
-`git clone https://github.com/gchudov/cuetools.net.git`
-* Get the required submodules using:  
-`git submodule update --init --recursive`
-* Materialize the pinned commits plus CUETools patches in the ignored vendor source stage:
-`powershell -NoProfile -ExecutionPolicy Bypass -File eng/ci/Prepare-VendorSources.ps1`
-  The checked-out submodules remain clean. Native codec builds call this preparation step
-  automatically.
-* The solution can be built using Microsoft Visual Studio 2022 or newer (Community Edition will work)
-  * Install the required .NET development tools (currently .NET Framework 4.7 and the .NET SDK)
-  * Install the v143 C++ build tools and C++/CLI support
-  * Install an appropriate Windows SDK version (e.g. 10.0.16299.0 or newer)
-  * Install the Microsoft Visual Studio Installer Projects
-* Open cuetools.net\CUETools.sln
-* Select 'Any CPU' under 'Solution Platforms'
-* Build solution
+## Uninstalling
+
+For a portable ZIP, close CUETools and delete the extracted application folder.
+To remove per-user state as well, delete `%AppData%\CUETools2026` after reviewing
+or exporting any settings, verification history, calibration, logs, and imported
+encoders you want to keep. Classic profiles use `%AppData%\CUE Tools` and
+`%AppData%\CUERipper`; CUEPlayer has separate settings and playlists. An
+installer-based build can be removed through Windows **Installed apps**.
+
+## License and upstream
+
+First-party CUETools code is distributed under GPL-2.0-or-later. Bundled
+third-party components retain their own licenses and notices; consult
+[License.txt](License.txt), each release's `THIRD-PARTY-NOTICES`, SBOMs, and
+native-dependency evidence. CUETools was created and is maintained upstream by
+Grigory Chudov and its contributors; this fork's changes do not imply upstream
+endorsement.
