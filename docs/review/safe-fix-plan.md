@@ -1276,3 +1276,31 @@ failed `OUT_OF_RESOURCES`; an isolated host/plugin matrix proved architecture
 was the differentiator. With the legacy 32-bit-preferred flag explicit, the
 RTX 3060/OpenCL 3.0 matrix passes. The plugin retains all 126 public IL
 declarations, exact resource payload hashes, and exact kernel bytes.
+
+### Retire the unreachable CLParity experiment
+
+**Exact files:** `CUETools.CLParity/`, its `CUETools.sln` entry/configurations,
+the S8 reachability ledger, D7/R8/R12 scope, R89, and this plan.
+
+**Safety and unchanged behavior:** require independent proof that no current
+project consumes the assembly, registration is disabled, release collection
+does not ship it, and the project cannot build from tracked dependencies. Do
+not translate its obsolete settings/writer API into a current encoder by
+assumption. Preserve recovery through Git history.
+
+**Checks:** enumerate first-party project candidates and all C#/project/solution
+references; inspect the registration and `IAudioDest` mismatch; scan release
+manifests; remove the project and require zero code/project/solution matches.
+Run release safety and canonical tests afterward.
+
+**Rollback:** recover the 35-file tree and solution entries from the parent
+commit only if a current product contract, CPU oracle, and supported OpenCL
+test matrix are supplied together.
+
+**Observability:** none. The experiment had no runtime reachability, packaging,
+settings, or logging surface.
+
+**Status:** implemented 2026-07-29. Among 68 first-party project candidates,
+only four files inside the experiment plus the solution mentioned its types or
+assembly. The 308,630-byte tracked tree and solution entry are removed; the
+post-removal code/project/solution scan has zero matches.

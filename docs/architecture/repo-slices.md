@@ -156,15 +156,16 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 
 ### S8: GPU codecs and parity
 
-- **Scope:** `CUETools.Codecs.FLACCL/`, `CUETools.FLACCL.cmd/`,
-  `CUETools.CLParity/`.
+- **Scope:** `CUETools.Codecs.FLACCL/`, `CUETools.FLACCL.cmd/`. The retired
+  `CUETools.CLParity/` experiment remains available in Git history through the
+  R89 parent.
 - **Why it matters:** OpenCL/device-specific behavior is difficult to reproduce;
   the CUDA trees can be confused with shipped functionality.
-- **Reachability:** FLACCL is an optional current classic path. `CLParity` is
-  still listed in the solution but is not current: its encoder registration is
-  commented out, no first-party consumer references it, it is absent from
-  release collection, and its project points at a missing `OpenCLNet.dll`.
-  Historical FlaCuda projects were deleted in commit `4e1b02d`.
+- **Reachability:** FLACCL is an optional current classic path. `CLParity` was
+  retired under R89 after proving its encoder registration was commented out,
+  no first-party consumer referenced it, it was absent from release collection,
+  and its project pointed at a missing `OpenCLNet.dll`. Historical FlaCuda
+  projects were deleted in commit `4e1b02d`.
 - **Verified controls:** solution/release membership is mapped. The FLACCL
   plugin and command host are SDK-style net47 projects with explicit
   32-bit-preferred host behavior. Corrected per-frame verification passed on an
@@ -172,10 +173,10 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   4096-sample boundary.
 - **Residual boundary:** one NVIDIA device/driver does not establish every
   OpenCL implementation, device, or performance profile.
-- **Risk / status:** medium; FLACCL mapped and locally exercised, CLParity
-  classified as dead/non-building pending removal.
-- **Next evidence:** remove or deliberately restore CLParity, then repeat the
-  FLACCL correctness matrix on another OpenCL vendor.
+- **Risk / status:** medium; FLACCL mapped and locally exercised, dead GPU
+  ancestors retired.
+- **Next evidence:** repeat the FLACCL correctness matrix on another OpenCL
+  vendor.
 
 ### S9: Classic GUI applications
 
