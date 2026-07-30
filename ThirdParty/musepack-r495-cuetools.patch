@@ -1,0 +1,97 @@
+diff --git a/libmpcenc/bitstream.c b/libmpcenc/bitstream.c
+index 4865ce9..9659d19 100644
+--- a/libmpcenc/bitstream.c
++++ b/libmpcenc/bitstream.c
+@@ -95 +95 @@ static const mpc_uint32_t Cnk_lost[MAX_ENUM / 2][MAX_ENUM] =
+-static const mpc_uint8_t log2[32] =
++static const mpc_uint8_t log2_table[32] =
+@@ -168 +168 @@ void encodeLog(mpc_encoder_t * e, mpc_uint32_t value, mpc_uint32_t max)
+-		writeBits(e, value, log2[max - 1] - 1);
++		writeBits(e, value, log2_table[max - 1] - 1);
+@@ -170 +170 @@ void encodeLog(mpc_encoder_t * e, mpc_uint32_t value, mpc_uint32_t max)
+-		writeBits(e, value + log2_lost[max - 1], log2[max - 1]);
++		writeBits(e, value + log2_lost[max - 1], log2_table[max - 1]);
+diff --git a/libmpcpsy/libmpcpsy.h b/libmpcpsy/libmpcpsy.h
+index 2763646..ef54d26 100644
+--- a/libmpcpsy/libmpcpsy.h
++++ b/libmpcpsy/libmpcpsy.h
+@@ -88,2 +88,2 @@ typedef struct {
+-	int * SCF_Index_L;
+-	int * SCF_Index_R;              // Scalefactor-index for Bitstream
++	int (*SCF_Index_L)[3];
++	int (*SCF_Index_R)[3];          // Scalefactor-index for Bitstream
+@@ -92 +91,0 @@ typedef struct {
+-
+diff --git a/libmpcpsy/psy_tab.c b/libmpcpsy/psy_tab.c
+index f04369f..f53140f 100644
+--- a/libmpcpsy/psy_tab.c
++++ b/libmpcpsy/psy_tab.c
+@@ -191 +191 @@ static double
+-asinh ( double x )
++mpc_asinh ( double x )
+@@ -194,0 +195,2 @@ asinh ( double x )
++#else
++#define mpc_asinh asinh
+@@ -201 +203 @@ Freq2Bark ( double Hz )           // Klemm 2002
+-    return 9.97074*asinh (1.1268e-3 * Hz) - 6.25817*asinh (0.197193e-3 * Hz) ;
++    return 9.97074*mpc_asinh (1.1268e-3 * Hz) - 6.25817*mpc_asinh (0.197193e-3 * Hz) ;
+diff --git a/mpcenc/mpcenc.c b/mpcenc/mpcenc.c
+index 776a890..e9fe820 100644
+--- a/mpcenc/mpcenc.c
++++ b/mpcenc/mpcenc.c
+@@ -35,0 +36 @@ int           DisplayUpdateTime = 1;
++#ifndef CUETOOLS_NO_TAGS
+@@ -36,0 +38 @@ int           APE_Version     = 2000;
++#endif
+@@ -47,0 +50 @@ unsigned int  verbose         = 0;      // more information during output
++#ifndef CUETOOLS_NO_TAGS
+@@ -48,0 +52 @@ unsigned int  NoUnicode       = 1;      // console is unicode or not (tag transl
++#endif
+@@ -73 +77 @@ mpc_bool_t    FrontendPresent = 0;      // Flag for frontend-detection
+-const char    About []        = "MPC Encoder " MPCENC_VERSION " (C) 1999-2009 Buschmann/Klemm/Piecha/MDT\nBuilt " __DATE__ " " __TIME__;
++const char    About []        = "MPC Encoder " MPCENC_VERSION " (C) 1999-2009 Buschmann/Klemm/Piecha/MDT\nCUETools source build r495";
+@@ -217,0 +222 @@ longhelp ( PsyModel * m )
++#ifndef CUETOOLS_NO_TAGS
+@@ -232,0 +238 @@ longhelp ( PsyModel * m )
++#endif
+@@ -704 +710 @@ Quantisierung ( PsyModel * m,
+-				QuantizeSubband                 ( subq[Band].R, subx[Band].R, *resR, errorL [Band], MAX_NS_ORDER);
++				QuantizeSubband                 ( subq[Band].R, subx[Band].R, *resR, errorR [Band], MAX_NS_ORDER);
+@@ -816,0 +823 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#ifndef CUETOOLS_NO_TAGS
+@@ -819,0 +827 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#endif
+@@ -1038,0 +1047 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#ifndef CUETOOLS_NO_TAGS
+@@ -1047,0 +1057 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#endif
+@@ -1072,0 +1083 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#ifndef CUETOOLS_NO_TAGS
+@@ -1228,0 +1240 @@ EvalParameters (PsyModel * m, int argc, char** argv, char** InputFile, char** Ou
++#endif
+@@ -1540,2 +1552,2 @@ mainloop ( int argc, char** argv )
+-	m.SCF_Index_L = (int*) e.SCF_Index_L;
+-	m.SCF_Index_R = (int*) e.SCF_Index_R;
++	m.SCF_Index_L = e.SCF_Index_L;
++	m.SCF_Index_R = e.SCF_Index_R;
+@@ -1556,0 +1569 @@ mainloop ( int argc, char** argv )
++#ifndef CUETOOLS_NO_TAGS
+@@ -1557,0 +1571 @@ mainloop ( int argc, char** argv )
++#endif
+@@ -1769,0 +1784 @@ mainloop ( int argc, char** argv )
++#ifndef CUETOOLS_NO_TAGS
+@@ -1770,0 +1786 @@ mainloop ( int argc, char** argv )
++#endif
+@@ -1800,0 +1817 @@ main ( int argc, char** argv )
++#ifndef CUETOOLS_NO_TAGS
+@@ -1801,0 +1819 @@ main ( int argc, char** argv )
++#endif
+diff --git a/mpcenc/mpcenc.h b/mpcenc/mpcenc.h
+index 28b9c69..d147845 100644
+--- a/mpcenc/mpcenc.h
++++ b/mpcenc/mpcenc.h
+@@ -244,2 +244,2 @@ float  ISNR_Schaetzer_Trans            ( const float* samples, const float comp,
+-void   QuantizeSubband                 ( unsigned int* qu_output, const float* input, const int res, float* errors, const int maxNsOrder );
+-void   QuantizeSubbandWithNoiseShaping ( unsigned int* qu_output, const float* input, const int res, float* errors, const float* FIR );
++void   QuantizeSubband                 ( mpc_int16_t* qu_output, const float* input, const int res, float* errors, const int maxNsOrder );
++void   QuantizeSubbandWithNoiseShaping ( mpc_int16_t* qu_output, const float* input, const int res, float* errors, const float* FIR );

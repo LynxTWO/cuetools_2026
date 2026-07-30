@@ -28,25 +28,68 @@ FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`) and its CUDA.NET depe
 
 The user requested xHE-AAC, OptimFROG, WavPack, and all redistributable encoders available in `C:\_Audio Codecs_`. WavPack is packaged in-process. The supplied command-line set contains Musepack, Ogg Vorbis, Opus, qaac, and TAK. The WPF catalog now provides exact encode contracts, selectable implementations, archival defaults, compatible executable aliases, history/best-use help, and receipt-bound user imports for that set plus exhale/xHE-AAC and OptimFROG. User imports take precedence over the packaged fallback.
 
-The WPF package includes two provenance-complete command encoders:
+The WPF package includes three provenance-complete command encoders:
 
-- official Opus Tools 0.2 `opusenc.exe` under its BSD-2-Clause terms;
+- official Opus Tools `0.2-3-gf5f571b` with stable libopus 1.3
+  `opusenc.exe` under its BSD-2-Clause terms;
 - RareWares oggenc2 2.88/libVorbis 1.3.7 with the exact corresponding source
-  archive and GPL-2.0 notice.
+  archive and GPL-2.0 notice;
+- a deterministic x64 Musepack SV8 r495 source build with its complete upstream
+  archive, CUETools correctness/licensing patch, CMake recipe, build notes, and
+  LGPL-2.1 notice.
 
 `eng/release/external-command-encoders.json` pins the download URL, archive size
 and SHA-256, selected entry SHA-256, license, and source archive. Preparation
 refuses any byte drift. The artifact contract repeats the hashes, and runtime
 resolution binds the executable to the same non-replaceable launch lease used
-for an imported encoder. Real stdin encodes passed with both packaged files.
+for an imported encoder. Real stdin encodes passed with all three packaged
+files. Two independent clean Musepack builds produced the same 378,368-byte
+executable and SHA-256, and two encodes plus independent ffmpeg decodes were
+byte-deterministic.
 
-Musepack and TAK remain import-only due to their distribution boundaries. qaac
-remains import-only because it requires Apple's CoreAudioToolbox runtime. exhale
+The Musepack build deliberately excludes `common/tags.c`: Debian's preserved
+copyright inventory records that file separately as all-rights-reserved without
+a clear grant, while the encoder/psychoacoustic sources used by the executable
+are LGPL-2.1-or-later or BSD. CUETools writes metadata after encoding, so the
+ambiguous file is unnecessary and encoder-side tag arguments are rejected.
+
+TAK remains import-only due to its distribution boundary. qaac remains
+import-only because it requires Apple's CoreAudioToolbox runtime. exhale
 1.2.2 was built from its official source and its actual stdin contract was
 verified, but remains import-only because its license explicitly grants no
 patent rights. OptimFROG 5.100 passed a real encode/self-decode round trip and
 has a complete lossless verifier contract, but its redistribution terms require
 notification to the author before an unmodified CLI is packaged.
+
+### Owner codec collection review, 2026-07-29
+
+The expanded `C:\_Audio Codecs_` collection was treated as evidence and source
+material, not as an implicit redistribution grant:
+
+- its FLAC 1.5.0 and WavPack 5.9.0 trees match the versions CUETools already
+  source-builds;
+- its Ogg executable is byte-identical to the packaged, source-accompanied
+  RareWares encoder;
+- its Musepack binary and source versions do not correspond, which led to the
+  reproducible r495 build above instead of copying either opaque binary;
+- its `bp0/libhdcd` tree is valid official v1.4 source, but failed the recorded
+  old-vs-new behavioral compatibility gate and therefore does not replace the
+  legacy decoder;
+- FDK-AAC 2.0.3 explicitly grants no patent license. The Apache-2.0 libxaac
+  source is a useful xHE-AAC research input, but upstream currently recommends
+  only the 64 and 96 kbps USAC operating points and still describes quality
+  work in progress. It also supplies a raw testbench rather than CUETools'
+  required production M4A publication/metadata transaction;
+- `enc_xheaac.dll` and `enc_xheaacf.dll` are validly signed Poikosoft
+  EZ CD Audio Converter product components, not a redistributable SDK or
+  CUETools command-encoder contract;
+- the unversioned `opus-main` snapshot is not a release provenance anchor.
+  Official libopus is now 1.6.1, while the latest official Windows
+  `opus-tools` binary remains 0.2 linked to libopus 1.3. A source-built upgrade
+  needs its complete libopus/libopusenc/libogg/tool recipe and behavior gate;
+- qaac, TAK, and OptimFROG retain the import/notification boundaries documented
+  above. The presence of binaries in the owner collection does not change
+  those upstream terms.
 
 ## Sequencing / risk
 
@@ -62,12 +105,14 @@ notification to the author before an unmodified CLI is packaged.
 
 The historical version survey is retained above. FlaCuda retirement is complete.
 WavPack 5.9.0 and Monkey's Audio 13.20 have both-architecture build and runtime
-evidence. The command-line catalog and the two safe bundled integrations are
-complete; the deliberately import-only boundaries above are recorded rather
-than silently bypassed. LAME 4 remains a separate major-version project. FFmpeg
+evidence. The command-line catalog and the three safe bundled integrations are
+complete for the current release recipe; the deliberately import-only
+boundaries above are recorded rather than silently bypassed. A current-libopus
+source build is the remaining clearly redistributable command-encoder upgrade.
+LAME 4 remains a separate major-version project. FFmpeg
 matters if its currently unshipped product path returns.
 
-## Upstream release evidence checked 2026-07-26
+## Upstream release evidence checked through 2026-07-29
 
 - FLAC: `https://github.com/xiph/flac/releases/tag/1.5.0`
 - WavPack: `https://github.com/dbry/WavPack/releases/tag/5.9.0`
@@ -75,3 +120,8 @@ matters if its currently unshipped product path returns.
 - LAME: `https://lame.sourceforge.io/`
 - FFmpeg: `https://ffmpeg.org/download.html`
 - taglib-sharp: `https://github.com/mono/taglib-sharp/releases/tag/TaglibSharp-2.3.0.0`
+- Opus/libopusenc: `https://opus-codec.org/downloads/`
+- libogg: `https://xiph.org/downloads/`
+- libxaac: `https://github.com/ittiam-systems/libxaac`
+- FDK-AAC license: `https://github.com/mstorsjo/fdk-aac/blob/master/NOTICE`
+- Musepack preserved source: `https://packages.debian.org/source/stable/libmpc`

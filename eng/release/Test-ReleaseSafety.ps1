@@ -216,6 +216,11 @@ try {
             $dotnetPublishIndex -ge 0 -and
             $externalPrepareIndex -lt $dotnetPublishIndex) `
         "Publish-Wpf.ps1 does not prepare hash-pinned command encoders before publishing."
+    Assert-True `
+        ($publishSource.Contains(
+                "-p:NuGetLockFilePath=obj/release-win-x64/packages.lock.json") -and
+            $publishSource.Contains("-p:RestoreLockedMode=false")) `
+        "Publish-Wpf.ps1 can rewrite committed lock files with RID-only restore graphs."
     $classicCollectionSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\collect_files.bat") -Raw
     Assert-True `
@@ -256,10 +261,22 @@ try {
         ConvertFrom-Json
     $encoderCatalogSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\CUETools.Wpf\Services\EncoderCatalog.cs") -Raw
-    foreach ($externalPath in @(
-        "encoders/opusenc.exe",
-        "encoders/oggenc2.exe",
-        "encoders/source/oggenc2.88srcs.zip")) {
+    $externalPaths = New-Object "Collections.Generic.List[string]"
+    foreach ($encoder in @($externalEncoderContract.encoders)) {
+        $externalPaths.Add([string]$encoder.packagePath)
+        if (-not [string]::IsNullOrWhiteSpace(
+                [string]$encoder.sourceArchive.packagePath)) {
+            $externalPaths.Add([string]$encoder.sourceArchive.packagePath)
+        }
+        $sourceSupportProperty =
+            $encoder.PSObject.Properties["sourceSupport"]
+        if ($null -ne $sourceSupportProperty) {
+            foreach ($support in @($sourceSupportProperty.Value)) {
+                $externalPaths.Add([string]$support.packagePath)
+            }
+        }
+    }
+    foreach ($externalPath in $externalPaths) {
         $externalEntries = @(
             $wpfContract.requiredFiles |
                 Where-Object { $_.path -ceq $externalPath })
@@ -296,6 +313,22 @@ try {
                     [string]$sourceEntry[0].sha256 -ieq
                         [string]$encoder.sourceArchive.sha256) `
                 "The packaged source hash for $($encoder.id) drifted from the external encoder contract."
+        }
+        $sourceSupportProperty =
+            $encoder.PSObject.Properties["sourceSupport"]
+        if ($null -ne $sourceSupportProperty) {
+            foreach ($support in @($sourceSupportProperty.Value)) {
+                $supportEntry = @(
+                    $wpfContract.requiredFiles |
+                        Where-Object {
+                            $_.path -ceq $support.packagePath
+                        })
+                Assert-True `
+                    ($supportEntry.Count -eq 1 -and
+                        [string]$supportEntry[0].sha256 -ieq
+                            [string]$support.sha256) `
+                    "Packaged build support for $($encoder.id) drifted from the external encoder contract."
+            }
         }
     }
 

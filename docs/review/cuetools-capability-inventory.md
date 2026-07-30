@@ -434,5 +434,5 @@ are superseded:
 - FLACCL is classic-only; its exact-length verifier is fixed and app-hosted settings
   now receive a one-time verify-on migration, while its CLI stays opt-in.
 - The managed FFmpeg wrapper is not shipped by either primary product.
-- Ogg, Opus, Musepack, TAK, and AAC output are conditional external-executable paths,
+- Ogg, Opus, and Musepack output are packaged external-executable paths; TAK and AAC are conditional imported paths,
   not bundled in-process codecs.

@@ -202,7 +202,27 @@
         "ThirdParty/x64/hdcd.dll (SHA-256 pinned above)"
       ],
       "buildRecipe": [],
-      "verification": "Packaged bytes are hash-bound; the WPF release probe initializes and closes the x64 decoder.",
+      "sourceBuiltReplacementProbe": {
+        "candidate": "bp0/libhdcd v1.4 at c574f998fc030a575b9fd9ff0b3ad05f571ee9c1",
+        "sourceArchive": {
+          "url": "https://codeload.github.com/bp0/libhdcd/zip/c574f998fc030a575b9fd9ff0b3ad05f571ee9c1",
+          "sha256": "70ebe5027a47a7a0c26fe06e7d714a7779c0d5fad26d455d7215f1867a00ff58",
+          "bytes": 19996450
+        },
+        "license": "BSD-2-Clause",
+        "localInputVerification": "The owner-provided C:\\_Audio Codecs_\\HDCD\\libhdcd-master tree contains the same 42 files as the official v1.4 commit. After CRLF/LF normalization, every source, header, build, and test-vector file is byte-identical; only .gitignore differs.",
+        "buildEvidence": "The official source built successfully for x64 and x86 with current MSVC through a minimal CMake harness. Its public API is a stereo in-place processor and is not the retained DLL's 19-function hdcd_decoder_* ABI.",
+        "compatibilityCorpus": [
+          "hdcd-pfa.wav: 438273/441000 scaled PCM samples equal; packet count 45 vs 98 and decoded samples differ.",
+          "hdcd-tgm.wav: 412586/441000 scaled PCM samples equal; packet count 53 vs 107 and target-gain behavior differs.",
+          "hdcd-ftm.wav: the legacy decoder reports no detection/statistics while libhdcd reports effectual HDCD with 200 packets; 881819/882000 scaled PCM samples equal but the differing samples include large deltas.",
+          "hdcd-all.wav: 2604083/2646016 scaled PCM samples equal; packet count 422 vs 869 and decoded samples differ.",
+          "ava16.wav: all 882000 scaled PCM samples equal for the non-HDCD control.",
+          "hdcd.wav: 805039/811008 scaled PCM samples equal; packet count 92 vs 184 and decoded samples differ."
+        ],
+        "verdict": "Not a behavior-compatible replacement. Keep the source-built candidate behind a new-engine/compatibility gate unless a future adapter reproduces legacy detection, statistics, packet accounting, gain, decoded PCM, and reset/flush semantics on the corpus."
+      },
+      "verification": "Packaged bytes are hash-bound; the WPF release probe initializes and closes the x64 decoder. A six-vector old-vs-new compatibility probe independently proved that the current open-source libhdcd cannot silently replace these bytes.",
       "limitations": "The author/library family, redistribution license, import-era evidence, ABI, and compiler family are recorded. Exact source revision, original DLL download URL, compiler build, flags, and build recipe remain unknown.",
       "retentionDecision": "Retain the two hash-bound legacy binaries until a source-built replacement passes old-vs-new HDCD detection, decoded-PCM, statistics, and flush/reset compatibility tests. Do not describe these bytes as reproducibly built or silently substitute a related open decoder without that behavioral proof."
     },

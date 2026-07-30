@@ -266,20 +266,46 @@ if ($Flavor -eq "Wpf") {
         $lines.Add("Version: $($encoder.version)")
         $lines.Add("Upstream: $($encoder.upstream)")
         $lines.Add("License: $($encoder.license)")
-        $lines.Add(
-            "Binary archive: $($encoder.binaryArchive.url) " +
-            "(SHA-256 $($encoder.binaryArchive.sha256))")
+        $binaryPathProperty = $encoder.PSObject.Properties["binaryPath"]
+        if ($null -ne $binaryPathProperty) {
+            $lines.Add(
+                "Source-built executable: $($binaryPathProperty.Value) " +
+                "(SHA-256 $($encoder.executableSha256))")
+        }
+        else {
+            $lines.Add(
+                "Binary archive: $($encoder.binaryArchive.url) " +
+                "(SHA-256 $($encoder.binaryArchive.sha256))")
+        }
         $lines.Add(
             "Executable SHA-256: $($encoder.executableSha256)")
         $lines.Add(
             "Source archive: $($encoder.sourceArchive.url) " +
             "(SHA-256 $($encoder.sourceArchive.sha256))")
+        $linkedLibrarySourceProperty =
+            $encoder.PSObject.Properties["linkedLibrarySource"]
+        if ($null -ne $linkedLibrarySourceProperty) {
+            $linkedLibrarySource = $linkedLibrarySourceProperty.Value
+            $lines.Add(
+                "Linked library source: $($linkedLibrarySource.name) " +
+                "$($linkedLibrarySource.version), $($linkedLibrarySource.url) " +
+                "(SHA-256 $($linkedLibrarySource.sha256))")
+        }
         $lines.Add("Package path: $($encoder.packagePath)")
         if (-not [string]::IsNullOrWhiteSpace(
                 [string]$encoder.sourceArchive.packagePath)) {
             $lines.Add(
                 "Packaged corresponding source: " +
                 $encoder.sourceArchive.packagePath)
+        }
+        $sourceSupportProperty =
+            $encoder.PSObject.Properties["sourceSupport"]
+        if ($null -ne $sourceSupportProperty) {
+            foreach ($support in @($sourceSupportProperty.Value)) {
+                $lines.Add(
+                    "Packaged build support: $($support.packagePath) " +
+                    "(SHA-256 $($support.sha256))")
+            }
         }
         $lines.Add("Provenance: $($encoder.provenanceNote)")
         $lines.Add("")
@@ -325,9 +351,19 @@ if ($Flavor -eq "Wpf") {
         -Text (Read-TrackedText "eng\release\licenses\OpusTools-opusenc-BSD-2-Clause.txt")
     Add-LicenseText `
         -Lines $lines `
+        -Title "libopus 1.3 - BSD-3-Clause" `
+        -Source "eng/release/licenses/libopus-1.3-BSD-3-Clause.txt" `
+        -Text (Read-TrackedText "eng\release\licenses\libopus-1.3-BSD-3-Clause.txt")
+    Add-LicenseText `
+        -Lines $lines `
         -Title "oggenc2 2.88 - GNU General Public License 2.0" `
         -Source "ttalib-1.1/COPYING (standard GPL-2.0 text)" `
         -Text (Read-TrackedText "ttalib-1.1\COPYING")
+    Add-LicenseText `
+        -Lines $lines `
+        -Title "Musepack SV8 r495 compiled files - GNU Lesser General Public License 2.1 or later" `
+        -Source "ThirdParty/flac/COPYING.LGPL (standard LGPL-2.1 text)" `
+        -Text (Read-TrackedText "ThirdParty\flac\COPYING.LGPL")
 }
 
 if ($Flavor -eq "Classic") {

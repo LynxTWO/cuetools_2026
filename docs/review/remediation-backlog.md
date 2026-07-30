@@ -2064,10 +2064,142 @@ does not relax evidence, rollback, or verification requirements.
   FLAC contained exactly one 100,222-byte picture whose SHA-256 matched
   `folder.jpg`, and final output PCM verification passed after metadata.
 
+### R84. Related open HDCD source is not a behavior-compatible replacement - bucket C, risk high
+
+- **Area or slice:** retained `hdcd.dll` runtimes and the proposed
+  `bp0/libhdcd` source-built replacement.
+- **Why it matters:** replacing an unbuildable legacy binary with related open
+  source looks like a supply-chain improvement, but an HDCD decoder can change
+  detection, gain, packet accounting, statistics, and decoded PCM while still
+  accepting the same input. A silent swap would change users' audio.
+- **Evidence found:** the owner-provided `libhdcd-master` tree matches official
+  v1.4 source at `c574f998` for all 42 files after line-ending normalization
+  except `.gitignore`. It builds for x86 and x64 with current MSVC, but exposes
+  a different API. A six-vector comparison found exact scaled PCM on the
+  non-HDCD control, while every HDCD vector differed in packet accounting or
+  decoded PCM. The combined vector matched only 2,604,083 of 2,646,016 scaled
+  samples; the legacy false-negative/statistics-error case was detected as
+  effectual HDCD with 200 packets by the modern library.
+- **Confidence:** verified from official source identity, two-architecture
+  builds, and the real upstream corpus.
+- **Approval needed:** no for retention; yes only if product semantics later
+  add a separately named modern decoding engine.
+- **Recommended next pass:** preserve the legacy engine and its exact-hash
+  runtime probe; treat modern libhdcd as a new behavior until compatibility is
+  deliberately specified.
+- **Smallest safe next step:** if replacement work resumes, commit a permanent
+  corpus harness and adapter that covers detection, statistics, packet counts,
+  gain, PCM, reset, and flush before any packaging change.
+- **Verification plan:** require old-vs-new equality on the recorded corpus,
+  non-HDCD controls, chunk-boundary permutations, and application-level HDCD
+  metadata before changing the default.
+- **Owner:** codec maintainers / product owner for any new-engine semantics.
+- **Status:** investigated and bounded 2026-07-29. The source-built candidate
+  is valid software but failed the compatibility gate, so the hash-bound legacy
+  DLLs remain the honest default. Exact source/archive/build/corpus evidence is
+  recorded in `eng/release/native-dependencies.json`.
+
+### R85. Musepack's available binary lacked a corresponding-source proof - bucket A, risk high
+
+- **Area or slice:** optional Musepack command encoder, release provenance, and
+  external-encoder runtime precedence.
+- **Why it matters:** shipping an owner-supplied executable merely because it
+  runs would leave its source correspondence, build changes, license
+  obligations, and future replacement policy unverifiable. The preserved r495
+  source also contains a separately marked all-rights-reserved tag writer that
+  must not be silently swept into an LGPL claim.
+- **Evidence found:** the supplied executable reports 1.30.0 while the available
+  source identifies 1.30.1. Debian preserves upstream r495 with a detailed
+  copyright inventory. `common/tags.c` has a separate ambiguous notice, but the
+  encoder, psychoacoustic, and required common sources are LGPL-2.1-or-later or
+  BSD. Current MSVC exposed incorrect pointer declarations, CRT/math name
+  collisions, and a real right-channel quantizer bug.
+- **Confidence:** verified from source, licenses, current-compiler diagnostics,
+  binary inspection, repeat builds, and real encode/decode runs.
+- **Approval needed:** no; the user explicitly requested every safely
+  redistributable codec with complete licensing and user-import precedence.
+- **Recommended next pass:** retain the exact source/build/runtime gates and
+  treat any Musepack source refresh as a codec-quality change.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** two independent clean builds must match the pinned
+  executable SHA-256; stdin encoding must be deterministic and independently
+  decodable; encoder-side tag arguments must remain unavailable; release
+  preparation, notices, runtime trust, and artifact manifests must agree.
+- **Owner:** codec and release maintainers.
+- **Status:** fixed 2026-07-29. CUETools packages its reproducible 378,368-byte
+  x64 r495 build, the complete upstream archive, reviewed patch, CMake recipe,
+  build notes, and LGPL-2.1 notice. Two clean builds matched SHA-256
+  `599771ff...`, repeated quality-7 stdin encodes matched, and both outputs
+  decoded identically. The patch excludes `common/tags.c`, fixes the
+  right-channel error-history defect, and gives the old declarations their
+  actual types. Receipt-bound user imports remain higher precedence. The full
+  WPF suite passes 439/439, the warning gate is empty, and the self-contained
+  release contract passes all 44 required files.
+
+### R86. Self-contained WPF publish rewrites committed NuGet locks - bucket A, risk medium
+
+- **Area or slice:** `Publish-Wpf.ps1`, RID-specific restore, and clean-tree
+  release evidence.
+- **Why it matters:** a successful `win-x64` publish appended empty RID graphs
+  to four committed `packages.lock.json` files. A later ordinary locked restore
+  then rejected those files because the project no longer declared that RID.
+  Release validation should not leave source changes or make the next canonical
+  restore fail.
+- **Evidence found:** the validated 44-path publish changed the CTDB, Codecs,
+  Processor, and WPF locks. `dotnet restore --locked-mode` then failed NU1004
+  on all four due to the transient `win-x64` graph. A canonical force-evaluated
+  non-RID restore returned every lock byte-for-byte to `HEAD`.
+- **Confidence:** verified by before/after hashes and NuGet's exact diagnostic.
+- **Approval needed:** no; generated release work must not alter reviewed source
+  inputs.
+- **Recommended next pass:** keep committed locks as the canonical
+  target-framework dependency closure and prevent the packaging-only RID
+  restore from writing them.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** clean publish, 44-path artifact contract, unchanged
+  hashes for all 13 committed lock files, then the normal lock-file gate.
+- **Owner:** build and release maintainers.
+- **Status:** fixed 2026-07-29. WPF publish redirects each project's
+  packaging-only RID lock into its ignored intermediate directory and disables
+  locked mode only for that staged restore; hosted/local dependency review
+  remains enforced by the canonical lock lane. Release-safety tests pin the
+  non-mutating invocation. The self-contained 44-path publish passed while all
+  13 committed lock-file hashes remained unchanged.
+
+### R87. Packaged Opus core is behind the current stable library - bucket B, risk medium
+
+- **Area or slice:** packaged `opusenc.exe`, its libopus/libopusenc/libogg
+  closure, and lossy-codec quality provenance.
+- **Why it matters:** the latest official Windows `opus-tools` binary is still
+  0.2 linked to libopus 1.3, while the official stable codec library is 1.6.1.
+  Replacing it with an arbitrary owner binary would lose provenance; replacing
+  it with a source build can change encoded bytes and quality even though the
+  stream stays standards-compliant.
+- **Evidence found:** the Opus project currently lists libopus 1.6.1, fixes
+  since 1.6, libopusenc 0.3, and libogg 1.3.6, but still links Windows users to
+  the 2018 opus-tools 0.2/libopus 1.3 bundle. The owner collection's
+  `opus-main` snapshot has neither Git metadata nor a generated package-version
+  identity.
+- **Confidence:** verified from official release pages and local source/binary
+  inspection.
+- **Approval needed:** no; the user requested safe current codec builds.
+- **Recommended next pass:** build only from official hash-pinned release
+  archives, package every corresponding source/license/build input, and compare
+  old/new decode, metadata, determinism, and representative signal behavior.
+- **Smallest safe next step:** create a deterministic x64 static build recipe
+  around opus-tools 0.2, libopusenc 0.3, libopus 1.6.1, and libogg 1.3.6.
+- **Verification plan:** two clean builds with one executable hash; repeated
+  stdin encodes; independent ffmpeg decode; duration/channel/rate/tag checks;
+  old/new corpus comparison; release preparation/notices/trust/artifact gates;
+  user-import precedence.
+- **Owner:** codec and release maintainers.
+- **Status:** open 2026-07-29.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R83. Remaining work
-is ordered by the authority or evidence it requires:
+The locally actionable correctness queue is closed through R86; R87 is the
+next bounded codec slice. Remaining work is ordered by the authority or
+evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -2166,3 +2298,6 @@ is ordered by the authority or evidence it requires:
   Test & Copy and independently verified six-sector CTDB repair. Kept exact
   dormant-branch coverage open because all wake counters were zero. Added R83
   after the same run exposed an artwork-discovery/job-snapshot race.
+- 2026-07-29 - bounded the open libhdcd replacement as R84, shipped a
+  reproducible source-accompanied Musepack encoder as R85, and closed R86's
+  RID-publish lock-file dirtiness. Added R87 for a current-libopus source build.
