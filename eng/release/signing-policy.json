@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "policyId": "cuetools-windows-authenticode-v1",
+  "fileDigest": "SHA256",
+  "timestampDigest": "SHA256",
+  "timestampUrl": "http://timestamp.digicert.com",
+  "codeSigningEku": "1.3.6.1.5.5.7.3.3",
+  "productionRefPrefix": "refs/tags/",
+  "profiles": [
+    {
+      "id": "classic-win",
+      "artifactDirectory": "bin/Release/CUETools_2.2.6",
+      "contractPath": "eng/release/classic-win.manifest.json",
+      "minimumSelectedFiles": 60,
+      "regeneratePluginManifest": true,
+      "includePathRegexes": [
+        "^(?:BluTools|CUEControls|CUERipper|CUETools(?:\\.[^/]+)*)\\.(?:exe|dll)$",
+        "^(?:Freedb|ProgressODoom)\\.dll$",
+        "^(?:de-DE|ru-RU)/(?:CUERipper|CUETools)\\.resources\\.dll$",
+        "^plugins/(?:Bwg\\.[^/]+|CUETools\\.[^/]+)\\.dll$",
+        "^plugins/(?:de-DE|ru-RU)/(?:Bwg\\.[^/]+|CUETools\\.[^/]+)\\.resources\\.dll$",
+        "^plugins/(?:win32|x64)/(?:CUETools\\.[^/]+|hdcd|libFLAC_dynamic|MACLibDll|wavpackdll)\\.dll$",
+        "^interop/EAC/CUETools\\.[^/]+\\.dll$"
+      ]
+    },
+    {
+      "id": "wpf-win-x64",
+      "artifactDirectory": "bin/Release/CUETools2026-win-x64",
+      "contractPath": "eng/release/wpf-win-x64.manifest.json",
+      "minimumSelectedFiles": 40,
+      "regeneratePluginManifest": true,
+      "includePathRegexes": [
+        "^CUETools(?:\\.[^/]+)*\\.(?:exe|dll)$",
+        "^(?:Bwg\\.[^/]+|Freedb|ProgressODoom)\\.dll$",
+        "^(?:de-DE|ru-RU)/(?:Bwg\\.[^/]+|CUETools\\.[^/]+)\\.resources\\.dll$",
+        "^plugins/CUETools\\.[^/]+\\.dll$",
+        "^plugins/(?:de-DE|ru-RU)/CUETools\\.[^/]+\\.resources\\.dll$",
+        "^plugins/x64/(?:hdcd|libFLAC_dynamic|MACLibDll|wavpackdll)\\.dll$"
+      ]
+    }
+  ]
+}

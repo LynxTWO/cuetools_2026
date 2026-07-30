@@ -125,6 +125,17 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
   actual package declarations, require policy and lock files to agree exactly, use
   locked restore in CI, and prove restore does not write into vendor submodules or
   generated dependency stages.
+- Treat a native binding version and its loaded native runtime as one ABI contract.
+  Check runtime majors before the first functional call, contain managed callback
+  exceptions at the ABI boundary, and exercise real native bytes in every shipped
+  architecture; a managed compile or one architecture is not compatibility evidence.
+- Treat release signing as a byte-mutating build phase. Sign before final hashes,
+  provenance, SBOMs, and archive creation; then regenerate every dependent manifest
+  and revalidate the signed artifact. An explicit unsigned evaluation build is not a
+  production release.
+- Validate workflow commands under the shell the workflow actually declares. YAML
+  parsing and workflow linting do not prove that comments, quoting, exit propagation,
+  or multiline syntax are valid in `cmd`, PowerShell, or Bash.
 - Distinguish a source defect from an unexercised path, missing toolchain, unavailable capability, or missing native dependency.
 - Name out-of-repo boundaries when they affect live behavior.
 - Do not claim whole-repo coverage from one clean path.

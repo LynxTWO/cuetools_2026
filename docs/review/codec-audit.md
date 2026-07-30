@@ -132,8 +132,8 @@ decoder. The UI must still apply `EncoderCatalog.IsUsable`.
 
 | Project or capability | Current disposition |
 | --- | --- |
-| `CUETools.Codecs.ffmpeg` | Still in the solution and references FFmpeg.AutoGen 7.1.1, but `CUETools.Codecs.ffmpegdll.dll`, `FFmpeg.AutoGen.dll`, and the FFmpeg native DLL family are no longer copied by classic or WPF. It is `not shipped`. |
-| FFmpeg native DLL workflow | The manual workflow still produces standalone x86/x64 FFmpeg 7.1.1 artifacts while upstream stable is 8.1.2. Those artifacts are not inputs to either primary release. |
+| `CUETools.Codecs.ffmpeg` | Still in the solution and now references FFmpeg.AutoGen 8.1.0. The wrapper rejects incompatible native major ABIs, contains managed callback failures, drains delayed frames, owns native resources transactionally, and passed deterministic FFmpeg 8.1.2 x64 and x86 16/24-bit path/stream/nonzero-seek/PCM checks. `CUETools.Codecs.ffmpegdll.dll`, `FFmpeg.AutoGen.dll`, and the native DLL family are still not copied by classic or WPF, so it remains `not shipped`. |
+| FFmpeg native DLL workflow | The manual workflow source-builds standalone x86/x64 FFmpeg 8.1.2#3 from one immutable vcpkg commit, runs the managed/native probe in each process architecture, and emits license, port-manifest, version, size, and SHA-256 evidence. Those artifacts are not inputs to either primary release. |
 | `ffmpeg.exe` command encoder | Separate from the managed wrapper. The built-in external ALAC command path remains supported and its real self-verification test passed when `ffmpeg.exe` was present. |
 | LossyWAV | The classic collection script copies the standalone DLL and CLI. It is not a dynamically registered `IAudioEncoderSettings` plugin, so this audit does not present `lossy.flac` as a proven integrated GUI codec pipeline. |
 | CoreAudio, DirectSound, Icecast | Solution components used by the separate player/output tools. They are not WPF or classic CUETools release codec plugins. |
@@ -185,6 +185,10 @@ release evidence. Evidence-specific runs on 2026-07-26 established:
   terminal-state checks, and failure-preserving publication checks;
 - focused WPF codec/trust tests passed 16/16, while focused manifest trust
   selection passed 13/13.
+- the refreshed FFmpeg 8.1.2 x64 and x86 runtimes decoded deterministic
+  5,003-frame 16- and 24-bit AIFF files from paths and managed streams with
+  exact PCM equality, replayed nonzero seeks, drained EOF, rejected use after
+  disposal, and contained a managed callback exception.
 
 The canonical suite covers WAV primitives, managed FLAC and ALAC behavior, libFLAC,
 finalization and publication failures, external-process watchdogs, real FFmpeg ALAC

@@ -7,6 +7,19 @@ on:
     tags:
       - '*'
   workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Apply production Authenticode signing (requires protected environment secrets)
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -14,6 +27,7 @@ defaults:
 
 jobs:
   build:
+    environment: release-signing
     strategy:
       matrix:
         # https://github.com/actions/virtual-environments/blob/master/images/win/Windows2022-Readme.md
@@ -62,6 +76,33 @@ jobs:
       - name: Clean-publish and validate CUETools 2026
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\Publish-Wpf.ps1 -Configuration Release
+      - name: Apply release signing policy and revalidate signed artifacts
+        shell: pwsh
+        env:
+          CUETOOLS_SIGNING_PFX_BASE64: ${{ secrets.CUETOOLS_SIGNING_PFX_BASE64 }}
+          CUETOOLS_SIGNING_PFX_PASSWORD: ${{ secrets.CUETOOLS_SIGNING_PFX_PASSWORD }}
+          CUETOOLS_SIGNING_SUBJECT_PATTERN: ${{ vars.CUETOOLS_SIGNING_SUBJECT_PATTERN }}
+          CUETOOLS_REQUIRE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/') || inputs.sign_release == true }}
+        run: |
+          $requireSigning = $env:CUETOOLS_REQUIRE_SIGNING -eq 'true'
+          $certificateBase64 = if ($requireSigning) {
+            $env:CUETOOLS_SIGNING_PFX_BASE64
+          } else {
+            ''
+          }
+          & .\eng\release\Invoke-ArtifactSigning.ps1 `
+            -CertificateBase64 $certificateBase64 `
+            -CertificatePassword $env:CUETOOLS_SIGNING_PFX_PASSWORD `
+            -ExpectedSubjectPattern $env:CUETOOLS_SIGNING_SUBJECT_PATTERN `
+            -RequireSigning:$requireSigning
+          dotnet run --project eng\release\ArtifactValidator\ArtifactValidator.csproj --configuration Release -- bin\Release\CUETools_2.2.6 eng\release\classic-win.manifest.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "The signed classic artifact failed revalidation."
+          }
+          dotnet run --project eng\release\ArtifactValidator\ArtifactValidator.csproj --configuration Release -- bin\Release\CUETools2026-win-x64 eng\release\wpf-win-x64.manifest.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "The signed WPF artifact failed revalidation."
+          }
       - name: Generate deterministic artifact hashes and source receipts
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File eng\release\New-Provenance.ps1 -ArtifactDirectory bin\Release\CUETools_2.2.6 -ContractPath eng\release\classic-win.manifest.json -OutputDirectory bin\Release\evidence\provenance -ArtifactName CUETools_2.2.6

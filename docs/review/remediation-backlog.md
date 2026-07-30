@@ -2446,26 +2446,86 @@ does not relax evidence, rollback, or verification requirements.
   resource nodes are removed, and `eng/ci/Test-ResxDuplicateNames.ps1` prevents
   recurrence across first-party `.resx` files.
 
+### R94. The standalone FFmpeg path carried a stale major ABI and no runtime artifact proof - bucket A, risk high
+
+- **Area or slice:** `CUETools.Codecs.ffmpeg`, FFmpeg.AutoGen, the manual native
+  DLL workflow, native dependency inventory, and hosted artifact evidence.
+- **Why it matters:** a binding/library major mismatch can fail at load or cross
+  an unsafe native ABI. The old wrapper also let managed callback exceptions
+  cross the native boundary, incompletely owned partial native state, did not
+  drain delayed frames, and had no both-architecture behavior proof attached
+  to the workflow artifact.
+- **Evidence found:** FFmpeg.AutoGen is pinned and locked at 8.1.0. The workflow
+  source-builds FFmpeg 8.1.2#3 for x64 and x86 from vcpkg commit
+  `9e593bb18ea69cc5095e012465dcd675a822ed0d`, emits source/license/DLL hash
+  evidence, and runs the managed worker in the matching process architecture.
+  Both local process architectures report runtime 8.1.2 and passed exact
+  5,003-frame 16/24-bit path and managed-stream PCM, nonzero seek replay, EOF
+  drain, disposal, and callback containment.
+- **Confidence:** high for the reachable AIFF decoder and binding/native major
+  contract. This does not prove every demuxer/decoder in FFmpeg.
+- **Approval needed:** no; the path remains standalone and unshipped.
+- **Recommended next pass:** keep primary-package import separate and require a
+  new reachability/artifact decision if proposed.
+- **Smallest safe next step:** complete the hosted matrix.
+- **Verification plan:** zero-warning dual-target wrapper build; real x64/x86
+  worker; static workflow contract; actionlint; hosted artifact manifest and
+  license inspection.
+- **Owner:** codec and release maintainers.
+- **Status:** local implementation and x64/x86 evidence complete 2026-07-29;
+  hosted receipts are appended to the current live evidence record.
+
+### R95. Release hashes established byte identity but not publisher identity - bucket A, risk high
+
+- **Area or slice:** Windows release workflow, classic/WPF artifact contracts,
+  plugin hash manifests, provenance, SBOMs, and signing credentials.
+- **Why it matters:** a hash can prove that bytes did not change relative to a
+  receipt, but it cannot tell a user who published them. Signing after
+  provenance or without regenerating plugin manifests would also make existing
+  evidence false or prevent the application from loading its own plugins.
+- **Evidence found:** `signing-policy.json` selects 117 publisher-built PE files
+  while excluding hash-pinned upstream and Microsoft runtime files. Production
+  uses SHA-256 Authenticode and SHA-256 RFC 3161 timestamps, verifies all
+  signatures and timestamps, regenerates plugin manifests, revalidates both
+  artifacts, and only then generates provenance/SBOMs. Tag builds and explicit
+  signed dispatches fail closed when credentials are unavailable. Manual
+  evidence builds are labeled `unsigned-evaluation`, not silently releasable.
+- **Confidence:** high for policy selection, ordering, credential absence, and
+  fail-closed behavior; a public-trust certificate has not yet been configured.
+- **Approval needed:** only for the external legal/publisher identity and
+  certificate purchase or enrollment.
+- **Recommended next pass:** configure the protected `release-signing`
+  environment with independent approval and rotate/revoke per policy.
+- **Smallest safe next step:** select the certificate subject and populate the
+  two secrets and one subject-pattern variable.
+- **Verification plan:** 261 static signing-policy checks, 117-file plan,
+  actionlint, unsigned-evidence receipt, then a signed tag artifact with
+  independent SignTool verification.
+- **Owner:** project owner and release maintainers.
+- **Status:** repository policy implemented 2026-07-29; public-trust identity
+  provisioning remains an explicit external owner action.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R93. Remaining work
+The locally actionable correctness queue is closed through R95. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
    byte-proven; TheAudioDB remains explicitly opt-in.
-2. Run the pinned hosted workflows and compare them with the local WPF/classic
-   receipts.
-3. Choose and implement a publisher signing/attestation identity and policy.
+2. Retain current hosted workflow receipts and compare future runner-image
+   updates against them.
+3. Provision the public-trust signing identity in the protected environment;
+   policy and unsigned-release refusal are already implemented.
 4. Continue the deliberately large R8/R12 SDK/async modernization and the
-   behavior-changing R13/R14 LAME/FFmpeg projects one verified slice at a time.
+   behavior-changing R13/R14 LAME project one verified slice at a time.
 
 ## Holes / external boundaries
 
 - CTDB TLS (R4) is out-of-repo (server operator).
 - CI depends on GitHub-hosted Windows image + VS Enterprise devenv path.
-- Signing identity/policy is an owner decision; hashes establish byte identity, not
-  publisher identity.
+- Signing identity is an owner decision. The policy and tagged-release refusal
+  are implemented; hashes alone still do not establish publisher identity.
 - Retained vendored binaries remain a supply-chain surface even though shipped
   bytes, immutable gitlinks, patches, and staged source manifests are hash-bound
   and inventoried. The HDCD and RareWares LAME limitations are explicit retain

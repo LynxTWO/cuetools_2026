@@ -326,21 +326,21 @@
     {
       "id": "ffmpeg-on-demand",
       "packagePaths": [
-        "standalone ffmpeg_7.1.1_dlls_win32 workflow artifact",
-        "standalone ffmpeg_7.1.1_dlls_x64 workflow artifact"
+        "standalone ffmpeg_8.1.2_dlls_win32 workflow artifact",
+        "standalone ffmpeg_8.1.2_dlls_x64 workflow artifact"
       ],
-      "version": "7.1.1",
+      "version": "8.1.2",
       "sourceStatus": "source-built-standalone",
       "upstream": "https://ffmpeg.org/",
       "sourceInputs": [
-        "vcpkg commit ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0",
-        "x86-windows and x64-windows ffmpeg ports"
+        "vcpkg commit 9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "FFmpeg 8.1.2#3 x86-windows and x64-windows ports"
       ],
       "buildRecipe": [
         ".github/workflows/build_ffmpeg_dlls.yml"
       ],
-      "verification": "The workflow pins checkout, run-vcpkg, and upload actions to immutable commits.",
-      "limitations": "These DLLs are emitted by a separate manual workflow and are not included by the current classic or WPF release collection."
+      "verification": "The workflow pins checkout, run-vcpkg, and upload actions to immutable commits; uses FFmpeg.AutoGen 8.1.0; runs deterministic AIFF path and stream decodes, exact PCM checks, seek replay, disposal, and managed-callback exception containment under x64 and x86; and emits the FFmpeg license, exact vcpkg port manifest, DLL hashes, file versions, and build inputs.",
+      "limitations": "These DLLs are emitted by a separate manual workflow and are not included by the current classic or WPF release collection. The probe covers the reachable AIFF decoder contract rather than every format supported by FFmpeg."
     }
   ]
 }
