@@ -145,6 +145,10 @@ progress documents for it belong here, under `docs/review/`.
   no-restore build, and fail immediately if either command fails. Do not copy this
   unshipped path into either primary artifact without a separate reachability and
   packaging review.
+- A hosted workflow is not warning-clean when GitHub must force a pinned action
+  off its deprecated declared runtime. Keep actions on supported upstream releases,
+  pin immutable commits, inspect annotations, and bind the rerun receipt to the
+  exact source revision.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate

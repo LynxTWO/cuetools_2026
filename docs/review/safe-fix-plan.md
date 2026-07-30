@@ -1502,3 +1502,27 @@ types, 15 public methods, 7 public properties, 7 public fields, zero resources,
 the same five references and version, and the same app config. Devenv built
 58/58 projects without changing either lock. The full receipted release
 transaction passed all three configurations and exact artifact collection.
+
+### Remove deprecated hosted action-runtime shims
+
+**Scope:** update immutable checkout, .NET setup, and artifact-upload action
+pins across the four workflows and add the hosted-annotation rule to the local
+audit steering material.
+
+**Safety:** use only current upstream action releases and their exact commit
+SHAs. Preserve every workflow input, permission, matrix, shell, step order,
+artifact name, and artifact path.
+
+**Checks:** actionlint; FFmpeg workflow, signing-policy, and release-safety
+contracts; source-bound classic/WPF CI; dual-architecture FFmpeg behavior and
+artifact inspection; unsigned release artifact inspection; no deprecated action
+runtime annotations.
+
+**Rollback:** revert all action pins and the rule together only if a current
+action changes the established workflow contract. Do not accept the old
+compatibility warning as the rollback success criterion.
+
+**Observability:** hosted annotations, job conclusions, exact source revision,
+and downloaded artifact receipts only. Product runtime behavior is unchanged.
+
+**Status:** repository changes complete 2026-07-30; hosted reruns pending.

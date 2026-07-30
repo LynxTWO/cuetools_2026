@@ -432,6 +432,10 @@ Use this when a workflow embeds commands or claims hosted coverage:
   contract test for critical version pins, architecture matrices, evidence files,
   artifact names, and ordering constraints, then execute the workflow on the hosted
   runner it claims to cover.
+- Inspect hosted annotations as part of the result. A green job is not clean
+  evidence when the platform had to force an action off its declared deprecated
+  runtime. Move to a supported upstream action release, pin its immutable commit,
+  rerun the action's critical contract, and retain the source-bound hosted receipt.
 - Inspect downloaded artifacts and receipts after the hosted run. A green job proves
   its commands exited successfully; it does not by itself prove that the intended
   native runtime, architecture, license, manifest, signature, or final bytes were

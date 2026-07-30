@@ -164,6 +164,11 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     lane-isolated graph. Compare final dependencies, generated config, resources,
     executable flags, and lock cleanliness; never infer a shipping no-op from the
     build-time condition alone.
+27. HOSTED SUCCESS INCLUDES ACTION-RUNTIME HEALTH. Inspect workflow annotations, not
+    only job conclusions. If the platform must force a pinned action off a deprecated
+    declared runtime, move to a supported upstream release, pin its immutable commit,
+    rerun the critical workflow contract, and retain a receipt bound to that source
+    revision. A compatibility shim is migration evidence, not a clean long-term pass.
 
 ### How to choose the extraction
 
