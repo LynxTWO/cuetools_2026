@@ -76,10 +76,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   and full MSBuild.
 - **Remaining (folded into R12):** SDK-style conversion of the old-style WinForms
   GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`) so they too
-  `dotnet build`. `CLParity` is a separate reachability contradiction: its
-  registration is commented out, it has no consumer, and its project references
-  a missing binary. GUI conversions need runtime verification; they are not blind
-  headless changes.
+  `dotnet build`. The `CLParity` reachability contradiction was closed by R89:
+  the disabled, unconsumed, unshipped, non-building experiment was retired.
+  GUI conversions need runtime verification; they are not blind headless changes.
 
 ### R9. ProxyPassword stored plaintext at rest (F1) - DONE 2026-07-26, risk medium
 
@@ -2244,8 +2243,8 @@ does not relax evidence, rollback, or verification requirements.
 - **Approval needed:** no; this preserves the shipping runtime contract while
   completing the user-authorized R12 slice.
 - **Recommended next pass:** convert the remaining GUI projects one at a time
-  with explicit PE/resource/UI contracts. Classify `CLParity` separately rather
-  than treating its non-building project as a working optional path.
+  with explicit PE/resource/UI contracts. R89 separately retired `CLParity`
+  rather than treating its non-building project as a working optional path.
 - **Smallest safe next step:** none; this slice is closed.
 - **Verification plan:** locked restore; Core and full-MSBuild Release builds;
   public API/resource/kernel comparison; PE flag comparison; live modes 0-8,
@@ -2258,21 +2257,53 @@ does not relax evidence, rollback, or verification requirements.
   The RTX 3060/OpenCL 3.0 matrix passed modes 0-8, two CPU workers, 24-bit
   input, the 4096-sample boundary, and byte-identical verify-on/off output.
 
+### R89. CLParity was classified as current despite being disabled and non-building - bucket A, risk medium
+
+- **Area or slice:** `CUETools.CLParity`, solution membership, GPU/parity
+  reachability, and R8/R12 modernization scope.
+- **Why it matters:** treating a disabled research experiment as a current
+  optional path inflated release scope and suggested that making its project
+  compile would restore a supported feature. Its settings/writer contract
+  predates the current codec interface, so a mechanical SDK conversion would
+  invent product behavior without a consumer or test oracle.
+- **Evidence found:** 68 first-party project candidates and their C#/solution
+  references were scanned. Only four files inside `CUETools.CLParity` plus the
+  solution mentioned `CLParitySettings`, `CLParityWriter`, or the assembly.
+  Its registration attribute was commented out, no project referenced it, no
+  release collection included it, and its project referenced the absent
+  `ThirdParty\OpenCLNet.dll`. `CLParitySettings` did not implement the current
+  `IAudioEncoderSettings`, and the writer exposed the obsolete mutable
+  `object Settings` shape.
+- **Confidence:** high; source, project graph, solution, and release reachability
+  all agree.
+- **Approval needed:** no; dead-code removal D5 and autonomous R-item
+  remediation are user-authorized.
+- **Recommended next pass:** keep FLACCL as the only current GPU codec path. A
+  future parity accelerator should begin from a current product requirement,
+  interface, CPU oracle, and cross-device test matrix rather than reviving this
+  tree by filename.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** remove all solution/project/release references, require
+  a zero-match post-removal scan, run release safety and the canonical tests,
+  and preserve recovery through Git history.
+- **Owner:** codec and architecture maintainers.
+- **Status:** fixed 2026-07-29. Removed the 35-file, 308,630-byte experiment
+  and its solution configuration. The deleted set includes the old OpenCL
+  wrapper/kernel plus its paper, MATLAB models, and native prototypes; all
+  remain recoverable from the parent commit. No shipped artifact was removed.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R88 except for the
-newly corrected `CLParity` reachability classification. Remaining work is
-ordered by the authority or evidence it requires:
+The locally actionable correctness queue is closed through R89. Remaining work
+is ordered by the authority or evidence it requires:
 
-1. Resolve `CLParity` as dead/unshipped code or deliberately restore and
-   modernize its abandoned contract; do not continue calling it current.
-2. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
+1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
    byte-proven; TheAudioDB remains explicitly opt-in.
-3. Run the pinned hosted workflows and compare them with the local WPF/classic
+2. Run the pinned hosted workflows and compare them with the local WPF/classic
    receipts.
-4. Choose and implement a publisher signing/attestation identity and policy.
-5. Continue the deliberately large R8/R12 SDK/async modernization and the
+3. Choose and implement a publisher signing/attestation identity and policy.
+4. Continue the deliberately large R8/R12 SDK/async modernization and the
    behavior-changing R13/R14 LAME/FFmpeg projects one verified slice at a time.
 
 ## Holes / external boundaries
@@ -2373,3 +2404,5 @@ ordered by the authority or evidence it requires:
 - 2026-07-29 - closed R88 by converting the FLACCL plugin and command host to
   SDK-style net47 projects, preserving the discovered 32-bit-preferred runtime
   contract, and rerunning the full RTX 3060 correctness matrix.
+- 2026-07-29 - closed R89 by correcting CLParity's reachability classification
+  and retiring its disabled, unconsumed, unshipped, non-building experiment.

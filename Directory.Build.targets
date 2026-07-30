@@ -24,9 +24,9 @@
     Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here.
     FLACCL's paired plugin/command projects were converted under R12/R88. The old-style
     WinForms GUIs (CUETools, CUERipper, CUEPlayer, eac3ui) still need SDK conversion and
-    runtime UI verification. CLParity is tracked separately because its registration is
-    disabled and its project is already non-building. SDK-style first-party net47 projects
-    build under `dotnet build` with this in place.
+    runtime UI verification. The disabled, non-building CLParity experiment was retired
+    under R89. SDK-style first-party net47 projects build under `dotnet build` with this
+    in place.
   -->
 
   <PropertyGroup>

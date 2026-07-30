@@ -67,8 +67,8 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
   RTX 3060 matrix pass.
 - **Why not complete:** the old-style WinForms GUIs (`CUETools`, `CUERipper`,
   `CUEPlayer`, `CUETools.eac3ui`) still need SDK conversion plus real UI/resource
-  verification. `CLParity` is not a working optional project: it has no consumer,
-  its registration is commented, and its project points at a missing binary.
+  verification. The disabled, unconsumed, non-building `CLParity` experiment
+  was retired under R89 rather than modernized into a false feature.
 - **Verified:** CUEControls and the FLACCL pair build under `dotnet build`;
   TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
   the FLACCL live matrix is recorded under R88.
