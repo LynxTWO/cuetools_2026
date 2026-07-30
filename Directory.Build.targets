@@ -22,11 +22,17 @@
         an unrelated resource package and binding redirect do not enter their runtime closure.
 
     Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here.
-    FLACCL's paired plugin/command projects were converted under R12/R88, and BluTools
-    became the first classic GUI pilot under R90. The old-style GUIs (CUETools,
-    CUERipper, CUEPlayer) still need SDK conversion and runtime UI verification. The
+    FLACCL's paired plugin/command projects were converted under R12/R88, BluTools
+    became the first classic GUI pilot under R90, and CUERipper plus its
+    ProgressODoom control dependency followed under R91. The old-style CUETools
+    and CUEPlayer GUIs still need SDK conversion and runtime UI verification. The
     disabled, non-building CLParity experiment was retired under R89. SDK-style
     first-party net47 projects build under `dotnet build` with this in place.
+
+    A Core restore intentionally includes System.Resources.Extensions. A shipping
+    full-MSBuild build must perform its canonical full-MSBuild restore first;
+    reusing Core's project.assets.json can otherwise make the conditional package
+    appear in the generated app config even though this target is a Full no-op.
   -->
 
   <PropertyGroup>

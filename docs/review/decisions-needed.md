@@ -66,12 +66,15 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
   resource/kernel comparisons, executable architecture checks, and the live
   RTX 3060 matrix pass. BluTools (`CUETools.eac3ui`) is now the first classic
   GUI pilot: its API/member shape, PE flags, generated config, 19 embedded
-  images, and live WPF startup are preserved.
-- **Why not complete:** the old-style `CUETools`, `CUERipper`, and `CUEPlayer`
-  GUIs still need SDK conversion plus real UI/resource verification. The
+  images, and live WPF startup are preserved. CUERipper and ProgressODoom
+  followed with preserved managed/PE/config/localization/image contracts and
+  old/new live main-form parity.
+- **Why not complete:** the old-style `CUETools` and `CUEPlayer` GUIs still
+  need SDK conversion plus real UI/resource verification. The
   disabled, unconsumed, non-building `CLParity` experiment was retired under
   R89 rather than modernized into a false feature.
-- **Verified:** CUEControls, the FLACCL pair, and BluTools build under `dotnet build`;
+- **Verified:** CUEControls, the FLACCL pair, BluTools, CUERipper, and
+  ProgressODoom build under `dotnet build`;
   TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
   the FLACCL live matrix is recorded under R88 and the BluTools equivalence
   evidence under R90.
@@ -100,9 +103,10 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`,
   and the first paired R12 conversion (`CUETools.Codecs.FLACCL` plus
   `CUETools.FLACCL.cmd`) with live OpenCL evidence, followed by the first
-  classic-GUI pilot (`CUETools.eac3ui` / BluTools).
+  classic-GUI pilot (`CUETools.eac3ui` / BluTools) and the CUERipper /
+  ProgressODoom pair.
 - **The remaining sub-decision:** the remaining big pieces - SDK-style conversion of the
-  old-style classic GUIs (`CUETools`, `CUERipper`, `CUEPlayer`),
+  old-style classic GUIs (`CUETools`, `CUEPlayer`),
   then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm
   resource/icon loading and behavior. The current classic baseline is locally green:
   AnyCPU completed 53/0, x64 and Win32 each completed 2/0 with 59 skipped

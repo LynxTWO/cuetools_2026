@@ -150,6 +150,13 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     every enrolled project, and make CI restore in locked mode. Prove the policy does
     not generate files inside immutable vendor submodules. Locks prove resolution,
     while receipts, SBOMs, notices, and hashes retain their distinct artifact roles.
+25. RESTORE OUTPUT IS AN INPUT TO THE BUILD. A dependency conditioned on the restore
+    engine, runtime identifier, framework, or configuration can remain serialized in
+    `project.assets.json` and affect a later build where that condition evaluates false.
+    Exercise every supported canonical restore-plus-build lane from a clean or
+    lane-isolated graph. Compare final dependencies, generated config, resources,
+    executable flags, and lock cleanliness; never infer a shipping no-op from the
+    build-time condition alone.
 
 ### How to choose the extraction
 

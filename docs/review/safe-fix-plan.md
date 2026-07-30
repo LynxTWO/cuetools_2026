@@ -1335,3 +1335,38 @@ with zero warnings. Old/new builds match across 33 public declarations, 44
 fields, 59 method declarations, assembly identity, PE flags, exact generated
 config, and 19 embedded image payloads. The WPF compiler changed only the BAML
 encoding; both binaries construct a live hidden `BluTools` window.
+
+### Convert CUERipper and its ProgressODoom dependency as the second classic-GUI slice
+
+**Exact files:** `CUERipper/CUERipper.csproj`,
+`ProgressODoom/ProgressODoom.csproj`, their `CUETools.sln` project types,
+`Directory.Build.targets` restore-boundary note, and R8/R12/R91/S9 records.
+
+**Safety and unchanged behavior:** retain net47, assembly/file versions
+(including ProgressODoom's intentional `1.0.*` assembly version), WinExe/library
+roles, AnyCPU PE32/IL-only behavior, application manifest/icon, ClickOnce
+properties, bootstrapper declarations, unsafe-code setting, output paths,
+project references, form/localized resources, generated settings, and the
+`plugins` config probe. Change no application source.
+
+**Checks:** capture old packaged binaries, config, and satellites; perform a
+Core restore/build and a separate canonical full-MSBuild restore/build with
+zero warnings; compare IL classes/fields/methods/public declarations, assembly
+and file identity, PE flags, XML-normalized config, every manifest resource,
+localized satellites, and decoded pixels for compiler-rewritten WinForms
+image streams. Start old and new executables hidden, enumerate their top-level
+windows, and require a responsive `CUERipper 2.2.6` main form. Run canonical
+WPF and release-safety gates.
+
+**Rollback:** revert both projects and their solution types together. Do not
+retain a CUERipper conversion whose resource/control dependency stays
+old-style, or infer full-build closure from a Core-generated assets file.
+
+**Observability:** build/resource/startup evidence only. This changes no rip,
+network, settings value, device, metadata, logging, or telemetry behavior.
+
+**Status:** implemented and verified 2026-07-29. CUERipper retains 33 classes,
+200 fields, 274 methods, and 179 public declarations; ProgressODoom retains 45,
+241, 424, and 378 respectively. PE flags, config semantics, satellites, all 26
+control icons, and all decoded GUI images match. Both old/new applications
+create 13 top-level windows with the expected responsive main form.

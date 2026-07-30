@@ -191,7 +191,10 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   stored password, and report save failures. BluTools is the first SDK-style
   classic-GUI pilot: its API, fields, methods, PE flags, generated config, and
   all 19 embedded image payloads match the baseline, and both old/new builds
-  construct a live WPF window. Real `ApplicationSettingsBase`
+  construct a live WPF window. CUERipper and ProgressODoom are the second
+  conversion slice; managed shape, PE flags, config semantics, localization,
+  and decoded images match, and old/new CUERipper builds create the same
+  responsive main form/window set. Real `ApplicationSettingsBase`
   persistence/migration has not been exercised. CUEPlayer's entrypoint remains
   inventoried rather than runtime-smoked.
 - **Residual boundary:** interactive GUI, accessibility, and localization flows
