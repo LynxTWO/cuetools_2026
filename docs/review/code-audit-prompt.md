@@ -190,6 +190,19 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     rehashes current bytes and requires an explicit checkout representation for
     every pinned member. A provenance mismatch must stop publication; never make
     the receipt pass by omitting or weakening the check.
+31. PROVENANCE MUST NOT DEPEND ON PRIVATE IGNORE STATE. A generated source expansion
+    can be source-clean only when every derived member is validated by path, size,
+    and hash against a pinned archive and the complete closure digest is recorded.
+    Classify expected compiler residue separately without hiding it; any foreign,
+    missing, or modified member remains source-dirty. Exercise a hosted checkout
+    where local `.git/info/exclude` rules do not exist.
+32. SBOMS ARE TYPED DOCUMENTS, NOT FORMATTED TEXT. Postprocessing must preserve JSON
+    array/object/scalar types under the workflow's oldest PowerShell/runtime, update
+    digest sidecars after the final byte mutation, validate exact artifact file and
+    SHA-256 membership, validate the dependency graph, and require the producer's
+    validator to report success. A parseable file or zero generator exit is
+    insufficient. Inspect hosted annotations for expected warnings and either close
+    their cause or suppress them only behind stronger explicit postconditions.
 
 ### How to choose the extraction
 

@@ -20,6 +20,12 @@ if (-not (Test-Path -LiteralPath $releaseSafetyScript -PathType Leaf)) {
 }
 . $releaseSafetyScript
 
+$nativeInventoryScript = Join-Path $PSScriptRoot "NativeDependencyInventory.ps1"
+if (-not (Test-Path -LiteralPath $nativeInventoryScript -PathType Leaf)) {
+    throw "Native dependency inventory helper does not exist: $nativeInventoryScript"
+}
+. $nativeInventoryScript
+
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $ArtifactDirectory = [IO.Path]::GetFullPath($ArtifactDirectory)
 $ContractPath = [IO.Path]::GetFullPath($ContractPath)
@@ -119,7 +125,9 @@ function Get-PatchId([string]$WorkingDirectory) {
     finally { Pop-Location }
 }
 
-function Get-UntrackedRecords([string]$WorkingDirectory) {
+function Get-UntrackedRecords(
+    [string]$WorkingDirectory,
+    [hashtable]$ValidatedDerivedSourceLookup = @{}) {
     $records = @{}
     $excludedClassifications = @{}
     $excludedCount = 0
@@ -140,6 +148,21 @@ function Get-UntrackedRecords([string]$WorkingDirectory) {
         if (($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Untracked source must not be a reparse point: $relativePath"
         }
+        $normalized = $relativePath.Replace("\", "/")
+        if ($ValidatedDerivedSourceLookup.ContainsKey($normalized)) {
+            $expected = $ValidatedDerivedSourceLookup[$normalized]
+            $actualHash = Get-Sha256Hex $fullPath
+            if ([long]$info.Length -ne [long]$expected.bytes -or
+                -not [string]::Equals(
+                    $actualHash,
+                    [string]$expected.sha256,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw (
+                    "Validated derived source changed during provenance capture: " +
+                    $normalized)
+            }
+            continue
+        }
         $classification = Get-GeneratedUntrackedClassification -RelativePath $relativePath
         if ($null -ne $classification) {
             if (-not $excludedClassifications.ContainsKey($classification)) {
@@ -149,7 +172,6 @@ function Get-UntrackedRecords([string]$WorkingDirectory) {
             $excludedCount++
             continue
         }
-        $normalized = $relativePath.Replace("\", "/")
         $records[$normalized] = [pscustomobject]@{
             path = $normalized
             bytes = [long]$info.Length
@@ -174,6 +196,14 @@ function Get-UntrackedRecords([string]$WorkingDirectory) {
             )
         }
     }
+}
+
+$macSdkClosure = Get-CUEToolsMacSdkSourceClosure `
+    -RepositoryRoot $repoRoot `
+    -Inventory $nativeInventory
+$validatedDerivedSourceLookup = @{}
+foreach ($member in @($macSdkClosure.archiveMembers)) {
+    $validatedDerivedSourceLookup[[string]$member.path] = $member
 }
 
 $fileRecords = @{}
@@ -242,7 +272,9 @@ try {
     $commitTimeRaw = (& git show -s --format=%cI HEAD).Trim()
     $commitTime = ([DateTimeOffset]::Parse($commitTimeRaw)).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $rootPatchId = Get-PatchId $repoRoot
-    $rootUntrackedResult = Get-UntrackedRecords $repoRoot
+    $rootUntrackedResult = Get-UntrackedRecords `
+        -WorkingDirectory $repoRoot `
+        -ValidatedDerivedSourceLookup $validatedDerivedSourceLookup
     $rootUntracked = @($rootUntrackedResult.sourceFiles)
     $submodules = @()
     if (Test-Path -LiteralPath (Join-Path $repoRoot ".gitmodules")) {
@@ -276,11 +308,12 @@ try {
                 patchId = $subPatchId
                 untrackedFiles = $subUntracked
                 excludedGeneratedFiles = $subUntrackedResult.excludedGeneratedFiles
-                state = $(if (
-                    $null -eq $subPatchId -and
-                    $subUntracked.Count -eq 0 -and
-                    $subUntrackedResult.excludedGeneratedFiles.count -eq 0
-                ) { "clean" } else { "patched-or-untracked" })
+                state = Get-ProvenanceWorkspaceState `
+                    -PatchId $subPatchId `
+                    -UntrackedSourceCount $subUntracked.Count `
+                    -ClassifiedGeneratedFileCount (
+                        $subUntrackedResult.excludedGeneratedFiles.count) `
+                    -NestedWorkspacesClean $true
             }
         }
     }
@@ -308,18 +341,20 @@ try {
             rootPatchId = $rootPatchId
             untrackedFiles = $rootUntracked
             excludedGeneratedFiles = $rootUntrackedResult.excludedGeneratedFiles
+            validatedDerivedSourceClosures = @($macSdkClosure.summary)
             untrackedPolicy = [ordered]@{
                 enumeration = "git-ls-files-others-exclude-standard"
                 sourceFiles = "path-size-sha256"
-                generatedFiles = "count-and-classification-only"
+                generatedFiles = "count-and-classification-only; does not change source state"
+                validatedDerivedSources = "exact pinned archive member path-size-sha256 plus closure digest; does not change source state"
                 ignoredFiles = "not-enumerated-or-counted"
             }
-            state = $(if (
-                $null -eq $rootPatchId -and
-                $rootUntracked.Count -eq 0 -and
-                $rootUntrackedResult.excludedGeneratedFiles.count -eq 0 -and
-                $submoduleStateIsClean
-            ) { "clean" } else { "patched-or-untracked" })
+            state = Get-ProvenanceWorkspaceState `
+                -PatchId $rootPatchId `
+                -UntrackedSourceCount $rootUntracked.Count `
+                -ClassifiedGeneratedFileCount (
+                    $rootUntrackedResult.excludedGeneratedFiles.count) `
+                -NestedWorkspacesClean $submoduleStateIsClean
             submodules = $submodules
         }
         toolchain = [ordered]@{

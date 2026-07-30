@@ -165,6 +165,10 @@ progress documents for it belong here, under `docs/review/`.
   when its committed bytes change, derive the gate from the full inventory, and
   require explicit checkout-byte attributes for every member. Never bypass a
   provenance mismatch to complete publication.
+- Provenance must validate the complete pinned Monkey's Audio archive expansion
+  independently of Git ignore visibility. Record its path/size/hash closure; do not
+  count exact derived members or classified compiler residue as unknown source, and
+  do not let that exemption admit a missing, changed, or foreign file.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate
@@ -172,6 +176,10 @@ progress documents for it belong here, under `docs/review/`.
   or explicit signed dispatch must fail when protected credentials or the
   expected subject are unavailable. An unsigned manual evidence build must say
   `unsigned-evaluation` and is not releaseable.
+- SBOM normalization must preserve JSON types under Windows PowerShell 5.1, refresh
+  the final manifest sidecar, prove exact artifact file/hash membership, prove a
+  non-empty CycloneDX dependency graph, and pass Microsoft SBOM Tool validation.
+  Hosted SBOM annotations are part of the release verdict.
 - Treat `docs/review/remediation-backlog.md` status lines as authoritative. After
   each batch, reconcile the ordering, remaining-work summary, decisions, and
   historical next-step text so a closed R-item does not stay in the active queue.

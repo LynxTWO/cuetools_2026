@@ -109,6 +109,7 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
 - For long hardware or device benchmarks, run deterministic gates first and bind the run to an exact commit. Prefer external observers; when privilege blocks them, use opt-in fixed-memory numeric instrumentation. Prove every success, failure, and stop terminal route, and give the watcher an independent process or UI timeout.
 - Treat concurrency as distributed authority. Inventory process-local job state plus every shared physical resource, setting, cache, history, log, staging area, and destination. Require cross-process identity-bound leases, same-resource denial, independent cancellation, crash release, collision-safe publication, and non-sensitive launch/IPC contracts before claiming safe parallel work.
 - For release or generated-source claims, require one shared-writer boundary, non-destructive pre-cleanup intent recovery, archive-wide expansion evidence, explicit hashes for ignored inputs, and policy results from the exact build logs that produced the collected bytes.
+- Make provenance independent of private ignore rules and checkout visibility. Classify an archive-derived source tree only after exact member path, size, and hash validation against the pinned archive; record the full closure digest separately, let expected build residue remain visible by classification, and keep every unknown or modified file source-dirty.
 - Build patched pinned dependencies from an owned, identity-bound staging tree. Do not make the dependency worktree itself a build intermediate, and prove every build, test, packaging, and release consumer uses the same staged source.
 - For repair and preservation claims, verify user-visible identity as well as payload correctness: names, metadata, artwork, sidecars, ordering, and collision behavior can be part of the recovered artifact.
 - For UI-selected identity or policy, trace the selected stable value through the job snapshot, execution, output naming and tags, and final receipt. A correct picker label does not prove downstream consumers used the same selection; assert the produced artifact identity at the last publication boundary.
@@ -133,6 +134,12 @@ Mini-mode skips `05` (the repo is small enough that one map covers it), `07` and
   provenance, SBOMs, and archive creation; then regenerate every dependent manifest
   and revalidate the signed artifact. An explicit unsigned evaluation build is not a
   production release.
+- Treat SBOM postprocessing as a typed supply-chain transform. Preserve JSON arrays
+  and objects under the oldest workflow shell, refresh every digest sidecar after
+  normalization, validate the exact artifact file/hash closure and dependency graph,
+  and require the format producer's validator to report success. A green generator
+  exit or a parsable document is not schema or semantic evidence; inspect hosted
+  annotations as part of the gate.
 - Validate workflow commands under the shell the workflow actually declares. YAML
   parsing and workflow linting do not prove that comments, quoting, exit propagation,
   or multiline syntax are valid in `cmd`, PowerShell, or Bash.

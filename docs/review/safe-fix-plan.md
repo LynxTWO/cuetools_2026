@@ -1607,3 +1607,60 @@ results, provenance receipts, and hosted source revision.
 replacement receipts pending. The first post-EOL hosted release passed both
 application publications and unsigned signing-policy evaluation before the
 stale `81a305c6...` digest rejected the current `e57a0c47...` patch.
+
+### Make derived-source provenance independent of Git ignore visibility
+
+**Scope:** validate the complete Monkey's Audio archive expansion through the
+native inventory helper; record its closure in both provenance receipts;
+exclude only exact validated derived members from unknown untracked source;
+separate classified build residue from source-state dirtiness.
+
+**Safety:** do not ignore the SDK directory by prefix and do not trust file
+extensions as source identity. Require the pinned archive and four overrides,
+reject archive traversal/collisions/reparse points, compare every expanded
+member's path/size/hash, reject every foreign file, and retain classified
+generated counts in the receipt.
+
+**Checks:** 423 archive members and four overrides under Windows PowerShell
+5.1; stable closure digest; source-state policy unit cases; local provenance;
+clean hosted clone where private `.git/info/exclude` is absent.
+
+**Rollback:** revert the closure helper, provenance classification, state
+policy, and tests together. Never regain `clean` by hiding the expansion or
+dropping unknown untracked files from enumeration.
+
+**Observability:** closure identity/counts, unknown untracked records,
+classified build-residue counts, patch ID, submodule states, and final
+source-state verdict.
+
+**Status:** repository repair and local closure/provenance tests complete
+2026-07-30; clean-clone hosted receipt pending.
+
+### Preserve and validate typed SBOM evidence after normalization
+
+**Scope:** replace PowerShell object canonicalization with a package-free net8
+JSON guard; refresh the SPDX sidecar after the final byte transform; validate
+exact SPDX artifact membership, CycloneDX dependencies, and Microsoft SBOM
+Tool results; remove the expected hosted no-package annotation.
+
+**Safety:** keep tool versions, root package identities, source commit/time,
+and the complementary SBOM roles unchanged. Suppress component-detector
+warnings only after the SPDX file closure and the separate CycloneDX package
+graph pass stronger explicit postconditions. Do not accept a generator or
+validator process exit without inspecting its result document.
+
+**Checks:** zero-warning guard build; malformed one-element-array regression;
+idempotent canonicalization; current 97-file classic and 557-file WPF
+inventories; matching final sidecars; 24/25 and 37/38 CycloneDX graph counts;
+Microsoft validation; zero hosted annotations.
+
+**Rollback:** revert the guard and generation script together. Do not restore
+the PowerShell 5.1 `ConvertFrom-Json`/`ConvertTo-Json` round-trip or retain a
+sidecar generated before normalization.
+
+**Observability:** typed JSON shapes, artifact hashes, file-ID sets,
+root-package relationships, dependency refs, sidecar hash, validator result,
+and GitHub job annotations.
+
+**Status:** repository repair and both real local artifact validations complete
+2026-07-30; source-bound hosted release pending.

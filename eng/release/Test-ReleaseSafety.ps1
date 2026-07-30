@@ -6,6 +6,8 @@ Set-StrictMode -Version 2.0
 
 $safetyScript = Join-Path $PSScriptRoot "ReleaseSafety.ps1"
 . $safetyScript
+$nativeInventoryScript = Join-Path $PSScriptRoot "NativeDependencyInventory.ps1"
+. $nativeInventoryScript
 
 $script:checkCount = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -149,6 +151,30 @@ try {
         "native-build-log" `
         (Get-GeneratedUntrackedClassification "src/libFLAC/x64/Release_dynamic/libFLAC_dynamic.vcxproj.FileListAbsolute.txt") `
         "A native absolute file list was not classified."
+    Assert-Equal `
+        "clean" `
+        (Get-ProvenanceWorkspaceState `
+            -PatchId $null `
+            -UntrackedSourceCount 0 `
+            -ClassifiedGeneratedFileCount 6 `
+            -NestedWorkspacesClean $true) `
+        "Classified build residue incorrectly dirtied the source-state verdict."
+    Assert-Equal `
+        "patched-or-untracked" `
+        (Get-ProvenanceWorkspaceState `
+            -PatchId $null `
+            -UntrackedSourceCount 1 `
+            -ClassifiedGeneratedFileCount 0 `
+            -NestedWorkspacesClean $true) `
+        "Unknown untracked source was accepted as a clean workspace."
+    Assert-Equal `
+        "patched-or-untracked" `
+        (Get-ProvenanceWorkspaceState `
+            -PatchId "fixture-patch" `
+            -UntrackedSourceCount 0 `
+            -ClassifiedGeneratedFileCount 0 `
+            -NestedWorkspacesClean $true) `
+        "A tracked source patch was accepted as a clean workspace."
 
     $artifact = Join-Path $tempRoot "artifact"
     $artifactChild = Join-Path $artifact "content"
@@ -271,6 +297,19 @@ try {
     $nativeInventory = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "native-dependencies.json") -Raw |
         ConvertFrom-Json
+    $macSdkClosure = Get-CUEToolsMacSdkSourceClosure `
+        -RepositoryRoot (Join-Path $PSScriptRoot "..\..") `
+        -Inventory $nativeInventory
+    Assert-True `
+        ([string]$macSdkClosure.summary.classification -ceq
+            "pinned-native-source-expansion" -and
+            [string]$macSdkClosure.summary.state -ceq "validated" -and
+            [int]$macSdkClosure.summary.archiveFileCount -eq 423 -and
+            [int]$macSdkClosure.summary.overrideFileCount -eq 4 -and
+            [string]$macSdkClosure.summary.expandedTreeSha256 -cmatch
+                "^[0-9a-f]{64}$" -and
+            @($macSdkClosure.archiveMembers).Count -eq 423) `
+        "The pinned Monkey's Audio SDK derived-source closure is incomplete."
     foreach ($pinnedFile in @($nativeInventory.pinnedFiles)) {
         $attributePath = ([string]$pinnedFile.path).Replace("\", "/")
         Assert-True `
@@ -406,6 +445,15 @@ try {
     & (Join-Path $PSScriptRoot "..\ci\Test-WorkflowActionPins.ps1")
     & (Join-Path $PSScriptRoot "..\ci\Test-FFmpegWorkflow.ps1")
     & (Join-Path $PSScriptRoot "Test-SigningPolicy.ps1")
+    & dotnet run `
+        --project (Join-Path $PSScriptRoot "SbomGuard\SbomGuard.csproj") `
+        --configuration Release `
+        -- `
+        self-test
+    if ($LASTEXITCODE -ne 0) {
+        throw "SBOM guard self-test failed."
+    }
+    $script:checkCount++
 
     $provenanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "New-Provenance.ps1") -Raw
     Assert-True `
