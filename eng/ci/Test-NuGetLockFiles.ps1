@@ -80,7 +80,7 @@ $fullResourcePackage = @(
         $_.Include -eq "System.Resources.Extensions" -and
         $_.ParentNode.Condition -like "*MSBuildRuntimeType*!=*Core*" -and
         $_.ExcludeAssets -eq "all" -and
-        [string]::IsNullOrEmpty([string]$_.PrivateAssets)
+        [string]::IsNullOrEmpty($_.GetAttribute("PrivateAssets"))
     }
 )
 $fullNet20ReferencePackage = @(
