@@ -46,17 +46,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
-      - name: Install vcpkg and build packages
-        # Download and build vcpkg.
-        uses: lukka/run-vcpkg@8a5116de2b552d6fc8894e9774aacaf2e5db4823 # v7.6
+      - name: Set up pinned vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11.6
         with:
-          setupOnly: false
           doNotCache: true
-          # Location of vcpkg in the Git repository.
           vcpkgDirectory: '${{ github.workspace }}/vcpkg'
           vcpkgGitCommitId: '${{ matrix.vcpkgCommitId}}'
-          vcpkgTriplet: ${{ matrix.triplet }}
-          vcpkgArguments: '${{ matrix.vcpkgPackages }}'
+          runVcpkgInstall: false
+      - name: Build pinned FFmpeg package
+        shell: pwsh
+        run: |
+          $vcpkg = Join-Path '${{ github.workspace }}' 'vcpkg\vcpkg.exe'
+          & $vcpkg install '${{ matrix.vcpkgPackages }}' --triplet '${{ matrix.triplet }}' --clean-after-build
+          if ($LASTEXITCODE -ne 0) {
+            throw "The pinned vcpkg FFmpeg build failed with exit code $LASTEXITCODE."
+          }
       - name: Collect files
         shell: pwsh
         run: |

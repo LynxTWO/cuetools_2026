@@ -55,6 +55,11 @@
                       ExcludeAssets="all" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net20' And '$(MSBuildRuntimeType)' == 'Core' And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net20' And '$(MSBuildRuntimeType)' != 'Core' And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3"
                       ExcludeAssets="all" PrivateAssets="all" />

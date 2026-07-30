@@ -149,6 +149,10 @@ progress documents for it belong here, under `docs/review/`.
   off its deprecated declared runtime. Keep actions on supported upstream releases,
   pin immutable commits, inspect annotations, and bind the rerun receipt to the
   exact source revision.
+- Exact-byte text fixtures must pin their checkout EOL policy. Core MSBuild must
+  actively consume the net20 reference-assembly fallback; full MSBuild retains the
+  same package only as restore evidence because Visual Studio supplies that pack.
+  Keep the shared lock graph and exercise both hosts.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate

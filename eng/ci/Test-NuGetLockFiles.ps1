@@ -110,14 +110,26 @@ $fullNet20ReferencePackage = @(
         $_.PrivateAssets -eq "all"
     }
 )
+$coreNet20ReferencePackage = @(
+    $packageNodes | Where-Object {
+        $_.Include -eq "Microsoft.NETFramework.ReferenceAssemblies" -and
+        $_.ParentNode.Condition -like "*TargetFramework*net20*" -and
+        $_.ParentNode.Condition -like "*MSBuildRuntimeType*==*Core*" -and
+        [string]::IsNullOrEmpty($_.GetAttribute("ExcludeAssets")) -and
+        $_.PrivateAssets -eq "all"
+    }
+)
 if ($coreResourcePackage.Count -ne 1 -or
     $fullResourcePackage.Count -ne 1 -or
+    $coreNet20ReferencePackage.Count -ne 1 -or
     $fullNet20ReferencePackage.Count -ne 1) {
     throw (
         "Core/full restore-graph parity is incomplete. Core resource={0}, " +
-        "full resource={1}, full net20 reference assemblies={2}." -f
+        "full resource={1}, Core net20 reference assemblies={2}, " +
+        "full net20 reference assemblies={3}." -f
         $coreResourcePackage.Count,
         $fullResourcePackage.Count,
+        $coreNet20ReferencePackage.Count,
         $fullNet20ReferencePackage.Count)
 }
 

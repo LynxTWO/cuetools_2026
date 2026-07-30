@@ -1505,9 +1505,9 @@ transaction passed all three configurations and exact artifact collection.
 
 ### Remove deprecated hosted action-runtime shims
 
-**Scope:** update immutable checkout, .NET setup, and artifact-upload action
-pins across the four workflows and add the hosted-annotation rule to the local
-audit steering material.
+**Scope:** update immutable checkout, .NET setup, artifact-upload, and vcpkg
+action pins across the four workflows and add the hosted-annotation rule to the
+local audit steering material.
 
 **Safety:** use only current upstream action releases and their exact commit
 SHAs. Preserve every workflow input, permission, matrix, shell, step order,
@@ -1526,3 +1526,27 @@ compatibility warning as the rollback success criterion.
 and downloaded artifact receipts only. Product runtime behavior is unchanged.
 
 **Status:** repository changes complete 2026-07-30; hosted reruns pending.
+
+### Make exact-byte and net20 fallback tests host-independent
+
+**Scope:** pin the RAR fixture checkout bytes; activate the locked net20
+reference-assembly fallback only for Core MSBuild; retain the same restore-only
+direct dependency under full MSBuild; strengthen the package-role gate.
+
+**Safety:** do not change the archive, decoded payload, codec code, dependency
+version, or lock. Limit the EOL rule to the exact fixture and keep the archive
+binary.
+
+**Checks:** Git attribute inspection; focused production RAR enumeration,
+full-read, and backward-seek test; Core net20 restore/build and exception relay;
+unchanged lock hash; Core/full role assertion; hosted legacy lane on the image
+without an installed .NET 2.0 targeting pack.
+
+**Rollback:** revert attributes, Core package role, and its guard together.
+Do not restore a host-dependent text oracle or a fallback that is only visible
+to the build host that does not need it.
+
+**Observability:** test bytes, package evaluation, build output, and hosted
+receipts only. Runtime packaging remains unchanged.
+
+**Status:** repository changes complete 2026-07-30; hosted rerun pending.

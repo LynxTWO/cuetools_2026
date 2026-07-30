@@ -169,6 +169,12 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     declared runtime, move to a supported upstream release, pin its immutable commit,
     rerun the critical workflow contract, and retain a receipt bound to that source
     revision. A compatibility shim is migration evidence, not a clean long-term pass.
+28. EXACT-BYTE FIXTURES NEED CHECKOUT-BYTE CONTRACTS. A text oracle that Git may
+    expand from LF to CRLF cannot byte-prove an archive payload unless its exact
+    `.gitattributes` policy is pinned. For framework-reference fallback packages,
+    consume their assets under the build host that lacks the installed targeting
+    pack and keep them restore-only under the host that must share the lock without
+    consuming those assets. Exercise both hosts.
 
 ### How to choose the extraction
 
