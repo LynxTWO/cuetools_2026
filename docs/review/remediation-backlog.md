@@ -78,8 +78,11 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   pilot. Its SDK-style net47 project builds with both MSBuild runtimes while
   preserving its API, fields, methods, PE flags, config, image resources, and
   live WPF startup behavior.
+- **Done in R12/R91:** CUERipper and its old ProgressODoom control dependency
+  are SDK-style net47. Their managed and resource contracts are preserved, and
+  old/new CUERipper builds create the same live `CUERipper 2.2.6` window set.
 - **Remaining (folded into R12):** SDK-style conversion of the old-style
-  `CUETools`, `CUERipper`, and `CUEPlayer` GUIs so they too `dotnet build`.
+  `CUETools` and `CUEPlayer` GUIs so they too `dotnet build`.
   The `CLParity` reachability contradiction was closed by R89: the disabled,
   unconsumed, unshipped, non-building experiment was retired. GUI conversions
   need runtime verification; they are not blind headless changes.
@@ -2327,9 +2330,50 @@ does not relax evidence, rollback, or verification requirements.
   both MSBuild runtimes. All retained contracts above pass; the only resource
   payload change is compiler-generated BAML whose live startup is proven.
 
+### R91. CUERipper and ProgressODoom retain old project and mixed-restore behavior - bucket A, risk high
+
+- **Area or slice:** classic CUERipper, ProgressODoom controls, WinForms
+  localization/resources, ClickOnce/manifest properties, Core/full-MSBuild
+  restore ordering, and R8/R12.
+- **Why it matters:** CUERipper could not consume one restored dependency graph
+  under both MSBuild runtimes while ProgressODoom remained old-style. A
+  mechanical conversion can also change executable architecture, localized
+  satellites, designer images, settings/config probing, or the actual startup
+  form. Core's binary-resource package is conditional at evaluation time but
+  remains in `project.assets.json`; reusing that Core assets file in a later
+  full build adds a non-shipping binding redirect unless full MSBuild performs
+  its canonical restore first.
+- **Evidence found:** the old packaged binaries were captured before conversion.
+  CUERipper retains all 33 classes, 200 fields, 274 methods, and 179 public
+  declarations; ProgressODoom retains 45 classes, 241 fields, 424 methods, and
+  378 public declarations. Both retain PE32/IL-only architecture. ProgressODoom
+  keeps its intentional nondeterministic `1.0.*` assembly version and exact
+  file version. Its 26 icons and both CUERipper localization satellites are
+  byte-identical. Of 511 main-form resource entries, 508 are byte-identical;
+  the three newer-compiler serializations decode to the same 16 images with
+  identical dimensions and pixel hashes. CUERipper's config is XML-equivalent,
+  including the `plugins` probing path. Old and new executables each created
+  13 top-level windows, including a responsive `CUERipper 2.2.6` main form.
+- **Confidence:** high for build, managed shape, resource semantics,
+  localization, architecture, config, and startup; full ripping workflows
+  remain covered by the existing shared-engine/hardware evidence rather than
+  this project-only smoke.
+- **Approval needed:** no; this is the user-authorized one-at-a-time R12 work.
+- **Recommended next pass:** convert CUETools or CUEPlayer only after capturing
+  its own application, resource, configuration, and live-window contracts.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** separate Core and full restores followed by
+  zero-warning Release builds; IL/config/PE/resource/satellite comparisons;
+  decoded-image equality; old/new top-level-window smoke; canonical tests and
+  release safety.
+- **Owner:** classic desktop and build maintainers.
+- **Status:** fixed 2026-07-29. CUERipper and ProgressODoom are SDK-style net47.
+  Core and canonical full restore/build lanes pass with zero warnings. All
+  retained contracts above pass, and no application source changed.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R90. Remaining work
+The locally actionable correctness queue is closed through R91. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2444,3 +2488,6 @@ is ordered by the authority or evidence it requires:
 - 2026-07-29 - closed R90 by converting BluTools as the first classic-GUI
   SDK-project pilot and preserving its managed, PE, config, resource, and live
   WPF startup contracts.
+- 2026-07-29 - closed R91 by converting CUERipper and ProgressODoom, preserving
+  their managed/PE/localization/image/config contracts, proving old/new live
+  main-form parity, and documenting the required per-MSBuild restore boundary.
