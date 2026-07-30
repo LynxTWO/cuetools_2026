@@ -81,8 +81,11 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Done in R12/R91:** CUERipper and its old ProgressODoom control dependency
   are SDK-style net47. Their managed and resource contracts are preserved, and
   old/new CUERipper builds create the same live `CUERipper 2.2.6` window set.
+- **Done in R12/R92:** CUEPlayer is SDK-style net47. Its managed, PE, config,
+  and decoded-image contracts are preserved, and old/new builds create the same
+  live `CUEPlayer 2.2.6` window set.
 - **Remaining (folded into R12):** SDK-style conversion of the old-style
-  `CUETools` and `CUEPlayer` GUIs so they too `dotnet build`.
+  `CUETools` GUI so it too `dotnet build`.
   The `CLParity` reachability contradiction was closed by R89: the disabled,
   unconsumed, unshipped, non-building experiment was retired. GUI conversions
   need runtime verification; they are not blind headless changes.
@@ -2371,9 +2374,43 @@ does not relax evidence, rollback, or verification requirements.
   Core and canonical full restore/build lanes pass with zero warnings. All
   retained contracts above pass, and no application source changed.
 
+### R92. CUEPlayer retains an old project and unproven desktop-build contract - bucket A, risk high
+
+- **Area or slice:** classic CUEPlayer, WinForms resources, generated settings,
+  Icecast/playback dependencies, solution membership, and R8/R12.
+- **Why it matters:** an SDK conversion can silently change executable
+  architecture, assembly/config identity, designer resources, settings
+  generation, or the startup form. CUEPlayer also sits beside sensitive
+  credential and network-output code, so a project-only change must not alter
+  application behavior.
+- **Evidence found:** the Release executable and config were captured before
+  conversion. Old and new builds retain 29 classes, 175 fields after
+  normalizing compiler-generated RVA offsets, 236 methods, and 118 public
+  declarations; the same `CUEPlayer, Version=2.2.6.0` identity; and PE32,
+  IL-only, unsigned flags. The generated configurations are XML-equivalent.
+  Six of eight manifest resources are byte-identical. The two newer-compiler
+  serialization changes decode to the same five images with identical
+  dimensions and pixel hashes. Old and new executables each create eight
+  top-level windows, including a responsive `CUEPlayer 2.2.6` main form.
+- **Confidence:** high for build, managed shape, resource semantics,
+  architecture, config, and startup. Playback-device, real settings migration,
+  and Icecast interoperability remain separate runtime boundaries.
+- **Approval needed:** no; this is the user-authorized one-at-a-time R12 work.
+- **Recommended next pass:** convert classic CUETools only after capturing its
+  own application, resource, configuration, and live-window contracts.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** separate Core and canonical full-MSBuild
+  restore/build lanes with zero warnings; IL/config/PE/resource comparisons;
+  decoded-image equality; old/new top-level-window smoke; canonical tests and
+  release safety.
+- **Owner:** classic desktop and build maintainers.
+- **Status:** fixed 2026-07-29. CUEPlayer is SDK-style net47 and all retained
+  contracts above pass. It remains solution-buildable but is not collected by
+  either primary release package, matching its pre-conversion reachability.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R91. Remaining work
+The locally actionable correctness queue is closed through R92. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2491,3 +2528,6 @@ is ordered by the authority or evidence it requires:
 - 2026-07-29 - closed R91 by converting CUERipper and ProgressODoom, preserving
   their managed/PE/localization/image/config contracts, proving old/new live
   main-form parity, and documenting the required per-MSBuild restore boundary.
+- 2026-07-29 - closed R92 by converting CUEPlayer, preserving its managed,
+  PE/config/decoded-image contracts and old/new live main-form parity while
+  documenting that it remains outside the primary release packages.

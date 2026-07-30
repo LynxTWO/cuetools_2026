@@ -27,7 +27,7 @@ verification, metadata, artwork, streaming, and update-message endpoints.
 | --- | --- | --- | --- |
 | `CUETools/` | Classic conversion, verification, repair, and per-file output through `CUETools.Processor` | .NET Framework 4.7 WinForms | verified: `CUETools/CUETools.csproj`, `CUETools/frmCUETools.cs` |
 | `CUERipper/` | Classic optical-disc ripping and metadata lookup through the SCSI/ripper stack | SDK-style .NET Framework 4.7 WinForms | verified: project/main UI paths plus old/new managed, PE, config, localization, decoded-image, and live main-form equivalence under R91 |
-| `CUEPlayer/` | Playback and Icecast streaming | .NET Framework 4.7 WinForms | verified: `CUEPlayer/CUEPlayer.csproj`, `CUEPlayer/Icecast.cs` |
+| `CUEPlayer/` | Playback and Icecast streaming; solution-buildable but not collected into either primary release package | SDK-style .NET Framework 4.7 WinForms | verified: project/Icecast paths plus old/new managed, PE, config, decoded-image, and live main-form equivalence under R92 |
 | `CUETools.Wpf/` | Modern ripping, Test & Copy, conversion, verification/repair, reports, history, album art, drive calibration, and external-encoder approval | `net8.0-windows`, x64 WPF | verified: `CUETools.Wpf/CUETools.Wpf.csproj`, `CUETools.Wpf/App.xaml.cs`, `CUETools.Wpf/Services/` |
 | `CUETools.CTDB.EACPlugin/` | CTDB verification/submission code loaded inside Exact Audio Copy | .NET Framework 2.0 | verified: `CUETools.CTDB.EACPlugin/CUETools.CTDB.EACPlugin.csproj`, `Plugin.cs`; host behavior is external |
 | CLI projects | Scriptable conversion, verification, ripping, and codec entrypoints over shared libraries | mixed .NET Framework and SDK-style projects | verified: solution and project files |

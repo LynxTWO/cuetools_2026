@@ -126,7 +126,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUETools.CTDB", "CUETools.C
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ProgressODoom", "ProgressODoom\ProgressODoom.csproj", "{8DD1E84B-0B03-4C0B-9B42-1E49F75E7CB1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CUEPlayer", "CUEPlayer\CUEPlayer.csproj", "{04E59836-0C5A-4B9B-8899-848D56911758}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUEPlayer", "CUEPlayer\CUEPlayer.csproj", "{04E59836-0C5A-4B9B-8899-848D56911758}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CUETools.Codecs.CoreAudio", "CUETools.Codecs.CoreAudio\CUETools.Codecs.CoreAudio.csproj", "{FAD09EE2-D6B2-4A8E-9F1C-2A9FB293661A}"
 EndProject

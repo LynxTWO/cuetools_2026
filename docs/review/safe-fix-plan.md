@@ -1370,3 +1370,31 @@ network, settings value, device, metadata, logging, or telemetry behavior.
 241, 424, and 378 respectively. PE flags, config semantics, satellites, all 26
 control icons, and all decoded GUI images match. Both old/new applications
 create 13 top-level windows with the expected responsive main form.
+
+### Convert CUEPlayer after capturing its runtime and resource contract
+
+**Scope:** replace only `CUEPlayer/CUEPlayer.csproj` with an SDK-style net47
+WinForms project and update its solution project-type GUID. Preserve assembly
+metadata, references/copy-local behavior, publish/bootstrapper properties,
+Release unsafe-code behavior, generated settings/resources, output path, and
+the historical exclusion of two dataset source files. Change no application
+source and do not add CUEPlayer to a release package.
+
+**Checks:** capture the old executable/config; perform separate Core and
+canonical full-MSBuild restores/builds; compare normalized IL declarations,
+assembly identity, PE flags, XML config, manifest resources, and decoded image
+pixels. Start old and new executables beside the same dependency closure and
+require the same responsive `CUEPlayer 2.2.6` window set. Run canonical WPF,
+release-safety, and NuGet-lock gates.
+
+**Rollback:** revert the project and solution type together. Do not infer
+shipping reachability from solution membership.
+
+**Observability:** build/resource/startup evidence only. This changes no
+playback, streaming, credential, settings value, logging, or telemetry
+behavior.
+
+**Status:** implemented and verified 2026-07-29. CUEPlayer retains 29 classes,
+175 normalized fields, 236 methods, and 118 public declarations; PE/config
+semantics and all five decoded GUI images match; and both builds create eight
+top-level windows with the expected responsive main form.
