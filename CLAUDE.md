@@ -31,6 +31,11 @@ progress documents for it belong here, under `docs/review/`.
   `--force-evaluate`, then run `eng/ci/Test-NuGetLockFiles.ps1` and locked
   solution/WPF/ripper restores. Never generate lock files in `ThirdParty` or
   `obj/vendor-sources`.
+- Keep Core and full-MSBuild restore inputs identical. Core-only build assets
+  such as `System.Resources.Extensions` and net20 reference assemblies must
+  remain declared as `ExcludeAssets=all` restore evidence under full MSBuild;
+  do not remove those nodes or allow them into the shipping compile/runtime
+  closure.
 - Run classic release clean/build/receipt/collect/validate through
   `eng/release/Invoke-ClassicRelease.ps1`. A clean staging directory does not prove
   fresh compiled inputs. The orchestrator holds one repo-wide lease across recovery,
