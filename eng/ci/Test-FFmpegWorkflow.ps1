@@ -42,6 +42,13 @@ Require `
         $workflow.Contains("CUETools.FFmpegCodecWorker.exe")) `
     "The FFmpeg workflow does not build and run the managed/native probe."
 Require `
+    (([regex]::Matches(
+        $workflow,
+        "FFmpegCodecWorker\.csproj[^\r\n]*-p:PlatformTarget=\$\{\{ matrix\.configuration \}\}")).Count -eq 2 -and
+        $workflow.Contains("probe restore failed") -and
+        $workflow.Contains("probe build failed")) `
+    "The FFmpeg probe does not bind restore/build architecture or fail closed."
+Require `
     ($workflow.Contains("FFmpeg.txt") -and
         $workflow.Contains("FFmpeg-vcpkg.json")) `
     "The FFmpeg workflow does not retain its license and port evidence."
