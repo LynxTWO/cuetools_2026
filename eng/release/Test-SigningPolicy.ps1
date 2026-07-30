@@ -33,7 +33,7 @@ Require `
     ([string]$policy.codeSigningEku -ceq "1.3.6.1.5.5.7.3.3") `
     "The signing policy does not require the code-signing EKU."
 Require `
-    ([string]$policy.productionRefPrefix -ceq "refs/tags/") `
+    ([string]$policy.productionRefPrefix -ceq "refs/tags/v") `
     "Production signing is not bound to tag refs."
 Require (@($policy.profiles).Count -eq 2) "Both release artifact profiles are required."
 
@@ -100,7 +100,7 @@ Require `
         $workflow.Contains("CUETOOLS_SIGNING_SUBJECT_PATTERN")) `
     "The release workflow does not use the protected signing environment contract."
 Require `
-    ($workflow.Contains("startsWith(github.ref, 'refs/tags/')") -and
+    ($workflow.Contains("startsWith(github.ref, 'refs/tags/v')") -and
         $workflow.Contains("inputs.sign_release")) `
     "The release workflow does not require signing for tags or explicit release dispatches."
 Require `

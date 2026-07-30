@@ -45,8 +45,8 @@ Assert-True `
 $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
 Assert-True ($plan.schemaVersion -eq 2) "Collection plan schema changed unexpectedly."
 Assert-True `
-    (@($plan.files).Count -eq 95) `
-    "Collection plan no longer has the reviewed 95 copied inputs."
+    (@($plan.files).Count -eq 98) `
+    "Collection plan no longer has the reviewed 98 copied inputs."
 $binSources = @($plan.files | Where-Object {
     ([string]$_.source).Replace("\", "/").StartsWith(
         "bin/Release/",
@@ -95,8 +95,8 @@ Assert-True `
     (($requiredPaths -join "`n") -eq (($uniqueDestinations | Sort-Object) -join "`n")) `
     "Classic artifact contract and collection plan do not name the same exact files."
 Assert-True `
-    ($requiredPaths.Count -eq 97) `
-    "Classic artifact contract no longer has the reviewed 97-file exact tree."
+    ($requiredPaths.Count -eq 100) `
+    "Classic artifact contract no longer has the reviewed 100-file exact tree."
 $peContracts = @($contract.requiredFiles | Where-Object {
     $_.PSObject.Properties["peMachine"] -ne $null
 })

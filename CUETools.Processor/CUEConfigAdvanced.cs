@@ -90,7 +90,8 @@ namespace CUETools.Processor
         [DisplayName("Create TOC files")]
         public bool CreateTOC { get; set; }
 
-        [DefaultValue(true), Category("CTDB"), DisplayName("Submit to CTDB")]
+        [DefaultValue(false), Category("CTDB"), DisplayName("Submit to CTDB")]
+        [Description("Opt in to contributing disc layout, checksums, recovery parity, drive information, a pseudonymous device identifier, and album metadata to CTDB.")]
         public bool CTDBSubmit { get; set; }
 
         [DefaultValue(true), Category("CTDB"), DisplayName("Ask before submitting")]

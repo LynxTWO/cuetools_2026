@@ -18,9 +18,23 @@ public sealed class RequestedDefaultsTests
             CUEConfigAdvanced.CTDBCoversSearch.Extensive,
             config.advanced.coversSearch);
         Assert.AreEqual(1500, config.maxAlbumArtSize);
+        Assert.IsFalse(config.advanced.CTDBSubmit);
+        Assert.IsFalse(CtdbSubmissionPolicy.IsEnabled(config));
         Assert.IsTrue(config.detectHDCD);
         Assert.IsFalse(config.decodeHDCD);
         Assert.IsFalse(config.decodeHDCDto24bit);
+    }
+
+    [TestMethod]
+    public void CtdbContributionRequiresExplicitOptIn()
+    {
+        var config = new CUEConfig();
+
+        Assert.IsFalse(CtdbSubmissionPolicy.IsEnabled(config));
+
+        config.advanced.CTDBSubmit = true;
+
+        Assert.IsTrue(CtdbSubmissionPolicy.IsEnabled(config));
     }
 
     [TestMethod]
