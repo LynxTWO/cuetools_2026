@@ -154,6 +154,7 @@
         "bytes": 35928
       },
       "sourceArchiveVerification": "Re-downloaded from the official SourceForge project on 2026-07-26. The 2009 import contains all 20 library and build files from the 21-file archive and omits only samples/example.cpp. After normalizing line endings, 16 files are exact. The four import-time differences are reviewable local changes: a null-safe TTATester cleanup, an upgraded x86/x64 Visual C++ project, and an include/forward-declaration cleanup in TTAReader.cpp and TTAReader.h. Later changes remain attributable in Git history.",
+      "historicalChecksumStatus": "No checksum captured in 2009 can be created retroactively. The surviving official archive is pinned by current SHA-256 and byte-compared with the import, so present source identity and every local delta are reviewable; only the unprovable claim that SourceForge never republished those same versioned bytes is excluded.",
       "importCommit": "1a251073489775190b45c21ca53a6a28954458e9",
       "authors": [
         "Alexander Djourik",
@@ -171,7 +172,8 @@
         "CUETools.sln Release|x64 builds the x64 C++/CLI wrapper"
       ],
       "verification": "The classic artifact contract requires both architecture outputs and binds both hashes in the runtime manifest.",
-      "limitations": "SourceForge does not expose a checksum captured contemporaneously with the 2009 import. The current versioned archive hash plus file-level comparison establishes the source family and exact local delta, but does not cryptographically prove that SourceForge never republished the archive. Current source also contains later CUETools build, include-case, and warning cleanup recorded in Git."
+      "limitations": "SourceForge does not expose a checksum captured contemporaneously with the 2009 import. The current versioned archive hash plus file-level comparison establishes the source family and exact local delta, but does not cryptographically prove that SourceForge never republished the archive. Current source also contains later CUETools build, include-case, and warning cleanup recorded in Git.",
+      "retentionDecision": "Retain the source-built mixed-mode codec. Its complete current source, official versioned archive, import delta, later Git history, build recipe, and output hashes are available; the irrecoverable absence of a 2009 checksum is disclosed rather than treated as unfinished local work."
     },
     {
       "id": "hdcd",
@@ -190,13 +192,19 @@
       "license": "LicenseRef-Christopher-Key-HDCD",
       "licenseSource": "License.txt, hdcd.dll section",
       "buildEvidence": "Both binaries have 2008-11-13 PE timestamps and linker version 8.00 (Visual Studio 2005 toolchain family), no version resource, no Authenticode signature, no PDB path, and the same 19-function hdcd_decoder_* ABI.",
+      "historicalUpstreamEvidence": [
+        "The Internet Archive capture of http://www.srcf.ucam.org/~cjk32/hdcd/ from 2008-09-18 lists Christopher Key's public hdcd-r71, r91, r166, r172, and r185 reference-decoder archives.",
+        "Import-era discussion links CUETools/eac3to HDCD decoding to Christopher Key, while the public archives expose the command-line reference decoder rather than this DLL ABI.",
+        "FFmpeg's maintained HDCD filter independently records that its original algorithm was reverse engineered from Christopher Key's decoder library."
+      ],
       "sourceInputs": [
         "ThirdParty/Win32/hdcd.dll (SHA-256 pinned above)",
         "ThirdParty/x64/hdcd.dll (SHA-256 pinned above)"
       ],
       "buildRecipe": [],
       "verification": "Packaged bytes are hash-bound; the WPF release probe initializes and closes the x64 decoder.",
-      "limitations": "The author/library family, redistribution license, import-era evidence, ABI, and compiler family are recorded. Exact source revision, original download URL, compiler build, flags, and build recipe remain unknown."
+      "limitations": "The author/library family, redistribution license, import-era evidence, ABI, and compiler family are recorded. Exact source revision, original DLL download URL, compiler build, flags, and build recipe remain unknown.",
+      "retentionDecision": "Retain the two hash-bound legacy binaries until a source-built replacement passes old-vs-new HDCD detection, decoded-PCM, statistics, and flush/reset compatibility tests. Do not describe these bytes as reproducibly built or silently substitute a related open decoder without that behavioral proof."
     },
     {
       "id": "libmp3lame",
@@ -228,6 +236,7 @@
         }
       ],
       "binaryArchiveVerification": "Re-downloaded from RareWares on 2026-07-26. Each archive's libmp3lame.dll entry is byte-for-byte identical to the corresponding checked-in DLL.",
+      "binaryArchiveContents": "Each RareWares archive contains only libmp3lame.dll, libmp3lame.lib, and libmp3lame.exp. Neither archive contains source, a build log, compiler flags, a commit identifier, or a build note.",
       "importCommit": "711c3dd1c84d06650613be0307f2caf6198b9aca",
       "importEvidence": "The import commit records both RareWares archive URLs, version 3.100, and the 2017-10-22 build date.",
       "license": "LGPL-2.0-or-later",
@@ -244,7 +253,8 @@
       ],
       "buildRecipe": [],
       "verification": "Packaged bytes are hash-bound; the WPF release probe calls the x64 library version export through the registered encoder.",
-      "limitations": "Repository history plus current archive re-downloads close the binary distributor, archive URLs and hashes, byte identity, version, architecture, build date, configuration names, and Visual Studio toolchain family. They do not prove the exact upstream source revision/archive used by RareWares or recover compiler flags and the full DLL build recipe."
+      "limitations": "Repository history plus current archive re-downloads close the binary distributor, archive URLs and hashes, byte identity, version, architecture, build date, configuration names, and Visual Studio toolchain family. They do not prove the exact upstream source revision/archive used by RareWares or recover compiler flags and the full DLL build recipe.",
+      "retentionDecision": "Retain the hash-bound RareWares 3.100 binaries for the current release. Replace them only through the separately gated LAME 4 source-build project, with MP3 ABI, decode, corpus, and quality evidence; do not invent an unrecoverable third-party build recipe."
     },
     {
       "id": "unrar",
