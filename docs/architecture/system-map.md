@@ -68,7 +68,7 @@ visible and do not silently discard a newly supplied credential.
 | System | Reachable product path | Transport and current state |
 | --- | --- | --- |
 | AccurateRip | classic and modern verification/ripping through shared libraries | HTTPS-only hardcoded endpoints in `CUETools.AccurateRip/AccurateRip.cs` |
-| CTDB | verification, repair, metadata, and submission | plain HTTP remains in `CUETools.CTDB/CUEToolsDB.cs`; the server did not offer usable TLS when checked, so closure requires external coordination |
+| CTDB | verification, repair, metadata, and optional contribution | plain HTTP remains in `CUETools.CTDB/CUEToolsDB.cs`; contribution is off by default and CUERipper honors the shared consent preference and optional disclosure prompt. The server did not offer usable TLS when checked, so transport closure requires external coordination |
 | gnudb | freedb-compatible metadata fallback | plain HTTP text protocol in `Freedb/FreedbHelper.cs` |
 | cue.tools MOTD | classic CUETools startup message | exact HTTPS endpoint `https://cue.tools/motd/motd.txt`; bounded strict UTF-8 text with finite timeouts; the former remote-image decode/cache path is gone |
 | Icecast | CUEPlayer streaming source and metadata updates | HTTPS by default through `IcecastEndpointPolicy`; HTTP requires an explicit persisted `AllowInsecureHttp` choice and UI warning. A disposable Icecast 2.5.0 instance passed source/auth rejection, metadata, listener-byte, flush/close, and teardown smoke locally; HTTPS certificate and Mono behavior remain unobserved |

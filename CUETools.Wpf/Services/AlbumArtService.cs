@@ -92,7 +92,7 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
         _http.DefaultRequestHeaders.UserAgent.Add(
             new ProductInfoHeaderValue("CUETools", "2026.1"));
         _http.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("(https://github.com/gchudov/cuetools.net)"));
+            new ProductInfoHeaderValue("(https://github.com/LynxTWO/cuetools_2026)"));
     }
 
     private static HttpMessageHandler CreateHandler(CUEConfig config)

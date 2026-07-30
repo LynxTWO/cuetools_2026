@@ -1,6 +1,6 @@
 # Unknowns: Logging Audit
 
-Current-state refresh: 2026-07-26.
+Current-state refresh: 2026-07-30.
 
 ## Entries
 
@@ -52,6 +52,15 @@ Current-state refresh: 2026-07-26.
 
 ## Closed items
 
+- **CUERipper CTDB contribution ignored consent settings:** closed 2026-07-30.
+  The rip-success path now crosses `CtdbSubmissionPolicy`, the shared default is
+  off, and an enabled `CTDBAsk` preference displays the submitted field classes
+  and plaintext-HTTP warning before calling `CTDB.Submit`. Verification, repair,
+  and metadata lookup do not enable contribution.
+- **Hosted test-tool telemetry:** closed 2026-07-30. All checked GitHub Actions
+  workflows set both the .NET CLI and Microsoft Testing Platform telemetry
+  opt-outs. The transitive MSTest telemetry package is not part of the shipped
+  application runtime.
 - **Classic ProxyPassword plaintext at rest:** closed 2026-07-26.
   `CUEConfig.Save` clears the plaintext property while serializing Advanced
   settings and stores only a DPAPI CurrentUser `ProxyPasswordProtected` value.

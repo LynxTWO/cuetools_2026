@@ -1,7 +1,7 @@
 # Windows release signing policy
 
 CUETools has one enforceable Windows publisher-signing policy:
-`eng/release/signing-policy.json`. A tag build and a manual build whose
+`eng/release/signing-policy.json`. A stable `v...` tag build and a manual build whose
 `sign_release` input is selected must produce Authenticode-signed release
 artifacts. Missing credentials, an unexpected certificate subject, an expired
 certificate, a missing code-signing EKU, a failed RFC 3161 timestamp, or an
@@ -10,6 +10,8 @@ invalid post-signature artifact contract stops the release.
 A normal manual dispatch is an evidence build. It deliberately receives no
 signing key and emits `signing-status.json` with
 `mode: unsigned-evaluation`; that artifact is not release-eligible.
+Tags outside the stable `v...` namespace do not enter the credentialed release
+workflow and may only be used for clearly labeled unsigned previews.
 
 ## Cryptographic and publication contract
 

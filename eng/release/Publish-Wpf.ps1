@@ -73,6 +73,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "License.txt") -Destination $ArtifactDirectory
+Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination $ArtifactDirectory
+Copy-Item -LiteralPath (Join-Path $repoRoot "PRIVACY.md") -Destination $ArtifactDirectory
+Copy-Item -LiteralPath (Join-Path $repoRoot "CODE_SIGNING_POLICY.md") -Destination $ArtifactDirectory
 $pluginInstaller = Join-Path $PSScriptRoot "Install-CUEToolsPlugin.ps1"
 Copy-Item -LiteralPath $pluginInstaller -Destination $ArtifactDirectory
 $noticesScript = Join-Path $PSScriptRoot "New-ThirdPartyNotices.ps1"
