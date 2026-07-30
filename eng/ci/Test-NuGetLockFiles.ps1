@@ -65,4 +65,42 @@ if ($vendorLocks.Count -gt 0) {
     throw "First-party restore wrote a lock file into ThirdParty."
 }
 
+$targetsPath = Join-Path $repoRoot "Directory.Build.targets"
+[xml]$targets = Get-Content -LiteralPath $targetsPath -Raw
+$packageNodes = @($targets.SelectNodes(
+    "/Project/ItemGroup/PackageReference"))
+$coreResourcePackage = @(
+    $packageNodes | Where-Object {
+        $_.Include -eq "System.Resources.Extensions" -and
+        $_.ParentNode.Condition -like "*_AdcCoreNet47Resx*"
+    }
+)
+$fullResourcePackage = @(
+    $packageNodes | Where-Object {
+        $_.Include -eq "System.Resources.Extensions" -and
+        $_.ParentNode.Condition -like "*MSBuildRuntimeType*!=*Core*" -and
+        $_.ExcludeAssets -eq "all" -and
+        [string]::IsNullOrEmpty([string]$_.PrivateAssets)
+    }
+)
+$fullNet20ReferencePackage = @(
+    $packageNodes | Where-Object {
+        $_.Include -eq "Microsoft.NETFramework.ReferenceAssemblies" -and
+        $_.ParentNode.Condition -like "*TargetFramework*net20*" -and
+        $_.ParentNode.Condition -like "*MSBuildRuntimeType*!=*Core*" -and
+        $_.ExcludeAssets -eq "all" -and
+        $_.PrivateAssets -eq "all"
+    }
+)
+if ($coreResourcePackage.Count -ne 1 -or
+    $fullResourcePackage.Count -ne 1 -or
+    $fullNet20ReferencePackage.Count -ne 1) {
+    throw (
+        "Core/full restore-graph parity is incomplete. Core resource={0}, " +
+        "full resource={1}, full net20 reference assemblies={2}." -f
+        $coreResourcePackage.Count,
+        $fullResourcePackage.Count,
+        $fullNet20ReferencePackage.Count)
+}
+
 Write-Host "NuGet lock-file checks passed: $($projects.Count)"

@@ -60,7 +60,7 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 ### D7. CUEControls resgen under dotnet build - DONE 2026-07-29
 
 - **Decision:** fix so the solution builds without full Visual Studio.
-- **What shipped 2026-07-02:** `Directory.Build.targets` at repo root adds `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions` for net47 first-party projects, **gated on `$(MSBuildRuntimeType) == 'Core'`** so it applies ONLY to `dotnet build` and is a provable no-op under devenv/CI (the shipping build's resource format and runtime deps are unchanged - important because CUEControls loads binary icons at runtime, and forcing preserialized resources into the shipping build would have required deploying a new DLL). Result: all **SDK-style** net47 first-party projects (CUEControls + the codec/lib projects) now build under `dotnet build`.
+- **What shipped 2026-07-02, hardened 2026-07-30:** `Directory.Build.targets` at repo root adds `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions` for net47 first-party projects only when `$(MSBuildRuntimeType) == 'Core'`, so `dotnet build` can process binary resources. Full MSBuild declares the same package identity only as `ExcludeAssets=all` restore evidence, and does the same for Core's implicit net20 reference-assembly package. The two hosts therefore share reviewed lock graphs while devenv/CI keeps the classic resource format and shipping runtime closure unchanged.
 - **Progress 2026-07-29:** the reachable FLACCL plugin and command host are now
   SDK-style net47 projects. Locked Core restore, Core/full-MSBuild builds, exact
   resource/kernel comparisons, executable architecture checks, and the live

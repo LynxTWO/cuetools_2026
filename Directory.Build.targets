@@ -6,12 +6,13 @@
     Studio / devenv. Core MSBuild's GenerateResource cannot serialize non-string resources
     without the preserialized path plus System.Resources.Extensions (errors MSB3822/MSB3823).
 
-    Gated on $(MSBuildRuntimeType) == 'Core' ON PURPOSE: this applies ONLY to `dotnet build`.
-    Under full MSBuild (devenv / the CI + release workflows that produce the shipping binaries)
-    this resource block is a complete no-op, so the shipping build's resource format and runtime
-    dependencies are provably unchanged. The classic full-framework resgen keeps handling binary
-    resources there with no extra runtime DLL. This keeps the local-dev affordance from leaking
-    into what users download.
+    GenerateResourceUsePreserializedResources remains gated on
+    $(MSBuildRuntimeType) == 'Core' ON PURPOSE: it applies ONLY to `dotnet build`.
+    Full MSBuild (devenv / the CI + release workflows that produce shipping binaries)
+    sees the same package identities during restore so one reviewed lock file describes
+    both hosts, but ExcludeAssets=all keeps them out of compilation, app config, and
+    publication. The classic full-framework resgen therefore retains its resource format
+    and runtime closure.
 
     Further scope:
       - net47 only. net20 cannot consume System.Resources.Extensions.
@@ -29,14 +30,14 @@
     disabled, non-building CLParity experiment was retired under R89. SDK-style
     first-party net47 projects build under `dotnet build` with this in place.
 
-    A Core restore intentionally includes System.Resources.Extensions. A shipping
-    full-MSBuild build must perform its canonical full-MSBuild restore first;
-    reusing Core's project.assets.json can otherwise make the conditional package
-    appear in the generated app config even though this target is a Full no-op.
+    Core MSBuild also adds Microsoft.NETFramework.ReferenceAssemblies when it targets
+    net20 on a machine without that targeting pack. Full MSBuild has the targeting pack,
+    but still declares the package as restore-only so locked restore sees the same graph.
   -->
 
   <PropertyGroup>
-    <_AdcCoreNet47Resx Condition="'$(CUEToolsDisableCoreResxExtension)' != 'true' And '$(MSBuildRuntimeType)' == 'Core' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcCoreNet47Resx>
+    <_AdcNet47ResxEligible Condition="'$(CUEToolsDisableCoreResxExtension)' != 'true' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcNet47ResxEligible>
+    <_AdcCoreNet47Resx Condition="'$(_AdcNet47ResxEligible)' == 'true' And '$(MSBuildRuntimeType)' == 'Core'">true</_AdcCoreNet47Resx>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
@@ -45,6 +46,16 @@
 
   <ItemGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
     <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(_AdcNet47ResxEligible)' == 'true' And '$(MSBuildRuntimeType)' != 'Core'">
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0"
+                      ExcludeAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net20' And '$(MSBuildRuntimeType)' != 'Core' And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3"
+                      ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
 
   <!--
