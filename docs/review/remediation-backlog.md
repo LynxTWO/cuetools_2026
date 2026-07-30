@@ -68,7 +68,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Finding:** no live MusicBrainz client existed to replace - the `MusicBrainz/` library was dead (unbuilt, unreferenced) and CUERipper's direct query was commented out; MB metadata comes via CTDB's proxy + Freedb fallback. The user chose option A: retain the CTDB-proxied path and remove the dead mirror/binary and stale references. Full scope and the optional future direct-provider design remain in `docs/review/musicbrainz-replacement-scope.md`.
 
-### R8. CUEControls resgen under dotnet build (decision D7) - PARTIAL, updated 2026-07-29
+### R8. CUEControls resgen under dotnet build (decision D7) - DONE 2026-07-29
 
 - **Done:** repo-root `Directory.Build.targets` (Core-MSBuild-gated) makes all SDK-style net47 first-party projects build under `dotnet build`; zero impact on the shipping devenv/CI build.
 - **Done in R12/R88:** the reachable FLACCL plugin and its command host are now
@@ -84,8 +84,9 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Done in R12/R92:** CUEPlayer is SDK-style net47. Its managed, PE, config,
   and decoded-image contracts are preserved, and old/new builds create the same
   live `CUEPlayer 2.2.6` window set.
-- **Remaining (folded into R12):** SDK-style conversion of the old-style
-  `CUETools` GUI so it too `dotnet build`.
+- **Done in R12/R93:** classic CUETools is SDK-style net47. Its managed, PE,
+  config, main/localized resource, and live-window contracts are preserved.
+  All first-party classic GUIs now build through Core and full MSBuild.
   The `CLParity` reachability contradiction was closed by R89: the disabled,
   unconsumed, unshipped, non-building experiment was retired. GUI conversions
   need runtime verification; they are not blind headless changes.
@@ -2408,9 +2409,46 @@ does not relax evidence, rollback, or verification requirements.
   contracts above pass. It remains solution-buildable but is not collected by
   either primary release package, matching its pre-conversion reachability.
 
+### R93. Classic CUETools retains an old project and silently duplicated resources - bucket A, risk high
+
+- **Area or slice:** classic CUETools, WinForms/localized resources, generated
+  settings, ClickOnce metadata, solution membership, and R8/R12.
+- **Why it matters:** this was the final classic GUI that could not consume one
+  trustworthy restore graph under Core and full MSBuild. Project conversion
+  can change architecture, config probing, resource names/values, localization,
+  icon/manifest behavior, or startup. Its main form also contained duplicate
+  resource names that the old compiler silently resolved by keeping one value.
+- **Evidence found:** the old Release executable, config, PDB, and satellites
+  were captured first. Old and new builds retain 53 classes, 463 normalized
+  fields, 434 methods, and 229 public declarations; the same
+  `CUETools, Version=2.2.6.0` identity; and PE32, IL-only, unsigned flags.
+  Configuration is XML-equivalent, including the `plugins` probe. All ten main
+  manifest resources are byte-identical. The de-DE and ru-RU satellites retain
+  the same 257 and 358 resource entries with byte-identical types and payloads.
+  The source cleanup removed 237 second occurrences whose complete XML nodes
+  were identical to the first occurrence, so no compiled resource value
+  changed. Old and new executables each create 16 top-level windows, including
+  a responsive `CUETools 2.2.6` main form.
+- **Confidence:** high for build, managed shape, resource/localization
+  semantics, architecture, config, and startup. Full interactive conversion,
+  repair, settings, accessibility, and localization flows remain separate
+  behavioral boundaries.
+- **Approval needed:** no; this is the user-authorized final classic GUI slice.
+- **Recommended next pass:** continue R12 outside the now-closed classic
+  project-format boundary.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** separate Core and canonical full-MSBuild
+  restore/build lanes with zero warnings; IL/config/PE/main/satellite resource
+  comparisons; old/new top-level-window smoke; duplicate-resource-name,
+  canonical test, lock, and release-safety gates.
+- **Owner:** classic desktop and build maintainers.
+- **Status:** fixed 2026-07-29. CUETools is SDK-style net47, exact duplicate
+  resource nodes are removed, and `eng/ci/Test-ResxDuplicateNames.ps1` prevents
+  recurrence across first-party `.resx` files.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R92. Remaining work
+The locally actionable correctness queue is closed through R93. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2531,3 +2569,7 @@ is ordered by the authority or evidence it requires:
 - 2026-07-29 - closed R92 by converting CUEPlayer, preserving its managed,
   PE/config/decoded-image contracts and old/new live main-form parity while
   documenting that it remains outside the primary release packages.
+- 2026-07-29 - closed R93 by converting classic CUETools, preserving its
+  managed/PE/config/main/localized-resource contracts and old/new live
+  main-form parity, removing 237 compiler-ignored exact resource duplicates,
+  and adding a first-party `.resx` duplicate-name gate.

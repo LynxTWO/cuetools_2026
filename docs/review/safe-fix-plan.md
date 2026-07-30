@@ -1398,3 +1398,35 @@ behavior.
 175 normalized fields, 236 methods, and 118 public declarations; PE/config
 semantics and all five decoded GUI images match; and both builds create eight
 top-level windows with the expected responsive main form.
+
+### Convert classic CUETools and reject silently duplicated resource names
+
+**Scope:** replace only `CUETools/CUETools.csproj` with an SDK-style net47
+WinForms project and update its solution project-type GUID. Preserve assembly,
+architecture, unsafe-code, icon/manifest, ClickOnce/bootstrapper, content,
+generated settings/resource, localized resource, output, and project-reference
+contracts. Exclude the four nested test-project trees from SDK default items.
+Remove only later `.resx` nodes whose complete XML is identical to the retained
+first node.
+
+**Checks:** capture the old executable/config/PDB/satellites; perform separate
+Core and canonical full-MSBuild restores/builds; compare normalized IL
+declarations, assembly identity, PE flags, XML config, every main manifest
+resource, and every localized resource entry. Start old and new executables
+beside the same dependency closure and require the same responsive
+`CUETools 2.2.6` window set. Scan all first-party `.resx` files for duplicate
+names and run canonical tests, lock, and release-safety gates.
+
+**Rollback:** revert project, solution type, exact-duplicate cleanup, and guard
+together. Do not retain a resource rewrite unless compiled resource equality is
+proven.
+
+**Observability:** build/resource/startup evidence only. This changes no
+conversion, verification, repair, network, settings value, logging, or
+telemetry behavior.
+
+**Status:** implemented and verified 2026-07-29. CUETools retains 53 classes,
+463 normalized fields, 434 methods, and 229 public declarations; all ten main
+resources and all 615 localized resource entries match; PE/config semantics
+match; and both builds create 16 top-level windows with the expected responsive
+main form. The new CI guard passes across 67 first-party resource files.

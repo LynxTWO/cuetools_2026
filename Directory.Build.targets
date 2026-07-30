@@ -24,9 +24,8 @@
     Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here.
     FLACCL's paired plugin/command projects were converted under R12/R88, BluTools
     became the first classic GUI pilot under R90, CUERipper plus its
-    ProgressODoom control dependency followed under R91, and CUEPlayer followed
-    under R92. Only the old-style CUETools GUI still needs SDK conversion and
-    runtime UI verification. The
+    ProgressODoom control dependency followed under R91, CUEPlayer followed
+    under R92, and CUETools completed the classic GUI set under R93. The
     disabled, non-building CLParity experiment was retired under R89. SDK-style
     first-party net47 projects build under `dotnet build` with this in place.
 
@@ -49,7 +48,7 @@
   </ItemGroup>
 
   <!--
-    Several old-style projects name Visual Studio's installed AllRules.ruleset.
+    Some retained old-style projects name Visual Studio's installed AllRules.ruleset.
     Core MSBuild does not search that Visual Studio ruleset directory, so the
     setting cannot take effect there and only emits MSB3884. Preserve the rule
     selection for full Visual Studio builds and clear the unresolved Core value.
