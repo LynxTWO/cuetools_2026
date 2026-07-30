@@ -6,8 +6,6 @@ Set-StrictMode -Version 2.0
 
 $safetyScript = Join-Path $PSScriptRoot "ReleaseSafety.ps1"
 . $safetyScript
-$nativeInventoryScript = Join-Path $PSScriptRoot "NativeDependencyInventory.ps1"
-. $nativeInventoryScript
 
 $script:checkCount = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -297,19 +295,6 @@ try {
     $nativeInventory = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "native-dependencies.json") -Raw |
         ConvertFrom-Json
-    $macSdkClosure = Get-CUEToolsMacSdkSourceClosure `
-        -RepositoryRoot (Join-Path $PSScriptRoot "..\..") `
-        -Inventory $nativeInventory
-    Assert-True `
-        ([string]$macSdkClosure.summary.classification -ceq
-            "pinned-native-source-expansion" -and
-            [string]$macSdkClosure.summary.state -ceq "validated" -and
-            [int]$macSdkClosure.summary.archiveFileCount -eq 423 -and
-            [int]$macSdkClosure.summary.overrideFileCount -eq 4 -and
-            [string]$macSdkClosure.summary.expandedTreeSha256 -cmatch
-                "^[0-9a-f]{64}$" -and
-            @($macSdkClosure.archiveMembers).Count -eq 423) `
-        "The pinned Monkey's Audio SDK derived-source closure is incomplete."
     foreach ($pinnedFile in @($nativeInventory.pinnedFiles)) {
         $attributePath = ([string]$pinnedFile.path).Replace("\", "/")
         Assert-True `

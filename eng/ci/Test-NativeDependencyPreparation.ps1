@@ -57,6 +57,25 @@ try {
         "The clean-checkout-shaped Monkey's Audio SDK expansion failed."
     Assert-True (Test-Path -LiteralPath $archiveOnlyProject -PathType Leaf) `
         "The archive-only MACLib project was not expanded."
+    $inventoryHelperPath = Join-Path $tempRoot (
+        "eng\release\NativeDependencyInventory.ps1")
+    . $inventoryHelperPath
+    $fixtureInventory = Get-Content -LiteralPath (
+        Join-Path $tempRoot "eng\release\native-dependencies.json") -Raw |
+        ConvertFrom-Json
+    $macSdkClosure = Get-CUEToolsMacSdkSourceClosure `
+        -RepositoryRoot $tempRoot `
+        -Inventory $fixtureInventory
+    Assert-True `
+        ([string]$macSdkClosure.summary.classification -ceq
+            "pinned-native-source-expansion" -and
+            [string]$macSdkClosure.summary.state -ceq "validated" -and
+            [int]$macSdkClosure.summary.archiveFileCount -eq 423 -and
+            [int]$macSdkClosure.summary.overrideFileCount -eq 4 -and
+            [string]$macSdkClosure.summary.expandedTreeSha256 -cmatch
+                "^[0-9a-f]{64}$" -and
+            @($macSdkClosure.archiveMembers).Count -eq 423) `
+        "The pinned Monkey's Audio SDK derived-source closure is incomplete."
     $wrapperProjectText = [IO.File]::ReadAllText($trackedSentinel)
     Assert-True ($wrapperProjectText -notmatch "DefaultPlatformToolset") `
         "The Monkey's Audio wrapper still inherits an environment-selected toolset."
