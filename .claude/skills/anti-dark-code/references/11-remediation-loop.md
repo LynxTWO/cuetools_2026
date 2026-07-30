@@ -436,6 +436,11 @@ Use this when a workflow embeds commands or claims hosted coverage:
   evidence when the platform had to force an action off its declared deprecated
   runtime. Move to a supported upstream action release, pin its immutable commit,
   rerun the action's critical contract, and retain the source-bound hosted receipt.
+- Give every exact-byte fixture a checkout-byte contract. When an archive contains
+  LF bytes but its text oracle can be expanded to CRLF, a host-dependent failure is
+  testing source control conversion rather than the parser. Pin the exact path's
+  text/EOL attributes or treat it as binary, then compare the committed and decoded
+  payloads.
 - Inspect downloaded artifacts and receipts after the hosted run. A green job proves
   its commands exited successfully; it does not by itself prove that the intended
   native runtime, architecture, license, manifest, signature, or final bytes were
@@ -459,6 +464,11 @@ package-manager installation:
 - Run one direct build of the previously blocked target. Classify a remaining failure
   as source defect, toolchain blocker, native dependency blocker, or unexercised path
   instead of treating installer success as a passing build.
+- When a package supplies a missing framework reference or targeting pack, make it
+  active under the build host that lacks the installed pack and restore-only under
+  the host that must retain the same lock graph without consuming package assets.
+  Exercise both hosts and, where practical, a hosted image without the installed
+  pack; a local machine with the pack cannot prove the fallback is wired.
 - For release collection, distinguish a fresh exact staging tree from fresh compiled
   inputs. Require a build receipt that binds the source commit or dirty-worktree
   fingerprint, configuration, platform/toolchain tuple, and hashes of compiled

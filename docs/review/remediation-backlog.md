@@ -2544,9 +2544,10 @@ does not relax evidence, rollback, or verification requirements.
   a platform migration warning and left future runner behavior dependent on a
   compatibility shim.
 - **Evidence found:** the annotation named checkout and setup-dotnet. Their
-  current upstream releases, plus the artifact action used by the evidence
-  workflows, provide supported replacements. All uses now pin the exact
-  checkout 7.0.1, setup-dotnet 6.0.0, and upload-artifact 7.0.1 commits.
+  current upstream releases, plus the artifact and vcpkg actions used by the
+  evidence workflows, provide supported replacements. All uses now pin the
+  exact checkout 7.0.1, setup-dotnet 6.0.0, upload-artifact 7.0.1, and
+  run-vcpkg 11.6 commits.
 - **Confidence:** high for the repository workflows and hosted annotation.
 - **Approval needed:** no; immutable pin maintenance is inside the authorized
   hosted-evidence scope.
@@ -2560,10 +2561,36 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** repository migration implemented 2026-07-30; final hosted receipts
   pending.
 
+### R98. Hosted classic tests depended on checkout line endings and an installed net20 targeting pack - bucket A, risk high
+
+- **Area or slice:** the RAR5 production-path fixture, repository checkout
+  attributes, Core/full MSBuild reference-package roles, and the legacy hosted
+  test lane.
+- **Why it matters:** the archive contains a 2,083-byte LF payload, while hosted
+  checkout expanded its text oracle to 2,118 CRLF bytes. The same run then found
+  that Core MSBuild could not build net20 without a machine-installed targeting
+  pack even though the dependency lock contained the intended fallback.
+- **Evidence found:** `.gitattributes` now pins the exact RAR text oracle to LF
+  and the archive to binary. Core MSBuild actively consumes
+  `Microsoft.NETFramework.ReferenceAssemblies` for net20; full MSBuild retains
+  the same direct dependency with all assets excluded. The lock is unchanged,
+  the focused RAR test passes, and the local net20 relay probe passes.
+- **Confidence:** high for both root causes; the hosted image supplies the
+  missing-targeting-pack falsification the local workstation cannot.
+- **Approval needed:** no; both fixes make existing test/build intent portable.
+- **Recommended next pass:** retain exact checkout attributes for any future
+  byte oracle and test reference-package fallbacks on an image without the pack.
+- **Smallest safe next step:** complete the replacement hosted legacy lane.
+- **Verification plan:** attribute inspection; focused RAR extraction/seek;
+  Core/full package-role gate; unchanged lock hash; net20 build/relay probe;
+  complete hosted legacy test discovery.
+- **Owner:** codec-test and build maintainers.
+- **Status:** repository fixes complete 2026-07-30; hosted receipt pending.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. R97 awaits only
-the source-bound hosted receipt. Remaining work
+The locally actionable correctness queue is closed through R96. R97 and R98
+await only source-bound hosted receipts. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector

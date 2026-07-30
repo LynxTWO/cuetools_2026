@@ -38,6 +38,16 @@ Require `
         "vcpkgCommitId:\s+'$expectedVcpkg'")).Count -eq 2) `
     "Both FFmpeg architectures must use the reviewed vcpkg commit."
 Require `
+    ($workflow.Contains(
+        "lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11.6") -and
+        $workflow.Contains("runVcpkgInstall: false")) `
+    "The FFmpeg workflow does not use the reviewed Node 24 vcpkg setup action."
+Require `
+    ($workflow.Contains("& `$vcpkg install") -and
+        $workflow.Contains('--triplet ''${{ matrix.triplet }}''') -and
+        $workflow.Contains("pinned vcpkg FFmpeg build failed")) `
+    "The explicit pinned FFmpeg package build is missing or does not fail closed."
+Require `
     ($workflow.Contains("FFmpegCodecWorker.csproj") -and
         $workflow.Contains("CUETools.FFmpegCodecWorker.exe")) `
     "The FFmpeg workflow does not build and run the managed/native probe."

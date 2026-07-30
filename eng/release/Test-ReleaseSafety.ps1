@@ -377,6 +377,7 @@ try {
     & (Join-Path $PSScriptRoot "Test-ArtifactValidatorExactFiles.ps1")
     & (Join-Path $PSScriptRoot "..\ci\Test-NuGetLockFiles.ps1")
     & (Join-Path $PSScriptRoot "..\ci\Test-ResxDuplicateNames.ps1")
+    & (Join-Path $PSScriptRoot "..\ci\Test-WorkflowActionPins.ps1")
     & (Join-Path $PSScriptRoot "..\ci\Test-FFmpegWorkflow.ps1")
     & (Join-Path $PSScriptRoot "Test-SigningPolicy.ps1")
 
