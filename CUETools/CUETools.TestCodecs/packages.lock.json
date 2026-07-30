@@ -269,8 +269,7 @@
         "dependencies": {
           "CUETools.AccurateRip": "[2.2.6, )",
           "CUETools.CDImage": "[2.2.6, )",
-          "CUETools.Codecs": "[2.2.6, )",
-          "System.Resources.Extensions": "[8.0.0, )"
+          "CUETools.Codecs": "[2.2.6, )"
         }
       },
       "freedb": {

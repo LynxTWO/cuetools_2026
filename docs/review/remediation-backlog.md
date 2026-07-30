@@ -2505,9 +2505,39 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** repository policy implemented 2026-07-29; public-trust identity
   provisioning remains an explicit external owner action.
 
+### R96. Visual Studio re-evaluated a legacy locked graph and parallel rebuild deleted shared outputs - bucket A, risk high
+
+- **Area or slice:** `CUETools.TestHelpers`, Core/full/IDE restore graphs, the
+  classic release command plan, retained build intents, and hosted evidence.
+- **Why it matters:** an explicit full-MSBuild restore passed while devenv's
+  automatic restore evaluated the legacy helper differently and rewrote two
+  reviewed locks. After that was corrected, transaction-wide cleanup followed
+  by parallel project `/Rebuild` let one clean delete another project's newly
+  produced shared dependency, causing 23 nondeterministic missing-metadata
+  failures.
+- **Evidence found:** the resource-free helper is now SDK-style net47 and
+  explicitly excluded from the conditional resource package. Core MSBuild,
+  full MSBuild, and Visual Studio agree on the two dependent lock graphs.
+  Devenv built 58/58 projects with both lock hashes unchanged. The receipt
+  still proves all declared output leaves absent before using `/Build`; the
+  fresh Any CPU/x64/Win32 transaction completed with zero native warning
+  fingerprints and published the exact classic artifact.
+- **Confidence:** high for local Visual Studio 18 Community and the guarded
+  hosted Visual Studio path.
+- **Approval needed:** no; this is build/release correctness within the
+  authorized conversion and evidence scope.
+- **Recommended next pass:** retain hosted receipts and compare future IDE and
+  runner-image changes.
+- **Smallest safe next step:** none; the repo-local defect is closed.
+- **Verification plan:** legacy/SDK assembly contract, Core/full locked
+  restores, lock hashes across real devenv, receipt/orchestrator fault tests,
+  three-configuration fresh build, native warning gate, and artifact collector.
+- **Owner:** build and release maintainers.
+- **Status:** fixed 2026-07-30.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R95. Remaining work
+The locally actionable correctness queue is closed through R96. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2633,3 +2663,7 @@ is ordered by the authority or evidence it requires:
   managed/PE/config/main/localized-resource contracts and old/new live
   main-form parity, removing 237 compiler-ignored exact resource duplicates,
   and adding a first-party `.resx` duplicate-name gate.
+- 2026-07-30 - closed R96 by converting the resource-free legacy test helper,
+  proving Core/full/IDE lock parity, replacing the unsafe pre-clean plus
+  parallel `/Rebuild` sequence with a receipted fresh `/Build`, and completing
+  the exact three-configuration release transaction.

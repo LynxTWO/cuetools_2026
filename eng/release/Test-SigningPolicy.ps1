@@ -103,6 +103,12 @@ Require `
     ($workflow.Contains("startsWith(github.ref, 'refs/tags/')") -and
         $workflow.Contains("inputs.sign_release")) `
     "The release workflow does not require signing for tags or explicit release dispatches."
+Require `
+    ($workflow.Contains("Upload retained release failure evidence") -and
+        $workflow.Contains("if: failure()") -and
+        $workflow.Contains('release-failure-evidence-${{ github.run_id }}') -and
+        $workflow.Contains("bin/Release/evidence/")) `
+    "The release workflow does not preserve retained failure evidence."
 
 $signingIndex = $workflow.IndexOf(
     "Invoke-ArtifactSigning.ps1",

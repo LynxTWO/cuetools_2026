@@ -35,20 +35,25 @@ progress documents for it belong here, under `docs/review/`.
   such as `System.Resources.Extensions` and net20 reference assemblies must
   remain declared as `ExcludeAssets=all` restore evidence under full MSBuild;
   do not remove those nodes or allow them into the shipping compile/runtime
-  closure.
+  closure. Exercise the real devenv build and prove lock hashes do not change;
+  Visual Studio may perform another restore with a different legacy-project
+  evaluation after the explicit restore.
 - Run classic release clean/build/receipt/collect/validate through
   `eng/release/Invoke-ClassicRelease.ps1`. A clean staging directory does not prove
   fresh compiled inputs. The orchestrator holds one repo-wide lease across recovery,
   exact-leaf cleanup, build, receipt, collection, and publication. Do not bypass it
-  through the receipt or collector helpers.
+  through the receipt or collector helpers. The orchestrator uses `/Build` after
+  exact-leaf cleanup. Do not change this to parallel `/Rebuild`: project-level clean
+  operations race in the shared `bin\Release` output tree.
 - Classic receipts must account for every consumed native binary and ignored source
   input. They bind the expanded Monkey's Audio tree to its archive, and bind the exact
   Release|x64 and Release|Win32 command logs plus warning-baseline hash before
   collection. A new warning retains the intent and logs and must not publish.
 - A retry may archive a source-stale failed build only through
   `Invoke-ClassicRelease.ps1 -ArchiveStalePendingIntent`. The explicit path preserves
-  the old intent byte-for-byte before cleanup. Do not delete or rename pending intent
-  evidence manually.
+  the old intent byte-for-byte before cleanup, including a superseded command plan
+  that is never executed. Same-source recovery and every new intent still require the
+  current canonical plan. Do not delete or rename pending intent evidence manually.
 - Monkey's Audio is pinned to the official 13.20 SDK archive. Prepare and build it
   through `eng/ci/Build-NativeDependencies.ps1`; the script byte-validates all 423
   archive files plus four hash-pinned CUETools wrapper overrides before building
@@ -136,8 +141,10 @@ progress documents for it belong here, under `docs/review/`.
   standalone path uses FFmpeg.AutoGen 8.1.0 with FFmpeg 8.1.2#3 from vcpkg commit
   `9e593bb18ea69cc5095e012465dcd675a822ed0d`. Both x64 and x86 must run the
   16/24-bit path/stream/nonzero-seek worker and retain license, port-manifest,
-  version, size, and SHA-256 evidence. Do not copy this unshipped path into either
-  primary artifact without a separate reachability and packaging review.
+  version, size, and SHA-256 evidence. Pass the same `PlatformTarget` to restore and
+  no-restore build, and fail immediately if either command fails. Do not copy this
+  unshipped path into either primary artifact without a separate reachability and
+  packaging review.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate

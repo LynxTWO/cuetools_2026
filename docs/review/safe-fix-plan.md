@@ -1474,3 +1474,31 @@ step.
 
 **Status:** repository policy implemented 2026-07-29. Public-trust certificate
 identity and protected GitHub values remain external owner provisioning.
+
+### Align locked test graphs and make the fresh classic build deterministic
+
+**Scope:** convert the resource-free `CUETools.TestHelpers` library to SDK-style
+net47, explicitly exclude it from the preserialized-resource package graph,
+refresh only the two dependent test locks, and change the receipted Visual
+Studio commands from `/Rebuild` to `/Build` after the orchestrator's existing
+declared-output pre-clean.
+
+**Safety:** preserve assembly identity, public surface, references, output path,
+and app config. Keep command-plan changes bound to the receipt. Permit an
+explicit stale-source recovery to archive, but never execute, an older
+command-plan intent.
+
+**Checks:** compare the legacy and SDK assembly/resource/config contracts; run
+Core and full-MSBuild restores; hash locks across the real devenv build; run
+the exact fresh-output Any CPU/x64/Win32 release transaction; require zero
+native-warning drift and exact artifact publication.
+
+**Rollback:** revert the project conversion, two locks, eligibility rule,
+command plan, tests, and docs as one unit. Retain abandoned intent/log bytes as
+evidence.
+
+**Status:** implemented and verified 2026-07-30. The helper retains 2 public
+types, 15 public methods, 7 public properties, 7 public fields, zero resources,
+the same five references and version, and the same app config. Devenv built
+58/58 projects without changing either lock. The full receipted release
+transaction passed all three configurations and exact artifact collection.

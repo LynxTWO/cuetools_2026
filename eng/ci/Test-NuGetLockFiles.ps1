@@ -67,6 +67,24 @@ if ($vendorLocks.Count -gt 0) {
 
 $targetsPath = Join-Path $repoRoot "Directory.Build.targets"
 [xml]$targets = Get-Content -LiteralPath $targetsPath -Raw
+$eligibilityNode = $targets.SelectSingleNode(
+    "/Project/PropertyGroup/_AdcNet47ResxEligible")
+if ($null -eq $eligibilityNode -or
+    $eligibilityNode.Condition -notlike "*TargetFramework*==*net47*" -or
+    $eligibilityNode.Condition -like "*TargetFrameworkVersion*") {
+    throw "Core resource support must be limited to SDK target-framework evaluation."
+}
+$testHelperProjectPath = Join-Path $repoRoot `
+    "CUETools.TestHelpers\CUETools.TestHelpers.csproj"
+[xml]$testHelperProject = Get-Content -LiteralPath `
+    $testHelperProjectPath -Raw
+$testHelperOptOut = $testHelperProject.SelectSingleNode(
+    "/*[local-name()='Project']/*[local-name()='PropertyGroup']/" +
+    "*[local-name()='CUEToolsDisableCoreResxExtension']")
+if ($null -eq $testHelperOptOut -or
+    [string]$testHelperOptOut.InnerText -cne "true") {
+    throw "The resource-free test helper must explicitly opt out of the Core resource package."
+}
 $packageNodes = @($targets.SelectNodes(
     "/Project/ItemGroup/PackageReference"))
 $coreResourcePackage = @(

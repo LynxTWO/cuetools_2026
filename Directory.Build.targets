@@ -29,6 +29,8 @@
     under R92, and CUETools completed the classic GUI set under R93. The
     disabled, non-building CLParity experiment was retired under R89. SDK-style
     first-party net47 projects build under `dotnet build` with this in place.
+    The resource-free CUETools.TestHelpers project is SDK-style but opts out
+    explicitly so every restore host sees the same test dependency graph.
 
     Core MSBuild also adds Microsoft.NETFramework.ReferenceAssemblies when it targets
     net20 on a machine without that targeting pack. Full MSBuild has the targeting pack,
@@ -36,7 +38,7 @@
   -->
 
   <PropertyGroup>
-    <_AdcNet47ResxEligible Condition="'$(CUEToolsDisableCoreResxExtension)' != 'true' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcNet47ResxEligible>
+    <_AdcNet47ResxEligible Condition="'$(CUEToolsDisableCoreResxExtension)' != 'true' And '$(TargetFramework)' == 'net47' And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcNet47ResxEligible>
     <_AdcCoreNet47Resx Condition="'$(_AdcNet47ResxEligible)' == 'true' And '$(MSBuildRuntimeType)' == 'Core'">true</_AdcCoreNet47Resx>
   </PropertyGroup>
 
