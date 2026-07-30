@@ -75,8 +75,14 @@ jobs:
       - name: Build and run managed/native decoder probe
         shell: pwsh
         run: |
-          dotnet restore eng\ci\FFmpegCodecWorker\FFmpegCodecWorker.csproj --force-evaluate
+          dotnet restore eng\ci\FFmpegCodecWorker\FFmpegCodecWorker.csproj --force-evaluate -p:PlatformTarget=${{ matrix.configuration }}
+          if ($LASTEXITCODE -ne 0) {
+            throw "The FFmpeg managed/native decoder probe restore failed with exit code $LASTEXITCODE."
+          }
           dotnet build eng\ci\FFmpegCodecWorker\FFmpegCodecWorker.csproj -c Release --no-restore -p:PlatformTarget=${{ matrix.configuration }}
+          if ($LASTEXITCODE -ne 0) {
+            throw "The FFmpeg managed/native decoder probe build failed with exit code $LASTEXITCODE."
+          }
           $probeSource = Join-Path '${{ github.workspace }}' 'eng\ci\FFmpegCodecWorker\bin\Release\net47'
           $probeRoot = Join-Path '${{ github.workspace }}' 'deploy\plugins\probe'
           Copy-Item -LiteralPath $probeSource -Destination $probeRoot -Recurse
