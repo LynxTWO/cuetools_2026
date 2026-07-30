@@ -316,12 +316,14 @@ were fixed; legacy Freedb/SCSI construction style remains cleanup debt.
   `RarStream` full-read/backward-seek evidence in both process architectures;
   its committed regression also fixed backward-seek replay against stale EOF and
   passed 20/20 repeats. The prior 6.11 import record remains historical evidence.
-  The retained LAME DLLs are
-  byte-identical to the SHA-256-recorded RareWares archives. Exact build
-  provenance remains open only where evidence cannot close it: HDCD's
-  source/revision/recipe, RareWares' exact LAME source revision and flags, and
-  a TTA archive checksum captured contemporaneously with its 2009 import. The
-  current official archive and the import's exact local delta are recorded.
+  The retained LAME DLLs are byte-identical to the SHA-256-recorded RareWares
+  archives. Evidence that cannot be recovered has an explicit retain decision,
+  not an open-ended search: the public Christopher Key archives expose the
+  reference command-line decoder rather than this DLL's source/recipe; the
+  RareWares archives contain only DLL/LIB/EXP outputs; and no present action can
+  create a TTA checksum captured in 2009. TTA's current official archive hash
+  and the import's exact local delta are recorded. HDCD and LAME may be replaced
+  only through the behavior/ABI/corpus gates named in the native inventory.
 - Plan and validate the remaining codec drift one integration at a time. WavPack
   5.9.0 is complete with clean Win32/x64 builds and a focused real round trip.
   LAME 3.100 to the newly released 4.0 remains separate. Monkey's Audio 13.20

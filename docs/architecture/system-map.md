@@ -176,9 +176,12 @@ workflow have completed on the current source state.
 - Real `ApplicationSettingsBase.Save()` persistence and legacy Icecast
   credential migration in CUEPlayer.
 - CTDB server-side TLS and gnudb transport modernization.
-- Complete residual provenance decisions for HDCD, LAME build inputs, TTA, and
-  other vendored binaries; UnRAR 7.23 origin/signature/ABI/runtime evidence is
-  closed. Release signing and NuGet lockfiles remain.
+- Continue the source-built HDCD and LAME replacement projects only through
+  their recorded behavior/ABI/corpus gates. Their unrecoverable historical build
+  details and the absent contemporaneous TTA checksum are disclosed retain
+  decisions, not claims that more local searching can close them. UnRAR 7.23
+  origin/signature/ABI/runtime evidence and first-party NuGet lock coverage are
+  closed. Release signing and other mirrored-asset provenance remain.
 
 See `docs/architecture/coverage-ledger.md` for review depth and
 `docs/unknowns/` for the bounded open questions.

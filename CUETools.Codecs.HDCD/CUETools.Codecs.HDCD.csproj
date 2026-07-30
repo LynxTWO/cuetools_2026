@@ -6,7 +6,7 @@
     <AssemblyName>CUETools.Codecs.HDCD</AssemblyName>
     <RootNamespace>CUETools.Codecs.HDCD</RootNamespace>
     <Product>CUETools</Product>
-    <Description>A library for decompressing RAR.</Description>
+    <Description>A managed wrapper for detecting and decoding HDCD audio.</Description>
     <Copyright>Copyright (c) 2008-2025 Grigory Chudov</Copyright>
     <Authors>Grigory Chudov</Authors>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

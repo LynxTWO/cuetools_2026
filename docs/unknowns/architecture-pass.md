@@ -57,10 +57,12 @@ below as history.
   SHA-256-recorded RareWares x86/x64 archives; TTA 1.1 is traced to the
   official SourceForge archive and its reviewable 2009 import delta; and HDCD
   is attributed and licensed to Christopher Key. Source-built codec patches
-  are now SHA-256 pinned. Remaining gaps are narrower: HDCD's exact
-  source/revision/build recipe, RareWares' exact LAME source revision and
-  flags, and a checksum for the TTA archive captured contemporaneously with
-  the import. The reviewed RAR input flow does not extract
+  are now SHA-256 pinned. The remaining historical limits have explicit retain
+  decisions: the surviving public Christopher Key archives contain the
+  command-line reference decoder rather than the DLL source/recipe; the
+  RareWares LAME archives contain only DLL/LIB/EXP outputs; and a checksum
+  captured contemporaneously with TTA's 2009 import cannot be created
+  retroactively. The reviewed RAR input flow does not extract
   attacker-controlled paths to disk, so the earlier path-traversal reachability
   concern is closed without claiming the parser has no other CVEs. The detached
   `WavPack`, `WindowsMediaLib`, `flac`, and `taglib-sharp` submodules also contain
@@ -68,10 +70,9 @@ below as history.
   than overwritten during an upgrade.
 - **Confidence:** medium
 - **Likely owner:** release maintainer and upstream dependency owners
-- **Next best check:** reconcile and preserve the four dirty submodule worktrees,
-  replace the remaining unverifiable binary build inputs with reproducible source
-  builds or document an explicit retain decision, then execute pending version
-  upgrades one codec at a time.
+- **Next best check:** execute source-built HDCD and LAME replacements only with
+  their recorded behavior, ABI, corpus, and quality gates. Do not erase the
+  disclosed historical limits by inferring recipes from opaque output bytes.
 - **Risk level:** high
 - **Status:** in progress
 

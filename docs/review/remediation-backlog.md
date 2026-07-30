@@ -623,9 +623,14 @@ does not relax evidence, rollback, or verification requirements.
   `CI=true` enables locked restore; a checked inventory fails when a first-party
   package project or lock file is added, removed, or drifts. Solution, WPF, and
   ripper-test locked restores pass without touching vendor submodules. Remaining:
-  signing identity/policy, hosted parity, HDCD's exact source/revision/recipe,
-  RareWares' exact LAME build flags/revision, and the historical TTA archive
-  checksum.
+  signing identity/policy and hosted parity. The remaining historical
+  provenance limits are now explicit retain decisions rather than actionable
+  searches: HDCD's exact source/revision/recipe was not published with the
+  surviving DLL ABI; RareWares' archives contain no LAME source identifier,
+  flags, or build notes; and a checksum captured in 2009 cannot be created
+  retroactively. Current bytes, archives where available, hashes, import
+  history, build evidence, and replacement gates are recorded in
+  `eng/release/native-dependencies.json`.
 
 ### R33. Custom WPF job paths can leak through exception diagnostics - bucket A, risk medium
 
@@ -2070,10 +2075,7 @@ is ordered by the authority or evidence it requires:
 2. Run the pinned hosted workflows and compare them with the local WPF/classic
    receipts.
 3. Choose and implement a publisher signing/attestation identity and policy.
-4. Resolve the external provenance holes in R32: exact HDCD source/build recipe,
-   RareWares LAME source revision/build flags, and contemporaneous TTA archive
-   checksum.
-5. Continue the deliberately large R8/R12 SDK/async modernization and the
+4. Continue the deliberately large R8/R12 SDK/async modernization and the
    behavior-changing R13/R14 LAME/FFmpeg projects one verified slice at a time.
 
 ## Holes / external boundaries
@@ -2082,9 +2084,11 @@ is ordered by the authority or evidence it requires:
 - CI depends on GitHub-hosted Windows image + VS Enterprise devenv path.
 - Signing identity/policy is an owner decision; hashes establish byte identity, not
   publisher identity.
-- Remaining vendored provenance is a supply-chain surface even though shipped bytes,
-  immutable gitlinks, patches, and staged source manifests are hash-bound and
-  inventoried.
+- Retained vendored binaries remain a supply-chain surface even though shipped
+  bytes, immutable gitlinks, patches, and staged source manifests are hash-bound
+  and inventoried. The HDCD and RareWares LAME limitations are explicit retain
+  decisions with source-built replacement gates; TTA is source-built from a
+  reviewable tree and official archive comparison.
 - MusicBrainz/gnudb/AccurateRip/CTDB servers are external; their behavior can change independent of this repo.
 - Apple artwork embedding lacks a documented Search API permission for this use.
   TheAudioDB remains optional until a production account and attribution placement
