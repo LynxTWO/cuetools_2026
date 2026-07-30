@@ -123,14 +123,14 @@ if (-not (Test-Path -LiteralPath $spdxRoot)) {
     -m $spdxRoot `
     -pn $PackageName `
     -pv $PackageVersion `
-    -ps "Organization: CUETools contributors" `
+    -ps "CUETools contributors" `
     -nsu $commit `
     -gt $commitTime `
     -D true `
     -F false `
     -P 2 `
     -mi SPDX:2.2 `
-    -V Warning
+    -V Error
 if ($LASTEXITCODE -ne 0) {
     throw "SPDX generation failed."
 }
@@ -154,47 +154,10 @@ function Get-StableGuid([string]$Seed) {
     finally { $sha.Dispose() }
 }
 
-function ConvertTo-CanonicalJsonNode([object]$Value) {
-    if ($null -eq $Value) {
-        return $null
-    }
-
-    if ($Value -is [pscustomobject]) {
-        $propertyNames = [string[]]@($Value.PSObject.Properties.Name)
-        [Array]::Sort($propertyNames, [StringComparer]::Ordinal)
-        $ordered = [ordered]@{}
-        foreach ($propertyName in $propertyNames) {
-            $ordered[$propertyName] = ConvertTo-CanonicalJsonNode $Value.$propertyName
-        }
-        return [pscustomobject]$ordered
-    }
-
-    if ($Value -is [Collections.IEnumerable] -and $Value -isnot [string]) {
-        $decorated = New-Object "Collections.Generic.List[object]"
-        foreach ($item in $Value) {
-            $node = ConvertTo-CanonicalJsonNode $item
-            $decorated.Add([pscustomobject]@{
-                    Key  = ($node | ConvertTo-Json -Depth 100 -Compress)
-                    Node = $node
-                })
-        }
-        $comparison = [Comparison[object]] {
-            param($left, $right)
-            return [StringComparer]::Ordinal.Compare($left.Key, $right.Key)
-        }
-        $decorated.Sort($comparison)
-        [object[]]$items = @($decorated | ForEach-Object { $_.Node })
-        Write-Output -NoEnumerate $items
-        return
-    }
-
-    return $Value
-}
-
 # sbom-tool creates random document/SWID UUIDs even when its namespace suffix and timestamp are
 # supplied. Normalize only those two UUID fields to hashes of immutable build identity. Parallelism
-# is fixed at the tool's minimum above, then unordered SPDX collections are canonicalized because
-# the tool's parallel traversal can emit the same elements in a different order.
+# is fixed at the tool's minimum above, then a package-free .NET guard canonicalizes unordered
+# SPDX collections without PowerShell 5.1 collapsing or wrapping one-element JSON arrays.
 $spdxJson = [IO.File]::ReadAllText($spdxPath)
 $guidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 $documentGuid = Get-StableGuid "$commit`n$PackageName`n$PackageVersion`ndocument"
@@ -213,14 +176,79 @@ $spdxJson = [Text.RegularExpressions.Regex]::Replace(
     $spdxJson,
     $swidPattern,
     ('${1}' + $swidGuid))
-$spdxObject = $spdxJson | ConvertFrom-Json
-$canonicalSpdxObject = ConvertTo-CanonicalJsonNode $spdxObject
-$spdxJson = $canonicalSpdxObject | ConvertTo-Json -Depth 100
 [IO.File]::WriteAllText(
     $spdxPath,
-    ($spdxJson + [Environment]::NewLine),
+    $spdxJson,
     (New-Object Text.UTF8Encoding($false)))
-$null = [IO.File]::ReadAllText($spdxPath) | ConvertFrom-Json
+
+$sbomGuardProject = Join-Path $PSScriptRoot "SbomGuard\SbomGuard.csproj"
+& dotnet run `
+    --project $sbomGuardProject `
+    --configuration Release `
+    -- `
+    canonicalize `
+    $spdxPath
+if ($LASTEXITCODE -ne 0) {
+    throw "SPDX canonicalization failed."
+}
+$spdxSidecarPath = "$spdxPath.sha256"
+$spdxHash = (
+    Get-FileHash -LiteralPath $spdxPath -Algorithm SHA256
+).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText(
+    $spdxSidecarPath,
+    $spdxHash,
+    (New-Object Text.UTF8Encoding($false)))
+
+& dotnet run `
+    --project $sbomGuardProject `
+    --configuration Release `
+    --no-build `
+    -- `
+    validate-spdx `
+    $ArtifactDirectory `
+    $spdxPath `
+    $PackageName `
+    $PackageVersion
+if ($LASTEXITCODE -ne 0) {
+    throw "SPDX semantic validation failed."
+}
+& dotnet run `
+    --project $sbomGuardProject `
+    --configuration Release `
+    --no-build `
+    -- `
+    validate-cyclonedx `
+    $cyclonePath `
+    $PackageName `
+    $PackageVersion
+if ($LASTEXITCODE -ne 0) {
+    throw "CycloneDX semantic validation failed."
+}
+
+$spdxValidationPath = Join-Path $ToolDirectory (
+    "$OutputStem-spdx-validation-" + [Guid]::NewGuid().ToString("N") + ".json")
+& $sbomTool validate `
+    -b $ArtifactDirectory `
+    -m (Join-Path $spdxRoot "_manifest") `
+    -o $spdxValidationPath `
+    -F false `
+    -P 2 `
+    -mi SPDX:2.2 `
+    -V Error
+if ($LASTEXITCODE -ne 0 -or
+    -not (Test-Path -LiteralPath $spdxValidationPath -PathType Leaf)) {
+    throw "Microsoft SPDX artifact validation failed."
+}
+$spdxValidation = Get-Content -LiteralPath $spdxValidationPath -Raw |
+    ConvertFrom-Json
+if ([string]$spdxValidation.Result -ne "Success" -or
+    [int]$spdxValidation.ValidationErrors.Count -ne 0 -or
+    [int]$spdxValidation.Summary.ValidationTelemetery.FilesFailedCount -ne 0 -or
+    [int]$spdxValidation.Summary.ValidationTelemetery.FilesSuccessfulCount -ne
+        [int]$spdxValidation.Summary.ValidationTelemetery.TotalFilesInManifest) {
+    throw "Microsoft SPDX validator did not report an exact successful artifact closure."
+}
 
 Write-Host "CycloneDX SBOM: $cyclonePath"
 Write-Host "SPDX SBOM: $spdxPath"

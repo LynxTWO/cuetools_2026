@@ -123,6 +123,32 @@ function Get-GeneratedUntrackedClassification {
     return $null
 }
 
+function Get-ProvenanceWorkspaceState {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [string]$PatchId,
+        [int]$UntrackedSourceCount,
+        [int]$ClassifiedGeneratedFileCount,
+        [bool]$NestedWorkspacesClean
+    )
+
+    if ($UntrackedSourceCount -lt 0 -or
+        $ClassifiedGeneratedFileCount -lt 0) {
+        throw "Provenance workspace counts must not be negative."
+    }
+    # Build residue is surfaced by count and classification but is not source.
+    # A validated archive-derived source closure is recorded separately and never
+    # reaches this policy decision. Only a tracked patch, unknown untracked source,
+    # or a dirty/missing nested workspace changes the source-state verdict.
+    if ([string]::IsNullOrWhiteSpace($PatchId) -and
+        $UntrackedSourceCount -eq 0 -and
+        $NestedWorkspacesClean) {
+        return "clean"
+    }
+    return "patched-or-untracked"
+}
+
 function Get-ClassicReleaseLeasePath {
     [CmdletBinding()]
     param(

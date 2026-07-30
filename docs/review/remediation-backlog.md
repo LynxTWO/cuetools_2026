@@ -2653,9 +2653,74 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** repository repair implemented 2026-07-30; local and hosted
   replacement receipts pending.
 
+### R101. Provenance treated a validated SDK expansion as arbitrary untracked source - bucket A, risk high
+
+- **Area or slice:** release provenance, Git ignore visibility, and the pinned
+  Monkey's Audio 13.20 source closure.
+- **Why it matters:** the successful hosted release labeled both artifacts
+  `patched-or-untracked` because 390 archive-derived SDK files were visible in
+  the clean clone. The same tree was hidden by this workstation's private
+  `.git/info/exclude`, so source-state evidence depended on machine-local Git
+  configuration. Six classified compiler/linker outputs also dirtied the
+  verdict even though they were explicitly not source.
+- **Evidence found:** the official 1,787,657-byte archive is pinned by SHA-256.
+  The shared closure validator checks all 423 archive members and four
+  CUETools overrides by exact path, byte length, and hash; rejects collisions,
+  traversal, reparse points, missing members, drift, and foreign files; and
+  emits an identity digest independent of Git visibility. Provenance exempts
+  only those exact validated derived members, records the closure, keeps
+  compiler residue visible by count/classification, and leaves any unknown
+  untracked file source-dirty.
+- **Confidence:** high for the local closure and policy tests; the decisive
+  clean-clone receipt is hosted.
+- **Approval needed:** no; this corrects the meaning of existing provenance
+  without weakening source validation.
+- **Recommended next pass:** retain a clean-clone regression whenever ignored
+  generated source becomes a build input.
+- **Smallest safe next step:** inspect the replacement hosted receipts for
+  `source.state=clean` plus the 423-member closure.
+- **Verification plan:** PowerShell 5.1 closure validation; release safety;
+  local provenance; clean hosted release; receipt inspection with unknown-file
+  refusal preserved.
+- **Owner:** release and supply-chain maintainers.
+- **Status:** repository repair and local 423-member proof complete
+  2026-07-30; replacement hosted receipt pending.
+
+### R102. PowerShell SBOM canonicalization corrupted SPDX arrays and stale-hashed the result - bucket A, risk critical
+
+- **Area or slice:** deterministic SBOM generation, Windows PowerShell 5.1,
+  Microsoft SBOM Tool, CycloneDX, and hosted annotations.
+- **Why it matters:** one-element and other JSON arrays were rewritten as
+  `{value, Count}` objects. Microsoft SBOM Tool rejected the retained SPDX
+  document, while its `.sha256` sidecar still described the pre-normalized
+  bytes. The hosted job nevertheless concluded success and emitted two
+  no-package warnings, so generator exit alone was false evidence.
+- **Evidence found:** raw SBOM Tool output contains correct arrays. A
+  package-free net8 guard now canonicalizes the JSON tree without changing
+  types; proves the exact artifact path/SHA-256/file-ID/root-package closure;
+  verifies the sidecar after final normalization; and validates the non-empty
+  CycloneDX graph. Microsoft SBOM Tool must independently report a successful
+  97-file or 557-file artifact validation. Its expected zero dependency
+  detection is logged at error verbosity because CycloneDX owns the dependency
+  graph and the new postconditions prove the complementary SPDX file inventory.
+- **Confidence:** high locally: both real artifacts pass the custom and
+  Microsoft validators, with 24/25 classic and 37/38 WPF CycloneDX
+  component/dependency-node counts.
+- **Approval needed:** no; this repairs invalid retained evidence.
+- **Recommended next pass:** require a schema/semantic validator and sidecar
+  check after every future SBOM transform.
+- **Smallest safe next step:** run the source-bound hosted release and require
+  zero job annotations.
+- **Verification plan:** zero-warning guard build; self-test that rejects the
+  observed array wrapper; idempotent canonicalization; both real artifact
+  inventories; Microsoft validation; hosted annotation inspection.
+- **Owner:** release and supply-chain maintainers.
+- **Status:** repository repair and local dual-artifact validation complete
+  2026-07-30; replacement hosted receipt pending.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. R97 through R100
+The locally actionable correctness queue is closed through R96. R97 through R102
 await only source-bound hosted receipts. Remaining work
 is ordered by the authority or evidence it requires:
 
