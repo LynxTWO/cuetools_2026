@@ -1,7 +1,7 @@
 ---
 name: Build ffmpeg dlls
 # GitHub Action to build ffmpeg dlls on demand using vcpkg
-# Wolfgang Stöggl <c72578@yahoo.de>, 2023-2025.
+# Wolfgang Stöggl <c72578@yahoo.de>, 2023-2026.
 
 # yamllint disable rule:line-length
 # yamllint disable-line rule:truthy
@@ -27,20 +27,21 @@ jobs:
         include:
           - os: windows-2022
             triplet: x64-windows
-            # https://github.com/microsoft/vcpkg/commit/ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0
-            vcpkgCommitId: 'ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0'
+            # FFmpeg 8.1.2#3:
+            # https://github.com/microsoft/vcpkg/commit/9e593bb18ea69cc5095e012465dcd675a822ed0d
+            vcpkgCommitId: '9e593bb18ea69cc5095e012465dcd675a822ed0d'
             vcpkgPackages: 'ffmpeg'
             configuration: 'x64'
             pluginDir: 'x64'
           - os: windows-2022
             triplet: x86-windows
-            vcpkgCommitId: 'ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0'
+            vcpkgCommitId: '9e593bb18ea69cc5095e012465dcd675a822ed0d'
             vcpkgPackages: 'ffmpeg'
             configuration: 'x86'
             pluginDir: 'win32'
     env:
       buildDir: '${{ github.workspace }}/build/'
-      ffmpegVer: '7.1.1'
+      ffmpegVer: '8.1.2'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -57,11 +58,78 @@ jobs:
           vcpkgTriplet: ${{ matrix.triplet }}
           vcpkgArguments: '${{ matrix.vcpkgPackages }}'
       - name: Collect files
+        shell: pwsh
         run: |
-          # ffmpeg dlls: avcodec, avdevice, avfilter, avformat, avutil
-          xcopy /Y /D vcpkg\installed\${{ matrix.triplet }}\bin\av*.dll deploy\plugins\${{ matrix.pluginDir }}\
-          # ffmpeg dlls: swresample, swscale
-          xcopy /Y /D vcpkg\installed\${{ matrix.triplet }}\bin\sw*.dll deploy\plugins\${{ matrix.pluginDir }}\
+          $sourceRoot = Join-Path '${{ github.workspace }}' 'vcpkg\installed\${{ matrix.triplet }}\bin'
+          $destinationRoot = Join-Path '${{ github.workspace }}' 'deploy\plugins\${{ matrix.pluginDir }}'
+          New-Item -ItemType Directory -Force -Path $destinationRoot | Out-Null
+          $nativeLibraries = @(
+            Get-ChildItem -LiteralPath $sourceRoot -File |
+              Where-Object { $_.Name -match '^(av|sw).*\.dll$' } |
+              Sort-Object Name
+          )
+          if ($nativeLibraries.Count -eq 0) {
+            throw "No FFmpeg runtime DLLs were produced for ${{ matrix.triplet }}."
+          }
+          $nativeLibraries | Copy-Item -Destination $destinationRoot
+      - name: Build and run managed/native decoder probe
+        shell: pwsh
+        run: |
+          dotnet restore eng\ci\FFmpegCodecWorker\FFmpegCodecWorker.csproj --force-evaluate
+          dotnet build eng\ci\FFmpegCodecWorker\FFmpegCodecWorker.csproj -c Release --no-restore -p:PlatformTarget=${{ matrix.configuration }}
+          $probeSource = Join-Path '${{ github.workspace }}' 'eng\ci\FFmpegCodecWorker\bin\Release\net47'
+          $probeRoot = Join-Path '${{ github.workspace }}' 'deploy\plugins\probe'
+          Copy-Item -LiteralPath $probeSource -Destination $probeRoot -Recurse
+          & (Join-Path $probeRoot 'CUETools.FFmpegCodecWorker.exe')
+          if ($LASTEXITCODE -ne 0) {
+            throw "The FFmpeg managed/native decoder probe failed with exit code $LASTEXITCODE."
+          }
+      - name: Record license and immutable build evidence
+        shell: pwsh
+        run: |
+          $noticeRoot = Join-Path '${{ github.workspace }}' 'deploy\THIRD-PARTY-NOTICES'
+          New-Item -ItemType Directory -Force -Path $noticeRoot | Out-Null
+          Copy-Item -LiteralPath 'vcpkg\installed\${{ matrix.triplet }}\share\ffmpeg\copyright' -Destination (Join-Path $noticeRoot 'FFmpeg.txt')
+          Copy-Item -LiteralPath 'vcpkg\ports\ffmpeg\vcpkg.json' -Destination (Join-Path $noticeRoot 'FFmpeg-vcpkg.json')
+
+          $dllRoot = Join-Path '${{ github.workspace }}' 'deploy\plugins\${{ matrix.pluginDir }}'
+          $files = @(
+            Get-ChildItem -LiteralPath $dllRoot -File -Filter '*.dll' |
+              Sort-Object Name |
+              ForEach-Object {
+                $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($_.FullName)
+                [ordered]@{
+                  path = "plugins/${{ matrix.pluginDir }}/$($_.Name)"
+                  length = $_.Length
+                  sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+                  fileVersion = $version.FileVersion
+                  productVersion = $version.ProductVersion
+                }
+              }
+          )
+          $manifest = [ordered]@{
+            schema = 'cuetools.ffmpeg-build.v1'
+            ffmpegVersion = '${{ env.ffmpegVer }}'
+            ffmpegAutoGenVersion = '8.1.0'
+            vcpkgCommit = '${{ matrix.vcpkgCommitId }}'
+            triplet = '${{ matrix.triplet }}'
+            configuration = '${{ matrix.configuration }}'
+            files = $files
+          }
+          $json = $manifest | ConvertTo-Json -Depth 6
+          [IO.File]::WriteAllText(
+            (Join-Path '${{ github.workspace }}' 'deploy\ffmpeg-build.json'),
+            $json + [Environment]::NewLine,
+            [Text.UTF8Encoding]::new($false))
+
+          $probeRoot = Join-Path '${{ github.workspace }}' 'deploy\plugins\probe'
+          if (-not $probeRoot.StartsWith(
+              (Join-Path '${{ github.workspace }}' 'deploy\plugins') +
+                [IO.Path]::DirectorySeparatorChar,
+              [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to clean unexpected probe path: $probeRoot"
+          }
+          Remove-Item -LiteralPath $probeRoot -Recurse -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ffmpeg_${{ env.ffmpegVer }}_dlls_${{ matrix.pluginDir }}

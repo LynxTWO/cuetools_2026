@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net47</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>CUETools.FFmpegCodecWorker</AssemblyName>
+    <RootNamespace>CUETools.FFmpegCodecWorker</RootNamespace>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <CUEToolsDisableCoreResxExtension>true</CUEToolsDisableCoreResxExtension>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\CUETools.Codecs\CUETools.Codecs.csproj" />
+    <ProjectReference Include="..\..\..\CUETools.Codecs.ffmpeg\CUETools.Codecs.ffmpeg.csproj" />
+  </ItemGroup>
+
+</Project>

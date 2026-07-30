@@ -89,7 +89,7 @@ visible and do not silently discard a newly supplied credential.
 | Local-development plugin path | loose `CUETools.*.dll` enumeration is disabled unless `CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS=1` is explicitly set | enabling the switch intentionally restores an unmanifested local-development trust boundary |
 | Application to optical drive | SCSI command construction and device access in `Bwg.Scsi` and `CUETools.Ripper.SCSI`; H: and K: completed real full-disc reads and simultaneous inquiry/TOC, and H: completed a full rip plus two-read Test & Copy | two drives do not establish every firmware, C2, cache, cancellation, disagreement, or damaged-media behavior; the final-source H: repeat remains pending |
 | EAC host to plugin | .NET 2.0 plugin boundary and inputs are documented | EAC process behavior, installer environment, and COM integration are external |
-| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts. Local classic AnyCPU/x64/Win32/TTA builds and a targeted MSI build pass | frozen 97-path classic receipts and execution on the pinned hosted VS2022 image remain |
+| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts. Local classic AnyCPU/x64/Win32/TTA builds and a targeted MSI build pass. Tag releases additionally require 117 contract-selected publisher files to pass SHA-256 Authenticode and RFC 3161 verification; plugin manifests are regenerated and artifacts revalidated before provenance/SBOM generation | frozen 97-path classic receipts and execution on the pinned hosted VS2022 image remain; a public-trust certificate must be provisioned in the protected environment |
 
 ## 6. Transaction and publication boundaries
 
@@ -181,7 +181,8 @@ workflow have completed on the current source state.
   details and the absent contemporaneous TTA checksum are disclosed retain
   decisions, not claims that more local searching can close them. UnRAR 7.23
   origin/signature/ABI/runtime evidence and first-party NuGet lock coverage are
-  closed. Release signing and other mirrored-asset provenance remain.
+  closed. Release-signing policy and unsigned-tag refusal are closed; the
+  external public-trust identity and other mirrored-asset provenance remain.
 
 See `docs/architecture/coverage-ledger.md` for review depth and
 `docs/unknowns/` for the bounded open questions.

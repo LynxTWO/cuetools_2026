@@ -127,8 +127,9 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 - **Current pins and upstream check:** libFLAC 1.5.0, WavPack 5.9.0,
   Monkey's Audio 13.20, and taglib-sharp 2.3.0.0 match current upstream releases.
   Vendored LAME 3.100 trails the newly
-  released official 4.0. The standalone, currently unshipped FFmpeg 7.1.1 path
-  trails 8.1.2.
+  released official 4.0. The standalone, currently unshipped FFmpeg path is now
+  current at 8.1.2 with FFmpeg.AutoGen 8.1.0 and both-architecture runtime
+  evidence.
 - **Why the remaining bumps are separate:** taglib-sharp contains existing local
   work that must be preserved; LAME has
   a new major release without a packaged MP3 decode/quality gate; and FFmpeg is
@@ -150,10 +151,16 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   no longer in this group: R85 packages CUETools' deterministic r495 build with
   its complete corresponding source, reviewed patch, recipe, build notes, and
   LGPL-2.1 notice.
-- **One external action remains before OptimFROG can be bundled:** its license
-  requires notification to the author. CUETools supports a user import and a
-  verified lossless encode today; packaging must wait for a project-owner
-  notification rather than inventing an identity or silently violating the term.
+- **OptimFROG notification sent:** Daniel Boyd notified the author at the
+  license-specified address on 2026-07-29, identified this repository, and
+  described the intended unmodified x64 CLI redistribution. The notification
+  condition is no longer an owner-decision blocker; package integration remains
+  a separate exact-byte/license/artifact change.
+- **Signing identity remains external:** the repository now enforces the
+  SHA-256 Authenticode/RFC 3161 policy and refuses an unsigned tagged release.
+  The owner still needs to acquire/select the public-trust certificate and
+  configure the protected GitHub environment values described in
+  `docs/security/release-signing.md`.
 
 ## Resolved / actioned
 

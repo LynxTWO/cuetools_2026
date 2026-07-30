@@ -12,7 +12,7 @@ User request 2026-07-02: upgrade all codecs to latest versions/builds, add any m
 | WavPack | `ThirdParty/WavPack` submodule + `.libwavpack` | 5.9.0, tag commit `5803634` | 5.9.0 | Current. The CUETools patch applies cleanly, both architectures rebuild without warnings, and the focused lifecycle plus real round-trip gate passes 2/2. |
 | Monkey's Audio (APE) | `ThirdParty/MAC_SDK` (`MAC_1320_SDK.zip`) + `.MACLib` | 13.20 | 13.20 SDK | Current. The CUETools stream wrapper was adapted from `CIO` to `IAPEIO`; Win32/x64 builds and real 16/24-bit verified round trips passed. |
 | LAME (MP3) | vendored x86/x64 `libmp3lame.dll` + `.libmp3lame` | 3.100 (RareWares DLLs built 2017-10-22; imported in 2021) | 4.0 (July 2026) | Major-version drift. The release arrived after the local LAME-v4 research started. Do not ship a blind DLL change without ABI, quality, metadata, and decode-compatibility gates. |
-| ffmpeg | manual `build_ffmpeg_dlls.yml` through a pinned vcpkg commit; managed wrapper uses FFmpeg.AutoGen | 7.1.1 | 8.1.2 | Behind, but neither primary package currently ships the managed/native FFmpeg set. Refresh the standalone workflow and wrapper together if that product path is restored. |
+| ffmpeg | manual `build_ffmpeg_dlls.yml` through pinned vcpkg commit `9e593bb`; managed wrapper uses FFmpeg.AutoGen | 8.1.2 / AutoGen 8.1.0 | 8.1.2 | Current standalone path. Both architectures are source-built and runtime-probed, with immutable build/license/hash evidence. Neither primary package ships the managed/native FFmpeg set. |
 | taglib-sharp | `ThirdParty/taglib-sharp` submodule | `b5ae84f2` / `TaglibSharp-2.3.0.0` | 2.3.0.0 | Current release, with extensive local source changes that still require provenance/diff maintenance. |
 | TTA | `ttalib-1.1/` (in-repo C++) + `.TTA` (C++/CLI) | TTA library 1.1 (2005 source) | TTA C++ library 2.3 (2015) | Dormant but materially behind. Its C++/CLI and classic-only shape makes an upgrade or retirement a compatibility decision, not a blind source swap. |
 | ALAC | `CUETools.Codecs.ALAC` (managed) + Apple ref | Apple ALAC reference | unchanged | Stable; no action. |
@@ -99,8 +99,8 @@ license, notice, version, author, source, or SDK evidence:
   suite counts are refreshed by the final canonical gate; real executable/native
   coverage still depends on installed runtimes, hardware, and corpus fixtures.
 - Native bumps require re-checking local patches or wrappers against the new ABI.
-- Current upstream releases: libFLAC, WavPack, Monkey's Audio, and taglib-sharp. Known drift: LAME 3.100 -> 4.0, and the
-  standalone/unshipped FFmpeg path 7.1.1 -> 8.1.2.
+- Current upstream releases: libFLAC, WavPack, Monkey's Audio, taglib-sharp,
+  and the standalone FFmpeg 8.1.2 path. Known drift remains LAME 3.100 -> 4.0.
 - Do one codec at a time with a decode/encode round-trip verification (extend the ziptest-style harness pattern).
 
 ## Status
@@ -110,8 +110,9 @@ complete. WavPack 5.9.0 and Monkey's Audio 13.20 have both-architecture build
 and runtime evidence. The command-line catalog and the three safe bundled
 integrations are complete for the current release recipe; the deliberately
 import-only boundaries above are recorded rather than silently bypassed. LAME
-4 remains a separate major-version project. FFmpeg matters if its currently
-unshipped product path returns.
+4 remains a separate major-version project. The unshipped FFmpeg path is
+modernized and evidence-bound; importing it into either primary product would
+still be a separate reachability and packaging decision.
 
 ## Upstream release evidence checked through 2026-07-29
 

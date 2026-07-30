@@ -361,6 +361,72 @@ Use this when closing package-manager provenance:
   receipts, SBOMs, package notices, native-input manifests, and final artifact
   hashes as their separate proofs.
 
+### Native ABI upgrade checklist
+
+Use this when updating a managed binding, native wrapper, runtime DLL, or native
+package consumed across a language boundary:
+
+- Pin the binding, native source or package revision, build features, compiler
+  tuple, and architecture as one compatibility set. A restored binding package does
+  not prove the runtime DLLs beside the application match it.
+- Resolve and compare runtime ABI majors before the first call that interprets native
+  structs or enums. Fail with the expected and observed identities instead of
+  continuing into memory-unsafe disagreement.
+- Make partial initialization transactional. Every allocation, open handle, custom
+  I/O context, packet, frame, callback root, and native owner must have one cleanup
+  path that also works when the next initialization step fails.
+- Never allow a managed exception to unwind through a native callback ABI. Catch it
+  at the callback, retain the first failure without allocating on the hot path when
+  practical, return the native error contract, and rethrow or report it on the
+  managed side.
+- Exercise EOF drain, final flush, nonzero seek or reset, callback failure, disposed
+  access, and more than one materially different input shape. For media, include
+  multiple sample widths or layouts so one conversion branch cannot stand in for all
+  of them.
+- Run the real native runtime in a real process for every shipped architecture.
+  Record native filenames, versions, lengths, hashes, license evidence, and the exact
+  build inputs in the artifact receipt.
+
+### Release signing and final-byte checklist
+
+Use this when introducing Authenticode, package signing, notarization, or another
+publisher-identity operation:
+
+- Declare which first-party artifact files are signed and which pinned third-party
+  or platform files must remain untouched. Derive the selection from the versioned
+  artifact contract and fail on ambiguous or uncovered executable files.
+- Treat signing as a mutation of the released bytes. Build and validate the unsigned
+  candidate, sign it, verify every signer and trusted timestamp, regenerate manifests
+  that hash or inventory those bytes, revalidate, and only then create final
+  provenance, SBOM, checksums, and archives.
+- Keep certificate material out of the repository and logs. Import it into the
+  narrowest temporary store or provider scope, require the expected code-signing
+  purpose and subject, select exactly one usable identity, and remove imported
+  material on success and failure.
+- Make release behavior fail closed when credentials, timestamping, trust, coverage,
+  or post-sign validation fail. If unsigned artifacts are useful for evaluation,
+  label that mode explicitly and make it ineligible for production publication.
+- Test the mechanism with an ephemeral non-production identity, including a real
+  timestamp response and the expected refusal of an untrusted publisher. This proves
+  mechanics, not public trust; production evidence must name the trusted signer,
+  timestamp, artifact hashes, and protected release environment.
+
+### Workflow shell and hosted-evidence checklist
+
+Use this when a workflow embeds commands or claims hosted coverage:
+
+- Record the effective shell for every `run` block, including workflow defaults and
+  per-step overrides. Validate comments, quoting, variables, multiline commands,
+  wildcard behavior, and exit-code propagation in that exact shell.
+- Treat YAML schema checks and workflow lint as structural evidence only. Add a
+  contract test for critical version pins, architecture matrices, evidence files,
+  artifact names, and ordering constraints, then execute the workflow on the hosted
+  runner it claims to cover.
+- Inspect downloaded artifacts and receipts after the hosted run. A green job proves
+  its commands exited successfully; it does not by itself prove that the intended
+  native runtime, architecture, license, manifest, signature, or final bytes were
+  produced.
+
 ### Toolchain and installer coherence checklist
 
 Use this when a build is blocked on an IDE, SDK, compiler, workload, extension, or

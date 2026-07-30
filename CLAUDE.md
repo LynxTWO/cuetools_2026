@@ -127,6 +127,19 @@ progress documents for it belong here, under `docs/review/`.
 - Keep executable support separate from redistribution. A working imported codec
   does not authorize packaging. Real CLI execution, license/source compliance,
   runtime dependencies, and patent or notification boundaries must all be recorded.
+- Keep the FFmpeg wrapper and native artifact version-locked as one unit. The
+  standalone path uses FFmpeg.AutoGen 8.1.0 with FFmpeg 8.1.2#3 from vcpkg commit
+  `9e593bb18ea69cc5095e012465dcd675a822ed0d`. Both x64 and x86 must run the
+  16/24-bit path/stream/nonzero-seek worker and retain license, port-manifest,
+  version, size, and SHA-256 evidence. Do not copy this unshipped path into either
+  primary artifact without a separate reachability and packaging review.
+- Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
+  artifacts first validate; sign only its contract-selected publisher files;
+  require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate
+  plugin hash manifests; revalidate; and generate provenance/SBOMs last. A tag
+  or explicit signed dispatch must fail when protected credentials or the
+  expected subject are unavailable. An unsigned manual evidence build must say
+  `unsigned-evaluation` and is not releaseable.
 - Treat `docs/review/remediation-backlog.md` status lines as authoritative. After
   each batch, reconcile the ordering, remaining-work summary, decisions, and
   historical next-step text so a closed R-item does not stay in the active queue.

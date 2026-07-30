@@ -1430,3 +1430,47 @@ telemetry behavior.
 resources and all 615 localized resource entries match; PE/config semantics
 match; and both builds create 16 top-level windows with the expected responsive
 main form. The new CI guard passes across 67 first-party resource files.
+
+### Modernize and prove the standalone FFmpeg 8 path
+
+**Scope:** update only the unshipped FFmpeg managed wrapper, package lock,
+manual native workflow, focused worker, native inventory, and guard/docs. Keep
+it outside both primary artifact collectors.
+
+**Safety:** require binding/runtime major equality before native use; contain
+all managed callback exceptions; give each native allocation one idempotent
+owner; drain delayed frames; preserve deterministic AIFF seeking; never infer
+runtime success from a compiled P/Invoke surface.
+
+**Checks:** dual-target zero-warning build; source-build FFmpeg 8.1.2#3 from one
+immutable vcpkg commit for x64 and x86; run matching-process path/stream/PCM/
+seek/disposal/callback probes; actionlint; emit license, port manifest, versions,
+sizes, and SHA-256.
+
+**Rollback:** revert wrapper, lock, workflow, worker, inventory, and guard as one
+unit. The primary packages remain unaffected because this path is unshipped.
+
+**Status:** implemented 2026-07-29. Matching x64 and x86 16/24-bit runtime
+proof passes; the hosted receipts complete the evidence record.
+
+### Enforce publisher signing without invalidating plugin or provenance evidence
+
+**Scope:** add a declarative signing policy, invocation/refusal script, static
+gate, release workflow step, WPF dependency contract completion, and owner
+runbook.
+
+**Safety:** never commit or print credentials; import PFX non-exportably and
+remove it in `finally`; sign only contract-selected publisher-built PE files;
+exclude hash-pinned upstream bytes; require SHA-256 Authenticode and RFC 3161;
+regenerate plugin hashes after signing; revalidate before provenance/SBOMs.
+
+**Checks:** static policy/order/coverage checks; 117-file local plan; actionlint;
+unsigned manual evidence must label itself non-releaseable; tags and explicit
+signed dispatches must refuse missing or mismatched credentials.
+
+**Rollback:** revert the policy/workflow/scripts/contracts together. Never
+retain a workflow that can upload a nominal release after a skipped signing
+step.
+
+**Status:** repository policy implemented 2026-07-29. Public-trust certificate
+identity and protected GitHub values remain external owner provisioning.
