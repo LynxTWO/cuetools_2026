@@ -37,6 +37,27 @@ fail if either profile loses its minimum coverage, selects a hash-pinned
 upstream file, weakens a digest, omits plugin-manifest regeneration, or moves
 signing after provenance/SBOM generation.
 
+## Current hosted evidence
+
+[Manual release run 30518479906](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518479906)
+completed successfully at commit
+`a7f26bf457b736fcd61f186d5f34b6d139d94147` with zero check-run annotations.
+The downloaded status document reports:
+
+```json
+{
+  "schema": "cuetools.signing-status.v1",
+  "policyId": "cuetools-windows-authenticode-v1",
+  "mode": "unsigned-evaluation",
+  "productionRelease": false,
+  "selectedFileCount": 117
+}
+```
+
+This proves policy selection, honest unsigned labeling, and downstream
+artifact/provenance/SBOM ordering on the hosted runner. It is not publisher
+identity evidence and cannot substitute for the first production-signed tag.
+
 ## GitHub configuration
 
 Create a GitHub environment named `release-signing`. Restrict it to release

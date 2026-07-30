@@ -162,3 +162,63 @@ cancelled pre-fix run left one empty multi-disc folder; that exact empty folder
 was removed after containment and emptiness checks. The user's application
 profile was restored to Dark, Tracks, FLAC, Paranoid, and the normal
 Music/CUETools output directory.
+
+## Hosted project, FFmpeg, and release evidence
+
+The following GitHub-hosted runs close the current-source workflow boundary.
+Run and artifact claims in this section are bound to the recorded commit rather
+than inferred from the branch name.
+
+- [FFmpeg 8 matrix run 30516040154](https://github.com/LynxTWO/cuetools_2026/actions/runs/30516040154)
+  completed successfully at commit
+  `9e2a119113ab3b9e11fcc0ccc1d5315d4b7eebb4`. Both `x86-windows` and
+  `x64-windows` jobs built the pinned FFmpeg 8.1.2 runtime and exercised it
+  through FFmpeg.AutoGen 8.1.0 in a matching process. Each passed 16- and
+  24-bit, 5,003-frame path and managed-stream decode, nonzero seek replay, EOF
+  drain, disposal, and callback-containment checks. Both check runs have zero
+  annotations. This proves the deliberately standalone AIFF decoder path, not
+  every FFmpeg demuxer or decoder, and FFmpeg remains outside both shipping
+  artifact collectors.
+- [Classic CI run 30518472651](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518472651)
+  completed successfully at commit
+  `a7f26bf457b736fcd61f186d5f34b6d139d94147`. Hosted Windows Server 2022
+  discovered 22 parity tests (18 passed, four intentional skips), 113 codec
+  tests (111 passed, two intentional skips), ten processor tests (nine passed,
+  one intentional skip), and 17 ripper tests (all passed). The converted
+  classic CUETools and CUEPlayer projects were included in the guarded Visual
+  Studio build graph. Native warning emission was zero and the check run has
+  zero annotations.
+- [WPF CI run 30518472662](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518472662)
+  completed successfully at the same commit. It passed 28/28 modern ripper
+  tests and 440/440 WPF tests, emitted no native warning lines, and has zero
+  annotations.
+- [Windows release run 30518479906](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518479906)
+  completed successfully at the same commit and has zero annotations. Its
+  downloaded `deploy` artifact was independently inspected under
+  `J:\TEMP\cuetools-release-final-30518479906`.
+
+The independent release-artifact audit found:
+
+- the classic contract passed with 97 files and 10,742,302 bytes;
+- the WPF receipt bound 557 files and 194,127,197 bytes, while its shipping
+  contract passed all required paths, 19 plugin registrations, and five native
+  probes;
+- every provenance-manifest entry matched the downloaded path, length, and
+  SHA-256; both receipts reported `source.state=clean`, no root patch, no
+  unknown untracked files, and five clean submodules;
+- both receipts recorded the validated 423-member Monkey's Audio 13.20
+  expansion and closure SHA-256
+  `5777ba9a6debcd55565ba49c2e713fdb46a62d81474bc17d394ef17893eeb578`;
+- the custom SPDX guard and Microsoft SBOM Tool independently accepted exact
+  97/97 classic and 557/557 WPF file closures, including matching final
+  sidecars;
+- CycloneDX retained nonempty package graphs: 24 components/25 dependency
+  nodes for classic and 37 components/38 dependency nodes for WPF;
+- `signing-status.json` selected 117 publisher-owned files and correctly
+  labeled the manual build `unsigned-evaluation`, with
+  `productionRelease=false`.
+
+The last point is an intentional boundary, not a signed-release claim. The
+repository policy now refuses an unsigned tag or explicitly signed dispatch,
+but a production-signed artifact still requires a public-trust code-signing
+certificate and protected `release-signing` environment values.

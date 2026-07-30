@@ -55,8 +55,8 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Residual boundary:** no test suite can establish behavior for every drive,
   firmware, media defect, or SCSI transport.
 - **Risk / status:** high; commented and partially tested.
-- **Next evidence:** final-source H: Test & Copy repeat plus deliberate
-  cancellation, disagreement, and recoverable/unrecoverable read errors.
+- **Next evidence:** deliberate cancellation, disagreement, wake, and additional
+  recoverable/unrecoverable read errors across more drives and transports.
 
 ### S3: Processor engine, settings, and plugin discovery
 
@@ -266,15 +266,17 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Reachability:** every shipped product.
 - **Verified controls:** legacy/modern suite manifests with discovery and skip
   gates, net20 probe, warning gates, fuzz smoke, classic/WPF artifact contracts,
-  plugin manifests, native probes, provenance, and SBOM scripts.
-- **Residual boundary:** static/local verification is not a completed hosted
-  workflow. Local classic AnyCPU is 53/0; x64 and Win32 are each 2/0 with
-  59 skipped configuration entries; TTA builds both; Installer Projects is 8/0
-  and produced a 929,792-byte MSI. Frozen 97-path receipts and parity on the
-  pinned hosted VS2022 image remain.
-- **Risk / status:** high; reviewed and locally tested.
-- **Next evidence:** first current hosted CI/release run and signed artifact
-  decision.
+  plugin manifests, native probes, provenance, and SBOM scripts. Local classic
+  AnyCPU/x64/Win32/TTA/MSI evidence passes. Source-bound hosted classic/WPF CI
+  and unsigned release evidence also pass; downloaded classic and WPF payloads
+  have exact hash/SPDX closures, populated dependency graphs, and clean-source
+  receipts.
+- **Residual boundary:** hosted evidence ages when the runner image, Visual
+  Studio, SDK, or actions change. The production public-trust signing identity
+  is not yet provisioned.
+- **Risk / status:** high; reviewed, locally tested, and hosted-evidence tested.
+- **Next evidence:** retain the current receipts, refresh them after control
+  plane changes, and independently verify the first production-signed tag.
 
 ### S14: Automated tests
 
@@ -287,10 +289,11 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Reachability:** codecs, parity, Processor, modern ripper services, and WPF
   services/contracts.
 - **Verified controls:** CI records minimum discovery and maximum skip counts.
-  The prior 388/381/7 aggregate is historical pending the final canonical total.
-  TestRipper is now SDK net47, calls the shipping `SecureSectorVote` helper,
-  has no private-capture dependency, and passed its enrolled 3-test/zero-skip
-  contract.
+  The prior 388/381/7 aggregate remains historical. At the final source-bound
+  commit, hosted classic suites discovered 162 tests and passed 155 with seven
+  declared skips; hosted modern suites passed 468/468. TestRipper is SDK net47,
+  calls the shipping `SecureSectorVote` helper, has no private-capture
+  dependency, and passed 17/17 in the current expanded suite.
 - **Residual boundary:** declared skips and availability-gated behavior remain
   visible gaps; focused fixtures do not replace hosted or hardware integration.
 - **Risk / status:** medium; tested with explicit exclusions.
@@ -308,12 +311,15 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   dependencies.
 - **Verified controls:** DPAPI settings migration, local redacting diagnostics,
   album and repair transactions, plugin trust, external-encoder approvals,
-  artifact contract, and 241/241 local WPF tests.
+  artifact contract, 440/440 hosted WPF tests, and an independently validated
+  557-file self-contained release payload.
 - **Residual boundary:** optical-drive, WMA, crash/power-loss filesystem,
-  real-service, and signed-release evidence remain outside local automation.
-- **Risk / status:** high; mapped, reviewed, and tested at service seams.
-- **Next evidence:** end-to-end known-media smoke and first validated release
-  artifact.
+  real-service, and production-signed-release matrices remain bounded external
+  evidence.
+- **Risk / status:** high; mapped, reviewed, service-seam tested, and
+  release-artifact tested.
+- **Next evidence:** continue hardware/service matrices and independently
+  verify the first production-signed tag.
 
 ## Exclusions
 

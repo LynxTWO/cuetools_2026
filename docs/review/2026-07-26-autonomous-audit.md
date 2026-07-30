@@ -150,7 +150,7 @@ required unavailable tuple metadata; that declared-framework blocker is fixed wi
 named result/out-parameter API. The next pass found net35-only `SortedSet<T>` in the
 adaptive-speed ladder; its ordered `List<T>` replacement preserves the documented
 rung/cutoff semantics. The local AnyCPU, x64, and Win32 solution builds now pass; the
-final frozen-output receipt run remains pending.
+final hosted classic receipt and exact 97-file artifact now pass.
 
 ### Build, native, fuzz, and artifact gates
 
@@ -176,8 +176,8 @@ final frozen-output receipt run remains pending.
   generated. The latter is a file inventory, not evidence that the product has zero
   dependencies.
 - Workflow syntax: all four YAML files parsed successfully and official
-  `actionlint` v1.7.12 passed all four locally. Hosted execution remains a separate
-  environment check.
+  `actionlint` v1.7.12 passed all four locally. Source-bound hosted
+  classic/WPF/FFmpeg/release execution later passed with zero final annotations.
 
 The validated tree is `bin/Release/CUETools2026-win-x64`. An older ignored
 `publish/CUETools2026-win-x64` directory contains 518 files and no plugin manifest;
@@ -199,9 +199,10 @@ TTA compiled and linked separately for both configurations, and both outputs are
 valid CLR PE files. Installer Projects 3.0.0, with its required
 `DisableOutOfProcBuild` integration, passed a targeted build at 8 succeeded and
 0 failed and produced a 929,792-byte MSI. The successful local route combines the
-Visual Studio 18 resolver with the VS2022 v143 toolset; it does not substitute for
-the pinned hosted VS2022 workflow. Final frozen-output validation, direct CUEPlayer
-compilation evidence, receipts, hashes, and SBOM comparison remain pending.
+Visual Studio 18 resolver with the VS2022 v143 toolset. Final hosted classic run
+`30518472651` and release run `30518479906` now agree with it: converted
+CUEPlayer/CUETools build, and the downloaded artifact passes exact output,
+receipt, hash, provenance, and SBOM validation.
 
 ## Static risk-surface census
 
@@ -380,12 +381,14 @@ The skill passes the skill-creator `quick_validate.py` validator after these cha
 
 The modern WPF x64 tree is suitable for a hosted release-candidate run. WMA,
 CTDB-repair, Icecast, FLACCL, and optical/Test & Copy mechanism evidence are green
-locally; the short final-source H: rerun after `SecureSectorVote` extraction remains
-pending.
-It should not be called a final signed release until the hosted workflow, final clean
-artifact gate, and publisher signing/attestation policy are green.
+locally, including the final-source H: rerun after `SecureSectorVote`
+extraction.
+The hosted workflow, final clean artifact gate, and publisher-signing policy are
+now green. It should not be called a final signed release until a public-trust
+certificate is provisioned and the first production-signed tag is independently
+verified.
 
 The classic solution and targeted MSI now have local Visual Studio evidence across
 AnyCPU, x64, and Win32, including both TTA architectures. The distribution is not yet
-certified: its frozen 97-path artifact/receipt checks and the pinned hosted VS2022
-lane still need to agree with that local evidence.
+publisher-certified, but its 97-path artifact/receipt checks and the pinned hosted
+VS2022 lane now agree with the local evidence.

@@ -311,8 +311,8 @@ does not relax evidence, rollback, or verification requirements.
   A live H: run then passed two independent full reads (413s/410s), published 11
   verified FLAC files with matching AR 107/424 and CTDB 114/544, recorded zero
   reread/failed windows, and round-tripped decoded-and-compared output assurance through
-  `rip.verify`. That proves the mechanism; a final-source no-build H: rerun is pending
-  because the behavior-preserving `SecureSectorVote` extraction landed afterward.
+  `rip.verify`. A final-source isolated rerun later crossed the same Copy phase and
+  passed, closing the observed same-drive agreement path.
 
 ### R20. Modern WPF CTDB Repair fails before writing - bucket B, risk high
 
@@ -429,7 +429,9 @@ does not relax evidence, rollback, or verification requirements.
   `DisableOutOfProcBuild`, passed 8 projects with 0 failures and produced a
   929,792-byte MSI. The local route used the Visual Studio 18 resolver with the
   VS2022 v143 toolset. The local frozen receipt and exact collection now pass;
-  parity on the pinned hosted VS2022 image remains.
+  final hosted classic run `30518472651` and release run `30518479906` agree
+  with that evidence. The downloaded classic payload passed its exact 97-file
+  contract, SHA-256 manifest, provenance, and SPDX closure.
 
 ### R24. External encoder process lifecycle can hang or accept bad output - bucket B, risk high
 
@@ -649,8 +651,9 @@ does not relax evidence, rollback, or verification requirements.
   `PackageReference` projects now commit their complete dependency closures.
   `CI=true` enables locked restore; a checked inventory fails when a first-party
   package project or lock file is added, removed, or drifts. Solution, WPF, and
-  ripper-test locked restores pass without touching vendor submodules. Remaining:
-  signing identity/policy and hosted parity. The remaining historical
+  ripper-test locked restores pass without touching vendor submodules. Hosted
+  parity, the signing policy, and unsigned-tag refusal now pass. Remaining is
+  the external public-trust signing identity. The remaining historical
   provenance limits are now explicit retain decisions rather than actionable
   searches: HDCD's exact source/revision/recipe was not published with the
   surviving DLL ABI; RareWares' archives contain no LAME source identifier,
@@ -825,7 +828,7 @@ does not relax evidence, rollback, or verification requirements.
   the canonical WPF suite includes the new invariant. Disposable Icecast 2.5.0 also
   passed source/auth/metadata/listener/teardown smoke, and focused tests prove that
   bitrate/joint-stereo settings reach LAME. The classic AnyCPU solution lane is green;
-  a direct frozen-output CUEPlayer compilation receipt is still pending.
+  converted CUEPlayer also builds in final hosted classic run `30518472651`.
 
 ### R41. Album reservation cleanup could report failure after publication committed - bucket A, risk high
 
@@ -1507,8 +1510,8 @@ does not relax evidence, rollback, or verification requirements.
   libFLAC tests pass 2/2, classic codec tests pass 112/113 with one established
   skip, and WPF tests pass 358/358. Staging passes 15 checks under PowerShell 7,
   the final stage validates under Windows PowerShell 5.1, and all five submodules
-  remain clean. The source-bound classic receipt remains pending until the
-  active rip ends.
+  remain clean. Superseding release run `30518479906` retains a clean
+  source-bound classic receipt and exact downloaded artifact closure.
 
 ### R65. Core MSBuild cannot resolve legacy Visual Studio rulesets - bucket A, risk low
 
@@ -2553,13 +2556,14 @@ does not relax evidence, rollback, or verification requirements.
   hosted-evidence scope.
 - **Recommended next pass:** treat any future action-runtime annotation as a
   migration finding even when the job conclusion is success.
-- **Smallest safe next step:** complete source-bound hosted reruns and inspect
-  their annotations and artifacts.
+- **Smallest safe next step:** none; retain the source-bound annotation
+  receipts as the new baseline.
 - **Verification plan:** actionlint, FFmpeg/signing/release workflow contracts,
   classic CI, WPF CI, dual-architecture FFmpeg, and unsigned release evidence.
 - **Owner:** CI and release maintainers.
-- **Status:** repository migration implemented 2026-07-30; final hosted receipts
-  pending.
+- **Status:** closed 2026-07-30. FFmpeg matrix run `30516040154`, classic CI
+  `30518472651`, WPF CI `30518472662`, and release run `30518479906` all
+  succeeded; every associated final check run has zero annotations.
 
 ### R98. Hosted classic tests depended on checkout line endings and an installed net20 targeting pack - bucket A, risk high
 
@@ -2587,13 +2591,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Approval needed:** no; both fixes make existing test/build intent portable.
 - **Recommended next pass:** retain exact checkout attributes for any future
   byte oracle and test reference-package fallbacks on an image without the pack.
-- **Smallest safe next step:** complete the replacement hosted legacy lane.
+- **Smallest safe next step:** none; the replacement hosted lane is green.
 - **Verification plan:** attribute inspection; focused RAR extraction/seek;
   Core/full package-role gate; unchanged lock hash; net20 build/relay probe;
   complete hosted legacy test discovery.
 - **Owner:** codec-test and build maintainers.
-- **Status:** repository fixes and exact local legacy transaction complete
-  2026-07-30; replacement hosted receipt pending.
+- **Status:** closed 2026-07-30. Hosted classic run `30518472651` passed all
+  four enrolled suites: parity 18/22 with four intentional skips, codecs
+  111/113 with two intentional skips, processor 9/10 with one intentional
+  skip, and ripper 17/17 with no skips.
 
 ### R99. Hash-bound encoder build support changed bytes across hosted checkout - bucket A, risk high
 
@@ -2609,20 +2615,21 @@ does not relax evidence, rollback, or verification requirements.
   repository. `.gitattributes` now fixes each one to LF, `git check-attr`
   reports `eol: lf` for the complete set, and release safety derives that set
   from the encoder manifest and requires an exact LF rule for every member.
-- **Confidence:** high for root cause and repository repair; final publication
-  still needs a replacement hosted receipt.
+- **Confidence:** high for root cause, repository repair, and final hosted
+  publication.
 - **Approval needed:** no; the fix preserves committed and contract-declared
   bytes across supported checkout hosts.
 - **Recommended next pass:** model checkout representation explicitly whenever
   a repository text file enters an exact size/hash artifact contract.
-- **Smallest safe next step:** run and inspect the source-bound unsigned hosted
-  release.
+- **Smallest safe next step:** none; the source-bound release artifact was
+  independently inspected.
 - **Verification plan:** attribute inspection; exact size/hash preparation;
   release safety; clean WPF publication; final artifact and provenance
   inspection.
 - **Owner:** release and supply-chain maintainers.
-- **Status:** repository fix and local release-safety gate complete 2026-07-30;
-  replacement hosted receipt pending.
+- **Status:** closed 2026-07-30. Source-bound release run `30518479906`
+  completed both publications and the downloaded classic/WPF payloads passed
+  their artifact contracts and independent hash-manifest inspection.
 
 ### R100. Native provenance retained a stale libFLAC patch digest - bucket A, risk high
 
@@ -2644,14 +2651,15 @@ does not relax evidence, rollback, or verification requirements.
   changing the reviewed patch or native build.
 - **Recommended next pass:** update source inventories in the same commit as
   every hash-bound input and retain the complete-set gate.
-- **Smallest safe next step:** regenerate both provenance receipts locally,
-  then rerun the source-bound unsigned hosted release.
+- **Smallest safe next step:** none; local and hosted receipts bind the repaired
+  inventory.
 - **Verification plan:** full 13-file digest comparison; Git attribute
   inspection; native preparation; release safety; classic/WPF provenance;
   hosted artifact and receipt inspection.
 - **Owner:** native build and supply-chain maintainers.
-- **Status:** repository repair implemented 2026-07-30; local and hosted
-  replacement receipts pending.
+- **Status:** closed 2026-07-30. Release run `30518479906` accepted all current
+  pinned native inputs. Both downloaded provenance receipts bind the same
+  source commit and the independently rehashed native-inventory sidecars.
 
 ### R101. Provenance treated a validated SDK expansion as arbitrary untracked source - bucket A, risk high
 
@@ -2671,20 +2679,22 @@ does not relax evidence, rollback, or verification requirements.
   only those exact validated derived members, records the closure, keeps
   compiler residue visible by count/classification, and leaves any unknown
   untracked file source-dirty.
-- **Confidence:** high for the local closure and policy tests; the decisive
-  clean-clone receipt is hosted.
+- **Confidence:** high for the local closure and policy tests plus the decisive
+  clean-clone hosted receipts.
 - **Approval needed:** no; this corrects the meaning of existing provenance
   without weakening source validation.
 - **Recommended next pass:** retain a clean-clone regression whenever ignored
   generated source becomes a build input.
-- **Smallest safe next step:** inspect the replacement hosted receipts for
-  `source.state=clean` plus the 423-member closure.
+- **Smallest safe next step:** none; both replacement receipts have the clean
+  state and exact closure.
 - **Verification plan:** PowerShell 5.1 closure validation; release safety;
   local provenance; clean hosted release; receipt inspection with unknown-file
   refusal preserved.
 - **Owner:** release and supply-chain maintainers.
-- **Status:** repository repair and local 423-member proof complete
-  2026-07-30; replacement hosted receipt pending.
+- **Status:** closed 2026-07-30. Both downloaded receipts from release run
+  `30518479906` report `source.state=clean`, no root patch, no unknown
+  untracked files, five clean submodules, and the validated 423-member closure
+  digest `5777ba9a6debcd55565ba49c2e713fdb46a62d81474bc17d394ef17893eeb578`.
 
 ### R102. PowerShell SBOM canonicalization corrupted SPDX arrays and stale-hashed the result - bucket A, risk critical
 
@@ -2709,26 +2719,29 @@ does not relax evidence, rollback, or verification requirements.
 - **Approval needed:** no; this repairs invalid retained evidence.
 - **Recommended next pass:** require a schema/semantic validator and sidecar
   check after every future SBOM transform.
-- **Smallest safe next step:** run the source-bound hosted release and require
-  zero job annotations.
+- **Smallest safe next step:** none; the source-bound release has zero
+  annotations and independently validated SBOMs.
 - **Verification plan:** zero-warning guard build; self-test that rejects the
   observed array wrapper; idempotent canonicalization; both real artifact
   inventories; Microsoft validation; hosted annotation inspection.
 - **Owner:** release and supply-chain maintainers.
-- **Status:** repository repair and local dual-artifact validation complete
-  2026-07-30; replacement hosted receipt pending.
+- **Status:** closed 2026-07-30. The hosted release and an independent
+  downloaded-artifact audit both accepted exact 97-file classic and 557-file
+  WPF SPDX closures. Microsoft validation reported zero failures, CycloneDX
+  retained 24/25 and 37/38 component/dependency-node graphs, final sidecars
+  matched, and the check run has zero annotations.
 
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. R97 through R102
-await only source-bound hosted receipts. Remaining work
-is ordered by the authority or evidence it requires:
+The locally actionable and hosted correctness queue is closed through R102.
+Remaining work is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
    byte-proven; TheAudioDB remains explicitly opt-in.
-2. Retain current hosted workflow receipts and compare future runner-image
-   updates against them.
+2. Retain the source-bound hosted receipts recorded in
+   `2026-07-29-live-release-evidence.md` and compare future runner-image updates
+   against them.
 3. Provision the public-trust signing identity in the protected environment;
    policy and unsigned-release refusal are already implemented.
 4. Continue the deliberately large R8/R12 SDK/async modernization and the
