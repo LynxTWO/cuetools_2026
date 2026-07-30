@@ -389,6 +389,29 @@ foreach ($encoder in @($manifest.encoders)) {
             -DestinationPath $sourceDestination `
             -ExpectedSha256 ([string]$encoder.sourceArchive.sha256)
     }
+    $additionalSourceArchivesProperty =
+        $encoder.PSObject.Properties["additionalSourceArchives"]
+    if ($null -ne $additionalSourceArchivesProperty) {
+        foreach ($additionalSource in @(
+                $additionalSourceArchivesProperty.Value)) {
+            $additionalArchive = Get-VerifiedDownload `
+                -Id $id `
+                -Kind ("source-" + [string]$additionalSource.name) `
+                -Archive $additionalSource
+            $additionalPackagePath =
+                [string]$additionalSource.packagePath
+            if ([string]::IsNullOrWhiteSpace($additionalPackagePath)) {
+                throw "$id additional source is missing packagePath."
+            }
+            $additionalDestination = Join-Path $outputRoot (
+                "source\" +
+                [IO.Path]::GetFileName($additionalPackagePath))
+            Publish-File `
+                -SourcePath $additionalArchive `
+                -DestinationPath $additionalDestination `
+                -ExpectedSha256 ([string]$additionalSource.sha256)
+        }
+    }
     $linkedLibrarySourceProperty =
         $encoder.PSObject.Properties["linkedLibrarySource"]
     if ($null -ne $linkedLibrarySourceProperty) {

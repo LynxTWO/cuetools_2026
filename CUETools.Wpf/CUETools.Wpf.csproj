@@ -99,6 +99,30 @@
       Include="..\ThirdParty\encoders\x64\mpcenc.exe"
       Condition="Exists('..\ThirdParty\encoders\x64\mpcenc.exe')" />
     <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\opus-tools-0.2.tar.gz"
+      Condition="Exists('..\ThirdParty\encoders\source\opus-tools-0.2.tar.gz')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\libopusenc-0.3.tar.gz"
+      Condition="Exists('..\ThirdParty\encoders\source\libopusenc-0.3.tar.gz')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\opus-1.6.1.tar.gz"
+      Condition="Exists('..\ThirdParty\encoders\source\opus-1.6.1.tar.gz')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\libogg-1.3.6.tar.gz"
+      Condition="Exists('..\ThirdParty\encoders\source\libogg-1.3.6.tar.gz')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\opus-1.6.1-cuetools.patch"
+      Condition="Exists('..\ThirdParty\encoders\source\opus-1.6.1-cuetools.patch')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\libopusenc-0.3-cuetools.patch"
+      Condition="Exists('..\ThirdParty\encoders\source\libopusenc-0.3-cuetools.patch')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\opus-CMakeLists.txt"
+      Condition="Exists('..\ThirdParty\encoders\source\opus-CMakeLists.txt')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\opus-build-README.md"
+      Condition="Exists('..\ThirdParty\encoders\source\opus-build-README.md')" />
+    <ExternalCommandSource
       Include="..\ThirdParty\encoders\source\oggenc2.88srcs.zip"
       Condition="Exists('..\ThirdParty\encoders\source\oggenc2.88srcs.zip')" />
     <ExternalCommandSource
@@ -158,7 +182,8 @@
   </Target>
 
   <Target Name="CopyExternalCommandEncoders" AfterTargets="Build">
-    <Delete Files="$(TargetDir)encoders\opusenc.exe;$(TargetDir)encoders\oggenc2.exe;$(TargetDir)encoders\mpcenc.exe;$(TargetDir)encoders\source\oggenc2.88srcs.zip;$(TargetDir)encoders\source\libmpc_0.1~r495.orig.tar.gz;$(TargetDir)encoders\source\musepack-r495-cuetools.patch;$(TargetDir)encoders\source\musepack-CMakeLists.txt;$(TargetDir)encoders\source\musepack-build-README.md" />
+    <Delete Files="@(ExternalCommandEncoder->'$(TargetDir)encoders\%(Filename)%(Extension)')" />
+    <Delete Files="@(ExternalCommandSource->'$(TargetDir)encoders\source\%(Filename)%(Extension)')" />
     <Copy
       SourceFiles="@(ExternalCommandEncoder)"
       DestinationFolder="$(TargetDir)encoders"
@@ -172,7 +197,8 @@
   </Target>
 
   <Target Name="PublishExternalCommandEncoders" AfterTargets="Publish">
-    <Delete Files="$(PublishDir)encoders\opusenc.exe;$(PublishDir)encoders\oggenc2.exe;$(PublishDir)encoders\mpcenc.exe;$(PublishDir)encoders\source\oggenc2.88srcs.zip;$(PublishDir)encoders\source\libmpc_0.1~r495.orig.tar.gz;$(PublishDir)encoders\source\musepack-r495-cuetools.patch;$(PublishDir)encoders\source\musepack-CMakeLists.txt;$(PublishDir)encoders\source\musepack-build-README.md" />
+    <Delete Files="@(ExternalCommandEncoder->'$(PublishDir)encoders\%(Filename)%(Extension)')" />
+    <Delete Files="@(ExternalCommandSource->'$(PublishDir)encoders\source\%(Filename)%(Extension)')" />
     <Copy
       SourceFiles="@(ExternalCommandEncoder)"
       DestinationFolder="$(PublishDir)encoders"

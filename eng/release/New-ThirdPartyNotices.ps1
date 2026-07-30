@@ -282,6 +282,17 @@ if ($Flavor -eq "Wpf") {
         $lines.Add(
             "Source archive: $($encoder.sourceArchive.url) " +
             "(SHA-256 $($encoder.sourceArchive.sha256))")
+        $additionalSourceArchivesProperty =
+            $encoder.PSObject.Properties["additionalSourceArchives"]
+        if ($null -ne $additionalSourceArchivesProperty) {
+            foreach ($additionalSource in @(
+                    $additionalSourceArchivesProperty.Value)) {
+                $lines.Add(
+                    "Additional source archive: $($additionalSource.name) " +
+                    "$($additionalSource.version), $($additionalSource.url) " +
+                    "(SHA-256 $($additionalSource.sha256))")
+            }
+        }
         $linkedLibrarySourceProperty =
             $encoder.PSObject.Properties["linkedLibrarySource"]
         if ($null -ne $linkedLibrarySourceProperty) {
@@ -297,6 +308,14 @@ if ($Flavor -eq "Wpf") {
             $lines.Add(
                 "Packaged corresponding source: " +
                 $encoder.sourceArchive.packagePath)
+        }
+        if ($null -ne $additionalSourceArchivesProperty) {
+            foreach ($additionalSource in @(
+                    $additionalSourceArchivesProperty.Value)) {
+                $lines.Add(
+                    "Packaged corresponding source: " +
+                    $additionalSource.packagePath)
+            }
         }
         $sourceSupportProperty =
             $encoder.PSObject.Properties["sourceSupport"]
@@ -351,9 +370,19 @@ if ($Flavor -eq "Wpf") {
         -Text (Read-TrackedText "eng\release\licenses\OpusTools-opusenc-BSD-2-Clause.txt")
     Add-LicenseText `
         -Lines $lines `
-        -Title "libopus 1.3 - BSD-3-Clause" `
-        -Source "eng/release/licenses/libopus-1.3-BSD-3-Clause.txt" `
-        -Text (Read-TrackedText "eng\release\licenses\libopus-1.3-BSD-3-Clause.txt")
+        -Title "libopus 1.6.1 - BSD-3-Clause and patent notices" `
+        -Source "eng/release/licenses/libopus-1.6.1-COPYING.txt" `
+        -Text (Read-TrackedText "eng\release\licenses\libopus-1.6.1-COPYING.txt")
+    Add-LicenseText `
+        -Lines $lines `
+        -Title "libopusenc 0.3 - BSD-3-Clause" `
+        -Source "eng/release/licenses/libopusenc-0.3-BSD-3-Clause.txt" `
+        -Text (Read-TrackedText "eng\release\licenses\libopusenc-0.3-BSD-3-Clause.txt")
+    Add-LicenseText `
+        -Lines $lines `
+        -Title "libogg 1.3.6 - BSD-3-Clause" `
+        -Source "eng/release/licenses/libogg-1.3.6-BSD-3-Clause.txt" `
+        -Text (Read-TrackedText "eng\release\licenses\libogg-1.3.6-BSD-3-Clause.txt")
     Add-LicenseText `
         -Lines $lines `
         -Title "oggenc2 2.88 - GNU General Public License 2.0" `

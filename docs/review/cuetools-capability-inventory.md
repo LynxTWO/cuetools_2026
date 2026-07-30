@@ -116,7 +116,7 @@ It also packages five x64 native codec dependencies for HDCD, libFLAC, LAME, Wav
 and Monkey's Audio under `plugins/x64`. WAV encode/decode lives in the base codec
 assembly.
 
-The WPF release contract requires 36 paths. Its plugin trust contract contains 14 exact
+The WPF release contract requires 52 paths. Its plugin trust contract contains 14 exact
 hash entries, expects nine managed plugin files, 19 registrations, and five native
 probes. This is the package contract, not a count of every framework DLL in a
 self-contained publish.

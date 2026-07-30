@@ -3,34 +3,77 @@
   "encoders": [
     {
       "id": "opusenc",
-      "displayName": "Opus Tools opusenc",
-      "version": "0.2-3-gf5f571b (libopus 1.3)",
+      "displayName": "CUETools Opus encoder",
+      "version": "opus-tools 0.2 + libopusenc 0.3 + libopus 1.6.1",
       "upstream": "https://opus-codec.org/downloads/",
-      "license": "BSD-2-Clause (opusenc; opusinfo is not packaged)",
+      "license": "BSD-2-Clause (opusenc) and BSD-3-Clause (libopus, libopusenc, libogg)",
       "licenseTextPath": "eng/release/licenses/OpusTools-opusenc-BSD-2-Clause.txt",
-      "binaryArchive": {
-        "url": "https://archive.mozilla.org/pub/opus/win64/opus-tools-0.2-opus-1.3-win64.zip",
-        "sha256": "a892bd29358e142fa756da6bfcaea2faadc0f82ee1947d9eb2cecd208f1b873f",
-        "bytes": 1460562
-      },
-      "archiveEntry": "opusenc.exe",
-      "executableSha256": "20d49f6334470805c367f9c8eeda9c91e005152d783ee40a99a4141b989c1b0d",
+      "binaryPath": "ThirdParty/bundled-encoders/x64/opusenc.exe",
+      "executableBytes": 665088,
+      "executableSha256": "c414aa0b6317aab4cc73ce659fd9527a42d51fa15e3ff975cd17a1502da2ddaa",
       "packagePath": "encoders/opusenc.exe",
       "sourceArchive": {
-        "url": "https://codeload.github.com/xiph/opus-tools/tar.gz/f5f571b39ac4acd1dbed6134f99c96ac39d8a13e",
-        "sha256": "5d75804335dba18eaf719f61a3cea61dffba65968325199ce899fd6374d92f0d",
-        "bytes": 122485,
-        "packagePath": ""
+        "url": "https://archive.mozilla.org/pub/opus/opus-tools-0.2.tar.gz",
+        "sha256": "b4e56cb00d3e509acfba9a9b627ffd8273b876b4e2408642259f6da28fa0ff86",
+        "bytes": 457680,
+        "packagePath": "encoders/source/opus-tools-0.2.tar.gz"
       },
-      "linkedLibrarySource": {
-        "name": "libopus",
-        "version": "1.3",
-        "url": "https://archive.mozilla.org/pub/opus/opus-1.3.tar.gz",
-        "sha256": "4f3d69aefdf2dbaf9825408e452a8a414ffc60494c70633560700398820dc550",
-        "bytes": 1032750,
-        "licenseTextPath": "eng/release/licenses/libopus-1.3-BSD-3-Clause.txt"
-      },
-      "provenanceNote": "Official Win64 binary linked by the Opus project. Version output identifies opus-tools commit f5f571b and libopus 1.3; both source inputs are separately hash-pinned, without claiming the official binary's unpublished compiler recipe. A hash-bound per-user import overrides this compatibility fallback."
+      "additionalSourceArchives": [
+        {
+          "name": "libopusenc",
+          "version": "0.3",
+          "url": "https://downloads.xiph.org/releases/opus/libopusenc-0.3.tar.gz",
+          "sha256": "f616d3aff9b2034547894ccb8ab56c36cf1a4acb0d922c5d7119f97bbe58642c",
+          "bytes": 408391,
+          "licenseTextPath": "eng/release/licenses/libopusenc-0.3-BSD-3-Clause.txt",
+          "packagePath": "encoders/source/libopusenc-0.3.tar.gz"
+        },
+        {
+          "name": "libopus",
+          "version": "1.6.1",
+          "url": "https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz",
+          "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1",
+          "bytes": 10472813,
+          "licenseTextPath": "eng/release/licenses/libopus-1.6.1-COPYING.txt",
+          "packagePath": "encoders/source/opus-1.6.1.tar.gz"
+        },
+        {
+          "name": "libogg",
+          "version": "1.3.6",
+          "url": "https://downloads.xiph.org/releases/ogg/libogg-1.3.6.tar.gz",
+          "sha256": "83e6704730683d004d20e21b8f7f55dcb3383cdf84c0daedf30bde175f774638",
+          "bytes": 604469,
+          "licenseTextPath": "eng/release/licenses/libogg-1.3.6-BSD-3-Clause.txt",
+          "packagePath": "encoders/source/libogg-1.3.6.tar.gz"
+        }
+      ],
+      "sourceSupport": [
+        {
+          "path": "ThirdParty/opus-1.6.1-cuetools.patch",
+          "sha256": "412afa93d9ba102aec07444b8c2207bca7e9b2c52cabc36eabb469f59842cb83",
+          "bytes": 307,
+          "packagePath": "encoders/source/opus-1.6.1-cuetools.patch"
+        },
+        {
+          "path": "ThirdParty/libopusenc-0.3-cuetools.patch",
+          "sha256": "55fdb0f378ff80ac8fb56c4d303b65b1cd103aa14398884feb37bb33da6bd59f",
+          "bytes": 3812,
+          "packagePath": "encoders/source/libopusenc-0.3-cuetools.patch"
+        },
+        {
+          "path": "eng/native/opus/CMakeLists.txt",
+          "sha256": "3afa6dd9d084e42a788db656b43381603a43414d0e5879322f4c667e4d5aa513",
+          "bytes": 4848,
+          "packagePath": "encoders/source/opus-CMakeLists.txt"
+        },
+        {
+          "path": "eng/native/opus/README.md",
+          "sha256": "2d018fc4429de8abbcb0ab84f3f41c0309a982d6dc3453bc627993caf927741b",
+          "bytes": 3367,
+          "packagePath": "encoders/source/opus-build-README.md"
+        }
+      ],
+      "provenanceNote": "CUETools builds the four official release archives with current MSVC and the checked-in patches. Two independent clean builds produced the pinned executable byte-for-byte. Real WAVE-on-stdin encodes passed duration, channel, sample-rate, metadata, and independent ffmpeg decode checks. A hash-bound per-user import remains higher precedence than this packaged fallback."
     },
     {
       "id": "oggenc2",

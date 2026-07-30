@@ -1085,6 +1085,19 @@ public sealed class ExternalEncoderTrustTests
     }
 
     [TestMethod]
+    public void OpusArchivalDefaultKeepsTheQualifiedSignalMargin()
+    {
+        using var tree = new EncoderTree();
+        tree.Catalog.EnsureRegistered(tree.Config);
+
+        tree.Catalog.ApplyArchivalDefaults(tree.Config);
+
+        AudioEncoderSettingsViewModel opus = tree.Config.Encoders.Single(
+            item => item.Extension == "opus" && item.Name == "opusenc.exe");
+        Assert.AreEqual("256", opus.Settings.EncoderMode);
+    }
+
+    [TestMethod]
     public void LegacyTakProfileReceivesOnlyEvidenceBackedSelfVerifierMigration()
     {
         using var tree = new EncoderTree();

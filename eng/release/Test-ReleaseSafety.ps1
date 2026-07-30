@@ -261,12 +261,22 @@ try {
         ConvertFrom-Json
     $encoderCatalogSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\CUETools.Wpf\Services\EncoderCatalog.cs") -Raw
+    $wpfProjectSource = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "..\..\CUETools.Wpf\CUETools.Wpf.csproj") -Raw
     $externalPaths = New-Object "Collections.Generic.List[string]"
     foreach ($encoder in @($externalEncoderContract.encoders)) {
         $externalPaths.Add([string]$encoder.packagePath)
         if (-not [string]::IsNullOrWhiteSpace(
                 [string]$encoder.sourceArchive.packagePath)) {
             $externalPaths.Add([string]$encoder.sourceArchive.packagePath)
+        }
+        $additionalSourceArchivesProperty =
+            $encoder.PSObject.Properties["additionalSourceArchives"]
+        if ($null -ne $additionalSourceArchivesProperty) {
+            foreach ($additionalSource in @(
+                    $additionalSourceArchivesProperty.Value)) {
+                $externalPaths.Add([string]$additionalSource.packagePath)
+            }
         }
         $sourceSupportProperty =
             $encoder.PSObject.Properties["sourceSupport"]
@@ -285,6 +295,19 @@ try {
                 -not [string]::IsNullOrWhiteSpace(
                     [string]$externalEntries[0].sha256)) `
             "The WPF artifact does not hash-bind $externalPath."
+        $externalLeaf = [IO.Path]::GetFileName($externalPath)
+        $expectedProjectPath = if (
+            $externalPath.StartsWith(
+                "encoders/source/",
+                [StringComparison]::Ordinal)) {
+            "..\ThirdParty\encoders\source\$externalLeaf"
+        }
+        else {
+            "..\ThirdParty\encoders\x64\$externalLeaf"
+        }
+        Assert-True `
+            ($wpfProjectSource.Contains($expectedProjectPath)) `
+            "The WPF project does not publish $externalPath."
     }
     foreach ($encoder in @($externalEncoderContract.encoders)) {
         $artifactEntry = @(
@@ -313,6 +336,23 @@ try {
                     [string]$sourceEntry[0].sha256 -ieq
                         [string]$encoder.sourceArchive.sha256) `
                 "The packaged source hash for $($encoder.id) drifted from the external encoder contract."
+        }
+        $additionalSourceArchivesProperty =
+            $encoder.PSObject.Properties["additionalSourceArchives"]
+        if ($null -ne $additionalSourceArchivesProperty) {
+            foreach ($additionalSource in @(
+                    $additionalSourceArchivesProperty.Value)) {
+                $additionalSourceEntry = @(
+                    $wpfContract.requiredFiles |
+                        Where-Object {
+                            $_.path -ceq $additionalSource.packagePath
+                        })
+                Assert-True `
+                    ($additionalSourceEntry.Count -eq 1 -and
+                        [string]$additionalSourceEntry[0].sha256 -ieq
+                            [string]$additionalSource.sha256) `
+                    "Additional packaged source for $($encoder.id) drifted from the external encoder contract."
+            }
         }
         $sourceSupportProperty =
             $encoder.PSObject.Properties["sourceSupport"]

@@ -172,11 +172,12 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   with implementation selection, archival defaults, rich help, compatible
   executable aliases, and hash-bound user-import precedence. The WPF package
   includes only the redistributable, provenance-complete command encoders:
-  official Opus Tools `opusenc.exe` and RareWares `oggenc2.exe`, with exact
-  archive/executable hashes, notices, and the corresponding Ogg source archive.
-  Release validation and runtime resolution both enforce those hashes. Real
-  stdin encodes passed for the exact packaged binaries; focused external-encoder
-  trust/contract tests pass 21/21. exhale 1.2.2 and OptimFROG 5.100 were built
+  CUETools' deterministic opus-tools 0.2/libopus 1.6.1 source build,
+  RareWares `oggenc2.exe`, and CUETools' deterministic Musepack r495 source
+  build. Release validation and runtime resolution enforce the executable and
+  packaged-source hashes. Real stdin encodes passed for the exact packaged
+  binaries; focused external-encoder trust/contract tests pass 22/22. exhale
+  1.2.2 and OptimFROG 5.100 were built
   or exercised against their real CLIs, but are import-only because exhale
   grants no patent rights and OptimFROG redistribution requires author
   notification. qaac remains import-only because its Apple runtime is not
@@ -2193,13 +2194,24 @@ does not relax evidence, rollback, or verification requirements.
   old/new corpus comparison; release preparation/notices/trust/artifact gates;
   user-import precedence.
 - **Owner:** codec and release maintainers.
-- **Status:** open 2026-07-29.
+- **Status:** fixed 2026-07-29. Four official release archives, the two
+  warning-correctness patches, exact license texts, CMake recipe, and build
+  notes now ship with the 665,088-byte x64 encoder. Two separately extracted
+  builds produced SHA-256
+  `c414aa0b6317aab4cc73ce659fd9527a42d51fa15e3ff975cd17a1502da2ddaa`.
+  Three real WAVE-on-stdin encodes decoded to the exact expected
+  duration/channel/rate shape with their requested tags. At 192 kbps, the
+  codec-native weighted-error diagnostic was effectively unchanged on pink
+  noise, improved on transients, and worsened on the synthetic tone vector.
+  The archival default is therefore 256 kbps: old and current libopus produced
+  byte-identical decoded PCM on all three 256-kbps vectors. Release preparation,
+  notices, 22 focused trust/default tests, and the 52-path release contract
+  pass. Receipt-bound user imports still take precedence.
 
 ## Ordering
 
-The locally actionable correctness queue is closed through R86; R87 is the
-next bounded codec slice. Remaining work is ordered by the authority or
-evidence it requires:
+The locally actionable correctness queue is closed through R87. Remaining
+work is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -2301,3 +2313,7 @@ evidence it requires:
 - 2026-07-29 - bounded the open libhdcd replacement as R84, shipped a
   reproducible source-accompanied Musepack encoder as R85, and closed R86's
   RID-publish lock-file dirtiness. Added R87 for a current-libopus source build.
+- 2026-07-29 - closed R87 with a deterministic current-libopus encoder, complete
+  source/license/build closure, real stdin/decode/tag checks, mixed 192-kbps
+  signal evidence, and a 256-kbps archival default whose old/current decoded
+  corpus is identical.
