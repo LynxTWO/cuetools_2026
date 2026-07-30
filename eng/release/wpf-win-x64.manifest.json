@@ -32,7 +32,7 @@
       "path": "encoders/opusenc.exe",
       "minimumBytes": 647680,
       "peMachine": "x64",
-      "sha256": "fa05b15daffdc70ad24bada408f30eaa3e9169bcb97bc9835fe1a6913a1919f0"
+      "sha256": "20d49f6334470805c367f9c8eeda9c91e005152d783ee40a99a4141b989c1b0d"
     },
     {
       "path": "encoders/oggenc2.exe",
@@ -44,6 +44,32 @@
       "path": "encoders/source/oggenc2.88srcs.zip",
       "minimumBytes": 728183,
       "sha256": "18469e692ab0bd9f7284850f9ac17dd1e5a493e800ee7974fbb0459e1f446ac9"
+    },
+    {
+      "path": "encoders/mpcenc.exe",
+      "minimumBytes": 378368,
+      "peMachine": "x64",
+      "sha256": "599771ff43e65439c4b752cd61634063d39a03c196833b2656376c1d2f17da48"
+    },
+    {
+      "path": "encoders/source/libmpc_0.1~r495.orig.tar.gz",
+      "minimumBytes": 199669,
+      "sha256": "5182d7a30eec1b338cafc9c1706d663a6c8dc217b1d90187054512074f662202"
+    },
+    {
+      "path": "encoders/source/musepack-r495-cuetools.patch",
+      "minimumBytes": 4932,
+      "sha256": "8dad0c7f44cddc6a38b5523d4d35647eeced4469ed79951fd5d3cb6f75f4a2b2"
+    },
+    {
+      "path": "encoders/source/musepack-CMakeLists.txt",
+      "minimumBytes": 2902,
+      "sha256": "bc15ccb3f0fea2bcc4dcf6b50d37057afe5a37ac31bbe400d698bb173e55f29b"
+    },
+    {
+      "path": "encoders/source/musepack-build-README.md",
+      "minimumBytes": 2185,
+      "sha256": "914796b947bf32e9ccdd3977457b7106067065361eb7cda43d2f527fa6fa9a29"
     },
     { "path": "plugins/CUETools.PluginManifest.v1", "minimumBytes": 1 },
     { "path": "plugins/CUETools.Codecs.Flake.dll", "minimumBytes": 1 },

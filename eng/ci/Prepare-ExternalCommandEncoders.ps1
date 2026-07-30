@@ -107,6 +107,42 @@ function Assert-ExactFile {
     }
 }
 
+function Resolve-RepositoryFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Purpose
+    )
+
+    if ([IO.Path]::IsPathRooted($RelativePath)) {
+        throw "$Purpose must use a repository-relative path."
+    }
+    $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $RelativePath))
+    if (-not $fullPath.StartsWith(
+            $repoPrefix,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Purpose escapes the repository: $RelativePath"
+    }
+
+    $relative = $fullPath.Substring($repoPrefix.Length)
+    $parts = $relative.Split(
+        @(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar),
+        [StringSplitOptions]::RemoveEmptyEntries)
+    $current = $repoRoot
+    foreach ($part in $parts) {
+        $current = Join-Path $current $part
+        if (-not (Test-Path -LiteralPath $current)) {
+            throw "$Purpose is missing: $current"
+        }
+        $info = Get-Item -LiteralPath $current -Force
+        if (($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Purpose traverses a reparse point: $current"
+        }
+    }
+    return $fullPath
+}
+
 function Get-VerifiedDownload {
     param(
         [Parameter(Mandatory = $true)][string]$Id,
@@ -184,6 +220,9 @@ function Publish-File {
     $stagePath = Join-Path $directory (
         "." + [IO.Path]::GetFileName($DestinationPath) + "." +
         [Guid]::NewGuid().ToString("N") + ".staging")
+    $backupPath = Join-Path $directory (
+        "." + [IO.Path]::GetFileName($DestinationPath) + "." +
+        [Guid]::NewGuid().ToString("N") + ".backup")
     try {
         $sourceStream = [IO.File]::Open(
             $SourcePath,
@@ -208,7 +247,11 @@ function Publish-File {
             throw "External encoder staging hash changed before publication."
         }
         if (Test-Path -LiteralPath $DestinationPath) {
-            [IO.File]::Replace($stagePath, $DestinationPath, $null)
+            # File.Replace is atomic on the destination volume. Use a concrete
+            # backup path because Windows PowerShell can bind a null third
+            # argument as an empty path and reject an otherwise valid update.
+            [IO.File]::Replace($stagePath, $DestinationPath, $backupPath)
+            Remove-Item -LiteralPath $backupPath -Force
         }
         else {
             [IO.File]::Move($stagePath, $DestinationPath)
@@ -217,6 +260,9 @@ function Publish-File {
     finally {
         if (Test-Path -LiteralPath $stagePath -PathType Leaf) {
             Remove-Item -LiteralPath $stagePath -Force
+        }
+        if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+            Remove-Item -LiteralPath $backupPath -Force
         }
     }
 }
@@ -297,30 +343,79 @@ foreach ($encoder in @($manifest.encoders)) {
     if ($id -notmatch "^[a-z0-9-]+$") {
         throw "External encoder id is invalid: $id"
     }
-    $binaryArchive = Get-VerifiedDownload `
-        -Id $id `
-        -Kind "binary" `
-        -Archive $encoder.binaryArchive
     $executablePath = Join-Path $outputRoot (
         "x64\" + [IO.Path]::GetFileName([string]$encoder.packagePath))
-    Expand-VerifiedZipEntry `
-        -ArchivePath $binaryArchive `
-        -EntryName ([string]$encoder.archiveEntry) `
-        -DestinationPath $executablePath `
-        -ExpectedSha256 ([string]$encoder.executableSha256)
+    $binaryPathProperty = $encoder.PSObject.Properties["binaryPath"]
+    if ($null -ne $binaryPathProperty) {
+        $binaryPath = Resolve-RepositoryFile `
+            -RelativePath ([string]$binaryPathProperty.Value) `
+            -Purpose "$id source-built executable"
+        Assert-ExactFile `
+            -Path $binaryPath `
+            -Bytes ([Int64]$encoder.executableBytes) `
+            -Sha256 ([string]$encoder.executableSha256) `
+            -Purpose "$id source-built executable"
+        Publish-File `
+            -SourcePath $binaryPath `
+            -DestinationPath $executablePath `
+            -ExpectedSha256 ([string]$encoder.executableSha256)
+    }
+    else {
+        $binaryArchive = Get-VerifiedDownload `
+            -Id $id `
+            -Kind "binary" `
+            -Archive $encoder.binaryArchive
+        Expand-VerifiedZipEntry `
+            -ArchivePath $binaryArchive `
+            -EntryName ([string]$encoder.archiveEntry) `
+            -DestinationPath $executablePath `
+            -ExpectedSha256 ([string]$encoder.executableSha256)
+    }
 
+    # Source provenance is part of the preparation gate even when a permissive
+    # license does not require us to copy the archive into the product. This
+    # keeps a stale URL or mistyped source hash from surviving behind an empty
+    # packagePath.
+    $sourceArchive = Get-VerifiedDownload `
+        -Id $id `
+        -Kind "source" `
+        -Archive $encoder.sourceArchive
     $sourcePackagePath = [string]$encoder.sourceArchive.packagePath
     if (-not [string]::IsNullOrWhiteSpace($sourcePackagePath)) {
-        $sourceArchive = Get-VerifiedDownload `
-            -Id $id `
-            -Kind "source" `
-            -Archive $encoder.sourceArchive
         $sourceDestination = Join-Path $outputRoot (
             "source\" + [IO.Path]::GetFileName($sourcePackagePath))
         Publish-File `
             -SourcePath $sourceArchive `
             -DestinationPath $sourceDestination `
             -ExpectedSha256 ([string]$encoder.sourceArchive.sha256)
+    }
+    $linkedLibrarySourceProperty =
+        $encoder.PSObject.Properties["linkedLibrarySource"]
+    if ($null -ne $linkedLibrarySourceProperty) {
+        [void](Get-VerifiedDownload `
+            -Id $id `
+            -Kind "linked-source" `
+            -Archive $linkedLibrarySourceProperty.Value)
+    }
+    $sourceSupportProperty = $encoder.PSObject.Properties["sourceSupport"]
+    if ($null -ne $sourceSupportProperty) {
+        foreach ($support in @($sourceSupportProperty.Value)) {
+            $supportPath = Resolve-RepositoryFile `
+                -RelativePath ([string]$support.path) `
+                -Purpose "$id source support"
+            Assert-ExactFile `
+                -Path $supportPath `
+                -Bytes ([Int64]$support.bytes) `
+                -Sha256 ([string]$support.sha256) `
+                -Purpose "$id source support"
+            $supportDestination = Join-Path $outputRoot (
+                "source\" +
+                [IO.Path]::GetFileName([string]$support.packagePath))
+            Publish-File `
+                -SourcePath $supportPath `
+                -DestinationPath $supportDestination `
+                -ExpectedSha256 ([string]$support.sha256)
+        }
     }
     $prepared++
 }

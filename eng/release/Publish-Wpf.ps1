@@ -65,7 +65,9 @@ if (-not (Test-Path -LiteralPath $externalEncoderScript -PathType Leaf)) {
     --self-contained true `
     --output $ArtifactDirectory `
     --nologo `
-    -p:PublishSingleFile=false
+    -p:PublishSingleFile=false `
+    -p:NuGetLockFilePath=obj/release-win-x64/packages.lock.json `
+    -p:RestoreLockedMode=false
 if ($LASTEXITCODE -ne 0) {
     throw "The clean WPF publish failed with exit code $LASTEXITCODE."
 }

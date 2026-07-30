@@ -50,9 +50,11 @@ public sealed class EncoderCatalog
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["opusenc.exe"] =
-                "FA05B15DAFFDC70AD24BADA408F30EAA3E9169BCB97BC9835FE1A6913A1919F0",
+                "20D49F6334470805C367F9C8EEDA9C91E005152D783EE40A99A4141B989C1B0D",
             ["oggenc2.exe"] =
                 "AC2C66F87695501AFD0AA664F2EB38FE84754A978ABB5BC80E90C74E55FF0C19",
+            ["mpcenc.exe"] =
+                "599771FF43E65439C4B752CD61634063D39A03C196833B2656376C1D2F17DA48",
         };
     public static string EncodersDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "encoders");
@@ -114,7 +116,7 @@ public sealed class EncoderCatalog
             "A subband perceptual music codec tuned for transparent stereo audio at moderate and high bitrates.",
             "Musepack evolved from the MPEG Layer II family; the current SV8 bitstream and encoder date from 2009.",
             "Music-focused lossy archives where efficiency matters more than broad hardware-player support.",
-            "The encoder is LGPL-2.1-or-later. This build supports a user-selected official executable; packaged copies require the matching license and source-compliance materials."
+            "CUETools packages a deterministic LGPL-2.1-or-later/BSD source build with complete source, patch, and build materials. A receipt-bound user import overrides the packaged fallback."
         ),
         (
             "takc.exe", "tak", "TAK", true, "takc.exe",
@@ -249,9 +251,8 @@ public sealed class EncoderCatalog
                 }
 
             if (!HasEncoder("mpc", "mpcenc.exe"))
-                // Musepack SV8 (mpcenc, the current official encoder): --quality 0..10 (5 = standard,
-                // 7 ~ archival sweet spot). Reads WAV from stdin - verified against the official
-                // 2009-04-02 build.
+                // Musepack SV8: --quality 0..10 (5 = standard, 7 ~ archival sweet spot).
+                // Reads WAV from stdin; verified against the reproducible r495 CUETools build.
                 AddEncoder(new CUETools.Codecs.CommandLine.EncoderSettings(
                     "mpcenc.exe", "mpc", false, "0 1 2 3 4 5 6 7 8 9 10", "7", "mpcenc.exe",
                     "--silent --overwrite --quality %M - %O"));

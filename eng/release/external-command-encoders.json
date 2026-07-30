@@ -4,25 +4,33 @@
     {
       "id": "opusenc",
       "displayName": "Opus Tools opusenc",
-      "version": "0.2 (libopus 1.3-rc2)",
+      "version": "0.2-3-gf5f571b (libopus 1.3)",
       "upstream": "https://opus-codec.org/downloads/",
       "license": "BSD-2-Clause (opusenc; opusinfo is not packaged)",
       "licenseTextPath": "eng/release/licenses/OpusTools-opusenc-BSD-2-Clause.txt",
       "binaryArchive": {
-        "url": "https://archive.mozilla.org/pub/opus/win64/opus-tools-0.2-win64.zip",
-        "sha256": "84e643f1cc3fd26fc743ea7830392de765507f72846e24719804d3d07f1ad96f",
-        "bytes": 1459976
+        "url": "https://archive.mozilla.org/pub/opus/win64/opus-tools-0.2-opus-1.3-win64.zip",
+        "sha256": "a892bd29358e142fa756da6bfcaea2faadc0f82ee1947d9eb2cecd208f1b873f",
+        "bytes": 1460562
       },
       "archiveEntry": "opusenc.exe",
-      "executableSha256": "fa05b15daffdc70ad24bada408f30eaa3e9169bcb97bc9835fe1a6913a1919f0",
+      "executableSha256": "20d49f6334470805c367f9c8eeda9c91e005152d783ee40a99a4141b989c1b0d",
       "packagePath": "encoders/opusenc.exe",
       "sourceArchive": {
-        "url": "https://archive.mozilla.org/pub/opus/opus-tools-0.2.tar.gz",
-        "sha256": "b4e56cb00d3e509acfba9a9b627ffd8273b876b4e2408642259f6da28fa0ff86",
-        "bytes": 457680,
+        "url": "https://codeload.github.com/xiph/opus-tools/tar.gz/f5f571b39ac4acd1dbed6134f99c96ac39d8a13e",
+        "sha256": "5d75804335dba18eaf719f61a3cea61dffba65968325199ce899fd6374d92f0d",
+        "bytes": 122485,
         "packagePath": ""
       },
-      "provenanceNote": "Official Win64 binary linked by the Opus project. A hash-bound per-user import overrides this compatibility fallback."
+      "linkedLibrarySource": {
+        "name": "libopus",
+        "version": "1.3",
+        "url": "https://archive.mozilla.org/pub/opus/opus-1.3.tar.gz",
+        "sha256": "4f3d69aefdf2dbaf9825408e452a8a414ffc60494c70633560700398820dc550",
+        "bytes": 1032750,
+        "licenseTextPath": "eng/release/licenses/libopus-1.3-BSD-3-Clause.txt"
+      },
+      "provenanceNote": "Official Win64 binary linked by the Opus project. Version output identifies opus-tools commit f5f571b and libopus 1.3; both source inputs are separately hash-pinned, without claiming the official binary's unpublished compiler recipe. A hash-bound per-user import overrides this compatibility fallback."
     },
     {
       "id": "oggenc2",
@@ -46,6 +54,45 @@
         "packagePath": "encoders/source/oggenc2.88srcs.zip"
       },
       "provenanceNote": "The packaged binary and its corresponding source archive are distributed together. The same executable bytes were independently found in the owner's codec collection under the compatible oggenc.exe alias."
+    },
+    {
+      "id": "mpcenc",
+      "displayName": "CUETools Musepack SV8 encoder",
+      "version": "r495 + CUETools 2026.07 patch",
+      "upstream": "https://packages.debian.org/source/stable/libmpc",
+      "license": "LGPL-2.1-or-later and BSD-3-Clause (compiled files)",
+      "licenseTextPath": "ThirdParty/flac/COPYING.LGPL",
+      "binaryPath": "ThirdParty/bundled-encoders/x64/mpcenc.exe",
+      "executableBytes": 378368,
+      "executableSha256": "599771ff43e65439c4b752cd61634063d39a03c196833b2656376c1d2f17da48",
+      "packagePath": "encoders/mpcenc.exe",
+      "sourceArchive": {
+        "url": "https://deb.debian.org/debian/pool/main/libm/libmpc/libmpc_0.1~r495.orig.tar.gz",
+        "sha256": "5182d7a30eec1b338cafc9c1706d663a6c8dc217b1d90187054512074f662202",
+        "bytes": 199669,
+        "packagePath": "encoders/source/libmpc_0.1~r495.orig.tar.gz"
+      },
+      "sourceSupport": [
+        {
+          "path": "ThirdParty/musepack-r495-cuetools.patch",
+          "sha256": "8dad0c7f44cddc6a38b5523d4d35647eeced4469ed79951fd5d3cb6f75f4a2b2",
+          "bytes": 4932,
+          "packagePath": "encoders/source/musepack-r495-cuetools.patch"
+        },
+        {
+          "path": "eng/native/musepack/CMakeLists.txt",
+          "sha256": "bc15ccb3f0fea2bcc4dcf6b50d37057afe5a37ac31bbe400d698bb173e55f29b",
+          "bytes": 2902,
+          "packagePath": "encoders/source/musepack-CMakeLists.txt"
+        },
+        {
+          "path": "eng/native/musepack/README.md",
+          "sha256": "914796b947bf32e9ccdd3977457b7106067065361eb7cda43d2f527fa6fa9a29",
+          "bytes": 2185,
+          "packagePath": "encoders/source/musepack-build-README.md"
+        }
+      ],
+      "provenanceNote": "CUETools builds the Debian-preserved upstream r495 source with current MSVC and a checked-in patch. Two independent clean builds produced the pinned executable byte-for-byte. The build excludes common/tags.c because that file carries a separate ambiguous all-rights-reserved notice; CUETools writes metadata after encoding. A hash-bound per-user import remains higher precedence than this compatibility fallback."
     }
   ]
 }

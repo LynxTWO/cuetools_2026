@@ -95,9 +95,24 @@
     <ExternalCommandEncoder
       Include="..\ThirdParty\encoders\x64\oggenc2.exe"
       Condition="Exists('..\ThirdParty\encoders\x64\oggenc2.exe')" />
+    <ExternalCommandEncoder
+      Include="..\ThirdParty\encoders\x64\mpcenc.exe"
+      Condition="Exists('..\ThirdParty\encoders\x64\mpcenc.exe')" />
     <ExternalCommandSource
       Include="..\ThirdParty\encoders\source\oggenc2.88srcs.zip"
       Condition="Exists('..\ThirdParty\encoders\source\oggenc2.88srcs.zip')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\libmpc_0.1~r495.orig.tar.gz"
+      Condition="Exists('..\ThirdParty\encoders\source\libmpc_0.1~r495.orig.tar.gz')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\musepack-r495-cuetools.patch"
+      Condition="Exists('..\ThirdParty\encoders\source\musepack-r495-cuetools.patch')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\musepack-CMakeLists.txt"
+      Condition="Exists('..\ThirdParty\encoders\source\musepack-CMakeLists.txt')" />
+    <ExternalCommandSource
+      Include="..\ThirdParty\encoders\source\musepack-build-README.md"
+      Condition="Exists('..\ThirdParty\encoders\source\musepack-build-README.md')" />
   </ItemGroup>
 
   <!-- The engine discovers codec plugins from a "plugins" subdir; put the managed codecs there
@@ -143,7 +158,7 @@
   </Target>
 
   <Target Name="CopyExternalCommandEncoders" AfterTargets="Build">
-    <Delete Files="$(TargetDir)encoders\opusenc.exe;$(TargetDir)encoders\oggenc2.exe;$(TargetDir)encoders\source\oggenc2.88srcs.zip" />
+    <Delete Files="$(TargetDir)encoders\opusenc.exe;$(TargetDir)encoders\oggenc2.exe;$(TargetDir)encoders\mpcenc.exe;$(TargetDir)encoders\source\oggenc2.88srcs.zip;$(TargetDir)encoders\source\libmpc_0.1~r495.orig.tar.gz;$(TargetDir)encoders\source\musepack-r495-cuetools.patch;$(TargetDir)encoders\source\musepack-CMakeLists.txt;$(TargetDir)encoders\source\musepack-build-README.md" />
     <Copy
       SourceFiles="@(ExternalCommandEncoder)"
       DestinationFolder="$(TargetDir)encoders"
@@ -157,7 +172,7 @@
   </Target>
 
   <Target Name="PublishExternalCommandEncoders" AfterTargets="Publish">
-    <Delete Files="$(PublishDir)encoders\opusenc.exe;$(PublishDir)encoders\oggenc2.exe;$(PublishDir)encoders\source\oggenc2.88srcs.zip" />
+    <Delete Files="$(PublishDir)encoders\opusenc.exe;$(PublishDir)encoders\oggenc2.exe;$(PublishDir)encoders\mpcenc.exe;$(PublishDir)encoders\source\oggenc2.88srcs.zip;$(PublishDir)encoders\source\libmpc_0.1~r495.orig.tar.gz;$(PublishDir)encoders\source\musepack-r495-cuetools.patch;$(PublishDir)encoders\source\musepack-CMakeLists.txt;$(PublishDir)encoders\source\musepack-build-README.md" />
     <Copy
       SourceFiles="@(ExternalCommandEncoder)"
       DestinationFolder="$(PublishDir)encoders"
