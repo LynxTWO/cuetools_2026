@@ -135,7 +135,6 @@ if ($Lane -eq "all" -or $Lane -eq "legacy") {
     $probeArguments = @{
         Configuration = $Configuration
     }
-    if ($NoRestore) { $probeArguments["NoRestore"] = $true }
     if ($NoBuild) { $probeArguments["NoBuild"] = $true }
     & (Join-Path $PSScriptRoot "Invoke-Net20ExceptionRelayProbe.ps1") @probeArguments
 }

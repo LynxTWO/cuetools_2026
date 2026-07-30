@@ -133,4 +133,20 @@ if ($coreResourcePackage.Count -ne 1 -or
         $fullNet20ReferencePackage.Count)
 }
 
+$net20ProbeSource = Get-Content -LiteralPath (
+    Join-Path $PSScriptRoot "Invoke-Net20ExceptionRelayProbe.ps1") -Raw
+$testSuiteSource = Get-Content -LiteralPath (
+    Join-Path $PSScriptRoot "Invoke-TestSuites.ps1") -Raw
+if (-not $net20ProbeSource.Contains('"--locked-mode"') -or
+    -not $net20ProbeSource.Contains('"--force-evaluate"') -or
+    -not $net20ProbeSource.Contains("MSBuildProjectExtensionsPath") -or
+    $net20ProbeSource.Contains("BaseIntermediateOutputPath") -or
+    -not $net20ProbeSource.Contains('"--no-restore"') -or
+    $net20ProbeSource.Contains("[switch]`$NoRestore") -or
+    $testSuiteSource.Contains('$probeArguments["NoRestore"]')) {
+    throw (
+        "The net20 compatibility lane must own a lane-isolated locked Core " +
+        "restore and a no-restore build.")
+}
+
 Write-Host "NuGet lock-file checks passed: $($projects.Count)"

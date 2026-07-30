@@ -469,6 +469,14 @@ package-manager installation:
   the host that must retain the same lock graph without consuming package assets.
   Exercise both hosts and, where practical, a hosted image without the installed
   pack; a local machine with the pack cannot prove the fallback is wired.
+- Package declarations and lock identity do not override an already serialized
+  `project.assets.json`. When two build hosts intentionally consume different asset
+  roles from the same locked dependency graph, give each canonical lane its own
+  `MSBuildProjectExtensionsPath`, perform a locked force-evaluated restore there,
+  and bind the no-restore build to that same path. Do not move
+  `BaseIntermediateOutputPath` outside the project merely to isolate restore state:
+  the SDK's default source globs can then ingest generated files from the old project
+  `obj` tree.
 - For release collection, distinguish a fresh exact staging tree from fresh compiled
   inputs. Require a build receipt that binds the source commit or dirty-worktree
   fingerprint, configuration, platform/toolchain tuple, and hashes of compiled

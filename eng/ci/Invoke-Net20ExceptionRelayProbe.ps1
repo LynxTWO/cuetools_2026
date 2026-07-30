@@ -2,7 +2,6 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$NoRestore,
     [switch]$NoBuild
 )
 
@@ -13,17 +12,43 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $projectPath = Join-Path $repoRoot "CUETools.Codecs\CUETools.Codecs.csproj"
 $assemblyPath =
     Join-Path $repoRoot "bin\$Configuration\net20\CUETools.Codecs.dll"
+$projectExtensionsPath = [IO.Path]::GetFullPath(
+    (Join-Path $repoRoot "CUETools.Codecs\obj\net20-probe\$Configuration"))
+$projectExtensionsProperty =
+    "-p:MSBuildProjectExtensionsPath=" +
+    $projectExtensionsPath.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) +
+    [IO.Path]::DirectorySeparatorChar
 
 if (-not $NoBuild) {
-    $arguments = @(
+    # The classic solution is restored by full MSBuild, where the net20
+    # reference package is deliberately restore-only. This compatibility probe
+    # is a Core-MSBuild lane and therefore owns a separate locked assets graph
+    # in which the package supplies the missing hosted reference assemblies.
+    $restoreArguments = @(
+        "restore",
+        $projectPath,
+        "--locked-mode",
+        "--force-evaluate",
+        "--nologo",
+        $projectExtensionsProperty
+    )
+    & dotnet @restoreArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "The net20 codec restore failed before the compatibility probe."
+    }
+
+    $buildArguments = @(
         "build",
         $projectPath,
         "--configuration", $Configuration,
         "--framework", "net20",
-        "--nologo"
+        "--no-restore",
+        "--nologo",
+        $projectExtensionsProperty
     )
-    if ($NoRestore) { $arguments += "--no-restore" }
-    & dotnet @arguments
+    & dotnet @buildArguments
     if ($LASTEXITCODE -ne 0) {
         throw "The net20 codec build failed before the compatibility probe."
     }

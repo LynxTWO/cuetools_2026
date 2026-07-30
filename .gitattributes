@@ -1,2 +1,9 @@
 CUETools/CUETools.TestCodecs/Data/rar-stream-fixture.txt text eol=lf
 CUETools/CUETools.TestCodecs/Data/rar-stream-fixture.rar binary
+ThirdParty/opus-1.6.1-cuetools.patch text eol=lf
+ThirdParty/libopusenc-0.3-cuetools.patch text eol=lf
+eng/native/opus/CMakeLists.txt text eol=lf
+eng/native/opus/README.md text eol=lf
+ThirdParty/musepack-r495-cuetools.patch text eol=lf
+eng/native/musepack/CMakeLists.txt text eol=lf
+eng/native/musepack/README.md text eol=lf
