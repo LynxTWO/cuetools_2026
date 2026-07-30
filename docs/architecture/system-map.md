@@ -1,6 +1,6 @@
 # System Map
 
-Current-state refresh: 2026-07-28. This is an evidence-bounded map of the
+Current-state refresh: 2026-07-29. This is an evidence-bounded map of the
 first-party repository. `verified` means the implementation, project file, test
 manifest, or local test result was inspected. `inferred` and `unknown` are used
 where runtime or external-system evidence is incomplete.
@@ -25,7 +25,7 @@ verification, metadata, artwork, streaming, and update-message endpoints.
 
 | Runtime unit | Reachable behavior | Framework / architecture | Evidence and boundary |
 | --- | --- | --- | --- |
-| `CUETools/` | Classic conversion, verification, repair, and per-file output through `CUETools.Processor` | .NET Framework 4.7 WinForms | verified: `CUETools/CUETools.csproj`, `CUETools/frmCUETools.cs` |
+| `CUETools/` | Classic conversion, verification, repair, and per-file output through `CUETools.Processor` | SDK-style .NET Framework 4.7 WinForms | verified: project/main UI paths plus old/new managed, PE, config, main/localized-resource, and live main-form equivalence under R93 |
 | `CUERipper/` | Classic optical-disc ripping and metadata lookup through the SCSI/ripper stack | SDK-style .NET Framework 4.7 WinForms | verified: project/main UI paths plus old/new managed, PE, config, localization, decoded-image, and live main-form equivalence under R91 |
 | `CUEPlayer/` | Playback and Icecast streaming; solution-buildable but not collected into either primary release package | SDK-style .NET Framework 4.7 WinForms | verified: project/Icecast paths plus old/new managed, PE, config, decoded-image, and live main-form equivalence under R92 |
 | `CUETools.Wpf/` | Modern ripping, Test & Copy, conversion, verification/repair, reports, history, album art, drive calibration, and external-encoder approval | `net8.0-windows`, x64 WPF | verified: `CUETools.Wpf/CUETools.Wpf.csproj`, `CUETools.Wpf/App.xaml.cs`, `CUETools.Wpf/Services/` |

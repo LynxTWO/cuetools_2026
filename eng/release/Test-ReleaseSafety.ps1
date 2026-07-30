@@ -376,6 +376,7 @@ try {
     & (Join-Path $PSScriptRoot "Test-ClassicArtifactCollection.ps1")
     & (Join-Path $PSScriptRoot "Test-ArtifactValidatorExactFiles.ps1")
     & (Join-Path $PSScriptRoot "..\ci\Test-NuGetLockFiles.ps1")
+    & (Join-Path $PSScriptRoot "..\ci\Test-ResxDuplicateNames.ps1")
 
     $provenanceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "New-Provenance.ps1") -Raw
     Assert-True `

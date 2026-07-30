@@ -57,7 +57,7 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Premise changed - there is no live MusicBrainz client to replace.** Full analysis in `docs/review/musicbrainz-replacement-scope.md`. In short: the `MusicBrainz/` musicbrainz-sharp library is dead code (not built, referenced by no project), and CUERipper's direct MusicBrainz query is commented out (`frmCUERipper.cs:893-918`). CUETools gets MusicBrainz metadata via **CTDB's server-side proxy** (`cueSheet.CTDB.Metadata`) plus a Freedb/gnudb fallback. So a "replacement" would reintroduce a direct-to-MusicBrainz path the project deliberately removed - a product decision, not a mechanical swap.
 - **DONE 2026-07-02 - you chose A.** Deleted the dead `MusicBrainz/` project (musicbrainz-sharp mirror), `ThirdParty/MusicBrainz.dll`, the `CUERipper.csproj` datasource reference + file, and the sln solution-items entry. Removed the commented-out direct-MB block in `frmCUERipper.cs` (replaced with a note pointing at the CTDB-proxy path). MB metadata continues via CTDB + Freedb/gnudb. The "look up on musicbrainz.org" website buttons (frmChoice, frmCUERipper) are unrelated to the library and were kept (and flipped http->https). TestCodecs 34/34 green; GUI projects verified by CI/devenv on push.
 
-### D7. CUEControls resgen under dotnet build - PARTIALLY DONE; classic CUETools deferred to R12
+### D7. CUEControls resgen under dotnet build - DONE 2026-07-29
 
 - **Decision:** fix so the solution builds without full Visual Studio.
 - **What shipped 2026-07-02:** `Directory.Build.targets` at repo root adds `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions` for net47 first-party projects, **gated on `$(MSBuildRuntimeType) == 'Core'`** so it applies ONLY to `dotnet build` and is a provable no-op under devenv/CI (the shipping build's resource format and runtime deps are unchanged - important because CUEControls loads binary icons at runtime, and forcing preserialized resources into the shipping build would have required deploying a new DLL). Result: all **SDK-style** net47 first-party projects (CUEControls + the codec/lib projects) now build under `dotnet build`.
@@ -69,13 +69,12 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
   images, and live WPF startup are preserved. CUERipper and ProgressODoom
   followed with preserved managed/PE/config/localization/image contracts and
   old/new live main-form parity. CUEPlayer followed with preserved managed,
-  PE/config/decoded-image contracts and old/new live main-form parity.
-- **Why not complete:** the old-style `CUETools` GUI still needs SDK conversion
-  plus real UI/resource verification. The
-  disabled, unconsumed, non-building `CLParity` experiment was retired under
-  R89 rather than modernized into a false feature.
+  PE/config/decoded-image contracts and old/new live main-form parity. Classic
+  CUETools completed the set with preserved managed/PE/config/main/localized
+  resource contracts and old/new live main-form parity. Its 237 exact duplicate
+  resource nodes were safely removed and are now guarded against recurrence.
 - **Verified:** CUEControls, the FLACCL pair, BluTools, CUERipper,
-  ProgressODoom, and CUEPlayer build under `dotnet build`;
+  ProgressODoom, CUEPlayer, and CUETools build under `dotnet build`;
   TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
   the FLACCL live matrix is recorded under R88 and the BluTools equivalence
   evidence under R90.
@@ -104,11 +103,10 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`,
   and the first paired R12 conversion (`CUETools.Codecs.FLACCL` plus
   `CUETools.FLACCL.cmd`) with live OpenCL evidence, followed by the first
-  classic-GUI pilot (`CUETools.eac3ui` / BluTools) and the CUERipper /
-  ProgressODoom pair.
-- **The remaining sub-decision:** the remaining big pieces - SDK-style conversion of the
-  old-style classic `CUETools` GUI,
-  then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm
+  classic-GUI pilot (`CUETools.eac3ui` / BluTools), the CUERipper /
+  ProgressODoom pair, CUEPlayer, and classic CUETools.
+- **The remaining sub-decision:** the remaining big pieces - async/`HttpClient`
+  and installer modernization - all need the GUI to be **run** to confirm
   resource/icon loading and behavior. The current classic baseline is locally green:
   AnyCPU completed 53/0, x64 and Win32 each completed 2/0 with 59 skipped
   configuration entries, TTA compiled and linked for both, and the targeted Installer
@@ -120,9 +118,9 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   - (B) Defer all GUI-touching modernization until the codec/rollout work settles, and I
     keep to non-GUI slices (build/test plumbing, library-layer cleanups).
   - (C) Pick one specific GUI to convert first as a pilot.
-  - **Pilots complete:** BluTools, CUERipper/ProgressODoom, and CUEPlayer were
-    converted and validated under R90-R92. Continue option (A) with the final
-    classic CUETools GUI from its own captured contract.
+  - **Classic GUI conversion complete:** BluTools, CUERipper/ProgressODoom,
+    CUEPlayer, and CUETools were converted and validated one captured contract
+    at a time under R90-R93.
 
 ### R13 decision - RESOLVED 2026-07-29
 
