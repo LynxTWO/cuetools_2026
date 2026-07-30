@@ -142,8 +142,10 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   oggenc2 ships with its exact source archive. Release and runtime checks fail
   closed on hash drift.
 - **No product decision remains for import-only codecs:** qaac requires an Apple
-  runtime; TAK is proprietary; exhale grants no patent rights; Musepack has not
-  been added to the package until its matching source-compliance set is curated.
+  runtime; TAK is proprietary; and exhale grants no patent rights. Musepack is
+  no longer in this group: R85 packages CUETools' deterministic r495 build with
+  its complete corresponding source, reviewed patch, recipe, build notes, and
+  LGPL-2.1 notice.
 - **One external action remains before OptimFROG can be bundled:** its license
   requires notification to the author. CUETools supports a user import and a
   verified lossless encode today; packaging must wait for a project-owner
