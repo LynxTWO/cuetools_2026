@@ -152,7 +152,15 @@ progress documents for it belong here, under `docs/review/`.
 - Exact-byte text fixtures must pin their checkout EOL policy. Core MSBuild must
   actively consume the net20 reference-assembly fallback; full MSBuild retains the
   same package only as restore evidence because Visual Studio supplies that pack.
-  Keep the shared lock graph and exercise both hosts.
+  Keep the shared lock graph and exercise both hosts. Their different package roles
+  require lane-isolated `MSBuildProjectExtensionsPath` values, a locked
+  force-evaluated restore, and a no-restore build bound to the same path; a shared
+  `project.assets.json` is not valid evidence. Do not isolate by moving
+  `BaseIntermediateOutputPath` outside the project because SDK globs can ingest stale
+  generated files from the original `obj` tree.
+- Every repository text file whose exact size or digest is part of an artifact
+  contract must have an explicit checkout EOL rule. Validate the complete
+  manifest-selected set rather than repairing only the first CRLF-expanded file.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate

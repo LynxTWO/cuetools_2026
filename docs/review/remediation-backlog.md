@@ -2573,8 +2573,15 @@ does not relax evidence, rollback, or verification requirements.
 - **Evidence found:** `.gitattributes` now pins the exact RAR text oracle to LF
   and the archive to binary. Core MSBuild actively consumes
   `Microsoft.NETFramework.ReferenceAssemblies` for net20; full MSBuild retains
-  the same direct dependency with all assets excluded. The lock is unchanged,
-  the focused RAR test passes, and the local net20 relay probe passes.
+  the same direct dependency with all assets excluded. The first replacement
+  hosted run proved the RAR repair with 111 passing codec tests and two expected
+  skips, then exposed that full MSBuild's serialized asset graph was still being
+  reused by the Core no-restore build. The probe now owns a locked,
+  force-evaluated restore under a lane-isolated
+  `MSBuildProjectExtensionsPath` and binds its no-restore build to that same
+  graph. The lock hash is unchanged; the complete local legacy lane passes 156
+  tests with six expected skips, and the net20 relay probe preserves exception
+  type and identity.
 - **Confidence:** high for both root causes; the hosted image supplies the
   missing-targeting-pack falsification the local workstation cannot.
 - **Approval needed:** no; both fixes make existing test/build intent portable.
@@ -2585,11 +2592,41 @@ does not relax evidence, rollback, or verification requirements.
   Core/full package-role gate; unchanged lock hash; net20 build/relay probe;
   complete hosted legacy test discovery.
 - **Owner:** codec-test and build maintainers.
-- **Status:** repository fixes complete 2026-07-30; hosted receipt pending.
+- **Status:** repository fixes and exact local legacy transaction complete
+  2026-07-30; replacement hosted receipt pending.
+
+### R99. Hash-bound encoder build support changed bytes across hosted checkout - bucket A, risk high
+
+- **Area or slice:** external-command encoder source-support manifests, Git
+  checkout attributes, WPF publication, and release safety.
+- **Why it matters:** the first hosted release passed release controls, classic
+  builds, all test discovery, fuzzing, and classic artifact validation, then
+  rejected an Opus patch whose 307 committed LF bytes had expanded to 317 CRLF
+  bytes. Fixing only that first file would leave six more manifest-selected
+  text inputs dependent on checkout configuration.
+- **Evidence found:** all seven selected patches, CMake files, and build
+  instructions match their declared lengths and SHA-256 digests in the
+  repository. `.gitattributes` now fixes each one to LF, `git check-attr`
+  reports `eol: lf` for the complete set, and release safety derives that set
+  from the encoder manifest and requires an exact LF rule for every member.
+- **Confidence:** high for root cause and repository repair; final publication
+  still needs a replacement hosted receipt.
+- **Approval needed:** no; the fix preserves committed and contract-declared
+  bytes across supported checkout hosts.
+- **Recommended next pass:** model checkout representation explicitly whenever
+  a repository text file enters an exact size/hash artifact contract.
+- **Smallest safe next step:** run and inspect the source-bound unsigned hosted
+  release.
+- **Verification plan:** attribute inspection; exact size/hash preparation;
+  release safety; clean WPF publication; final artifact and provenance
+  inspection.
+- **Owner:** release and supply-chain maintainers.
+- **Status:** repository fix and local release-safety gate complete 2026-07-30;
+  replacement hosted receipt pending.
 
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. R97 and R98
+The locally actionable correctness queue is closed through R96. R97 through R99
 await only source-bound hosted receipts. Remaining work
 is ordered by the authority or evidence it requires:
 

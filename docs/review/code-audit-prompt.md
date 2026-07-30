@@ -174,7 +174,16 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     `.gitattributes` policy is pinned. For framework-reference fallback packages,
     consume their assets under the build host that lacks the installed targeting
     pack and keep them restore-only under the host that must share the lock without
-    consuming those assets. Exercise both hosts.
+    consuming those assets. Exercise both hosts. If those hosts need different
+    serialized asset roles, isolate `MSBuildProjectExtensionsPath` per canonical
+    restore/build lane and use the same path for its locked restore and no-restore
+    build; a shared lock does not make a shared `project.assets.json` correct.
+29. HASH-BOUND TEXT INPUTS NEED CHECKOUT-BYTE CONTRACTS TOO. Exact sizes and digests
+    for patches, build scripts, notices, fixtures, and other repository text are
+    host-independent only when `.gitattributes` fixes their checkout representation.
+    Enumerate the whole manifest-selected set, not just the first file whose CRLF
+    expansion trips validation, and assert that every text member has an explicit
+    EOL contract before publishing.
 
 ### How to choose the extraction
 

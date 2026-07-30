@@ -263,6 +263,11 @@ try {
         Join-Path $PSScriptRoot "..\..\CUETools.Wpf\Services\EncoderCatalog.cs") -Raw
     $wpfProjectSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\CUETools.Wpf\CUETools.Wpf.csproj") -Raw
+    $gitAttributeLines = @(
+        Get-Content -LiteralPath (
+            Join-Path $PSScriptRoot "..\..\.gitattributes") |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_.Length -gt 0 -and -not $_.StartsWith("#") })
     $externalPaths = New-Object "Collections.Generic.List[string]"
     foreach ($encoder in @($externalEncoderContract.encoders)) {
         $externalPaths.Add([string]$encoder.packagePath)
@@ -283,6 +288,11 @@ try {
         if ($null -ne $sourceSupportProperty) {
             foreach ($support in @($sourceSupportProperty.Value)) {
                 $externalPaths.Add([string]$support.packagePath)
+                $expectedAttribute =
+                    ([string]$support.path).Replace("\", "/") + " text eol=lf"
+                Assert-True `
+                    ($gitAttributeLines -ccontains $expectedAttribute) `
+                    "Hash-bound source support lacks an exact LF checkout contract: $($support.path)"
             }
         }
     }

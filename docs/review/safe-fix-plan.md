@@ -1531,7 +1531,8 @@ and downloaded artifact receipts only. Product runtime behavior is unchanged.
 
 **Scope:** pin the RAR fixture checkout bytes; activate the locked net20
 reference-assembly fallback only for Core MSBuild; retain the same restore-only
-direct dependency under full MSBuild; strengthen the package-role gate.
+direct dependency under full MSBuild; give the Core compatibility probe its own
+serialized restore graph; strengthen the package-role gate.
 
 **Safety:** do not change the archive, decoded payload, codec code, dependency
 version, or lock. Limit the EOL rule to the exact fixture and keep the archive
@@ -1539,8 +1540,9 @@ binary.
 
 **Checks:** Git attribute inspection; focused production RAR enumeration,
 full-read, and backward-seek test; Core net20 restore/build and exception relay;
-unchanged lock hash; Core/full role assertion; hosted legacy lane on the image
-without an installed .NET 2.0 targeting pack.
+unchanged lock hash; Core/full role assertion; lane-isolated
+`MSBuildProjectExtensionsPath`; hosted legacy lane on the image without an
+installed .NET 2.0 targeting pack.
 
 **Rollback:** revert attributes, Core package role, and its guard together.
 Do not restore a host-dependent text oracle or a fallback that is only visible
@@ -1549,4 +1551,32 @@ to the build host that does not need it.
 **Observability:** test bytes, package evaluation, build output, and hosted
 receipts only. Runtime packaging remains unchanged.
 
-**Status:** repository changes complete 2026-07-30; hosted rerun pending.
+**Status:** repository changes and exact local legacy transaction complete
+2026-07-30; hosted rerun pending. The first replacement hosted run proved the
+RAR checkout fix, then falsified reuse of full MSBuild's serialized assets by
+the Core no-restore build; the isolated restore graph is the resulting repair.
+
+### Make hash-bound encoder build support checkout-stable
+
+**Scope:** pin every repository text input selected by external-command encoder
+source-support manifests to LF and assert the complete selected set in release
+safety.
+
+**Safety:** do not change the patches, build instructions, manifests, expected
+sizes, expected hashes, downloaded sources, or encoder binaries. The attributes
+only preserve their committed LF bytes across checkout hosts.
+
+**Checks:** `git check-attr`; exact source-support size/hash validation; release
+safety; clean WPF publication; source-bound unsigned hosted release.
+
+**Rollback:** revert the attributes and their release assertion together only
+if the manifest gains an explicit non-text member with its own byte contract.
+Do not restore host-dependent CRLF expansion.
+
+**Observability:** exact path, byte length, SHA-256, checkout attributes, and
+hosted publication receipt.
+
+**Status:** repository changes complete 2026-07-30; hosted rerun pending. The
+first hosted release reached clean WPF publication only after all release
+controls, classic builds, tests, fuzzing, and classic artifact validation
+passed; it then exposed Opus source support expanded from 307 to 317 bytes.
