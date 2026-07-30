@@ -2535,9 +2535,35 @@ does not relax evidence, rollback, or verification requirements.
 - **Owner:** build and release maintainers.
 - **Status:** fixed 2026-07-30.
 
+### R97. Hosted success depended on deprecated action-runtime compatibility - bucket A, risk medium
+
+- **Area or slice:** all four GitHub Actions workflows and their immutable
+  checkout, .NET setup, and artifact-upload pins.
+- **Why it matters:** GitHub completed the WPF workflow only by forcing two
+  actions that declared Node 20 onto Node 24. A green conclusion therefore hid
+  a platform migration warning and left future runner behavior dependent on a
+  compatibility shim.
+- **Evidence found:** the annotation named checkout and setup-dotnet. Their
+  current upstream releases, plus the artifact action used by the evidence
+  workflows, provide supported replacements. All uses now pin the exact
+  checkout 7.0.1, setup-dotnet 6.0.0, and upload-artifact 7.0.1 commits.
+- **Confidence:** high for the repository workflows and hosted annotation.
+- **Approval needed:** no; immutable pin maintenance is inside the authorized
+  hosted-evidence scope.
+- **Recommended next pass:** treat any future action-runtime annotation as a
+  migration finding even when the job conclusion is success.
+- **Smallest safe next step:** complete source-bound hosted reruns and inspect
+  their annotations and artifacts.
+- **Verification plan:** actionlint, FFmpeg/signing/release workflow contracts,
+  classic CI, WPF CI, dual-architecture FFmpeg, and unsigned release evidence.
+- **Owner:** CI and release maintainers.
+- **Status:** repository migration implemented 2026-07-30; final hosted receipts
+  pending.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. Remaining work
+The locally actionable correctness queue is closed through R96. R97 awaits only
+the source-bound hosted receipt. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
