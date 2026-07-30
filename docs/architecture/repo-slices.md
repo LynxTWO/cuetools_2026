@@ -194,9 +194,11 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   construct a live WPF window. CUERipper and ProgressODoom are the second
   conversion slice; managed shape, PE flags, config semantics, localization,
   and decoded images match, and old/new CUERipper builds create the same
-  responsive main form/window set. Real `ApplicationSettingsBase`
-  persistence/migration has not been exercised. CUEPlayer's entrypoint remains
-  inventoried rather than runtime-smoked.
+  responsive main form/window set. CUEPlayer is the third slice: managed shape,
+  PE/config semantics, decoded images, and the old/new responsive main-form
+  window set match. It remains solution-buildable but outside both primary
+  release packages. Real `ApplicationSettingsBase` persistence/migration has
+  not been exercised.
 - **Residual boundary:** interactive GUI, accessibility, and localization flows
   are not comprehensively automated.
 - **Risk / status:** medium; reviewed and commented.
