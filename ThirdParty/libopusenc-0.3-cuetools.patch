@@ -1,0 +1,86 @@
+diff --git a/src/ogg_packer.c b/src/ogg_packer.c
+index b37463a..aa2fd95 100644
+--- a/src/ogg_packer.c
++++ b/src/ogg_packer.c
+@@ -301 +301 @@ int oggp_commit_packet(oggpacker *oggp, oggp_int32 bytes, oggp_uint64 granulepos
+-  oggp->lacing[oggp->lacing_fill+nb_255s] = bytes - 255*nb_255s;
++  oggp->lacing[oggp->lacing_fill+nb_255s] = (unsigned char)(bytes - 255*nb_255s);
+@@ -378 +378 @@ int oggp_get_next_page(oggpacker *oggp, unsigned char **page, oggp_int32 *bytes)
+-  header_size = 27 + p->lacing_size;
++  header_size = (int)(27 + p->lacing_size);
+@@ -407 +407 @@ int oggp_get_next_page(oggpacker *oggp, unsigned char **page, oggp_int32 *bytes)
+-    oggp_int32 pageno=p->pageno;
++    oggp_int32 pageno=(oggp_int32)p->pageno;
+@@ -414 +414 @@ int oggp_get_next_page(oggpacker *oggp, unsigned char **page, oggp_int32 *bytes)
+-  ptr[26] = p->lacing_size;
++  ptr[26] = (unsigned char)p->lacing_size;
+@@ -417 +417 @@ int oggp_get_next_page(oggpacker *oggp, unsigned char **page, oggp_int32 *bytes)
+-  ogg_page_checksum_set(ptr, len);
++  ogg_page_checksum_set(ptr, (oggp_int32)len);
+@@ -420 +420 @@ int oggp_get_next_page(oggpacker *oggp, unsigned char **page, oggp_int32 *bytes)
+-  *bytes = len;
++  *bytes = (oggp_int32)len;
+diff --git a/src/opusenc.c b/src/opusenc.c
+index b238efe..297a6ac 100644
+--- a/src/opusenc.c
++++ b/src/opusenc.c
+@@ -613 +613 @@ static void encode_buffer(OggOpusEnc *enc) {
+-      min_samples = end_granule48k - enc->curr_granule;
++      min_samples = (int)(end_granule48k - enc->curr_granule);
+@@ -678 +678 @@ static void encode_buffer(OggOpusEnc *enc) {
+-        enc->header.preskip = end_granule48k + enc->frame_size - enc->curr_granule;
++        enc->header.preskip = (int)(end_granule48k + enc->frame_size - enc->curr_granule);
+@@ -1187 +1187 @@ static void extend_signal(float *x, int before, int after, int channels) {
+-    for (i=0;i<LPC_PADDING;i++) window[i] = .5+.5*window[i];
++    for (i=0;i<LPC_PADDING;i++) window[i] = .5f+.5f*window[i];
+diff --git a/src/opus_header.c b/src/opus_header.c
+index b9f34af..87ea27e 100644
+--- a/src/opus_header.c
++++ b/src/opus_header.c
+@@ -34,0 +35 @@
++#include <limits.h>
+@@ -254 +255,2 @@ void opeint_comment_init(char **comments, int* length, const char *vendor_string
+-  int vendor_length=strlen(vendor_string);
++  size_t vendor_length_size=strlen(vendor_string);
++  int vendor_length;
+@@ -256,2 +258,10 @@ void opeint_comment_init(char **comments, int* length, const char *vendor_string
+-  int len=8+4+vendor_length+4;
+-  char *p=(char*)malloc(len);
++  int len;
++  char *p;
++  if (vendor_length_size > INT_MAX-16) {
++    *length=0;
++    *comments=NULL;
++    return;
++  }
++  vendor_length=(int)vendor_length_size;
++  len=8+4+vendor_length+4;
++  p=(char*)malloc(len);
+@@ -275,3 +285,12 @@ int opeint_comment_add(char **comments, int* length, const char *tag, const char
+-  int tag_len=(tag?strlen(tag)+1:0);
+-  int val_len=strlen(val);
+-  int len=(*length)+4+tag_len+val_len;
++  size_t tag_text_len=tag?strlen(tag):0;
++  size_t val_len_size=strlen(val);
++  size_t len_size;
++  int tag_len;
++  int val_len;
++  int len;
++  if (*length < 0 || tag_text_len >= INT_MAX || val_len_size > INT_MAX) return 1;
++  tag_len=tag?(int)tag_text_len+1:0;
++  val_len=(int)val_len_size;
++  len_size=(size_t)*length+4+(size_t)tag_len+(size_t)val_len;
++  if (len_size > INT_MAX) return 1;
++  len=(int)len_size;
+diff --git a/src/picture.c b/src/picture.c
+index 4d35703..9e3ad99 100644
+--- a/src/picture.c
++++ b/src/picture.c
+@@ -47 +47 @@ static const char BASE64_TABLE[64]={
+-static void base64_encode(char *dst, const char *src, int len){
++static void base64_encode(char *dst, const char *src, size_t len){
+@@ -51,2 +51,2 @@ static void base64_encode(char *dst, const char *src, int len){
+-  int      ngroups;
+-  int      i;
++  size_t   ngroups;
++  size_t   i;

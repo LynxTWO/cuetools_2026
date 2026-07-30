@@ -30,9 +30,49 @@
     { "path": "Install-CUEToolsPlugin.ps1", "minimumBytes": 1 },
     {
       "path": "encoders/opusenc.exe",
-      "minimumBytes": 647680,
+      "minimumBytes": 665088,
       "peMachine": "x64",
-      "sha256": "20d49f6334470805c367f9c8eeda9c91e005152d783ee40a99a4141b989c1b0d"
+      "sha256": "c414aa0b6317aab4cc73ce659fd9527a42d51fa15e3ff975cd17a1502da2ddaa"
+    },
+    {
+      "path": "encoders/source/opus-tools-0.2.tar.gz",
+      "minimumBytes": 457680,
+      "sha256": "b4e56cb00d3e509acfba9a9b627ffd8273b876b4e2408642259f6da28fa0ff86"
+    },
+    {
+      "path": "encoders/source/libopusenc-0.3.tar.gz",
+      "minimumBytes": 408391,
+      "sha256": "f616d3aff9b2034547894ccb8ab56c36cf1a4acb0d922c5d7119f97bbe58642c"
+    },
+    {
+      "path": "encoders/source/opus-1.6.1.tar.gz",
+      "minimumBytes": 10472813,
+      "sha256": "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
+    },
+    {
+      "path": "encoders/source/libogg-1.3.6.tar.gz",
+      "minimumBytes": 604469,
+      "sha256": "83e6704730683d004d20e21b8f7f55dcb3383cdf84c0daedf30bde175f774638"
+    },
+    {
+      "path": "encoders/source/opus-1.6.1-cuetools.patch",
+      "minimumBytes": 307,
+      "sha256": "412afa93d9ba102aec07444b8c2207bca7e9b2c52cabc36eabb469f59842cb83"
+    },
+    {
+      "path": "encoders/source/libopusenc-0.3-cuetools.patch",
+      "minimumBytes": 3812,
+      "sha256": "55fdb0f378ff80ac8fb56c4d303b65b1cd103aa14398884feb37bb33da6bd59f"
+    },
+    {
+      "path": "encoders/source/opus-CMakeLists.txt",
+      "minimumBytes": 4848,
+      "sha256": "3afa6dd9d084e42a788db656b43381603a43414d0e5879322f4c667e4d5aa513"
+    },
+    {
+      "path": "encoders/source/opus-build-README.md",
+      "minimumBytes": 3367,
+      "sha256": "2d018fc4429de8abbcb0ab84f3f41c0309a982d6dc3453bc627993caf927741b"
     },
     {
       "path": "encoders/oggenc2.exe",

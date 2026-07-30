@@ -271,8 +271,8 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
                  "more compression at slower speed. Default 4m: the strongest setting.",
         ("ogg", _) => "Ogg Vorbis quality -1 to 8; q6 is roughly 192 kbps. Default q8: a " +
                  "high-quality, archival-leaning derivative.",
-        ("opus", _) => "Opus bitrate in kbps. Default 192: transparent music quality with ample " +
-                 "margin; 128 is the usual efficiency sweet spot.",
+        ("opus", _) => "Opus bitrate in kbps. Default 256: an archival-leaning derivative with " +
+                  "extra signal margin; 128 is the usual efficiency sweet spot.",
         ("wv", _) => "WavPack fast through high+ changes only compression effort. Default high+ " +
                  "with ExtraMode 6: maximum archival compression while remaining bit-exact.",
         ("ape", _) => "Monkey's Audio fast through insane changes only compression effort. " +

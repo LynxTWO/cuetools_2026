@@ -30,22 +30,22 @@ The user requested xHE-AAC, OptimFROG, WavPack, and all redistributable encoders
 
 The WPF package includes three provenance-complete command encoders:
 
-- official Opus Tools `0.2-3-gf5f571b` with stable libopus 1.3
-  `opusenc.exe` under its BSD-2-Clause terms;
+- a deterministic x64 opus-tools 0.2 build using libopusenc 0.3, libopus
+  1.6.1, and libogg 1.3.6 under their BSD terms;
 - RareWares oggenc2 2.88/libVorbis 1.3.7 with the exact corresponding source
   archive and GPL-2.0 notice;
 - a deterministic x64 Musepack SV8 r495 source build with its complete upstream
   archive, CUETools correctness/licensing patch, CMake recipe, build notes, and
   LGPL-2.1 notice.
 
-`eng/release/external-command-encoders.json` pins the download URL, archive size
-and SHA-256, selected entry SHA-256, license, and source archive. Preparation
-refuses any byte drift. The artifact contract repeats the hashes, and runtime
-resolution binds the executable to the same non-replaceable launch lease used
-for an imported encoder. Real stdin encodes passed with all three packaged
-files. Two independent clean Musepack builds produced the same 378,368-byte
-executable and SHA-256, and two encodes plus independent ffmpeg decodes were
-byte-deterministic.
+`eng/release/external-command-encoders.json` pins each download URL, archive
+size and SHA-256, executable SHA-256, license, source archive, patch, and build
+recipe. Preparation refuses byte drift. The artifact contract repeats the
+hashes, and runtime resolution binds the executable to the same
+non-replaceable launch lease used for an imported encoder. Real stdin encodes
+passed with all three packaged files. Two independent clean Musepack builds
+produced the same 378,368-byte executable and SHA-256. Two independent clean
+Opus builds produced the same 665,088-byte executable and SHA-256.
 
 The Musepack build deliberately excludes `common/tags.c`: Debian's preserved
 copyright inventory records that file separately as all-rights-reserved without
@@ -64,7 +64,9 @@ notification to the author before an unmodified CLI is packaged.
 ### Owner codec collection review, 2026-07-29
 
 The expanded `C:\_Audio Codecs_` collection was treated as evidence and source
-material, not as an implicit redistribution grant:
+material, not as an implicit redistribution grant. The repeat census covered
+5,233 files (148,270,296 bytes), including 185 files whose names identify
+license, notice, version, author, source, or SDK evidence:
 
 - its FLAC 1.5.0 and WavPack 5.9.0 trees match the versions CUETools already
   source-builds;
@@ -84,9 +86,9 @@ material, not as an implicit redistribution grant:
   EZ CD Audio Converter product components, not a redistributable SDK or
   CUETools command-encoder contract;
 - the unversioned `opus-main` snapshot is not a release provenance anchor.
-  Official libopus is now 1.6.1, while the latest official Windows
-  `opus-tools` binary remains 0.2 linked to libopus 1.3. A source-built upgrade
-  needs its complete libopus/libopusenc/libogg/tool recipe and behavior gate;
+  The packaged Opus encoder instead uses the four official release archives,
+  two checked patches, and the deterministic build and behavior gate described
+  above;
 - qaac, TAK, and OptimFROG retain the import/notification boundaries documented
   above. The presence of binaries in the owner collection does not change
   those upstream terms.
@@ -103,14 +105,13 @@ material, not as an implicit redistribution grant:
 
 ## Status
 
-The historical version survey is retained above. FlaCuda retirement is complete.
-WavPack 5.9.0 and Monkey's Audio 13.20 have both-architecture build and runtime
-evidence. The command-line catalog and the three safe bundled integrations are
-complete for the current release recipe; the deliberately import-only
-boundaries above are recorded rather than silently bypassed. A current-libopus
-source build is the remaining clearly redistributable command-encoder upgrade.
-LAME 4 remains a separate major-version project. FFmpeg
-matters if its currently unshipped product path returns.
+The historical version survey is retained above. FlaCuda retirement is
+complete. WavPack 5.9.0 and Monkey's Audio 13.20 have both-architecture build
+and runtime evidence. The command-line catalog and the three safe bundled
+integrations are complete for the current release recipe; the deliberately
+import-only boundaries above are recorded rather than silently bypassed. LAME
+4 remains a separate major-version project. FFmpeg matters if its currently
+unshipped product path returns.
 
 ## Upstream release evidence checked through 2026-07-29
 

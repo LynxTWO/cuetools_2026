@@ -50,7 +50,7 @@ public sealed class EncoderCatalog
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["opusenc.exe"] =
-                "20D49F6334470805C367F9C8EEDA9C91E005152D783EE40A99A4141B989C1B0D",
+                "C414AA0B6317AAB4CC73CE659FD9527A42D51FA15E3FF975CD17A1502DA2DDAA",
             ["oggenc2.exe"] =
                 "AC2C66F87695501AFD0AA664F2EB38FE84754A978ABB5BC80E90C74E55FF0C19",
             ["mpcenc.exe"] =
@@ -140,7 +140,7 @@ public sealed class EncoderCatalog
             "A modern open codec spanning speech, music, low delay, and a very wide bitrate range.",
             "The IETF standardized Opus as RFC 6716 in 2012 from Xiph.Org CELT and Skype SILK technology.",
             "Streaming, speech, and compact high-quality music copies; use lossless FLAC or WavPack for preservation masters.",
-            "opusenc is distributed under a two-clause BSD license. CUETools can package a source-pinned build with its notices; imported copies override any packaged copy."
+            "CUETools packages a deterministic source build with libopus 1.6.1 and the BSD notices for every linked component; imported copies override the packaged copy."
         ),
         (
             "qaac.exe (tvbr)", "m4a", "AAC (qaac)", false, "qaac.exe",
@@ -1019,7 +1019,7 @@ public sealed class EncoderCatalog
             ["wv|libwavpack"] = "high+",        // WavPack: strongest standard mode
             ["ape|MACLib"] = "insane",          // Monkey's Audio: strongest mode
             ["ogg|oggenc.exe"] = "8",           // Vorbis: high-quality archival derivative
-            ["opus|opusenc.exe"] = "192",       // Opus: transparent music with ample margin
+            ["opus|opusenc.exe"] = "256",       // Opus: archival derivative with extra signal margin
             ["m4a|qaac.exe (tvbr)"] = "127",    // qaac: strongest TVBR quality
             ["m4a|exhale.exe"] = "9",           // xHE-AAC: strongest conservative public preset
             ["ofr|ofr.exe"] = "max",            // OptimFROG: strongest preset

@@ -1196,7 +1196,8 @@ encodes through the exact packaged Opus and Vorbis files, focused WPF trust
 tests, warning-clean release build, notices generation, and the self-contained
 artifact contract.
 
-**Rollback:** remove both packaged files and their artifact entries together.
+**Rollback:** remove each affected packaged executable and its source/build
+artifact entries together.
 The catalog retains user imports; do not remove receipts or weaken lossless
 verification. A licensing/provenance failure disables packaging, not runtime
 trust checks.
@@ -1206,10 +1207,11 @@ reason code such as hash, location, or approval. They never log imported source
 paths or audio identity.
 
 **Status:** implemented and verified 2026-07-29. Focused external-encoder tests
-pass 21/21 and the complete WPF suite passes 437/437. Official Opus Tools and
-RareWares oggenc2 performed real stdin encodes. The release build is
-warning-clean, the artifact contract passes 39 required paths, and third-party
-notices include the binary/source provenance.
+pass 22/22 and the full WPF suite passes 440/440. The deterministic
+current-libopus build, RareWares oggenc2, and the deterministic Musepack build
+performed real stdin encodes. The release build is warning-clean, the artifact
+contract passes 52 required paths, and third-party notices include the
+binary/source provenance.
 exhale 1.2.2 and OptimFROG 5.100 real CLI contracts were also exercised; their
 documented patent/notification boundaries keep them import-only.
 

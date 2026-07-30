@@ -1,0 +1,10 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ebd32c2..87bc73c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18 +18 @@ include(FeatureSummary)
+-set(MSVC_CLANG_CL false BOOL)
++set(MSVC_CLANG_CL false)
+@@ -21 +21 @@ if (MSVC)
+-        set(MSVC_CLANG_CL true BOOL)
++        set(MSVC_CLANG_CL true)

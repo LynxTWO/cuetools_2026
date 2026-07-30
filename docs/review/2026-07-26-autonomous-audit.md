@@ -86,7 +86,7 @@ contradicts them.
 
 ### Reachability
 
-The WPF x64 artifact contract requires 36 paths, including:
+The WPF x64 artifact contract requires 52 paths, including:
 
 - 9 managed plugin DLLs;
 - 5 native x64 dependencies;
@@ -162,7 +162,7 @@ final frozen-output receipt run remains pending.
 - Deterministic fuzz: seed 20260712, 20,000 iterations, seven executable checks
   passed, zero failures, and one explicitly reported unsafe/native SCSI truncated
   boundary skip.
-- Clean WPF publish: the required-file contract is now 36 paths; trust entries
+- Clean WPF publish: the required-file contract is now 52 paths; trust entries
   14/14, registrations 19/19, native probes 5/5, and the forbidden-root check all
   passed in the recorded clean-artifact run. Final artifact/file-hash totals are
   refreshed by the final release gate.
