@@ -1,7 +1,7 @@
 <Project>
 
   <!--
-    Build modernization (decision D7 / remediation R8): let first-party WinForms projects that
+    Build modernization (decision D7 / remediation R8): let first-party desktop projects that
     hold binary .resx resources build under the .NET SDK (`dotnet build`), not only full Visual
     Studio / devenv. Core MSBuild's GenerateResource cannot serialize non-string resources
     without the preserialized path plus System.Resources.Extensions (errors MSB3822/MSB3823).
@@ -22,11 +22,11 @@
         an unrelated resource package and binding redirect do not enter their runtime closure.
 
     Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here.
-    FLACCL's paired plugin/command projects were converted under R12/R88. The old-style
-    WinForms GUIs (CUETools, CUERipper, CUEPlayer, eac3ui) still need SDK conversion and
-    runtime UI verification. The disabled, non-building CLParity experiment was retired
-    under R89. SDK-style first-party net47 projects build under `dotnet build` with this
-    in place.
+    FLACCL's paired plugin/command projects were converted under R12/R88, and BluTools
+    became the first classic GUI pilot under R90. The old-style GUIs (CUETools,
+    CUERipper, CUEPlayer) still need SDK conversion and runtime UI verification. The
+    disabled, non-building CLParity experiment was retired under R89. SDK-style
+    first-party net47 projects build under `dotnet build` with this in place.
   -->
 
   <PropertyGroup>

@@ -64,14 +64,17 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 - **Progress 2026-07-29:** the reachable FLACCL plugin and command host are now
   SDK-style net47 projects. Locked Core restore, Core/full-MSBuild builds, exact
   resource/kernel comparisons, executable architecture checks, and the live
-  RTX 3060 matrix pass.
-- **Why not complete:** the old-style WinForms GUIs (`CUETools`, `CUERipper`,
-  `CUEPlayer`, `CUETools.eac3ui`) still need SDK conversion plus real UI/resource
-  verification. The disabled, unconsumed, non-building `CLParity` experiment
-  was retired under R89 rather than modernized into a false feature.
-- **Verified:** CUEControls and the FLACCL pair build under `dotnet build`;
+  RTX 3060 matrix pass. BluTools (`CUETools.eac3ui`) is now the first classic
+  GUI pilot: its API/member shape, PE flags, generated config, 19 embedded
+  images, and live WPF startup are preserved.
+- **Why not complete:** the old-style `CUETools`, `CUERipper`, and `CUEPlayer`
+  GUIs still need SDK conversion plus real UI/resource verification. The
+  disabled, unconsumed, non-building `CLParity` experiment was retired under
+  R89 rather than modernized into a false feature.
+- **Verified:** CUEControls, the FLACCL pair, and BluTools build under `dotnet build`;
   TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
-  the FLACCL live matrix is recorded under R88.
+  the FLACCL live matrix is recorded under R88 and the BluTools equivalence
+  evidence under R90.
 
 ## Previously deferred decisions
 
@@ -96,9 +99,10 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 - **What is already done** (see D1, D2, D4, D7): HTTPS lookups, SharpZipLib 1.4.2,
   the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`,
   and the first paired R12 conversion (`CUETools.Codecs.FLACCL` plus
-  `CUETools.FLACCL.cmd`) with live OpenCL evidence.
+  `CUETools.FLACCL.cmd`) with live OpenCL evidence, followed by the first
+  classic-GUI pilot (`CUETools.eac3ui` / BluTools).
 - **The remaining sub-decision:** the remaining big pieces - SDK-style conversion of the
-  old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`),
+  old-style classic GUIs (`CUETools`, `CUERipper`, `CUEPlayer`),
   then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm
   resource/icon loading and behavior. The current classic baseline is locally green:
   AnyCPU completed 53/0, x64 and Win32 each completed 2/0 with 59 skipped
@@ -111,7 +115,8 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   - (B) Defer all GUI-touching modernization until the codec/rollout work settles, and I
     keep to non-GUI slices (build/test plumbing, library-layer cleanups).
   - (C) Pick one specific GUI to convert first as a pilot.
-  - **Recommend (A) with `CUETools.eac3ui` as the pilot** - it is the smallest GUI.
+  - **Pilot complete:** BluTools was converted and validated under R90. Continue
+    option (A), one captured and runtime-verified classic GUI at a time.
 
 ### R13 decision - RESOLVED 2026-07-29
 

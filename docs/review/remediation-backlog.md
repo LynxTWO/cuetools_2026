@@ -74,11 +74,15 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 - **Done in R12/R88:** the reachable FLACCL plugin and its command host are now
   SDK-style net47 projects that restore and build consistently under both Core
   and full MSBuild.
-- **Remaining (folded into R12):** SDK-style conversion of the old-style WinForms
-  GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`) so they too
-  `dotnet build`. The `CLParity` reachability contradiction was closed by R89:
-  the disabled, unconsumed, unshipped, non-building experiment was retired.
-  GUI conversions need runtime verification; they are not blind headless changes.
+- **Done in R12/R90:** `CUETools.eac3ui` / BluTools is the first classic-GUI
+  pilot. Its SDK-style net47 project builds with both MSBuild runtimes while
+  preserving its API, fields, methods, PE flags, config, image resources, and
+  live WPF startup behavior.
+- **Remaining (folded into R12):** SDK-style conversion of the old-style
+  `CUETools`, `CUERipper`, and `CUEPlayer` GUIs so they too `dotnet build`.
+  The `CLParity` reachability contradiction was closed by R89: the disabled,
+  unconsumed, unshipped, non-building experiment was retired. GUI conversions
+  need runtime verification; they are not blind headless changes.
 
 ### R9. ProxyPassword stored plaintext at rest (F1) - DONE 2026-07-26, risk medium
 
@@ -2292,9 +2296,40 @@ does not relax evidence, rollback, or verification requirements.
   wrapper/kernel plus its paper, MATLAB models, and native prototypes; all
   remain recoverable from the parent commit. No shipped artifact was removed.
 
+### R90. BluTools' old WPF project blocks consistent Core/full-MSBuild builds - bucket A, risk medium
+
+- **Area or slice:** `CUETools.eac3ui` / BluTools project shape, WPF resources,
+  generated settings, solution membership, and the R8/R12 GUI pilot.
+- **Why it matters:** the old project participates in the split legacy restore
+  graph, while a mechanical WPF conversion can silently change assembly
+  identity, executable architecture, generated configuration, embedded images,
+  or compiled XAML behavior.
+- **Evidence found:** the Release baseline was captured before conversion.
+  Old and new binaries expose the same 33 public declarations, 44 fields, and
+  59 method declarations; retain the same assembly identity and PE32/IL-only
+  flags; and produce byte-identical generated configuration and 19 embedded
+  image payloads. The WPF compiler rewrote only the `mainwindow.baml` encoding.
+  Both baseline and converted executables constructed a live hidden `BluTools`
+  window and remained healthy through the startup smoke.
+- **Confidence:** high for build, startup, resource, and managed-contract
+  preservation; broader interactive Blu-ray/eac3to workflows remain outside
+  the automated smoke.
+- **Approval needed:** no; this is the user-authorized one-at-a-time R12
+  modernization.
+- **Recommended next pass:** convert the remaining classic GUIs one at a time,
+  starting from a captured binary/resource/runtime contract for each.
+- **Smallest safe next step:** none; this pilot slice is closed.
+- **Verification plan:** Core and full-MSBuild Release builds with zero
+  warnings; declaration, field, method, identity, PE, config, and resource
+  comparisons; old/new live-window startup; canonical WPF and release gates.
+- **Owner:** classic desktop and build maintainers.
+- **Status:** fixed 2026-07-29. BluTools is SDK-style net47 and builds under
+  both MSBuild runtimes. All retained contracts above pass; the only resource
+  payload change is compiler-generated BAML whose live startup is proven.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R89. Remaining work
+The locally actionable correctness queue is closed through R90. Remaining work
 is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2406,3 +2441,6 @@ is ordered by the authority or evidence it requires:
   contract, and rerunning the full RTX 3060 correctness matrix.
 - 2026-07-29 - closed R89 by correcting CLParity's reachability classification
   and retiring its disabled, unconsumed, unshipped, non-building experiment.
+- 2026-07-29 - closed R90 by converting BluTools as the first classic-GUI
+  SDK-project pilot and preserving its managed, PE, config, resource, and live
+  WPF startup contracts.

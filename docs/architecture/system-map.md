@@ -31,7 +31,7 @@ verification, metadata, artwork, streaming, and update-message endpoints.
 | `CUETools.Wpf/` | Modern ripping, Test & Copy, conversion, verification/repair, reports, history, album art, drive calibration, and external-encoder approval | `net8.0-windows`, x64 WPF | verified: `CUETools.Wpf/CUETools.Wpf.csproj`, `CUETools.Wpf/App.xaml.cs`, `CUETools.Wpf/Services/` |
 | `CUETools.CTDB.EACPlugin/` | CTDB verification/submission code loaded inside Exact Audio Copy | .NET Framework 2.0 | verified: `CUETools.CTDB.EACPlugin/CUETools.CTDB.EACPlugin.csproj`, `Plugin.cs`; host behavior is external |
 | CLI projects | Scriptable conversion, verification, ripping, and codec entrypoints over shared libraries | mixed .NET Framework and SDK-style projects | verified: solution and project files |
-| `CUETools.eac3ui/` | Blu-ray/eac3to-oriented UI over shared processing code | .NET Framework 4.7 | verified: project and main UI/process call paths |
+| `CUETools.eac3ui/` | Blu-ray/eac3to-oriented BluTools UI over shared processing code | SDK-style .NET Framework 4.7 WPF | verified: project and main UI/process call paths; old/new API, PE, config, image-resource, and live startup equivalence under R90 |
 | `CUERipper.WPF/` | Historical one-window stub, not the CUETools 2026 application | .NET Framework 4.7 | verified: project contents; deferred dead-weight decision |
 | Historical FlaCuda projects | CUDA.NET-based codec projects formerly present in the repository | deleted; no current runtime reachability | verified: deleted in commit `4e1b02d` |
 

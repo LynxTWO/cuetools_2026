@@ -188,9 +188,12 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Verified controls:** the classic MOTD is exact-host bounded HTTPS text with
   no remote image decode/cache; CUETools/CUERipper surface DPAPI save failures;
   CUEPlayer source handlers warn before insecure Icecast, do not redisplay a
-  stored password, and report save failures. Real `ApplicationSettingsBase`
-  persistence/migration has not been exercised. CUEPlayer and eac3ui entrypoints
-  are inventoried.
+  stored password, and report save failures. BluTools is the first SDK-style
+  classic-GUI pilot: its API, fields, methods, PE flags, generated config, and
+  all 19 embedded image payloads match the baseline, and both old/new builds
+  construct a live WPF window. Real `ApplicationSettingsBase`
+  persistence/migration has not been exercised. CUEPlayer's entrypoint remains
+  inventoried rather than runtime-smoked.
 - **Residual boundary:** interactive GUI, accessibility, and localization flows
   are not comprehensively automated.
 - **Risk / status:** medium; reviewed and commented.

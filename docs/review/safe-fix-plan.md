@@ -1304,3 +1304,34 @@ settings, or logging surface.
 only four files inside the experiment plus the solution mentioned its types or
 assembly. The 308,630-byte tracked tree and solution entry are removed; the
 post-removal code/project/solution scan has zero matches.
+
+### Convert BluTools as the first classic-GUI SDK-project pilot
+
+**Exact files:** `CUETools.eac3ui/BLUTools.csproj`, its `CUETools.sln` project
+type, `Directory.Build.targets` scope notes, and R8/R12/R90/S9 records.
+
+**Safety and unchanged behavior:** retain net47, `BluTools` assembly identity,
+WinExe output, Release AnyCPU PE32/IL-only behavior, application icon, generated
+settings/resources, exact output path, project references, and every tracked
+WPF/image resource. Change no application source or workflow behavior.
+
+**Checks:** capture the old Release executable and generated config; require
+zero-warning Core and full-MSBuild builds; compare public declarations, fields,
+method declarations, assembly identity, PE flags, config bytes, manifest
+resource names, and each embedded image payload. Start both old and new
+executables hidden and require a healthy live window with the expected title.
+Run canonical WPF and release-safety gates.
+
+**Rollback:** revert the project and solution type as one unit. The baseline is
+recoverable from the parent commit; do not retain a conversion that changes
+runtime architecture or drops a resource.
+
+**Observability:** build/test/startup output only. The project conversion changes
+no application logging, settings values, network behavior, media processing, or
+telemetry.
+
+**Status:** implemented and verified 2026-07-29. Core and full MSBuild complete
+with zero warnings. Old/new builds match across 33 public declarations, 44
+fields, 59 method declarations, assembly identity, PE flags, exact generated
+config, and 19 embedded image payloads. The WPF compiler changed only the BAML
+encoding; both binaries construct a live hidden `BluTools` window.
