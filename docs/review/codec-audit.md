@@ -98,11 +98,11 @@ in both configurations into valid CLR PE files. Installer Projects 3.0.0, using 
 required `DisableOutOfProcBuild` integration, passed 8 projects with 0 failures and
 produced a 929,792-byte MSI.
 
-Those local results used the Visual Studio 18 resolver with the VS2022 v143 toolset,
-not the exact pinned hosted VS2022 image. The net47 codec tests and FLACCL/OpenCL
-integration also ran locally, but final frozen-output receipts, complete 97-path
-artifact validation, and a hosted repeat remain necessary before promoting the whole
-classic package graph to observed.
+Those local results used the Visual Studio 18 resolver with the VS2022 v143
+toolset. The net47 codec tests and FLACCL/OpenCL integration also ran locally.
+Final classic CI `30518472651` and release run `30518479906` now agree on the
+hosted image, and independent inspection accepted the downloaded 97-file
+artifact, receipt, provenance, and SBOM closure.
 
 ## Primary codec matrix
 
@@ -221,9 +221,10 @@ Evidence: [FLACCL settings and writer](../../CUETools.Codecs.FLACCL/FLACCLWriter
 
 ### Remaining evidence gaps
 
-- Retain the green local AnyCPU/x64/Win32/TTA/MSI evidence; finish the frozen 97-path
-  artifact/receipt validation and repeat the gates on the pinned hosted Visual Studio
-  image, including TTA selection and invocation.
+- Retain the green local AnyCPU/x64/Win32/TTA/MSI evidence and the source-bound
+  hosted classic receipt. The hosted 97-file contract, dual-architecture TTA
+  artifact membership, and clean provenance now pass; behavioral TTA
+  invocation remains a separate codec test gap.
 - Add real MP3 encode/decode-duration coverage. The primary packages currently encode
   MP3 but do not register an MP3 decoder.
 - Decide whether raw WAV needs finalized-file independent verification or a narrower

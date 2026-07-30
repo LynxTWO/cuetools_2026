@@ -1,17 +1,18 @@
 # Safe-Fix Plan
 
-**Current authority, 2026-07-26:** the wave below has been executed through its
-locally available gates. Individual batch notes preserve intermediate counts and
-plans, but the final status/counts are in `2026-07-26-autonomous-audit.md` and
-the final canonical gate rather than this historical plan. Optical-drive reads, an
+**Current authority, 2026-07-30:** the wave below has been executed through its
+local and selected hosted gates. Individual batch notes preserve intermediate
+counts and plans, but the final status/counts are in the live release evidence,
+remediation backlog, and final canonical gate rather than this historical plan.
+Optical-drive reads, an
 H: full FLAC rip and same-drive Test & Copy, CTDB repair, WMA Lossless, FLACCL/OpenCL,
 Icecast 2.5.0, and local actionlint now have direct evidence. The local classic
 matrix is green: AnyCPU 58/0/11, and x64 and Win32 9/0/60,
 TTA in both architectures, and Installer Projects 8/0 with a 929,792-byte MSI.
-The local frozen classic receipt and exact 97-file collection pass; hosted parity
-remains pending. Signing, CTDB TLS, and named residual
-hardware/service failure cases remain pending; H: Test & Copy also needs a final-source
-repeat after the behavior-preserving `SecureSectorVote` extraction.
+The local and hosted classic receipts and exact 97-file collection pass. Hosted
+classic/WPF/FFmpeg/release evidence is source-bound and annotation-clean.
+Public-trust signing identity provisioning, CTDB TLS, and named residual
+hardware/service failure cases remain pending.
 no intermediate "ready" label should be read as the current state.
 
 Bounded remediation batches under pass 11 Step 2. One section per batch. Update statuses as batches land.
@@ -50,7 +51,10 @@ Bounded remediation batches under pass 11 Step 2. One section per batch. Update 
 
 Revert the batch commits; no data or release artifacts affected.
 
-**Status:** landed 2026-07-02. Local verification matched the known-green baseline exactly: TestParity 18 passed / 4 skipped, TestCodecs 34 passed / 1 skipped, TestProcessor builds. CI verification pending first push (watch the two new test steps).
+**Status:** landed 2026-07-02. Local verification matched the then-known-green
+baseline exactly: TestParity 18 passed / 4 skipped, TestCodecs 34 passed / 1
+skipped, TestProcessor builds. Superseding hosted run `30518472651` passes the
+expanded classic selection with zero failures and seven declared skips.
 
 ## Wave 2: 2026-07-26 audit remediation
 
@@ -703,8 +707,8 @@ emits zero warnings, and its libFLAC and libFLAC++ tests pass 2/2. The classic
 codec suite passes 112/113 with its established skip, and the WPF suite passes
 358/358. Vendor staging passes 15 checks, reproduces the same patched source
 under PowerShell 5.1 and 7, and leaves all five submodules clean. The source-bound
-classic receipt remains pending until the active rip releases the running
-application.
+classic receipt is now retained by release run `30518479906`; its downloaded
+97-file payload and clean-source receipt passed independent validation.
 
 ### Keep Visual Studio rulesets out of Core MSBuild
 
@@ -1525,7 +1529,9 @@ compatibility warning as the rollback success criterion.
 **Observability:** hosted annotations, job conclusions, exact source revision,
 and downloaded artifact receipts only. Product runtime behavior is unchanged.
 
-**Status:** repository changes complete 2026-07-30; hosted reruns pending.
+**Status:** closed 2026-07-30. FFmpeg run `30516040154`, classic CI
+`30518472651`, WPF CI `30518472662`, and release run `30518479906` succeeded
+with zero final check-run annotations.
 
 ### Make exact-byte and net20 fallback tests host-independent
 
@@ -1551,10 +1557,11 @@ to the build host that does not need it.
 **Observability:** test bytes, package evaluation, build output, and hosted
 receipts only. Runtime packaging remains unchanged.
 
-**Status:** repository changes and exact local legacy transaction complete
-2026-07-30; hosted rerun pending. The first replacement hosted run proved the
-RAR checkout fix, then falsified reuse of full MSBuild's serialized assets by
-the Core no-restore build; the isolated restore graph is the resulting repair.
+**Status:** closed 2026-07-30. The first replacement hosted run proved the RAR
+checkout fix, then falsified reuse of full MSBuild's serialized assets by the
+Core no-restore build; the isolated restore graph is the resulting repair.
+Final classic run `30518472651` passed 18/22 parity, 111/113 codec, 9/10
+processor, and 17/17 ripper tests, with only the declared skips.
 
 ### Make hash-bound encoder build support checkout-stable
 
@@ -1576,10 +1583,11 @@ Do not restore host-dependent CRLF expansion.
 **Observability:** exact path, byte length, SHA-256, checkout attributes, and
 hosted publication receipt.
 
-**Status:** repository changes complete 2026-07-30; hosted rerun pending. The
-first hosted release reached clean WPF publication only after all release
-controls, classic builds, tests, fuzzing, and classic artifact validation
-passed; it then exposed Opus source support expanded from 307 to 317 bytes.
+**Status:** closed 2026-07-30. The first hosted release reached clean WPF
+publication only after all release controls, classic builds, tests, fuzzing,
+and classic artifact validation passed; it then exposed Opus source support
+expanded from 307 to 317 bytes. Final release run `30518479906` published and
+the downloaded payloads passed independent artifact/hash inspection.
 
 ### Repair stale native-input provenance and pin checkout bytes
 
@@ -1603,10 +1611,11 @@ provenance pass by weakening or skipping its input hash check.
 **Observability:** current and committed-blob digests, exact paths, attribute
 results, provenance receipts, and hosted source revision.
 
-**Status:** repository repair implemented 2026-07-30; local and hosted
-replacement receipts pending. The first post-EOL hosted release passed both
+**Status:** closed 2026-07-30. The first post-EOL hosted release passed both
 application publications and unsigned signing-policy evaluation before the
-stale `81a305c6...` digest rejected the current `e57a0c47...` patch.
+stale `81a305c6...` digest rejected the current `e57a0c47...` patch. Final
+release run `30518479906` accepted the corrected native inventory, and both
+downloaded receipts bind its SHA-256.
 
 ### Make derived-source provenance independent of Git ignore visibility
 
@@ -1633,8 +1642,10 @@ dropping unknown untracked files from enumeration.
 classified build-residue counts, patch ID, submodule states, and final
 source-state verdict.
 
-**Status:** repository repair and local closure/provenance tests complete
-2026-07-30; clean-clone hosted receipt pending.
+**Status:** closed 2026-07-30. Both clean-clone receipts from release run
+`30518479906` report clean source, no unknown untracked files, five clean
+submodules, and the exact 423-member expansion with closure SHA-256
+`5777ba9a6debcd55565ba49c2e713fdb46a62d81474bc17d394ef17893eeb578`.
 
 ### Preserve and validate typed SBOM evidence after normalization
 
@@ -1662,5 +1673,7 @@ sidecar generated before normalization.
 root-package relationships, dependency refs, sidecar hash, validator result,
 and GitHub job annotations.
 
-**Status:** repository repair and both real local artifact validations complete
-2026-07-30; source-bound hosted release pending.
+**Status:** closed 2026-07-30. Release run `30518479906` and the independently
+downloaded artifact both passed exact classic 97/97 and WPF 557/557 SPDX
+validation, populated CycloneDX graph checks, final sidecar checks, and zero
+hosted annotations.

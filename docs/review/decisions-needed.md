@@ -77,7 +77,9 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
   ProgressODoom, CUEPlayer, and CUETools build under `dotnet build`;
   TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
   the FLACCL live matrix is recorded under R88 and the BluTools equivalence
-  evidence under R90.
+  evidence under R90. Final hosted classic run `30518472651` passes the
+  converted solution graph, and release run `30518479906` independently closes
+  the exact 97-file classic artifact/receipt boundary.
 
 ## Previously deferred decisions
 

@@ -168,8 +168,10 @@ and 0 failed after the declared-net20 tuple and collection fixes. The x64 and Wi
 solution configurations each complete with 2 succeeded, 0 failed, and 59 skipped
 configuration entries; TTA compiles and links for both. The targeted Installer
 Projects build passes 8 projects with 0 failures and produces a 929,792-byte MSI.
-These local results use the Visual Studio 18 resolver with the VS2022 v143 toolset;
-final frozen-output receipts and hosted-image parity remain pending.
+These local results use the Visual Studio 18 resolver with the VS2022 v143
+toolset. Final classic CI `30518472651` and release run `30518479906` now agree
+on the hosted image; the downloaded classic artifact passed its exact 97-file
+contract, receipt, provenance, and SBOM checks.
 
 The managed FFmpeg wrapper is no longer in either primary package. Its project remains in
 the solution, and a separate manual workflow can build FFmpeg native DLL artifacts, but
@@ -410,11 +412,12 @@ capability work is narrower:
 
 - retain the passing H:/K: optical/mechanism evidence and add cancellation,
   disagreement, and other deliberate failure-injection hardware cases;
-- finish frozen 97-path artifact/receipt validation for the passing local classic
-  AnyCPU/x64/Win32/MSI matrix, then repeat it on the pinned hosted VS2022 image;
-- complete the damaged K: final-source run after Windows releases its currently
-  wedged device handle, including observed lead-in/out results and end-of-disc use;
-- decide whether dual-drive comparison belongs in this product;
+- retain the passing source-bound 97-path classic artifact/receipt and hosted
+  VS2022 evidence alongside the local AnyCPU/x64/Win32/MSI matrix;
+- retain the completed damaged K: final-source/CTDB-repair evidence and exercise
+  the intermittent drive-wake branch on hardware that reproduces it;
+- expand process-per-drive evidence across more simultaneous drive and firmware
+  combinations, including cross-drive CRC history;
 - add behavioral coverage for TTA and MP3;
 - retain the passing WMA Lossless and FLACCL hardware integrations in a repeatable
   release matrix.

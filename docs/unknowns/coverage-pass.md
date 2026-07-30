@@ -1,6 +1,6 @@
 # Unknowns: Coverage Pass
 
-Current-state refresh: 2026-07-26. These entries identify evidence that is
+Current-state refresh: 2026-07-30. These entries identify evidence that is
 still absent; skipped, excluded, or availability-gated behavior is not counted
 as covered.
 
@@ -32,19 +32,19 @@ as covered.
   injection/cancellation/disagreement, cross-vendor OpenCL, Icecast HTTPS/certificate
   and Mono, and release-lane repeatability. A first H: attempt's transient SCSI
   ASC/ASCQ 08/0A during an overlapping build is retained as diagnostic evidence; the
-  isolated rerun crossed the same Copy phase and passed. Because the
-  behavior-preserving extraction of the same shipping vote into `SecureSectorVote`
-  landed afterward, a final-source no-build H: rerun remains pending.
+  isolated final-source rerun crossed the same Copy phase and passed. Simultaneous
+  H:/K: jobs and damaged K:'s completed Test & Copy/CTDB repair add real
+  multi-drive and error-media evidence without claiming a universal drive matrix.
 - **Confidence:** medium
 - **Likely owner:** release/test maintainer
-- **Next best check:** complete the final-source H: rerun, retain the observed fixtures
-  in a named repeatable matrix, then add optical cancellation/disagreement/error media,
-  a second OpenCL vendor, Icecast HTTPS/certificate cases, and the supported Mono
-  target if retained.
+- **Next best check:** retain the observed fixtures in a named repeatable matrix,
+  then add optical cancellation/disagreement/error media, a second OpenCL
+  vendor, Icecast HTTPS/certificate cases, and the supported Mono target if
+  retained.
 - **Risk level:** high
 - **Status:** open
 
-### First current hosted CI/release evidence
+### First current hosted CI/release evidence - closed 2026-07-30
 
 - **Area or file:** `.github/workflows/CI-windows.yml`,
   `.github/workflows/release-windows.yml`
@@ -53,19 +53,20 @@ as covered.
   classic artifact.
 - **Why it matters:** tool/image drift can leave a documented gate unreachable
   or produce a different artifact than local checks.
-- **Evidence found so far:** workflow steps and discovery/skip gates are present.
-  All four workflows parse and pass official `actionlint` v1.7.12 locally. Aggregate
-  suite totals are being refreshed by the final canonical gate. A current successful
-  hosted run has not been supplied. Local classic evidence now includes AnyCPU 53/0,
-  x64 and Win32 2/0 with 59 skipped configuration entries each, TTA compiled/linked
-  for both, and a targeted Installer Projects 8/0 pass that produced a
-  929,792-byte MSI. That local resolver/toolset combination is not the hosted image.
-- **Confidence:** unknown
+- **Evidence found so far:** all four workflows parse and pass official
+  `actionlint` v1.7.12 locally. Source-bound FFmpeg run `30516040154`, classic
+  CI `30518472651`, WPF CI `30518472662`, and release run `30518479906`
+  succeeded with zero final annotations. The classic and modern lanes
+  discovered 630 tests, passed 623, and retained seven declared skips. The
+  downloaded release independently passed both artifact contracts, exact
+  SHA-256/SPDX closures, populated CycloneDX graphs, native-source closure, and
+  clean provenance.
+- **Confidence:** high
 - **Likely owner:** CI/release maintainer
-- **Next best check:** run both workflows from the intended branch and retain
-  per-suite TRX, artifact-validator, native-probe, provenance, and SBOM output.
+- **Next best check:** refresh the retained source-bound evidence after
+  runner-image, action, Visual Studio, SDK, or release-policy changes.
 - **Risk level:** high
-- **Status:** open
+- **Status:** closed
 
 ### ProgressODoom and residual ttalib provenance
 

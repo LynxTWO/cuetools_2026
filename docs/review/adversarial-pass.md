@@ -229,8 +229,8 @@ post-verified a deliberately damaged image without changing the source.
 
 Remaining adversarial checks are narrower: hostile replacement of an external
 encoder's shared work file, cross-vendor OpenCL behavior, Icecast TLS/certificate and
-Mono behavior, CTDB server authentication/TLS, frozen classic artifact receipts and
-hosted parity, and optical-drive cancellation/disagreement/failure injection.
+Mono behavior, CTDB server authentication/TLS, public-trust publisher signing,
+and optical-drive cancellation/disagreement/failure injection.
 
 Pass 07, 2026-07-02. Purpose: attack the current picture of the repo, not extend it. Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 

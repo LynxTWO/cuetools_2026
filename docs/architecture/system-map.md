@@ -87,9 +87,9 @@ visible and do not silently discard a newly supplied credential.
 | Metadata to Windows paths | invalid characters, reserved device names, and trailing dot/space cases are cleansed and covered by tests | arbitrary path-length and filesystem-specific behavior is not exhaustively proven |
 | Plugin directory to application process | packaged plugins require `CUETools.PluginManifest.v1` entries with normalized relative path, size, SHA-256, assembly identity, and architecture; managed and native bytes are rehashed at load. Native modules use verified full paths with no bare-name fallback and retained handles | this is an integrity allowlist, not publisher signing. A principal able to replace both manifest and directory can approve new bytes |
 | Local-development plugin path | loose `CUETools.*.dll` enumeration is disabled unless `CUETOOLS_ALLOW_UNMANIFESTED_PLUGINS=1` is explicitly set | enabling the switch intentionally restores an unmanifested local-development trust boundary |
-| Application to optical drive | SCSI command construction and device access in `Bwg.Scsi` and `CUETools.Ripper.SCSI`; H: and K: completed real full-disc reads and simultaneous inquiry/TOC, and H: completed a full rip plus two-read Test & Copy | two drives do not establish every firmware, C2, cache, cancellation, disagreement, or damaged-media behavior; the final-source H: repeat remains pending |
+| Application to optical drive | SCSI command construction and device access in `Bwg.Scsi` and `CUETools.Ripper.SCSI`; H: and K: completed real full-disc reads and simultaneous jobs, H: completed a full rip plus two-read Test & Copy, and damaged K: completed source-preserving CTDB repair | two drives do not establish every firmware, C2, cache, cancellation, disagreement, wake, or damaged-media behavior |
 | EAC host to plugin | .NET 2.0 plugin boundary and inputs are documented | EAC process behavior, installer environment, and COM integration are external |
-| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts. Local classic AnyCPU/x64/Win32/TTA builds and a targeted MSI build pass. Tag releases additionally require 117 contract-selected publisher files to pass SHA-256 Authenticode and RFC 3161 verification; plugin manifests are regenerated and artifacts revalidated before provenance/SBOM generation | frozen 97-path classic receipts and execution on the pinned hosted VS2022 image remain; a public-trust certificate must be provisioned in the protected environment |
+| CI source to release bytes | test-count/skip gates, artifact contracts, plugin manifests, native probes, provenance generation, and SBOM scripts. Local classic AnyCPU/x64/Win32/TTA builds and a targeted MSI build pass. Source-bound hosted classic/WPF CI and an unsigned release evidence run pass with zero annotations; the downloaded release has exact 97-file and 557-file hash/SPDX closures, populated CycloneDX graphs, clean provenance, and five clean submodules. Tag releases additionally require 117 contract-selected publisher files to pass SHA-256 Authenticode and RFC 3161 verification; plugin manifests are regenerated and artifacts revalidated before provenance/SBOM generation | hosted evidence must be refreshed after runner-image changes; a public-trust certificate must be provisioned in the protected environment before a production-signed release |
 
 ## 6. Transaction and publication boundaries
 
@@ -159,14 +159,18 @@ fuzz smoke, classic and WPF artifact contracts, plugin trust manifests, native
 probes, provenance, and SBOM output. Local classic evidence includes AnyCPU
 53/0, x64 and Win32 at 2/0 with 59 skipped configuration entries each, TTA
 compiled/linked for both, and an Installer Projects 8/0 pass that produced a
-929,792-byte MSI. This is not a claim that frozen 97-path receipts or the hosted
-workflow have completed on the current source state.
+929,792-byte MSI. Hosted classic run `30518472651` passed 155/162 tests with
+the seven declared skips, WPF run `30518472662` passed 468/468, and release run
+`30518479906` completed on commit
+`a7f26bf457b736fcd61f186d5f34b6d139d94147`. Independent inspection of the
+downloaded release accepted both artifact contracts, exact SHA-256 manifests,
+97/97 and 557/557 SPDX closures, nonempty CycloneDX graphs, and clean-source
+provenance. All three final check runs have zero annotations.
 
 ## 8. Remaining evidence gaps
 
-- First successful hosted CI/release execution on the current source state.
-- Frozen classic 97-path artifact/receipt validation and hosted-image parity for
-  the passing local AnyCPU/x64/Win32/TTA/MSI matrix.
+- Refresh the source-bound hosted receipts after material runner-image,
+  action-runtime, Visual Studio, or SDK changes.
 - Final-source H: Test & Copy repeat plus deliberate optical
   cancellation/disagreement/damaged-media cases. The two-drive read, full rip,
   Test & Copy mechanism, and staged known-image CTDB repair paths have run.

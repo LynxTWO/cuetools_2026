@@ -1,6 +1,6 @@
 # Unknowns: Architecture Pass
 
-Current-state refresh: 2026-07-28. This ledger holds architecture questions
+Current-state refresh: 2026-07-30. This ledger holds architecture questions
 that still block an honest claim. Resolved 2026-07-02 findings are retained
 below as history.
 
@@ -97,14 +97,13 @@ below as history.
 - **Risk level:** high
 - **Status:** open
 
-### Hosted and full classic release execution
+### Hosted and full classic release execution - closed 2026-07-30
 
 - **Area or file:** `.github/workflows/CI-windows.yml`,
   `.github/workflows/release-windows.yml`, `eng/ci/`, `eng/release/`,
   `collect_files*.bat`
-- **Concern:** current workflow definitions and local gates are inspected, but a
-  successful hosted run and final frozen classic artifact receipts have not been
-  observed on the current source state.
+- **Concern:** current workflow definitions and local gates needed agreement
+  from a successful hosted run and final frozen classic artifact receipts.
 - **Why it matters:** hosted image contents, Visual Studio Installer Projects,
   legacy resources/dependencies, native builds, and artifact packaging can fail
   despite static and local script checks.
@@ -121,15 +120,17 @@ below as history.
   0 failed, and 59 skipped configuration entries. TTA compiled and linked for both
   into valid CLR PE files. Installer Projects 3.0.0, with
   `DisableOutOfProcBuild`, passed 8 projects with 0 failures and produced a
-  929,792-byte MSI. This route used the Visual Studio 18 resolver with the VS2022
-  v143 toolset rather than the exact hosted VS2022 image.
-- **Confidence:** medium
+  929,792-byte MSI. Source-bound classic CI `30518472651`, WPF CI
+  `30518472662`, and release run `30518479906` now pass on the hosted image
+  with zero annotations. Independent inspection of the downloaded release
+  accepted the exact classic 97-file artifact, clean provenance, and both SPDX
+  and CycloneDX evidence.
+- **Confidence:** high
 - **Likely owner:** release maintainer
-- **Next best check:** finish the local frozen 97-path artifact validation and direct
-  CUEPlayer/receipt checks. Repeat the complete gate on the intended hosted image and retain
-  TRX/artifact-validator/provenance/SBOM evidence with tool versions.
+- **Next best check:** refresh the retained evidence after runner-image, action,
+  Visual Studio, SDK, or release-policy changes.
 - **Risk level:** high
-- **Status:** open
+- **Status:** closed
 
 ## Closed items
 
