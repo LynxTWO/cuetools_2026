@@ -1580,3 +1580,30 @@ hosted publication receipt.
 first hosted release reached clean WPF publication only after all release
 controls, classic builds, tests, fuzzing, and classic artifact validation
 passed; it then exposed Opus source support expanded from 307 to 317 bytes.
+
+### Repair stale native-input provenance and pin checkout bytes
+
+**Scope:** update the libFLAC patch digest after its reviewed 31-line change;
+give every native-inventory pinned file an explicit checkout representation;
+derive the complete-set attribute and hash checks from the inventory.
+
+**Safety:** do not edit or regenerate the libFLAC patch, native source, SDK
+archive, or vendored binaries. Bind the inventory to the current committed blob
+and retain its intentional mixed line endings byte-for-byte.
+
+**Checks:** history attribution; 13-file current/blob SHA-256 comparison;
+`git check-attr`; native preparation; release safety; both local provenance
+receipts; source-bound unsigned hosted release and downloaded receipt
+inspection.
+
+**Rollback:** revert the digest, byte attributes, and complete-set guard
+together only if the corresponding source change is also reverted. Never make
+provenance pass by weakening or skipping its input hash check.
+
+**Observability:** current and committed-blob digests, exact paths, attribute
+results, provenance receipts, and hosted source revision.
+
+**Status:** repository repair implemented 2026-07-30; local and hosted
+replacement receipts pending. The first post-EOL hosted release passed both
+application publications and unsigned signing-policy evaluation before the
+stale `81a305c6...` digest rejected the current `e57a0c47...` patch.

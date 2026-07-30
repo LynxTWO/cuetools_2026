@@ -2624,9 +2624,38 @@ does not relax evidence, rollback, or verification requirements.
 - **Status:** repository fix and local release-safety gate complete 2026-07-30;
   replacement hosted receipt pending.
 
+### R100. Native provenance retained a stale libFLAC patch digest - bucket A, risk high
+
+- **Area or slice:** native dependency inventory, libFLAC patch history,
+  checkout-byte contracts, and deterministic provenance generation.
+- **Why it matters:** the source-bound release completed both application
+  publications, unsigned signing-policy evaluation, tests, fuzzing, and
+  artifact validation, then correctly refused provenance because the inventory
+  still described the libFLAC patch before 31 reviewed lines were added in
+  `f17a83e`. A stale source digest would make a successful receipt false.
+- **Evidence found:** the inventory expected SHA-256 `81a305c6...`; the current
+  committed 47,573-byte mixed-EOL patch is `e57a0c47...`. History proves the
+  content change, and every other pinned input matches its declared digest.
+  The inventory now binds the current blob. All 13 pinned files have explicit
+  binary or `-text` checkout contracts, and release safety derives the complete
+  pinned set, rehashes it, and requires one of those exact rules.
+- **Confidence:** high for root cause and repository repair.
+- **Approval needed:** no; this repairs a false provenance statement without
+  changing the reviewed patch or native build.
+- **Recommended next pass:** update source inventories in the same commit as
+  every hash-bound input and retain the complete-set gate.
+- **Smallest safe next step:** regenerate both provenance receipts locally,
+  then rerun the source-bound unsigned hosted release.
+- **Verification plan:** full 13-file digest comparison; Git attribute
+  inspection; native preparation; release safety; classic/WPF provenance;
+  hosted artifact and receipt inspection.
+- **Owner:** native build and supply-chain maintainers.
+- **Status:** repository repair implemented 2026-07-30; local and hosted
+  replacement receipts pending.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R96. R97 through R99
+The locally actionable correctness queue is closed through R96. R97 through R100
 await only source-bound hosted receipts. Remaining work
 is ordered by the authority or evidence it requires:
 

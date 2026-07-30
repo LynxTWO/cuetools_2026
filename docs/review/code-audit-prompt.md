@@ -184,6 +184,12 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     Enumerate the whole manifest-selected set, not just the first file whose CRLF
     expansion trips validation, and assert that every text member has an explicit
     EOL contract before publishing.
+30. SOURCE INVENTORIES ARE LIVE ASSERTIONS. When a selected patch, build file, SDK
+    source, archive, or vendored binary changes, update its digest in the same
+    reviewed transaction. Derive a complete-set gate from the inventory that
+    rehashes current bytes and requires an explicit checkout representation for
+    every pinned member. A provenance mismatch must stop publication; never make
+    the receipt pass by omitting or weakening the check.
 
 ### How to choose the extraction
 

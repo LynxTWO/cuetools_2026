@@ -366,6 +366,12 @@ Use this when closing package-manager provenance:
 - Treat locks as dependency-resolution evidence, not artifact identity. Keep build
   receipts, SBOMs, package notices, native-input manifests, and final artifact
   hashes as their separate proofs.
+- A source-input inventory is a live assertion, not historical documentation.
+  Rehash every selected file from the committed representation whenever a patch,
+  build script, SDK source, or vendored binary changes. Derive a complete-set gate
+  from the inventory, and require explicit Git checkout-byte attributes for each
+  member before provenance generation; do not repair a mismatch by weakening the
+  receipt.
 
 ### Native ABI upgrade checklist
 
