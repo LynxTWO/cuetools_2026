@@ -61,8 +61,17 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 - **Decision:** fix so the solution builds without full Visual Studio.
 - **What shipped 2026-07-02:** `Directory.Build.targets` at repo root adds `GenerateResourceUsePreserializedResources=true` + `System.Resources.Extensions` for net47 first-party projects, **gated on `$(MSBuildRuntimeType) == 'Core'`** so it applies ONLY to `dotnet build` and is a provable no-op under devenv/CI (the shipping build's resource format and runtime deps are unchanged - important because CUEControls loads binary icons at runtime, and forcing preserialized resources into the shipping build would have required deploying a new DLL). Result: all **SDK-style** net47 first-party projects (CUEControls + the codec/lib projects) now build under `dotnet build`.
-- **Why not complete:** the old-style (non-SDK) csproj do not restore a PackageReference injected via the shared targets, so the old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`, and old-style `CLParity`/`FLACCL`) still cannot `dotnet build`. The clean fix is SDK-style conversion of those projects - real work that needs the GUI run to verify resource loading (cannot be done headless) and belongs to the modernization program (R12), not a blind headless change to the shipping GUIs.
-- **Verified:** CUEControls builds under `dotnet build`; TestParity 18/18, TestCodecs 34/34 green; devenv/CI unaffected by construction (Core-gated).
+- **Progress 2026-07-29:** the reachable FLACCL plugin and command host are now
+  SDK-style net47 projects. Locked Core restore, Core/full-MSBuild builds, exact
+  resource/kernel comparisons, executable architecture checks, and the live
+  RTX 3060 matrix pass.
+- **Why not complete:** the old-style WinForms GUIs (`CUETools`, `CUERipper`,
+  `CUEPlayer`, `CUETools.eac3ui`) still need SDK conversion plus real UI/resource
+  verification. `CLParity` is not a working optional project: it has no consumer,
+  its registration is commented, and its project points at a missing binary.
+- **Verified:** CUEControls and the FLACCL pair build under `dotnet build`;
+  TestParity 18/18 and TestCodecs 34/34 remain the historical focused baseline;
+  the FLACCL live matrix is recorded under R88.
 
 ## Previously deferred decisions
 
@@ -85,7 +94,9 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 ### R12 decision - which modernization slice next, and how to verify GUIs
 
 - **What is already done** (see D1, D2, D4, D7): HTTPS lookups, SharpZipLib 1.4.2,
-  the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`.
+  the Core-gated resgen fix so SDK-style net47 projects build under `dotnet build`,
+  and the first paired R12 conversion (`CUETools.Codecs.FLACCL` plus
+  `CUETools.FLACCL.cmd`) with live OpenCL evidence.
 - **The remaining sub-decision:** the remaining big pieces - SDK-style conversion of the
   old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`),
   then async/`HttpClient`, then installer - all need the GUI to be **run** to confirm

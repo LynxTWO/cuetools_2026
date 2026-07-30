@@ -1244,3 +1244,35 @@ changed. The policy adds no application logging or runtime data.
 first-party PackageReference projects and 13 valid lock files. Locked solution,
 WPF-test, and ripper-test restores pass; no vendor submodule or staged vendor
 source was modified.
+
+### Convert the paired FLACCL projects without changing their runtime architecture
+
+**Exact files:** `CUETools.Codecs.FLACCL/CUETools.Codecs.FLACCL.csproj`,
+`CUETools.FLACCL.cmd/CUETools.FLACCL.cmd.csproj`, `CUETools.sln`,
+`Directory.Build.targets`, R8/R12/R88 records, and GPU coverage records.
+
+**Safety and unchanged behavior:** retain net47, assembly identity/version,
+plugin and command output paths, localized resource names/bytes, `flac.cl`
+bytes/copy behavior, project references, and the command host's effective
+32-bit-preferred PE contract. Do not change encoder or command source.
+Keep Core-MSBuild-only resource support out of the command host because it has
+no resources of its own.
+
+**Checks:** capture an old-project binary baseline; require locked restore plus
+zero-warning Core and full-MSBuild builds. Compare public IL declarations,
+manifest and satellite resource hashes, kernel hash, config probing, and PE
+flags. Exercise modes 0-8 with verify, two CPU workers, 24-bit input, the exact
+4096-sample boundary, and verify-on/off output identity on the available OpenCL
+device.
+
+**Rollback:** revert both project conversions and the solution type GUIDs as one
+unit. Do not retain an SDK command host without its explicit 32-bit preference.
+
+**Observability:** build and test output only. This changes no application
+logging, network access, settings, audio metadata, or telemetry.
+
+**Status:** implemented and verified 2026-07-29. The first 64-bit SDK-host run
+failed `OUT_OF_RESOURCES`; an isolated host/plugin matrix proved architecture
+was the differentiator. With the legacy 32-bit-preferred flag explicit, the
+RTX 3060/OpenCL 3.0 matrix passes. The plugin retains all 126 public IL
+declarations, exact resource payload hashes, and exact kernel bytes.

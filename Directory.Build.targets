@@ -18,15 +18,19 @@
       - ThirdParty excluded by path (taglib-sharp already has its own Directory.Build.* and is
         excluded automatically; this covers the rest).
       - C++ (.vcxproj) and the .vdproj installer never set these TFM properties.
+      - SDK command hosts without resources may set CUEToolsDisableCoreResxExtension=true so
+        an unrelated resource package and binding redirect do not enter their runtime closure.
 
-    Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here, so
-    the old-style WinForms GUIs (CUETools, CUERipper, CUEPlayer, eac3ui, and the old-style
-    CLParity/FLACCL) still need `dotnet build` support via SDK-style conversion (tracked under
-    R12). SDK-style first-party net47 projects build under `dotnet build` with this in place.
+    Limitation: old-style (non-SDK) csproj do not restore a PackageReference injected here.
+    FLACCL's paired plugin/command projects were converted under R12/R88. The old-style
+    WinForms GUIs (CUETools, CUERipper, CUEPlayer, eac3ui) still need SDK conversion and
+    runtime UI verification. CLParity is tracked separately because its registration is
+    disabled and its project is already non-building. SDK-style first-party net47 projects
+    build under `dotnet build` with this in place.
   -->
 
   <PropertyGroup>
-    <_AdcCoreNet47Resx Condition="'$(MSBuildRuntimeType)' == 'Core' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcCoreNet47Resx>
+    <_AdcCoreNet47Resx Condition="'$(CUEToolsDisableCoreResxExtension)' != 'true' And '$(MSBuildRuntimeType)' == 'Core' And ('$(TargetFramework)' == 'net47' Or ('$(TargetFramework)' == '' And '$(TargetFrameworkVersion)' == 'v4.7')) And !$(MSBuildProjectDirectory.Contains('ThirdParty'))">true</_AdcCoreNet47Resx>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(_AdcCoreNet47Resx)' == 'true'">
