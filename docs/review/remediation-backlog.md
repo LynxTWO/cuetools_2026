@@ -68,10 +68,18 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 - **Finding:** no live MusicBrainz client existed to replace - the `MusicBrainz/` library was dead (unbuilt, unreferenced) and CUERipper's direct query was commented out; MB metadata comes via CTDB's proxy + Freedb fallback. The user chose option A: retain the CTDB-proxied path and remove the dead mirror/binary and stale references. Full scope and the optional future direct-provider design remain in `docs/review/musicbrainz-replacement-scope.md`.
 
-### R8. CUEControls resgen under dotnet build (decision D7) - PARTIAL, 2026-07-02
+### R8. CUEControls resgen under dotnet build (decision D7) - PARTIAL, updated 2026-07-29
 
 - **Done:** repo-root `Directory.Build.targets` (Core-MSBuild-gated) makes all SDK-style net47 first-party projects build under `dotnet build`; zero impact on the shipping devenv/CI build.
-- **Remaining (folded into R12):** SDK-style conversion of the old-style WinForms GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`, old-style `CLParity`/`FLACCL`) so they too `dotnet build`. Needs GUI runtime verification; not a blind headless change.
+- **Done in R12/R88:** the reachable FLACCL plugin and its command host are now
+  SDK-style net47 projects that restore and build consistently under both Core
+  and full MSBuild.
+- **Remaining (folded into R12):** SDK-style conversion of the old-style WinForms
+  GUIs (`CUETools`, `CUERipper`, `CUEPlayer`, `CUETools.eac3ui`) so they too
+  `dotnet build`. `CLParity` is a separate reachability contradiction: its
+  registration is commented out, it has no consumer, and its project references
+  a missing binary. GUI conversions need runtime verification; they are not blind
+  headless changes.
 
 ### R9. ProxyPassword stored plaintext at rest (F1) - DONE 2026-07-26, risk medium
 
@@ -132,6 +140,14 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 ### R12. Modernization program (net8 SDK-style, async, HttpClient, SIMD, installer, dead-code removal D5) - bucket B, large
 
 - **Reference:** the 14-item modernization list delivered 2026-07-02. Sequence: foundation (already: git/submodules/tests/CI) -> framework migration -> async -> the rest. D5 (delete FlaCuda/dead DLLs) revisit with D6's outcome.
+- **First project slice (R88, 2026-07-29):** converted the reachable net47
+  FLACCL plugin and command host to SDK projects without changing their source,
+  assembly versions, plugin/output locations, localized resources, or OpenCL
+  kernel. The conversion exposed and now explicitly preserves the host's
+  historical 32-bit-preferred launch contract; a 64-bit host failed the
+  qualified NVIDIA path with `OUT_OF_RESOURCES`, while the preserved 32-bit host
+  passed modes 0-8, verify on/off identity, two CPU workers, 24-bit input, and
+  the exact 4096-sample boundary.
 
 ### R13. Codec version refresh + FlaCuda retirement + add missing codecs (user request 2026-07-02) - bucket B, large
 
@@ -2208,18 +2224,55 @@ does not relax evidence, rollback, or verification requirements.
   notices, 22 focused trust/default tests, and the 52-path release contract
   pass. Receipt-bound user imports still take precedence.
 
+### R88. FLACCL's old projects have split restore graphs and an implicit host architecture - bucket A, risk high
+
+- **Area or slice:** `CUETools.Codecs.FLACCL`, `CUETools.FLACCL.cmd`, net47
+  restore/build behavior, resource/kernel publication, and live OpenCL runtime.
+- **Why it matters:** the old projects could not be restored once and then built
+  consistently by Core and full MSBuild. Converting only the plugin also left
+  the paired command host unable to exercise the result. An ordinary SDK
+  conversion silently changed the executable from 32-bit preferred to 64-bit,
+  which failed the qualified RTX 3060 path with OpenCL `OUT_OF_RESOURCES`.
+- **Evidence found:** the old plugin required different RID/package graphs under
+  the two MSBuild runtimes. The old command executable had PE32
+  `32BITPREFERRED` flags despite its AnyCPU label. Source, kernel, public API,
+  manifest-resource bytes, and satellite-resource bytes were unchanged across
+  the project conversion; only the 64-bit host failed, and the packaged
+  32-bit host passed with either plugin build.
+- **Confidence:** high; binary flags, isolated host/plugin/OpenCL matrices, and
+  live device runs separate project-shape behavior from hardware behavior.
+- **Approval needed:** no; this preserves the shipping runtime contract while
+  completing the user-authorized R12 slice.
+- **Recommended next pass:** convert the remaining GUI projects one at a time
+  with explicit PE/resource/UI contracts. Classify `CLParity` separately rather
+  than treating its non-building project as a working optional path.
+- **Smallest safe next step:** none; this slice is closed.
+- **Verification plan:** locked restore; Core and full-MSBuild Release builds;
+  public API/resource/kernel comparison; PE flag comparison; live modes 0-8,
+  CPU-worker, 24-bit, exact-boundary, and verify-on/off checks.
+- **Owner:** classic build and codec maintainers.
+- **Status:** fixed 2026-07-29. Both projects are SDK-style net47. Core and full
+  MSBuild complete with zero warnings. The plugin retains all 126 public IL
+  declarations, its exact three manifest resource names and bytes, and the
+  exact `flac.cl` SHA-256. The host explicitly retains 32-bit preference.
+  The RTX 3060/OpenCL 3.0 matrix passed modes 0-8, two CPU workers, 24-bit
+  input, the 4096-sample boundary, and byte-identical verify-on/off output.
+
 ## Ordering
 
-The locally actionable correctness queue is closed through R87. Remaining
-work is ordered by the authority or evidence it requires:
+The locally actionable correctness queue is closed through R88 except for the
+newly corrected `CLParity` reachability classification. Remaining work is
+ordered by the authority or evidence it requires:
 
-1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
+1. Resolve `CLParity` as dead/unshipped code or deliberately restore and
+   modernize its abandoned contract; do not continue calling it current.
+2. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
    byte-proven; TheAudioDB remains explicitly opt-in.
-2. Run the pinned hosted workflows and compare them with the local WPF/classic
+3. Run the pinned hosted workflows and compare them with the local WPF/classic
    receipts.
-3. Choose and implement a publisher signing/attestation identity and policy.
-4. Continue the deliberately large R8/R12 SDK/async modernization and the
+4. Choose and implement a publisher signing/attestation identity and policy.
+5. Continue the deliberately large R8/R12 SDK/async modernization and the
    behavior-changing R13/R14 LAME/FFmpeg projects one verified slice at a time.
 
 ## Holes / external boundaries
@@ -2317,3 +2370,6 @@ work is ordered by the authority or evidence it requires:
   source/license/build closure, real stdin/decode/tag checks, mixed 192-kbps
   signal evidence, and a 256-kbps archival default whose old/current decoded
   corpus is identical.
+- 2026-07-29 - closed R88 by converting the FLACCL plugin and command host to
+  SDK-style net47 projects, preserving the discovered 32-bit-preferred runtime
+  contract, and rerunning the full RTX 3060 correctness matrix.

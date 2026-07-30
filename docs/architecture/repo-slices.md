@@ -160,15 +160,22 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   `CUETools.CLParity/`.
 - **Why it matters:** OpenCL/device-specific behavior is difficult to reproduce;
   the CUDA trees can be confused with shipped functionality.
-- **Reachability:** FLACCL and CLParity are optional current paths. Historical
-  FlaCuda projects were deleted in commit `4e1b02d`.
-- **Verified controls:** solution/release membership is mapped. Corrected FLACCL
-  per-frame verification passed on an RTX 3060 across OpenCL modes 0-8, two CPU
-  workers, 24-bit input, and the exact 4096-sample boundary.
+- **Reachability:** FLACCL is an optional current classic path. `CLParity` is
+  still listed in the solution but is not current: its encoder registration is
+  commented out, no first-party consumer references it, it is absent from
+  release collection, and its project points at a missing `OpenCLNet.dll`.
+  Historical FlaCuda projects were deleted in commit `4e1b02d`.
+- **Verified controls:** solution/release membership is mapped. The FLACCL
+  plugin and command host are SDK-style net47 projects with explicit
+  32-bit-preferred host behavior. Corrected per-frame verification passed on an
+  RTX 3060 across OpenCL modes 0-8, two CPU workers, 24-bit input, and the exact
+  4096-sample boundary.
 - **Residual boundary:** one NVIDIA device/driver does not establish every
   OpenCL implementation, device, or performance profile.
-- **Risk / status:** medium; mapped and locally exercised.
-- **Next evidence:** repeat the correctness matrix on another OpenCL vendor.
+- **Risk / status:** medium; FLACCL mapped and locally exercised, CLParity
+  classified as dead/non-building pending removal.
+- **Next evidence:** remove or deliberately restore CLParity, then repeat the
+  FLACCL correctness matrix on another OpenCL vendor.
 
 ### S9: Classic GUI applications
 
