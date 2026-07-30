@@ -24,7 +24,7 @@
     },
     {
       "path": "ThirdParty/submodule_flac_CUETools.patch",
-      "sha256": "81a305c65c14c8c1c3539f588b5c154c76b70cfc8a2bde30fbd24e3a597fb883"
+      "sha256": "e57a0c47968107fba68af838164801a62c9fe23776d22a1823342ad86dc5a25d"
     },
     {
       "path": "ThirdParty/submodule_WavPack_CUETools.patch",

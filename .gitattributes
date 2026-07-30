@@ -7,3 +7,16 @@ eng/native/opus/README.md text eol=lf
 ThirdParty/musepack-r495-cuetools.patch text eol=lf
 eng/native/musepack/CMakeLists.txt text eol=lf
 eng/native/musepack/README.md text eol=lf
+ThirdParty/MAC_SDK/MAC_1320_SDK.zip binary
+ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp -text
+ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def -text
+ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.h -text
+ThirdParty/MAC_SDK/Source/Projects/VS2022/MACLibDll/MACLibDll.vcxproj -text
+ThirdParty/submodule_flac_CUETools.patch -text
+ThirdParty/submodule_WavPack_CUETools.patch -text
+ThirdParty/Win32/hdcd.dll binary
+ThirdParty/x64/hdcd.dll binary
+ThirdParty/Win32/libmp3lame.dll binary
+ThirdParty/x64/libmp3lame.dll binary
+ThirdParty/Win32/unrar.dll binary
+ThirdParty/x64/Unrar.dll binary

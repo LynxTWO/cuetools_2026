@@ -268,6 +268,22 @@ try {
             Join-Path $PSScriptRoot "..\..\.gitattributes") |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_.Length -gt 0 -and -not $_.StartsWith("#") })
+    $nativeInventory = Get-Content -LiteralPath (
+        Join-Path $PSScriptRoot "native-dependencies.json") -Raw |
+        ConvertFrom-Json
+    foreach ($pinnedFile in @($nativeInventory.pinnedFiles)) {
+        $attributePath = ([string]$pinnedFile.path).Replace("\", "/")
+        Assert-True `
+            ($gitAttributeLines -ccontains "$attributePath binary" -or
+                $gitAttributeLines -ccontains "$attributePath -text") `
+            "Hash-bound native input lacks an exact checkout-byte contract: $attributePath"
+        $inputPath = Join-Path $PSScriptRoot (
+            "..\..\" + ([string]$pinnedFile.path).Replace("/", "\"))
+        Assert-True `
+            ((Get-FileHash -LiteralPath $inputPath -Algorithm SHA256).Hash -ieq
+                [string]$pinnedFile.sha256) `
+            "Hash-bound native input drifted from its inventory: $attributePath"
+    }
     $externalPaths = New-Object "Collections.Generic.List[string]"
     foreach ($encoder in @($externalEncoderContract.encoders)) {
         $externalPaths.Add([string]$encoder.packagePath)

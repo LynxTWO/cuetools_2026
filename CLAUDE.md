@@ -161,6 +161,10 @@ progress documents for it belong here, under `docs/review/`.
 - Every repository text file whose exact size or digest is part of an artifact
   contract must have an explicit checkout EOL rule. Validate the complete
   manifest-selected set rather than repairing only the first CRLF-expanded file.
+- Treat native source inventories as live assertions. Rehash every selected input
+  when its committed bytes change, derive the gate from the full inventory, and
+  require explicit checkout-byte attributes for every member. Never bypass a
+  provenance mismatch to complete publication.
 - Signing changes bytes. Apply `eng/release/signing-policy.json` only after both
   artifacts first validate; sign only its contract-selected publisher files;
   require SHA-256 Authenticode plus an RFC 3161 SHA-256 timestamp; regenerate
