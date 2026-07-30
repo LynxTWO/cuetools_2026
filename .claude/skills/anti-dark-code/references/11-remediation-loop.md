@@ -357,6 +357,12 @@ Use this when closing package-manager provenance:
   restore.
 - Run an unlocked force-evaluate only to create or intentionally refresh locks,
   then repeat representative solution and product closures in locked mode.
+- Exercise the restore behavior of every build host that will consume the graph.
+  IDEs may run a second automatic restore after an explicit command-line restore
+  and may evaluate legacy project references differently. Hash locks before and
+  after the real IDE build; migrate or explicitly opt resource-free/ineligible
+  projects out of conditional package graphs instead of relying on an environment
+  switch that the host may ignore.
 - Treat locks as dependency-resolution evidence, not artifact identity. Keep build
   receipts, SBOMs, package notices, native-input manifests, and final artifact
   hashes as their separate proofs.
@@ -418,6 +424,10 @@ Use this when a workflow embeds commands or claims hosted coverage:
 - Record the effective shell for every `run` block, including workflow defaults and
   per-step overrides. Validate comments, quoting, variables, multiline commands,
   wildcard behavior, and exit-code propagation in that exact shell.
+- Keep architecture-, runtime-, and configuration-affecting properties identical
+  between restore and no-restore build commands. Check each native command's exit
+  immediately; a later missing-file error must not hide the first failed restore or
+  build.
 - Treat YAML schema checks and workflow lint as structural evidence only. Add a
   contract test for critical version pins, architecture matrices, evidence files,
   artifact names, and ordering constraints, then execute the workflow on the hosted
@@ -460,6 +470,11 @@ package-manager installation:
   validation under one orchestrator and one release lease. A collector may borrow
   that already-held lease, but it must not create a gap in which another process can
   replace inputs between receipt creation and copying.
+- Do not combine one transaction-wide output pre-clean with parallel per-project
+  rebuild/clean operations when projects share output directories. Once the
+  orchestrator has proven the declared output leaves absent, use the host's ordinary
+  build command and exercise that exact fresh-output sequence; otherwise one
+  project's clean can delete another project's newly produced dependency.
 - Scope the release lease to every shared mutable output, not only the final artifact
   name. Two versions, plans, helper scripts, or native builders that write the same
   leaves must contend on one stable lock. Helper entrypoints must not expose a
@@ -474,6 +489,10 @@ package-manager installation:
   must change to fix the failed build, require an explicit stale-intent abandonment
   mode, preserve the original intent bytes, and start the replacement build under a
   new receipt only after archival succeeds.
+- Permit an explicitly authorized stale-source abandonment to archive a prior
+  command-plan revision without executing it. Current command-plan validation stays
+  mandatory for same-source recovery and every new intent; otherwise a safe build
+  command correction can strand the evidence produced by the failed command.
 - Do not use a tracked file as the sentinel for an expanded archive when that file is
   present in the repository's partial overlay. Pin the archive digest, validate every
   destination, repair only missing archive-owned files, and reject unexpected drift.

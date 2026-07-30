@@ -138,7 +138,7 @@ function New-TestCommandRecords(
             sequence = [int]$command.sequence
             role = [string]$command.role
         }
-        if ([string]$command.role -eq "rebuild") {
+        if ([string]$command.role -eq "build") {
             $record.tuple = [string]$command.tuple
         }
         $record.toolRole = [string]$command.toolRole
@@ -285,8 +285,8 @@ try {
         "Begin did not bind both compiled leaves and all six native outputs."
     Assert-True `
         (@($intent.commandPlan).Count -eq 4 -and
-            [string]$intent.commandPlan[1].arguments[1] -ceq "/Rebuild") `
-        "Intent omitted the exact restore plus three /Rebuild commands."
+            [string]$intent.commandPlan[1].arguments[1] -ceq "/Build") `
+        "Intent omitted the exact restore plus three /Build commands."
 
     $generatedResidue = Join-Path $tempRoot (
         "ThirdParty/flac/src/libFLAC/x64/Release_dynamic/generated.obj")
@@ -431,13 +431,13 @@ try {
     [IO.File]::WriteAllText($receiptPath, $originalReceiptText)
 
     $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText
-    $tampered.commands[1].arguments[1] = "/Build"
+    $tampered.commands[1].arguments[1] = "/Rebuild"
     [IO.File]::WriteAllText(
         $receiptPath,
         ($tampered | ConvertTo-Json -Depth 32))
     Assert-ReceiptRejected `
         -ExpectedMessage "canonical invocation" `
-        -Message "Receipt accepted /Build in place of /Rebuild."
+        -Message "Receipt accepted /Rebuild in place of /Build."
     [IO.File]::WriteAllText($receiptPath, $originalReceiptText)
 
     $tampered = ConvertFrom-ClassicBuildJson -Text $originalReceiptText

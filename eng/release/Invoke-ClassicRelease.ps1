@@ -114,7 +114,7 @@ function Invoke-ClassicCanonicalBuildCommand {
         sequence = [int]$Command.sequence
         role = [string]$Command.role
     }
-    if ([string]$Command.role -ceq "rebuild") {
+    if ([string]$Command.role -ceq "build") {
         $record.tuple = [string]$Command.tuple
     }
     $record.toolRole = [string]$Command.toolRole

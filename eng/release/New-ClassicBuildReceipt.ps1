@@ -343,7 +343,7 @@ function Get-ClassicBuildUntrackedRecords {
         if ($null -ne (Get-GeneratedUntrackedClassification `
                 -RelativePath $normalizedPath)) {
             # Native projects in old submodules do not consistently ignore their obj/lib/pdb/tlog
-            # trees. Those files are build products, so /Rebuild must be allowed to create or
+            # trees. Those files are build products, so /Build must be allowed to create or
             # replace them without changing source identity. Source-shaped untracked files such as
             # project definitions and patches remain hash-bound below.
             continue
@@ -1398,36 +1398,36 @@ function New-ClassicBuildCommandPlan {
         }),
         [pscustomobject]([ordered]@{
             sequence = 2
-            role = "rebuild"
+            role = "build"
             tuple = "Release|Any CPU"
             toolRole = "devenv-com"
             arguments = [string[]]@(
                 "CUETools.sln",
-                "/Rebuild",
+                "/Build",
                 "Release|Any CPU")
-            logPath = "$logRoot/02-rebuild-any-cpu.log"
+            logPath = "$logRoot/02-build-any-cpu.log"
         }),
         [pscustomobject]([ordered]@{
             sequence = 3
-            role = "rebuild"
+            role = "build"
             tuple = "Release|x64"
             toolRole = "devenv-com"
             arguments = [string[]]@(
                 "CUETools.sln",
-                "/Rebuild",
+                "/Build",
                 "Release|x64")
-            logPath = "$logRoot/03-rebuild-x64.log"
+            logPath = "$logRoot/03-build-x64.log"
         }),
         [pscustomobject]([ordered]@{
             sequence = 4
-            role = "rebuild"
+            role = "build"
             tuple = "Release|Win32"
             toolRole = "devenv-com"
             arguments = [string[]]@(
                 "CUETools.sln",
-                "/Rebuild",
+                "/Build",
                 "Release|Win32")
-            logPath = "$logRoot/04-rebuild-win32.log"
+            logPath = "$logRoot/04-build-win32.log"
         }))
 }
 
@@ -1444,7 +1444,7 @@ function Assert-ClassicBuildCommandPlan {
     if (-not (Test-ClassicJsonEquivalent `
         -Left @($CommandPlan) `
         -Right $expected)) {
-        throw "Classic build command plan is not the canonical restore and three-rebuild sequence."
+        throw "Classic build command plan is not the canonical restore plus three builds."
     }
 }
 
@@ -1477,7 +1477,7 @@ function Assert-ClassicBuildCommandRecords {
             "completedAtUtc",
             "exitCode",
             "log")
-        if ([string]$planned.role -ceq "rebuild") {
+        if ([string]$planned.role -ceq "build") {
             $expectedProperties += "tuple"
         }
         Assert-ClassicExactProperties `
@@ -1492,7 +1492,7 @@ function Assert-ClassicBuildCommandRecords {
             [int]$actual.exitCode -ne 0) {
             throw "Classic build command record does not match its canonical invocation."
         }
-        if ([string]$planned.role -ceq "rebuild" -and
+        if ([string]$planned.role -ceq "build" -and
             [string]$actual.tuple -cne [string]$planned.tuple) {
             throw "Classic build command tuple is invalid."
         }
@@ -1548,12 +1548,12 @@ function Get-ClassicNativeWarningGate {
     $logPaths = New-Object "Collections.Generic.List[string]"
     for ($i = 0; $i -lt $coverageIds.Count; $i++) {
         $matches = @($Commands | Where-Object {
-            [string]$_.role -ceq "rebuild" -and
+            [string]$_.role -ceq "build" -and
             [string]$_.tuple -ceq $coverageIds[$i]
         })
         if ($matches.Count -ne 1 -or
             [int]$matches[0].sequence -ne $expectedSequences[$i]) {
-            throw "Classic native warning coverage does not match the canonical x64 and Win32 rebuilds."
+            throw "Classic native warning coverage does not match the canonical x64 and Win32 builds."
         }
         Assert-ClassicExactProperties `
             -Value $matches[0].log `
@@ -1878,9 +1878,14 @@ function Archive-ValidatedPendingClassicBuildIntent {
     [void](Assert-CurrentClassicBuildToolchain `
         -Toolchain $intent.toolchain `
         -TestToolRoot $TestToolRoot)
-    Assert-ClassicBuildCommandPlan `
-        -CommandPlan @($intent.commandPlan) `
-        -BuildId ([string]$intent.buildId)
+    # An explicitly approved stale-source recovery may also cross a command-plan
+    # revision. The old bytes are archived, never executed; current plans remain
+    # mandatory for same-source recovery and every new intent.
+    if (-not ($AllowStaleSource -and $sourceChanged)) {
+        Assert-ClassicBuildCommandPlan `
+            -CommandPlan @($intent.commandPlan) `
+            -BuildId ([string]$intent.buildId)
+    }
     if ((@($intent.requiredAbsentAtBegin) -join "`n") -cne
         (@($plan.requiredAbsentAtBegin) -join "`n")) {
         throw "Pending classic build intent has a stale fresh-output set."

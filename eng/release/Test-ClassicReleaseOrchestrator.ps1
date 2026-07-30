@@ -250,8 +250,8 @@ try {
             ((@($script:observedCommands |
                 Select-Object -Skip 1 |
                 ForEach-Object { $_.arguments[1] }) -join "`n") -ceq
-                "/Rebuild`n/Rebuild`n/Rebuild")) `
-        "Orchestrator command order or /Rebuild arguments drifted."
+                "/Build`n/Build`n/Build")) `
+        "Orchestrator command order or /Build arguments drifted."
     Assert-True `
         (Test-Path -LiteralPath $neighborPath -PathType Leaf) `
         "Release cleanup removed a neighboring file."
@@ -350,6 +350,15 @@ try {
         (Test-Path -LiteralPath (
             $receiptPath + ".intent.json") -PathType Leaf) `
         "Rejected stale-intent recovery did not retain the pending intent."
+    $stalePlanIntent = ConvertFrom-ClassicBuildJson -Text (
+        Get-Content -LiteralPath ($receiptPath + ".intent.json") -Raw)
+    $stalePlanIntent.commandPlan[1].arguments[1] = "/Rebuild"
+    [IO.File]::WriteAllText(
+        ($receiptPath + ".intent.json"),
+        ($stalePlanIntent | ConvertTo-Json -Depth 32))
+    $stalePlanIntentDocument = Read-ClassicBuildJsonDocument `
+        -Path ($receiptPath + ".intent.json") `
+        -Purpose "Stale-plan test build intent"
     $retryResult = Invoke-ClassicRelease `
         -RepositoryRoot $tempRoot `
         -PlanPath $planPath `
@@ -372,7 +381,7 @@ try {
         -Purpose "Archived failed test build intent"
     Assert-True `
         ([string]$archivedIntentDocument.sha256 -ceq
-            [string]$failedIntentDocument.sha256) `
+            [string]$stalePlanIntentDocument.sha256) `
         "Retry archive changed the failed-build intent bytes."
     Assert-True `
         ($script:collectionCalls -eq
@@ -395,7 +404,7 @@ try {
             }
         }
         $text = "fixture command $($Command.sequence)`n"
-        if ([string]$Command.role -ceq "rebuild" -and
+        if ([string]$Command.role -ceq "build" -and
             [string]$Command.tuple -ceq "Release|x64") {
             $text +=
                 "$RepositoryRoot\ThirdParty\flac\fixture.c(9): " +
