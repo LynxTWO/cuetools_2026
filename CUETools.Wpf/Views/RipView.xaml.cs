@@ -15,6 +15,21 @@ public partial class RipView : UserControl
     }
 
     // opens the per-encoder settings dialog for the currently selected output format
+    private void CodecPicker_Click(object sender, RoutedEventArgs e)
+    {
+        var services = App.Services;
+        if (services == null || DataContext is not RipViewModel viewModel) return;
+        var window = new CodecPickerWindow(
+            viewModel.CodecChoices,
+            viewModel.SelectedCodecChoice?.StableId)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (window.ShowDialog() == true && window.SelectedChoice != null)
+            viewModel.SelectCodec(window.SelectedChoice);
+    }
+
+    // opens the per-encoder settings dialog for the currently selected output format
     private void EncoderSettings_Click(object sender, RoutedEventArgs e)
     {
         var sp = App.Services;

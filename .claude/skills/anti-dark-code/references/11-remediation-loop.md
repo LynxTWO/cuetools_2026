@@ -398,6 +398,12 @@ package consumed across a language boundary:
 - Run the real native runtime in a real process for every shipped architecture.
   Record native filenames, versions, lengths, hashes, license evidence, and the exact
   build inputs in the artifact receipt.
+- Launch that process through the shipped host or apphost from the staged artifact,
+  with the production directory layout and normal load order. Loading a wrapper from
+  its plugin directory in a validator can hide duplicate-assembly and native-search
+  failures that occur when the product root loads the same wrapper first. Probe the
+  actual initialize, write, finalize, and read-back path; a version symbol alone does
+  not prove the encoder entry points or final flush.
 
 ### Release signing and final-byte checklist
 
@@ -593,6 +599,13 @@ publication, repair, or destructive paths:
 
 Use this when a remediation changes defaults, serialized settings, public plugin
 surfaces, network connection code, or UI claims about side effects:
+
+- Resolve and health-check the exact selected implementation before acquiring a
+  scarce resource, beginning irreversible work, or reading an expensive source.
+  Carry a stable implementation id in the immutable job snapshot and queue record;
+  an extension, display label, or capability class is not enough when several
+  implementations can produce the same format. Refuse an unavailable selection
+  before device ownership, staging publication, or the first read.
 
 - Before changing a `DefaultValue`, default-on flag, or constructor default, inspect
   every serializer and migration path. Historical values omitted because they matched

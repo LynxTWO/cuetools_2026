@@ -429,10 +429,13 @@
               <ComboBoxItem>Secure</ComboBoxItem>
               <ComboBoxItem>Paranoid</ComboBoxItem>
             </ComboBox>
-            <ComboBox Width="120" Margin="0,0,6,6" VerticalAlignment="Center"
-                      ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
-                      IsEnabled="{Binding CodecUnlocked}"
-                      ToolTip="Output format (only codecs with a working encoder on this machine are listed - see Settings for more encoders). Locks once encoding actually starts."/>
+            <Button Width="210" MinWidth="150" Margin="0,0,6,6"
+                    VerticalAlignment="Center" IsEnabled="{Binding CodecUnlocked}"
+                    Click="CodecPicker_Click" ToolTip="{Binding SelectedCodecTooltip}"
+                    AutomationProperties.Name="Choose output codec">
+              <TextBlock Text="{Binding SelectedCodecLabel}"
+                         TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            </Button>
             <ComboBox Width="176" Margin="0,0,6,6" VerticalAlignment="Center"
                       ItemsSource="{Binding OutputLayouts}"
                       SelectedItem="{Binding SelectedOutputLayout, Mode=TwoWay}"
@@ -440,7 +443,7 @@
                       ToolTip="Tracks: one tagged file per track (default). Image + embedded CUE: one continuous audio file with the complete disc layout stored in its tags."/>
             <Button Content="tune" FontFamily="{StaticResource Mono}" FontSize="11"
                     Padding="9,6" Margin="0,0,10,6" VerticalAlignment="Center"
-                    Click="EncoderSettings_Click"
+                    Click="EncoderSettings_Click" IsEnabled="{Binding CodecUnlocked}"
                     ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
             <Button Content="Test &amp; Copy" Command="{Binding TestCopyCommand}"
                     Padding="18,9" Margin="0,0,10,6"

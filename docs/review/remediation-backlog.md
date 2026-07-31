@@ -2731,9 +2731,73 @@ does not relax evidence, rollback, or verification requirements.
   retained 24/25 and 37/38 component/dependency-node graphs, final sidecars
   matched, and the check run has zero annotations.
 
+### R103. Production WPF native wrappers ignored the manifest-approved path - bucket A, risk high
+
+- **Area or slice:** packaged plugin trust bootstrap, five native codec wrappers,
+  WPF production layout, artifact probes, and Monkey's Audio failure cleanup.
+- **Why it matters:** the app preloaded and hash-approved native DLLs from
+  `plugins/x64`, but root-loaded managed wrapper duplicates independently searched
+  a nonexistent root `x64` folder. A selected codec therefore failed only after a
+  CD read began. Monkey's Audio then let its finalizer re-enter the failed type
+  initializer, risking a fatal process termination.
+- **Evidence found:** the installed build reproduced libFLAC, WavPack, and
+  Monkey's Audio `TypeInitializationException` failures. Process module paths show
+  native modules under `plugins/x64` and managed wrappers at the app root. The
+  artifact validator passed because it loaded the managed wrappers from the plugin
+  directory, not through the WPF apphost layout.
+- **Confidence:** high for the production-layout root cause and validator gap.
+- **Approval needed:** no; the user approved autonomous remediation. The exact
+  manifest trust boundary must remain intact.
+- **Recommended next pass:** pass 11 bounded remediation and verification.
+- **Smallest safe next step:** hand the exact approved full path from the trust
+  loader to the wrapper through a conflict-rejecting registry, then probe the
+  published apphost in a child process.
+- **Verification plan:** resolver conflict tests; five-wrapper guard; native
+  version and round-trip tests; self-contained publish; WPF child-process probe;
+  artifact validation; no root native duplicates.
+- **Owner:** codec runtime and release maintainers.
+- **Status:** closed 2026-07-31. A conflict-rejecting registry now joins the
+  manifest-approved native path to root-loaded managed wrappers without adding a
+  search path or duplicate DLL. The published apphost ran real FLAC, WavPack,
+  Monkey's Audio, and LAME encodes plus HDCD initialization from the production
+  layout. The artifact contract passed all five process probes, and Monkey's Audio
+  finalizer cleanup contains partial-initialization failure.
+
+### R104. Codec selection could retain invalid profiles and fail after disc reads began - bucket A, risk high
+
+- **Area or slice:** command encoder settings migration, codec availability,
+  Rip/Test & Copy startup, settings editor, and format picker.
+- **Why it matters:** a lossy Ogg profile retained a lossless verification
+  requirement and the generic editor exposed `Lossless` as a mutable setting.
+  Raw extension-only dropdowns hid unavailable codecs and gave no implementation,
+  origin, or readiness explanation. Native failures were discovered only after
+  optical work had started.
+- **Evidence found:** the installed settings file carries Ogg as lossy with
+  `VerificationRequired=true`; `EncoderCatalog.IsUsable` applies that stale flag to
+  every command encoder; `EncoderSettingsViewModel` exposes all browsable structural
+  properties; Rip and Test & Copy do not validate a selected codec before entering
+  their read lifecycle.
+- **Confidence:** high for the invalid-state and late-failure paths.
+- **Approval needed:** no; the user explicitly requested the full repair and rich
+  grouped picker.
+- **Recommended next pass:** pass 11 bounded remediation and verification.
+- **Smallest safe next step:** normalize the invariant at settings load and catalog
+  registration, centralize codec health, then use that result for both picker state
+  and the pre-read gate.
+- **Verification plan:** stale-profile JSON tests; property visibility guard;
+  descriptor/group/sort tests; unavailable-selection refusal; pre-read gate tests;
+  responsive XAML check; full WPF suite.
+- **Owner:** WPF and codec-profile maintainers.
+- **Status:** closed 2026-07-31. Controlled normalization removes stale lossy
+  verifier state while retaining the live lossless-verification invariant. Rip,
+  Convert, and Queue now use one grouped implementation-aware picker. Unavailable
+  rows remain explained but unselectable; queue records carry the exact stable
+  implementation id. Rip and Test & Copy refuse an unhealthy codec before claiming
+  a drive and freeze one checked implementation for the complete operation.
+
 ## Ordering
 
-The locally actionable and hosted correctness queue is closed through R102.
+The locally actionable and hosted correctness queue is closed through R104.
 Remaining work is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2864,3 +2928,9 @@ Remaining work is ordered by the authority or evidence it requires:
   proving Core/full/IDE lock parity, replacing the unsafe pre-clean plus
   parallel `/Rebuild` sequence with a receipted fresh `/Build`, and completing
   the exact three-configuration release transaction.
+- 2026-07-31 - closed R103/R104 by binding root-loaded WPF codec wrappers to
+  their exact manifest-approved native modules, launching the production apphost
+  for real native encode/finalize probes, normalizing stale command profiles, and
+  replacing raw extension selectors with one health-aware grouped codec picker.
+  The canonical local gate passed 637/643 with six declared skips, zero failures,
+  and zero managed warning fingerprints.

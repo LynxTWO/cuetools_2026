@@ -134,6 +134,18 @@ progress documents for it belong here, under `docs/review/`.
   WPF release and runtime checks repeat the hashes. A receipt-bound user import is
   resolved first and may override the bundled fallback; never replace or trust a
   packaged executable by filename alone.
+- Packaged native codec wrappers must resolve the exact path registered by
+  `PluginTrustManifest` after hash and loaded-module validation. Do not add app-root,
+  current-directory, `PATH`, or bare-name fallback searches, and do not copy native
+  DLLs beside duplicate root managed wrappers. Release evidence must launch the real
+  apphost from the staged layout and exercise initialize, write, finalize, and read
+  back; a validator-local assembly load or version getter is insufficient.
+- Codec readiness is a precondition for scarce work. Resolve the exact selected
+  encoder implementation before publishing settings, claiming an optical drive, or
+  reading media. Persist a stable implementation id in queued jobs and freeze one
+  checked implementation for the complete Rip or Test & Copy transaction. Keep
+  unavailable picker rows explanatory and unselectable; an extension alone is not
+  implementation identity.
 - Keep executable support separate from redistribution. A working imported codec
   does not authorize packaging. Real CLI execution, license/source compliance,
   runtime dependencies, and patent or notification boundaries must all be recorded.

@@ -56,6 +56,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IDiagnosticLog _log;
     private readonly IConvertService _codecs;
     private readonly AppStatusService _status;
+    private readonly EncoderCatalog _catalog;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
@@ -70,12 +71,42 @@ public sealed class RipViewModel : PageViewModel
 
     // Real output formats (only those with a working encoder in this build), not a fixed list.
     public ObservableCollection<string> Formats { get; } = new();
+    public ObservableCollection<CodecChoice> CodecChoices { get; } = new();
+
+    private CodecChoice? _selectedCodecChoice;
+    public CodecChoice? SelectedCodecChoice
+    {
+        get => _selectedCodecChoice;
+        private set
+        {
+            if (ReferenceEquals(_selectedCodecChoice, value)) return;
+            _selectedCodecChoice = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedCodecLabel));
+            OnPropertyChanged(nameof(SelectedCodecTooltip));
+        }
+    }
+    public string SelectedCodecLabel =>
+        SelectedCodecChoice?.CompactLabel ?? SelectedFormat.ToUpperInvariant();
+    public string SelectedCodecTooltip => SelectedCodecChoice == null
+        ? "Choose an output codec."
+        : SelectedCodecChoice.AccessibleLabel + ". " +
+          SelectedCodecChoice.HealthDetail;
 
     private string _selectedFormat = "flac";
     public string SelectedFormat
     {
         get => _selectedFormat;
-        set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode)); } }
+        set
+        {
+            if (Set(ref _selectedFormat, value))
+            {
+                _settings.SelectedFormat = value;
+                RefreshSelectedCodecChoice();
+                OnPropertyChanged(nameof(ScopeCodec));
+                OnPropertyChanged(nameof(ScopeMode));
+            }
+        }
     }
 
     public string[] OutputLayouts { get; } =
@@ -310,9 +341,9 @@ public sealed class RipViewModel : PageViewModel
     /// </summary>
     public bool ControlsUnlocked => !IsRipping;
 
-    // The codec dropdown stays editable through a Test read (a change there is honored - see
-    // RunTestCopyAsync's liveFormat), but locks the instant the first track actually starts
-    // encoding so it stops "lying": from then on the encode is guaranteed to use what's shown.
+    // The codec is immutable for every encoded job. Test & Copy freezes one health-checked codec
+    // before its Test read, so the Copy and possible confirming read cannot drift to another
+    // implementation after the evidence transaction has begun.
     // Cleared back to false wherever IsRipping is reset to false, on every path (success/error/stop).
     private bool _codecLocked;
     public bool CodecLocked { get => _codecLocked; private set { if (Set(ref _codecLocked, value)) OnPropertyChanged(nameof(CodecUnlocked)); } }
@@ -505,6 +536,7 @@ public sealed class RipViewModel : PageViewModel
         _launchOptions = launchOptions;
         _log = log;
         _status = status;
+        _catalog = catalog;
         _codecs = codecs;
         _drives.SelectedDriveChanged += OnSharedSelectedDriveChanged;
         // restore the persisted rip prefs; empty means never set - fall back to defaults
@@ -518,6 +550,9 @@ public sealed class RipViewModel : PageViewModel
             Formats.Clear();
             foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
             foreach (var f in codecs.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3, wma
+            CodecChoices.Clear();
+            foreach (CodecChoice choice in catalog.BuildChoices(config))
+                CodecChoices.Add(choice);
         }
         RebuildFormats();
         // an imported external encoder (e.g. mppenc.exe for Musepack) lights its format up live
@@ -525,6 +560,7 @@ public sealed class RipViewModel : PageViewModel
         {
             var keep = SelectedFormat; RebuildFormats();
             SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac");
+            RefreshSelectedCodecChoice();
             OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode));   // a type flip changes what the scope draws + its mode
         };
         // a cover-size change in Settings re-derives the already-fetched cover at the new size
@@ -544,6 +580,7 @@ public sealed class RipViewModel : PageViewModel
         };
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
+        RefreshSelectedCodecChoice();
 
         // canExecute, not just the early-return guard inside ReadDiscOrClose: without it the button
         // stays fully enabled during a rip and does nothing when pressed.
@@ -1161,9 +1198,11 @@ public sealed class RipViewModel : PageViewModel
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy || (encode && ArtLoading)) return;
+        if (encode && !ValidateSelectedCodec("rip")) return;
         PersistPrimarySettingsSnapshot();
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
+        CodecLocked = encode;
         IsRipping = true;
         RipDone = false;
         CanRepairLastRip = false;
@@ -1324,6 +1363,56 @@ public sealed class RipViewModel : PageViewModel
         _status.Report(result.Ok && encode ? AppActivity.Done : AppActivity.Idle);   // green badge until dismissed
     }
 
+    public void SelectCodec(CodecChoice choice)
+    {
+        if (choice == null)
+            throw new ArgumentNullException(nameof(choice));
+        _catalog.SelectCodec(_config, choice);
+        _selectedFormat = choice.Extension;
+        _settings.SelectedFormat = choice.Extension;
+        OnPropertyChanged(nameof(SelectedFormat));
+        RefreshSelectedCodecChoice(choice.StableId);
+        OnPropertyChanged(nameof(ScopeCodec));
+        OnPropertyChanged(nameof(ScopeMode));
+    }
+
+    private void RefreshSelectedCodecChoice(string? preferredStableId = null)
+    {
+        SelectedCodecChoice = CodecChoices.FirstOrDefault(choice =>
+                preferredStableId != null &&
+                string.Equals(
+                    choice.StableId,
+                    preferredStableId,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? _catalog.GetSelectedChoice(_config, _selectedFormat)
+            ?? CodecChoices.FirstOrDefault(choice =>
+                string.Equals(
+                    choice.Extension,
+                    _selectedFormat,
+                    StringComparison.OrdinalIgnoreCase) &&
+                choice.CanSelect)
+            ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
+    }
+
+    private bool ValidateSelectedCodec(string operation)
+    {
+        CodecChoice? selected = _catalog.GetSelectedChoice(
+            _config,
+            SelectedFormat);
+        if (selected != null)
+        {
+            CodecHealth health = _catalog.GetHealth(selected.Encoder);
+            if (health.IsReady)
+                return true;
+            StatusText = operation + " cannot start: " + selected.CompactLabel +
+                " is not ready. " + health.Detail;
+            return false;
+        }
+        StatusText = operation + " cannot start: no encoder is configured for " +
+            SelectedFormat + ". Open the codec picker to choose a ready encoder.";
+        return false;
+    }
+
     // Test & Copy: read the disc twice (a third time on a mismatch) and write only tracks two
     // independent reads agree on bit-for-bit. Mirrors RunJobAsync's progress/level/re-read wiring
     // and IsRipping lifecycle so the same live visuals work across the 2-3 reads; the result
@@ -1332,6 +1421,7 @@ public sealed class RipViewModel : PageViewModel
     {
         if (!CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading))
             return;
+        if (!ValidateSelectedCodec("Test & Copy")) return;
         PersistPrimarySettingsSnapshot();
         // Keep the previous held staging until the NEW run has produced a result. Discarding it up
         // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
@@ -1340,6 +1430,7 @@ public sealed class RipViewModel : PageViewModel
         if (previousHeld != null) { _heldResult = null; TestCopyHeld = false; }
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
+        CodecLocked = true;
         IsRipping = true;
         RipDone = false;
         TestCopyHeld = false;
@@ -1443,15 +1534,15 @@ public sealed class RipViewModel : PageViewModel
             else
                 Apply();
         }
-        // liveFormat is polled just before each encode read (Copy, and the third read on a mismatch),
-        // so a codec change made while the Test read is still running is honored.
+        // The codec was health-checked and locked before the Test read. Copy and a possible
+        // confirming read use that immutable format snapshot.
         RipTelemetryMailbox telemetry = StartTelemetry();
         TestCopyRunResult result;
         try
         {
             result = await Task.Run(() => _rip.RunTestAndCopy(
                 drive, cq, fmt, meta, outBase, Report, telemetry,
-                Reread, cover, liveFormat: () => SelectedFormat,
+                Reread, cover, liveFormat: null,
                 onEncodeStart: LockCodec,
                 onCrcEvidence: PublishCrcEvidence,
                 outputLayout: outputLayout));
