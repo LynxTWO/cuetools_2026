@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
+using CUETools.Processor;
 
 namespace CUETools.Wpf.ViewModels;
 
@@ -19,21 +20,54 @@ namespace CUETools.Wpf.ViewModels;
 public sealed class ConvertViewModel : PageViewModel
 {
     private readonly IConvertService _convert;
+    private readonly EncoderCatalog _catalog;
+    private readonly CUEConfig _config;
 
     public ObservableCollection<string> Formats { get; } = new();
+    public ObservableCollection<CodecChoice> CodecChoices { get; } = new();
 
-    public ConvertViewModel(IConvertService convert, EncoderCatalog catalog)
+    private CodecChoice? _selectedCodecChoice;
+    public CodecChoice? SelectedCodecChoice
+    {
+        get => _selectedCodecChoice;
+        private set
+        {
+            if (ReferenceEquals(_selectedCodecChoice, value)) return;
+            _selectedCodecChoice = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedCodecLabel));
+            OnPropertyChanged(nameof(SelectedCodecTooltip));
+        }
+    }
+    public string SelectedCodecLabel => SelectedCodecChoice == null
+        ? SelectedFormat.ToUpperInvariant()
+        : SelectedCodecChoice.CompactLabel + " - " +
+          SelectedCodecChoice.Implementation;
+    public string SelectedCodecTooltip => SelectedCodecChoice == null
+        ? "Choose an output codec."
+        : SelectedCodecChoice.AccessibleLabel + ". " +
+          SelectedCodecChoice.HealthDetail;
+
+    public ConvertViewModel(
+        IConvertService convert,
+        EncoderCatalog catalog,
+        CUEConfig config)
     {
         Title = "Convert";
         Group = "Work";
         Subtitle = "Transcode existing files to another format, layout, or tagging.";
         _convert = convert;
+        _catalog = catalog;
+        _config = config;
 
         void RebuildFormats()
         {
             Formats.Clear();
             foreach (var f in convert.LosslessFormats()) Formats.Add(f);
             foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last
+            CodecChoices.Clear();
+            foreach (CodecChoice choice in catalog.BuildChoices(config))
+                CodecChoices.Add(choice);
         }
         RebuildFormats();
         // an imported external encoder lights its format up without a restart
@@ -41,9 +75,11 @@ public sealed class ConvertViewModel : PageViewModel
         {
             var keep = SelectedFormat; RebuildFormats();
             SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac";
+            RefreshSelectedCodecChoice();
             OnPropertyChanged(nameof(ScopeCodec));   // a type flip changes what the scope must draw
         };
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
+        RefreshSelectedCodecChoice();
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile());
         BrowseFolderCommand = new RelayCommand(_ => BrowseFolder());
@@ -66,7 +102,14 @@ public sealed class ConvertViewModel : PageViewModel
     public string SelectedFormat
     {
         get => _selectedFormat;
-        set { if (Set(ref _selectedFormat, value)) OnPropertyChanged(nameof(ScopeCodec)); }
+        set
+        {
+            if (Set(ref _selectedFormat, value))
+            {
+                RefreshSelectedCodecChoice();
+                OnPropertyChanged(nameof(ScopeCodec));
+            }
+        }
     }
 
     /// <summary>Scope remap for two-faced formats - same rule as the Rip page: the visualization
@@ -94,7 +137,16 @@ public sealed class ConvertViewModel : PageViewModel
     public float[]? SampleWindow { get => _sampleWindow; private set => Set(ref _sampleWindow, value); }
 
     private bool _isBusy;
-    public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (Set(ref _isBusy, value))
+                OnPropertyChanged(nameof(CodecUnlocked));
+        }
+    }
+    public bool CodecUnlocked => !IsBusy;
 
     private double _progress;
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
@@ -112,6 +164,27 @@ public sealed class ConvertViewModel : PageViewModel
     public ICommand BrowseFolderCommand { get; }
     public ICommand BrowseOutputCommand { get; }
     public ICommand ConvertCommand { get; }
+
+    public void SelectCodec(CodecChoice choice)
+    {
+        _catalog.SelectCodec(_config, choice);
+        _selectedFormat = choice.Extension;
+        OnPropertyChanged(nameof(SelectedFormat));
+        RefreshSelectedCodecChoice(choice.StableId);
+        OnPropertyChanged(nameof(ScopeCodec));
+    }
+
+    private void RefreshSelectedCodecChoice(string? preferredStableId = null)
+    {
+        SelectedCodecChoice = CodecChoices.FirstOrDefault(choice =>
+                preferredStableId != null &&
+                string.Equals(
+                    choice.StableId,
+                    preferredStableId,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? _catalog.GetSelectedChoice(_config, _selectedFormat)
+            ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
+    }
 
     private void BrowseFile()
     {
@@ -153,6 +226,12 @@ public sealed class ConvertViewModel : PageViewModel
     private async Task RunAsync()
     {
         if (!HasSource || IsBusy) return;
+        CodecChoice? choice = _catalog.GetSelectedChoice(_config, _selectedFormat);
+        if (choice == null || !_catalog.GetHealth(choice.Encoder).IsReady)
+        {
+            StatusText = "Convert cannot start: choose a ready output codec.";
+            return;
+        }
         string path = _sourcePath, fmt = _selectedFormat, outDir = _outputDir;
         IsBusy = true;
         Progress = 0;

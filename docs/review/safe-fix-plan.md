@@ -1677,3 +1677,77 @@ and GitHub job annotations.
 downloaded artifact both passed exact classic 97/97 and WPF 557/557 SPDX
 validation, populated CycloneDX graph checks, final sidecar checks, and zero
 hosted annotations.
+
+### Bind packaged native wrappers to the manifest-approved production path
+
+**Scope:** add one process-local approved native-path registry in
+`CUETools.Codecs`; publish each already hashed, full-path-loaded dependency from
+`PluginTrustManifest`; migrate the five codec wrappers from `Assembly.CodeBase`
+to that registry with their existing assembly-relative architecture folder as
+the classic-host fallback; make Monkey's Audio finalizer cleanup nonthrowing.
+
+**Safety:** a packaged codec may use only the exact path that the trust manifest
+rehashes, loads, and confirms through the Windows module path. Do not add a bare
+DLL name, application-root search, `PATH` search, or a second native copy. Reject
+conflicting registrations. The classic fallback remains one exact
+`<managed-assembly>/<architecture>/<native-name>` path.
+
+**Checks:** resolver path and conflict tests; all five wrapper source guards;
+focused native settings/version probes; real encode/decode tests; self-contained
+WPF publication; a child WPF apphost probe launched from the published layout;
+artifact validation with no root `x64` workaround.
+
+**Rollback:** revert the registry, manifest handoff, wrapper migrations, and
+process probe together. Do not regain a passing artifact probe by copying native
+DLLs beside the root managed duplicates.
+
+**Observability:** manifest relative path, managed codec identity, bounded native
+filename, readiness category, child-process exit, and probe receipt. Do not log
+user paths or command arguments.
+
+**Status:** closed 2026-07-31. The trust loader now registers only the exact
+rehashes-and-loaded native path, conflicting bindings fail closed, and all five
+wrappers use that approved path with the classic assembly-relative fallback.
+The clean self-contained WPF artifact launched its real apphost with root-loaded
+managed wrappers, then initialized and finalized real FLAC, WavPack, Monkey's
+Audio, and LAME outputs plus HDCD. Lossless smoke outputs decoded and compared
+inside their wrappers. The artifact contract passed with 77 required files, 14
+runtime trust entries, 19 registrations, five native probes, and no root native
+copy. Monkey's Audio finalizer cleanup is nonthrowing after partial initialization.
+
+### Make codec selection truthful before optical work starts
+
+**Scope:** normalize stale command-encoder verification fields, hide structural
+profile properties from the generic editor, model every format face with one
+health/status/origin descriptor, add a grouped and sortable codec picker, and
+validate the selected encoder before Rip or Test & Copy takes hardware ownership.
+
+**Safety:** lossless command encoders still require an independently executable
+verification contract. Lossy profiles must not inherit that contract. Unavailable
+rows stay visible for explanation but cannot be selected. Readiness probing may
+touch settings/version metadata only; it must not create output files or read a
+disc. Preserve the extension plus persisted lossless/lossy face as the engine
+contract.
+
+**Checks:** JSON migration tests for stale lossy profiles; browsable-property
+guard; command and native health tests; deterministic grouping and guidance-sort
+tests; Rip/Test & Copy preflight tests; XAML reachability and light/dark token
+inspection; full WPF suite and warning gate.
+
+**Rollback:** revert the descriptor/picker and preflight together while retaining
+the native-path repair. Do not restore a raw extension list that silently removes
+unavailable codecs or lets a known-bad selection begin reading the disc.
+
+**Observability:** codec display name, extension, selected implementation,
+lossless/lossy category, origin class, readiness class, and bounded failure type.
+
+**Status:** closed 2026-07-31. Lossy profiles normalize stale verifier state only
+at controlled load/catalog boundaries; a mutable property assignment still cannot
+weaken an existing lossless verification contract. Structural fields are hidden.
+Rip, Convert, and Queue share one grouped picker with full names, extensions,
+implementations, origins, readiness, licensing, history, best use, unavailable
+rows, and honest guidance sorts. Queue records retain the exact implementation
+identity. Rip and Test & Copy validate that implementation before settings
+publication or drive ownership and freeze it for the complete evidence transaction.
+The canonical gate passed 643 discovered tests with 637 passes, zero failures, six
+declared skips, and zero managed warning fingerprints.

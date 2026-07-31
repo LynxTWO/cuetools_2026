@@ -232,7 +232,16 @@ public sealed class EncoderSettingsViewModel : ViewModelBase
         }
 
         // every browsable property is exposed; the plumbing ones the encoder hides stay hidden
-        var skip = new HashSet<string> { "EncoderMode", "PCM", "BlockSize", "Padding" };
+        var skip = new HashSet<string>
+        {
+            "EncoderMode", "PCM", "BlockSize", "Padding", "Lossless"
+        };
+        if (cliSettings is { Lossless: false })
+        {
+            skip.Add("VerificationUsesEncoder");
+            skip.Add("VerificationPath");
+            skip.Add("VerificationParameters");
+        }
         foreach (PropertyDescriptor p in TypeDescriptor.GetProperties(s))
         {
             if (!p.IsBrowsable || p.IsReadOnly || skip.Contains(p.Name) || !EncoderSettingRow.Supports(p)) continue;

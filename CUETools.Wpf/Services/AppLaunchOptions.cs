@@ -14,11 +14,14 @@ public sealed class AppLaunchOptions
 {
     internal char PreferredDrive { get; private init; }
     internal bool IsSecondaryDriveWindow { get; private init; }
+    internal string CodecProbeOutputPath { get; private init; } = "";
+    internal bool IsCodecProbe => CodecProbeOutputPath.Length > 0;
 
     internal static AppLaunchOptions Parse(IReadOnlyList<string> args)
     {
         char drive = '\0';
         bool secondary = false;
+        string codecProbeOutput = "";
         for (int i = 0; i < args.Count; i++)
         {
             string arg = args[i] ?? "";
@@ -28,6 +31,25 @@ public sealed class AppLaunchOptions
                     StringComparison.OrdinalIgnoreCase))
             {
                 secondary = true;
+                continue;
+            }
+
+            if (string.Equals(
+                    arg,
+                    "--codec-probe-output",
+                    StringComparison.OrdinalIgnoreCase) &&
+                i + 1 < args.Count)
+            {
+                string candidate = args[++i] ?? "";
+                try
+                {
+                    if (Path.IsPathRooted(candidate))
+                        codecProbeOutput = Path.GetFullPath(candidate);
+                }
+                catch
+                {
+                    codecProbeOutput = "";
+                }
                 continue;
             }
 
@@ -52,6 +74,7 @@ public sealed class AppLaunchOptions
             // A secondary role without an exact hardware selector would silently fall
             // back to the first enumerated drive and also suppress settings publication.
             IsSecondaryDriveWindow = secondary && drive != '\0',
+            CodecProbeOutputPath = codecProbeOutput,
         };
     }
 

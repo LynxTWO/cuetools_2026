@@ -192,6 +192,7 @@
   "pluginProbe": {
     "processorAssembly": "CUETools.Processor.dll",
     "pluginDirectory": "plugins",
+    "applicationExecutable": "CUETools.Wpf.exe",
     "expectedPluginFiles": [
       "CUETools.Codecs.ALAC.dll",
       "CUETools.Codecs.Flake.dll",
