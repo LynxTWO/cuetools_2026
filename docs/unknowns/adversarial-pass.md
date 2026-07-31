@@ -4,6 +4,31 @@ Current-state refresh: 2026-07-29.
 
 ## Entries
 
+### H normal-read 08/0A communication retry activation
+
+- **Area or file:** `Bwg.Scsi/Device.cs`,
+  `CUETools.Ripper.SCSI/SCSIDrive.cs`, R105 hardware evidence.
+- **Concern:** the exact retry is deterministic and packaged, but the new build has
+  not yet encountered the real H: communication failure.
+- **Why it matters:** policy and route tests prove eligibility and containment, not
+  that an 80 ms same-command retry recovers this drive when the state recurs.
+- **Evidence found so far:** four retained failures use `ReadCdBEh`, 16 sectors,
+  transition flags false, and `HardwareError / 08/0A`, at relative sectors 36,000,
+  36,576, 192,224, and 241,968. R105 permits one retry only in the top-level normal
+  payload loop, uses no failed payload, keeps every retry failure fatal, exposes a
+  counter, and passes the full software and artifact gates. Source-bound probes
+  crossed all four addresses. A full H: Test & Copy then passed in 846 seconds while
+  K: copied concurrently: 11 verified FLAC files, matching AR/CTDB evidence, zero
+  failed windows, and final decoded-output verification. Both H: phases recorded
+  zero communication retries.
+- **Confidence:** high for route containment; unknown for live recovery.
+- **Likely owner:** optical/SCSI maintainer.
+- **Next best check:** retain the terminal log with
+  `read_communication_retries > 0` if the exact hardware state recurs. Do not force
+  the drive into a failing state merely to activate the branch.
+- **Risk level:** high.
+- **Status:** open.
+
 ### K damaged-disc dormant-drive wake
 
 - **Area or file:** `CUETools.Ripper.SCSI/SCSIDrive.cs`, R69 hardware evidence.

@@ -2795,9 +2795,47 @@ does not relax evidence, rollback, or verification requirements.
   implementation id. Rip and Test & Copy refuse an unhealthy codec before claiming
   a drive and freeze one checked implementation for the complete operation.
 
+### R105. Recurrent H: 08/0A communication failures aborted otherwise valid payload reads - bucket A, risk high
+
+- **Area or slice:** `Bwg.Scsi` sense formatting and the top-level
+  `SCSIDrive` normal payload loop.
+- **Why it matters:** H: has repeatedly aborted Test & Copy at unrelated disc
+  addresses with the same 16-sector BEh `HardwareError / ASC 08 / ASCQ 0A`.
+  The UI reports `NO SENSE STRING`, losing the known communication-family identity,
+  and makes no bounded recovery attempt even though an isolated rerun crossed an
+  earlier occurrence.
+- **Evidence found:** scrubbed diagnostic logs retain relative sectors 36,000,
+  36,576, 192,224, and 241,968 with identical command shape and transition flags
+  false. A later isolated run crossed the first failure point. The
+  [T10 ASC/ASCQ table](https://www.t10.org/lists/asc-num.htm) assigns ASC 08 to
+  logical-unit communication failures but does not assign qualifier 0A, so the raw
+  qualifier must remain explicit and no official name may be invented.
+- **Confidence:** high for the repeated drive/communication signature and missing
+  diagnostic; medium for recovery because only a later independent rerun, not an
+  in-command retry, has crossed the condition.
+- **Approval needed:** no; the user supplied repeated evidence and requested the
+  bounded fix.
+- **Recommended next pass:** pass 11 bounded remediation and hardware proof.
+- **Smallest safe next step:** one retry for only the first normal 16-sector BEh
+  `DeviceFailed / HardwareError / 08/0A` on the observed H: model and firmware,
+  outside a control/cache transition; keep any repeat or different retry failure
+  fatal.
+- **Verification plan:** positive/negative classifier tests, ASC-family formatter
+  tests, route guard, SCSI multi-target builds, full managed gates, then an H:
+  Test & Copy that records the retry counter if the transient recurs.
+- **Owner:** optical/SCSI maintainer.
+- **Status:** closed 2026-07-31. The classifier and route guards pass 32/32,
+  net8/net47/net20 builds pass, the canonical 641/647 suite and empty warning gate
+  pass, release safety passes, and the separate self-contained R105 artifact passes
+  the production contract. Four source-bound address probes passed, followed by a
+  full 846-second H: Test & Copy with 11 verified FLAC files, matching AR/CTDB
+  evidence, zero reread/failed windows, and final decoded-output verification. Its
+  retry counters remained zero; the open adversarial record keeps branch activation
+  distinct from the passed user outcome.
+
 ## Ordering
 
-The locally actionable and hosted correctness queue is closed through R104.
+The locally actionable and hosted correctness queue is closed through R105.
 Remaining work is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
@@ -2934,3 +2972,8 @@ Remaining work is ordered by the authority or evidence it requires:
   replacing raw extension selectors with one health-aware grouped codec picker.
   The canonical local gate passed 637/643 with six declared skips, zero failures,
   and zero managed warning fingerprints.
+- 2026-07-31 - implemented R105's one-shot normal BEh 08/0A communication retry,
+  retained the unassigned qualifier and raw identity, and passed 32/32 ripper,
+  641/647 canonical, empty-warning, release-safety, and production artifact gates.
+  Four address probes and a full concurrent H: Test & Copy passed; both phases
+  recorded zero retries, so live branch activation remains in the unknowns ledger.

@@ -715,11 +715,20 @@ namespace Bwg.Scsi
         /// <param name="asc">the sense ASC value, see the SCSI spec</param>
         /// <param name="ascq">the sense ASCQ value, see the SCSI spec</param>
         /// <returns>a string representing the error codes given by ASC and ASCQ</returns>
-        public static string LookupSenseError(byte asc, byte ascq)
-        {
+		public static string LookupSenseError(byte asc, byte ascq)
+		{
 			string res = messages.GetString(string.Format("SCSIErrorMessage_{0:X2}{1:X2}", asc, ascq));
 			if (res != null)
 				return res;
+			if (asc == 0x08 && ascq == 0x0A)
+			{
+				// T10 assigns ASC 08 to logical-unit communication failures but does
+				// not assign qualifier 0A. Preserve both the known family and the raw
+				// unassigned qualifier instead of inventing a device-specific meaning.
+				string family = messages.GetString("SCSIErrorMessage_0800") ??
+					"LOGICAL UNIT COMMUNICATION FAILURE";
+				return family + " (UNASSIGNED QUALIFIER 0A) ASC=08, ASCQ=0A";
+			}
 			string msg = messages.GetString("UnknownSCSIError") ?? "Unknown SCSI Error";
             return msg + " ASC=" + asc.ToString("X2") + ", ASCQ=" + ascq.ToString("X2");
         }

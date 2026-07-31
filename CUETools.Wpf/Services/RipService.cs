@@ -979,6 +979,7 @@ public sealed class RipService : IRipService
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
+                    $"read_communication_retries={reader.ReadCommunicationRetryCount} " +
                     $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
                     $"cache_defeat_chunk_fallbacks={reader.CacheDefeatChunkFallbackCount} " +
                     $"cache_defeat_wakes={reader.CacheDefeatWakeCount} " +
