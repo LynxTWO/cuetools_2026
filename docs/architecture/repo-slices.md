@@ -1,6 +1,6 @@
 # Repo Slices
 
-Current-state refresh: 2026-07-26. These slices partition first-party code by
+Current-state refresh: 2026-07-31. These slices partition first-party code by
 runtime reachability and trust boundary. They are planning units, not claims of
 line-by-line review. The matching evidence/status table is
 `docs/architecture/coverage-ledger.md`.
@@ -321,6 +321,29 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 - **Next evidence:** continue hardware/service matrices and independently
   verify the first production-signed tag.
 
+### S16: Upstream contribution extraction
+
+- **Scope:** the commit and file delta from `gchudov/cuetools.net` `master` to
+  the fork, plus cross-repository pull-request publication.
+- **Why it matters:** the fork contains broadly useful fixes, but its product UI,
+  release policy, vendored payloads, and later engine changes are interdependent.
+  Sending the full delta would hide review boundaries and make rollback unsafe.
+- **Reachability:** upstream classic CUETools applications and shared libraries;
+  fork-only WPF and release surfaces are inputs to classification, not automatic
+  contribution candidates.
+- **Verified controls:** upstream `master` is an ancestor of the fork; the
+  2026-07-31 inventory found 307 merged fork commits and 640 changed files, plus
+  one separate draft codec-picker commit. Contribution branches are rooted at
+  `upstream/master` in separate worktrees, contain one independently testable
+  behavior, and are pushed to the fork before a cross-repository draft PR.
+- **Residual boundary:** maintainer preference, review capacity, and acceptance
+  of modernization or new-product work are external. A patch that passes in the
+  fork still needs a clean upstream-rooted build and focused evidence.
+- **Risk / status:** high; mapped and active.
+- **Next evidence:** review upstream draft PR 402, record maintainer feedback,
+  and use it to calibrate the size and presentation of later memory-safety
+  fixes.
+
 ## Exclusions
 
 - Pinned ThirdParty submodules are cross-repository boundaries. Their revisions,
@@ -336,12 +359,13 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
 
 ## Prioritized remaining passes
 
-1. Hosted CI/release and frozen classic artifact receipts (S13).
-2. Final-source optical repeat and deliberate drive/repair failure cases (S2,
+1. Export bounded, dependency-ordered upstream contributions (S16).
+2. Hosted CI/release and frozen classic artifact receipts (S13).
+3. Final-source optical repeat and deliberate drive/repair failure cases (S2,
    S5, S15).
-3. Cross-host WMA, Icecast HTTPS/certificate/Mono, and cross-vendor OpenCL
+4. Cross-host WMA, Icecast HTTPS/certificate/Mono, and cross-vendor OpenCL
    matrices (S6, S8, S11).
-4. Third-party binary provenance, signing, and dependency locking (S4, S7,
+5. Third-party binary provenance, signing, and dependency locking (S4, S7,
    S13).
-5. Decide the deferred `CUERipper.WPF` stub's future after owner review (S9,
+6. Decide the deferred `CUERipper.WPF` stub's future after owner review (S9,
    S14).
