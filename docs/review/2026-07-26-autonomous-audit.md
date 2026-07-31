@@ -255,8 +255,14 @@ were fixed; legacy Freedb/SCSI construction style remains cleanup debt.
   `OutputVerificationKnown=true`, `LosslessOutput=true`, and
   `OutputVerificationPerformed=true`, with decoded-and-compared detail. The first
   attempt is retained as diagnostic evidence: an overlapping dependency build
-  coincided with transient H: SCSI ASC/ASCQ 08/0A at 27% of Copy; the isolated rerun
-  crossed that point and passed. The later behavior-preserving extraction of the same
+  coincided with H: SCSI `HardwareError / ASC 08 / ASCQ 0A` at 27% of Copy; the
+  isolated rerun crossed that point and passed. Three later captures show the same
+  16-sector BEh failure at unrelated addresses. R105 now gives only that normal-read
+  shape one command-local retry and reports the unassigned qualifier without
+  inventing a standard name. Source-bound probes crossed all four addresses, then a
+  full H: Test & Copy passed in 846 seconds while K: copied concurrently. Both H:
+  phases recorded zero retries, so live branch activation remains pending. The later
+  behavior-preserving extraction of the same
   shipping vote into `SecureSectorVote` means a final-source no-build H: rerun is still
   pending. Remaining hardware work includes deliberate cancellation,
   disagreement/failure injection, concurrent publication, and preserved incomplete-stage

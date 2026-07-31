@@ -74,11 +74,13 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatWakeReadinessIndeterminateCount;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
+		private int _readCommunicationRetryCount;
 		private int _payloadBatchFallbackCount;
 		private int _pinpointRetryCount;
 		private int _corroboratedUnreadablePinpointCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
+		public int ReadCommunicationRetryCount => _readCommunicationRetryCount;
 		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
 		public int CacheDefeatChunkFallbackCount => _cacheDefeatChunkFallbackCount;
 		public int CacheDefeatWakeCount => _cacheDefeatWakeCount;
@@ -90,6 +92,20 @@ namespace CUETools.Ripper.SCSI
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
 			_corroboratedUnreadablePinpointCount;
+		private bool IsObservedReadCommunicationDrive =>
+			m_inqury_result != null &&
+			string.Equals(
+				m_inqury_result.VendorIdentification.TrimEnd(' ', '\0'),
+				"HL-DT-ST",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.ProductIdentification.TrimEnd(' ', '\0'),
+				"BD-RE  WH16NS40",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.FirmwareVersion.TrimEnd(' ', '\0'),
+				"1.05",
+				StringComparison.OrdinalIgnoreCase);
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -2326,6 +2342,48 @@ namespace CUETools.Ripper.SCSI
 						Thread.Sleep(40);
 						FetchSectors(sector, Sectors2Read, true);
 						_cacheDefeatJustFlushed = false;
+					}
+					catch (SCSIException readFailure) when (
+						PayloadReadFailurePolicy
+							.ShouldRetryObservedReadCommunicationFailure(
+								0,
+								IsObservedReadCommunicationDrive,
+								_readCDCommand == ReadCDCommand.ReadCdBEh,
+								Sectors2Read,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								readFailure.Status,
+								readFailure.SenseKey,
+								readFailure.Asc,
+								readFailure.Ascq))
+					{
+						// This command-local retry is intentionally outside FetchSectors:
+						// pinpoint, decomposition, and cache-eviction reads must not inherit it.
+						// Fetch without abort processing so a failed retry cannot enter the
+						// damaged-sector classifier under a different or overwritten identity.
+						Thread.Sleep(80);
+						_readCommunicationRetryCount++;
+						Device.CommandStatus repeatedStatus =
+							FetchSectors(sector, Sectors2Read, false);
+						if (repeatedStatus != Device.CommandStatus.Success)
+						{
+							string repeatedContext = string.Format(
+								"{0} [relative-sector={1}, sectors={2}, command={3}, speed={4}kB/s, speed-transition={5}, cache-transition={6}, communication-retry=True, initial-sense={7}/ASC={8:X2}/ASCQ={9:X2}]",
+								Resource1.ReadCDError,
+								sector,
+								Sectors2Read,
+								_readCDCommand,
+								_appliedSpeedKbps,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								readFailure.SenseKey,
+								readFailure.Asc,
+								readFailure.Ascq);
+							throw new SCSIException(
+								repeatedContext,
+								m_device,
+								repeatedStatus);
+						}
 					}
 					_cacheDefeatJustFlushed = false;
 					_speedChangeJustApplied = false;

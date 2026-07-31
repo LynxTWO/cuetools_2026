@@ -283,6 +283,7 @@ namespace CUETools.Wpf.Tests
                 $"cq={correctionQuality} cacheBytes={cacheBytes} " +
                 $"deepRecovery={deepRecovery} " +
                 $"readCommand='{reader.CurrentReadCommand}' " +
+                $"readCommunicationRetries={reader.ReadCommunicationRetryCount} " +
                 $"cacheRetries={reader.CacheDefeatRetryCount} " +
                 $"cacheChunkFallbacks={reader.CacheDefeatChunkFallbackCount} " +
                 $"cacheWakes={reader.CacheDefeatWakeCount} " +

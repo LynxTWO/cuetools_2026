@@ -115,6 +115,12 @@ progress documents for it belong here, under `docs/review/`.
   real hardware evidence. A repeated or unrelated failure stays fatal. Include
   relative sector, transfer count, command mode, and applied speed in scrubbed
   failure context; never include sector payload bytes.
+- Keep unassigned SCSI qualifiers raw. Report the known ASC family plus the numeric
+  ASC/ASCQ; do not invent a standard name from vendor behavior. The recurrent H:
+  `HardwareError / 08/0A` may settle for 80 ms and retry once only on the observed
+  `HL-DT-ST BD-RE WH16NS40` firmware 1.05, for a normal 16-sector BEh payload read
+  outside speed and cache transitions. The retry is local to that exact command. A
+  failed retry remains fatal and cannot mark media untrusted.
 - A rejected multi-sector READ CD transfer is not damaged-media evidence. The exact
   observed `DeviceFailed / IllegalRequest / 24/00` batch shape may fall back to
   single-sector payload reads. Each child must succeed independently unless the exact

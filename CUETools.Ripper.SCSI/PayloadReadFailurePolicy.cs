@@ -189,6 +189,39 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// The HL-DT-ST BD-RE WH16NS40 firmware 1.05 on the hardware matrix has
+        /// intermittently returned HardwareError/08/0A for otherwise valid normal
+        /// 16-sector BEh payload reads at unrelated addresses. ASC 08 identifies
+        /// the logical-unit communication family; 0A is an unassigned qualifier.
+        /// Permit one retry
+        /// for only that observed command shape when no control transition is in
+        /// flight. This is transport recovery, never damaged-media evidence.
+        /// </summary>
+        public static bool ShouldRetryObservedReadCommunicationFailure(
+            int retriesForCommand,
+            bool isObservedDrive,
+            bool isReadCdBeh,
+            int sectorCount,
+            bool speedTransitionPending,
+            bool cacheTransitionPending,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return retriesForCommand == 0 &&
+                isObservedDrive &&
+                isReadCdBeh &&
+                sectorCount == 16 &&
+                !speedTransitionPending &&
+                !cacheTransitionPending &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.HardwareError &&
+                asc == 0x08 &&
+                ascq == 0x0A;
+        }
+
+        /// <summary>
         /// The ASUS BW-16D1HT has intermittently rejected valid in-range READ CD
         /// commands with 24/00 during long reads. Cache eviction uses the same
         /// payload command. Each exact LBA/transfer-shape command may settle and

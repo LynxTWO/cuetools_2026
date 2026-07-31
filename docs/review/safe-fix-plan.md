@@ -1751,3 +1751,45 @@ identity. Rip and Test & Copy validate that implementation before settings
 publication or drive ownership and freeze it for the complete evidence transaction.
 The canonical gate passed 643 discovered tests with 637 passes, zero failures, six
 declared skips, and zero managed warning fingerprints.
+
+### Recover the observed BEh logical-unit communication rejection once
+
+**Scope:** give the observed H: `HL-DT-ST BD-RE WH16NS40` firmware 1.05 exact
+normal payload `ReadCdBEh` 16-sector command one local retry when it returns
+`DeviceFailed / HardwareError / 08/0A` outside speed and cache transitions;
+preserve that retry in completion telemetry; format the
+unassigned qualifier as the standard ASC 08 communication family plus raw
+ASC/ASCQ rather than `NO SENSE STRING`.
+
+**Safety:** this is a command-local retry for the repeated real H: signature at
+widely separated addresses, not damaged-media evidence. It does not apply to
+another drive or firmware, `ReadCdD8h`, one-sector pinpoints, batch decomposition,
+cache eviction, control transitions, another transfer size, another sense identity,
+or a second failure.
+Only bytes from a successful retry may be reorganized or voted. A failed retry
+remains fatal with retry context and never marks a sector untrusted.
+
+**Checks:** deterministic positive and negative policy matrix; known and
+unassigned ASC 08 formatting tests; source guard proving the retry stays in the
+top-level payload loop; focused ripper tests; all SCSI target builds; full managed
+test and warning gates; source-bound H: Test & Copy crossing the previously
+observed addresses.
+
+**Rollback:** revert the policy, top-level retry, diagnostic counter, formatter,
+and tests together. Do not replace the exact policy with a general hardware-error
+retry or teach the medium-error pipeline to consume this failure.
+
+**Observability:** relative sector, sector count, command, speed, transition
+flags, raw sense key/ASC/ASCQ, `communication-retry=True` on a failed repeat, and
+one aggregate successful/attempted retry counter. Never log sector payload.
+
+**Status:** closed 2026-07-31. Four retained H: failures show the same
+`HardwareError / 08/0A` on normal 16-sector BEh reads at relative sectors 36,000,
+36,576, 192,224, and 241,968. The exact classifier/source-contract suite passes
+32/32, all three SCSI targets build, the 641/647 canonical suite and empty warning
+gate pass, release safety passes, and the separate R105 self-contained artifact
+passes its production contract. Source-bound probes crossed all four addresses,
+then a full concurrent H: Test & Copy passed in 846 seconds: 412-second Test,
+413-second Copy, 11 verified FLAC files, AR 107/424, CTDB 114/544, zero reread or
+failed windows, and decoded-output verification. Both phases recorded zero
+communication retries, so live branch activation remains an explicit unknown.

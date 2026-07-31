@@ -38,7 +38,7 @@
       "lane": "modern",
       "project": "CUETools.Ripper.Tests/CUETools.Ripper.Tests.csproj",
       "framework": "net8.0-windows",
-      "minimumDiscovered": 8,
+      "minimumDiscovered": 32,
       "maximumSkipped": 0
     },
     {
