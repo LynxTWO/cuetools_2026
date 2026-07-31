@@ -6,6 +6,25 @@ as covered.
 
 ## Entries
 
+### Upstream maintainer contribution preferences
+
+- **Area or file:** `gchudov/cuetools.net`, cross-repository pull requests
+- **Concern:** repository evidence does not establish the maintainer's preferred
+  patch size, modernization appetite, or interest in the fork's new WPF product.
+- **Why it matters:** technically correct patches can still be unreviewable when
+  they mix product direction, dependency policy, and unrelated fixes.
+- **Evidence found so far:** upstream `master` is commit
+  `e90b1a8695a40f90169b71c0624493f45a31d862`; the last merged PR was in June
+  2025. Open PRs exist, but searches found no AccurateRip HTTPS issue or PR.
+  The fork delta contains 307 merged commits and 640 changed files, plus one
+  pending codec-picker commit. AccurateRip HTTPS is now upstream draft PR 402.
+- **Confidence:** unknown
+- **Likely owner:** upstream maintainer
+- **Next best check:** record review or CI feedback from draft PR 402, then use
+  it to tune the next bounded contribution.
+- **Risk level:** medium
+- **Status:** open
+
 ### Residual hardware and availability-gated runtime matrix
 
 - **Area or file:** `CUETools.Ripper.SCSI/`, `CUETools.Codecs.WMA/`,
