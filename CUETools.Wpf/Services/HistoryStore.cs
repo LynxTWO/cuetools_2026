@@ -93,14 +93,18 @@ public sealed class HistoryStore : IHistoryStore
                     ? "; final output PCM verified after metadata"
                     : "; WARNING: encoded output not verified"
                 : "; lossy output (output verification not applicable)";
+        // A damaged result reads "consistent", never "verified" - same policy as the log (R109).
+        bool damaged = r.FailedWindows > 0 || r.DamageRepairRequired;
+        string grade = damaged ? "consistent (damage recorded)" : "verified";
         if (r.OpticalReadsUsed >= 2 && r.MinimumAgreeingReads >= 2)
-            return $"{mode} - verified after {r.OpticalReadsUsed} optical reads; "
+            return $"{mode} - {grade} after {r.OpticalReadsUsed} optical reads; "
                 + $"at least {r.MinimumAgreeingReads} agreed per track"
                 + (databases.Length > 0 ? $" ({databases})" : " (not found in AR/CTDB)")
                 + output;
         if (r.Confirmed)
-            return $"{mode} - verified ({databases})" + output;
+            return $"{mode} - {grade} ({databases})" + output;
         return $"{mode} - {(r.Tracks > 0 ? r.Tracks + " tracks, " : "")}not confirmed"
+            + (damaged ? " (damage recorded)" : "")
             + output;
     }
 
@@ -140,7 +144,9 @@ public sealed class HistoryStore : IHistoryStore
                         MinimumAgreeingReads = r.MinimumAgreeingReads,
                         OutputVerificationKnown = r.OutputVerificationKnown,
                         LosslessOutput = r.LosslessOutput,
-                        OutputVerificationPerformed = r.OutputVerificationPerformed
+                        OutputVerificationPerformed = r.OutputVerificationPerformed,
+                        FailedWindows = r.FailedWindows,
+                        DamageRepairRequired = r.DamageRepairRequired
                     });
                     if (rows.Count > Cap)
                         rows.RemoveRange(Cap, rows.Count - Cap);
@@ -225,5 +231,9 @@ public sealed class HistoryStore : IHistoryStore
         public bool OutputVerificationKnown { get; set; }
         public bool LosslessOutput { get; set; }
         public bool OutputVerificationPerformed { get; set; }
+        // Damage evidence (R109). Rows persisted before these fields existed deserialize to 0 /
+        // false, which correctly renders the old "verified" wording rather than inventing damage.
+        public int FailedWindows { get; set; }
+        public bool DamageRepairRequired { get; set; }
     }
 }

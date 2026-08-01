@@ -1417,7 +1417,9 @@ public sealed class RipService : IRipService
                 // result would force 2-3 more reads of degraded media (R108).
                 if (honorStop) ThrowIfStopRequested();
                 keepStaging = true;
-                var last = reads[reads.Count - 1];
+                // A held result offers the COPY read's staging, so its evidence binds to the Copy
+                // read's own database checks, not the newest read's (R109).
+                var last = reads.Count > 1 ? reads[1] : reads[reads.Count - 1];
                 return new TestCopyRunResult
                 {
                     Ok = true,
@@ -1509,7 +1511,10 @@ public sealed class RipService : IRipService
                     driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir,
                     committedEncoded);
                 keepStaging = false;   // committed - the staging is now redundant
-                var last = reads[reads.Count - 1];
+                // Evidence binds to the COMMITTED read's own database checks, never the newest
+                // read: in a three-read run they can differ, and a certificate must not carry a
+                // verdict for bytes it does not cover (R109).
+                var last = reads[whole];
                 TrackCrc[] completedEvidence =
                     BuildTestCopyCrcEvidence(reads, whole);
                 if (historyRecorded)
@@ -1775,18 +1780,21 @@ public sealed class RipService : IRipService
         if (CountAudioFilesRequired(publication.StagingDirectory, format) != sourceFileCount)
             throw new InvalidDataException("The Test & Copy staging transfer is incomplete.");
 
-        // Build the committed record from the single committed read's own checksums (never a
-        // per-track mix of different reads).
+        // Build the committed record from the single committed read's own checksums AND its own
+        // database evidence (never a per-track mix of different reads, and never the newest
+        // read's AR/CTDB verdict standing in for the committed bytes - R109).
         var source = (sourceReadIndex >= 0 && sourceReadIndex < reads.Count) ? reads[sourceReadIndex] : null;
         var newest = reads[reads.Count - 1];
+        var evidence = source ?? newest;
         var committedRecord = new VerifyRecord
         {
             DiscId = discId,
             Tracks = BuildTestCopyCrcEvidence(reads, sourceReadIndex),
-            ArConfidence = newest?.ArConfidence ?? 0,
-            ArTotal = newest?.ArTotal ?? 0,
-            CtdbConfidence = newest?.CtdbConfidence ?? 0,
-            CtdbTotal = newest?.CtdbTotal ?? 0,
+            ArConfidence = evidence?.ArConfidence ?? 0,
+            ArTotal = evidence?.ArTotal ?? 0,
+            CtdbConfidence = evidence?.CtdbConfidence ?? 0,
+            CtdbTotal = evidence?.CtdbTotal ?? 0,
+            FailedWindows = failedWindows,
             Drive = drive,
             ReadOffset = offset,
             CorrectionQuality = newest?.CorrectionQuality ?? 0,
@@ -1829,7 +1837,8 @@ public sealed class RipService : IRipService
             encodedResult.CtdbHasErrors,
             encodedResult.CtdbCanRecover,
             encodedResult.CtdbRepairSectors,
-            encodedResult.CtdbRepairRanges);
+            encodedResult.CtdbRepairRanges,
+            committedReadIndex: sourceReadIndex);
         if (encodedResult.OutputVerificationKnown)
             logText += "\nEncoded-output verification: " +
                 encodedResult.OutputVerificationDetail + "\n";

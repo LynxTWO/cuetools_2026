@@ -2927,7 +2927,14 @@ step before any fix.
 - **Smallest safe next step:** carry a damage field through report, history,
   and `rip.verify`; bind AR/CTDB numbers to the committed (or held Copy) read.
 - **Verification plan:** WPF suite report/history/labeling cases.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `RipReport` carries `FailedWindows` and
+  `DamageRepairRequired`; `Verified` demotes damaged agreement everywhere
+  (headline, badge, history rows, log body damage line), matching the Test &
+  Copy log's CONSISTENT policy including a database match over damaged media.
+  Committed and held evidence now binds to the committed (or Copy) read's own
+  AR/CTDB checks in the result, the `rip.verify` record (which also gains
+  `FailedWindows`), and the Test & Copy log. Old persisted rows and records
+  deserialize to zero damage and keep their original wording. WPF 461/461.
 
 ### R110. StopOnUnrecoverable fires before classification and blocks deep recovery - bucket A, risk medium
 

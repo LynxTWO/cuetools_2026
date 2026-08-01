@@ -57,6 +57,9 @@ namespace CUETools.Wpf.Accuracy
         public bool LosslessOutput { get; set; }
         public bool OutputVerificationPerformed { get; set; }
         public string OutputVerificationDetail { get; set; } = "";
+        /// <summary>Sector windows the drive gave up on across the reads behind this record
+        /// (R109). Older records deserialize to 0, which claims nothing.</summary>
+        public int FailedWindows { get; set; }
     }
 
     /// <summary>Result of comparing a new read against this disc's stored history.</summary>

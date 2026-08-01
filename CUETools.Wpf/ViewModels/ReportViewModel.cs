@@ -67,9 +67,13 @@ public sealed class ReportViewModel : PageViewModel
         }
 
         Confirmed = r.Verified;
-        Headline = r.DatabaseConfirmed
-            ? "Accurately ripped"
-            : r.IndependentReadsVerified ? "Verified by independent reads" : "Not confirmed";
+        // Damage outranks every verification headline: the log says CONSISTENT for these jobs,
+        // and the certificate must never say more than the log (R109).
+        Headline = r.Damaged
+            ? "Consistent - damage recorded"
+            : r.DatabaseConfirmed
+                ? "Accurately ripped"
+                : r.IndependentReadsVerified ? "Verified by independent reads" : "Not confirmed";
         Album = r.Album;
         Artist = string.IsNullOrWhiteSpace(r.Year) ? r.Artist : $"{r.Artist}  ({r.Year})";
         Subhead = $"{r.Mode}  .  {r.CorrectionQualityName}  .  {r.Timestamp:yyyy-MM-dd HH:mm}";
