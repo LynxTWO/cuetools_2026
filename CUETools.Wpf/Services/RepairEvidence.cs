@@ -24,6 +24,10 @@ public sealed class RepairReceipt
     public int RepairSectors { get; set; }
     public int RepairTotalSectors { get; set; }
     public int RepairNpar { get; set; }
+    // Repair headroom (R115): worst per-stripe error count vs the npar/2 stripe capacity.
+    // Additive fields; receipts written before them deserialize to 0 (unknown).
+    public int RepairWorstStripeErrors { get; set; }
+    public int RepairStripeCapacity { get; set; }
     public string RepairRanges { get; set; } = "";
     public int AccurateRipConfidence { get; set; }
     public int AccurateRipTotal { get; set; }
@@ -136,6 +140,8 @@ internal static class RepairEvidence
             RepairSectors = repaired.RepairSectors,
             RepairTotalSectors = repaired.RepairTotalSectors,
             RepairNpar = repaired.RepairNpar,
+            RepairWorstStripeErrors = repaired.RepairWorstStripeErrors,
+            RepairStripeCapacity = repaired.RepairStripeCapacity,
             RepairRanges = repaired.RepairRanges,
             AccurateRipConfidence = verified.ArConfidence,
             AccurateRipTotal = verified.ArTotal,
@@ -178,6 +184,10 @@ internal static class RepairEvidence
         text.AppendLine("Repair applied: yes");
         text.AppendLine("Corrected samples: " + receipt.RepairSamples);
         text.AppendLine("Corrected sectors: " + receipt.RepairSectors);
+        if (receipt.RepairStripeCapacity > 0)
+            text.AppendLine("Parity headroom: worst stripe used " +
+                receipt.RepairWorstStripeErrors + " of " +
+                receipt.RepairStripeCapacity + " correctable errors");
         if (!string.IsNullOrWhiteSpace(receipt.RepairRanges))
             text.AppendLine("Corrected ranges: " + receipt.RepairRanges);
         text.AppendLine(

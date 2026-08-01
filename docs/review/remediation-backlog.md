@@ -3072,7 +3072,18 @@ step before any fix.
 - **Smallest safe next step:** implement in that order, each with its own
   deterministic test.
 - **Verification plan:** ripper and WPF suites per item.
-- **Status:** open.
+- **Status:** partially fixed 2026-08-01 (2 of 4). Repair headroom:
+  `CDRepairFix.WorstStripeErrors`/`StripeCapacity` populated in `VerifyParity`
+  (parity decode test asserts it), threaded through the verify/rip results
+  into the repair prompts and the `repair.verify` receipt with an at-capacity
+  re-rip recommendation. C2 surfacing: a Secure rip on a no-C2 drive logs a
+  named warning and the rip.drive telemetry line carries `c2_mode` and
+  `cache_defeat_bytes` (the human-facing log line became truthful in R113).
+  Re-scoped to R116 with named prerequisites: speed drops at pass boundaries
+  are blocked by the recorded ASUS BW-16D1HT mid-window SET CD SPEED crash
+  evidence (`SCSIDrive.cs` fresh-window comment) and need a live drive matrix
+  session; the adaptive vote quorum changes which rips are declared secure
+  and needs deterministic TestRipper corpus evidence before landing.
 
 ### R116. Recovery improvements, large - bucket D, risk medium
 
