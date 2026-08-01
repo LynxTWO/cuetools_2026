@@ -12,13 +12,16 @@ namespace CUETools.Wpf.Accuracy
             string discId, string drive, int readOffset, int failedWindows,
             bool ctdbHasErrors = false, bool ctdbCanRecover = false,
             int ctdbRepairSectors = 0, string ctdbRepairRanges = "",
-            int committedReadIndex = -1)
+            int committedReadIndex = -1, bool salvage = false)
         {
             var sb = new StringBuilder();
             sb.AppendLine("Test & Copy log");
             sb.AppendLine("Disc:   " + (discId ?? ""));
             sb.AppendLine("Drive:  " + (drive ?? "") + "   read offset " + readOffset);
             sb.AppendLine("Reads: " + result.ReadsUsed);
+            if (salvage)
+                sb.AppendLine("SALVAGE capture: Burst quality, C2 pointers off, minimum read speed. " +
+                    "Agreement below proves the DRIVE's output is stable, not that the disc is undamaged.");
             sb.AppendLine();
 
             foreach (var v in result.Tracks)
@@ -40,7 +43,16 @@ namespace CUETools.Wpf.Accuracy
 
             bool damagedAgreement = result.Outcome == TestCopyOutcome.Passed
                 && (failedWindows > 0 || ctdbHasErrors);
-            if (result.Outcome == TestCopyOutcome.Passed && !damagedAgreement)
+            if (result.Outcome == TestCopyOutcome.Passed && salvage)
+            {
+                sb.AppendLine(
+                    "Test & Copy SALVAGE CONSISTENT - every track agreed across >=2 independent " +
+                    "reads of a defective disc. Drive-stable capture, not a verified rip.");
+                if (ctdbCanRecover)
+                    sb.AppendLine(
+                        "Outcome: CTDB repair required for database-verified audio.");
+            }
+            else if (result.Outcome == TestCopyOutcome.Passed && !damagedAgreement)
                 sb.AppendLine(
                     "Test & Copy PASSED - every track verified by >=2 independent reads.");
             else if (result.Outcome == TestCopyOutcome.Passed)

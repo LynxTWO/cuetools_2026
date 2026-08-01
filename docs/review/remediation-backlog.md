@@ -3129,6 +3129,18 @@ step before any fix.
   floor-speed given-up windows before easing speed back up; persist the Test
   phase so a late transport death does not discard 25 minutes of evidence
   (overlaps R116 persistence).
+- **Evidence update (2026-08-01 evening):** the IoctlFailed is now identified
+  as Win32 error 121 (ERROR_SEM_TIMEOUT) and it recurred with the same shape:
+  the first 16-sector read of a window immediately after a cache flush at the
+  44 kB/s floor, in a zone where the slip classifier reports slip=1
+  (consistent-offset jitter, not random noise; observed on windows 72000 and
+  321600 across both apps). New mitigation candidate with the strongest
+  evidence so far: scale the READ CD timeout with the requested speed - at
+  the floor, a slipping-zone read plus the drive's internal retries can
+  exceed the fixed timeout, and the OS kills the ioctl before the drive
+  answers. The slip=1 zones also strengthen the parked slip-realignment
+  question (R116): entire regions slip consistently, so offset-aware reads
+  may be the only non-salvage recovery for this disc class.
 - **Status:** open.
 
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
@@ -3153,12 +3165,56 @@ step before any fix.
   - Requires an explicit expert mode: normal Test & Copy keeps its
     forced-Secure contract untouched.
 - **Why it matters:** the 2026-08-01 Reggae Roots evidence shows a class of
-  disc whose pits are unstable (wholesale fresh disagreement every pass,
-  slip=0); re-reading cannot verify them, but a stable-concealment capture
-  with honest labeling is a real preservation outcome.
+  disc whose pits are unstable (wholesale fresh disagreement every pass);
+  re-reading cannot verify them, but a stable-concealment capture with honest
+  labeling is a real preservation outcome.
 - **Confidence:** design. **Approval needed:** user approved exploring;
   implementation lands as its own reviewed slice with live evidence from the
   problem discs.
+- **Status:** implemented 2026-08-01 (software). The quality picker gains an
+  explicit Salvage entry: Test & Copy at Burst quality (post-D9: 16-pass cap,
+  no deep recovery), `C2ErrorMode.None`, read speed pinned to the drive
+  minimum, cache defeat and the independent-reads calibration gate intact.
+  Log, certificate, history, and status all label the result salvaged; the
+  reads leg of verification never applies, while an exact database match
+  still verifies the bytes. Four salvage tests plus source contracts pass;
+  WPF 472/472, ripper 48/48, legacy lanes green. Pending: a live session on
+  the defective discs (which may also exercise the R118 floor-speed hazards).
+
+### R120. Live per-track evidence during reads - bucket D, design (user request 2026-08-01)
+
+- **Area or slice:** RipService read plumbing, RipViewModel track grid.
+- **User request:** Test CRC should appear as each track completes instead of
+  waiting for the whole album; same for Copy CRC, and AR/CTDB verdicts should
+  surface after the Test phase rather than only at Test & Copy completion.
+  This is believed to be the previously discussed per-track progress plan,
+  which was never captured in a doc.
+- **Feasibility (verified from code):** all of it is surfacing, not new
+  computation. `AccurateRipVerify` accumulates CRCs incrementally as PCM
+  streams, so a track's CRCs are final at (shortly after) its boundary - poll
+  one offset window past the track end from the existing progress handler.
+  Each Test & Copy read already performs its own AR/CTDB check (the per-read
+  log lines prove it); the read-1 verdict exists at Test-read end and only
+  needs a callback into the VM. The grid already has the four columns; they
+  would fill live instead of at completion.
+- **Caveats:** AR offset-sweep values lag the track boundary by up to the
+  offset window - surface after the lag, never provisional values; a live
+  cell is presentation only and must not become job evidence (the immutable
+  records keep their existing assembly points).
+- **Status:** open, next UI slice.
+
+### R121. Album metadata editing and richer MusicBrainz columns - bucket D, design (user request 2026-08-01)
+
+- **Area or slice:** Rip page album header/track grid, metadata plumbing.
+- **User request:** no way to edit album info before ripping, and MusicBrainz
+  data with no display surface (per-track artists, composer, label, catalog
+  number, country, barcode, release descriptor; disc ISRCs are already read
+  but not shown).
+- **Sketch:** an edit affordance on the album header (artist/album/year plus
+  per-track title edit in the grid) feeding the frozen job metadata snapshot;
+  optional columns or a details flyout for the extra MB fields; ties into the
+  naming tokens that already exist (per-track artist parity is a recorded
+  naming-system todo).
 - **Status:** open.
 
 ### R117. Classic calibration/cache-defeat gate port - decision needed

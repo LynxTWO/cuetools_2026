@@ -89,7 +89,8 @@ public sealed class SettingsStore
             app.StopOnUnrecoverable = sr.LoadBoolean("WpfStopOnUnrecoverable") ?? app.StopOnUnrecoverable;
             app.OutputBaseDir = sr.Load("WpfOutputBaseDir") ?? "";
             app.SelectedFormat = sr.Load("WpfSelectedFormat") ?? "";
-            app.CorrectionQuality = Math.Max(0, Math.Min(2, sr.LoadInt32("WpfCorrectionQuality", 0, 2) ?? 1));
+            // 0-2 = engine qualities; 3 = the Salvage capture selection (R119).
+            app.CorrectionQuality = Math.Max(0, Math.Min(3, sr.LoadInt32("WpfCorrectionQuality", 0, 3) ?? 1));
             app.ArchivalDefaultsApplied = sr.LoadBoolean("WpfArchivalDefaultsApplied") ?? false;
             app.DefaultsV2Applied = sr.LoadBoolean("WpfDefaultsV2Applied") ?? false;
             app.DefaultsV3Applied = sr.LoadBoolean("WpfDefaultsV3Applied") ?? false;

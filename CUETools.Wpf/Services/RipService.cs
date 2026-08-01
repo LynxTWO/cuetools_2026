@@ -122,6 +122,10 @@ public sealed class TestCopyRunResult
     /// <summary>Recovery windows that exhausted every optical reread. A passed checksum vote with
     /// this value above zero proves repeatability, not pristine media.</summary>
     public int FailedWindows { get; init; }
+    /// <summary>True for a salvage capture (R119): Burst-quality reads, C2 off, minimum speed.
+    /// Track agreement then proves the DRIVE's output is stable, never that the disc is clean;
+    /// no surface may present a salvaged result as read-verified.</summary>
+    public bool Salvaged { get; init; }
     public string RepairSourcePath { get; init; } = "";
     internal string RepairSourceRelativePath { get; init; } = "";
     public bool Accurate { get; init; }
@@ -202,8 +206,12 @@ public interface IRipService
     /// before each of those encode reads (never before the Test read) so the caller can lock the
     /// codec choice once encoding actually starts. <paramref name="onCrcEvidence"/> receives a
     /// fresh named Test/Copy snapshot after each completed read; it is an ancillary notification
-    /// and must not affect the read or final transaction result.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
+    /// and must not affect the read or final transaction result.
+    /// <paramref name="salvage"/> (R119) runs the reads at Burst quality with C2 pointers off
+    /// at the drive's minimum speed for defective-by-design discs. Cache defeat and the
+    /// calibration gate still apply - without independent reads, "agreement" could be the
+    /// drive's cache echoing itself. The result is labeled salvaged, never read-verified.</summary>
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -366,7 +374,7 @@ public sealed class RipService : IRipService
         try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
     }
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
@@ -412,7 +420,15 @@ public sealed class RipService : IRipService
             // verify record reported whichever value happened to be current at the end.
             reader.DeepRecovery = deepRecovery;
             if (reader.DeepRecovery) _log.Info("rip", "deep recovery ON: progress-aware cap + slow-to-floor + slip probe");
-            else if (_settings.DeepRecovery) _log.Info("rip", "deep recovery gated off at Burst quality (D9): classic 16-pass cap only");
+            else if (_settings.DeepRecovery && !salvage) _log.Info("rip", "deep recovery gated off at Burst quality (D9): classic 16-pass cap only");
+            if (salvage)
+            {
+                // Salvage capture (R119): accept the drive's own concealment output. C2 off
+                // makes the vote majority-only, so a stable concealment converges instead of
+                // being held low-confidence forever on a defective master.
+                reader.DriveC2ErrorMode = 0;
+                _log.Info("rip", "salvage capture: C2 pointers off, Burst quality - agreement proves drive-stable output, not disc health");
+            }
 
             // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive
             // gets stuck on a window, ease back up after clean stretches. Only REQUESTS are made
@@ -467,7 +483,24 @@ public sealed class RipService : IRipService
 
             AdaptiveSpeedController? speedCtl = null;
             int lastRequested = 0;
-            if (_settings.AdaptiveReadSpeed)
+            if (salvage)
+            {
+                // Defective pits track best at the slowest rotation; salvage never eases up.
+                int[] salvageSpeeds = reader.GetSupportedSpeeds();
+                if (salvageSpeeds.Length > 0)
+                {
+                    int floor = salvageSpeeds[0];
+                    foreach (int s in salvageSpeeds) if (s > 0 && s < floor) floor = s;
+                    if (floor > 0)
+                    {
+                        lastRequested = floor;
+                        reader.RequestReadSpeed(floor);
+                        _log.Info("rip", $"salvage capture: read speed pinned to the drive minimum {floor} kB/s ({floor / 176}x)");
+                    }
+                }
+                else _log.Info("rip", "salvage capture: drive reports no speed list - using drive default");
+            }
+            else if (_settings.AdaptiveReadSpeed)
             {
                 int[] speeds = reader.GetSupportedSpeeds();
                 if (speeds.Length > 1)
@@ -1253,7 +1286,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false)
     {
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         string codecFailure = ValidateCodecBeforeOpticalRead(fmt);
@@ -1275,7 +1308,9 @@ public sealed class RipService : IRipService
         // final user-selected destination at this outer entry point too.
         RedactOutputRoot(outputBaseDir);
         _stopRequested = false;   // fresh operation - see the latch on Stop()
-        int rq = Math.Max(1, Math.Min(2, cq));            // force at least Secure
+        // Salvage (R119) deliberately runs at Burst quality: post-D9 that means the classic
+        // 16-pass cap, no deep recovery, no floor grind. Everything else keeps forced-Secure.
+        int rq = salvage ? 0 : Math.Max(1, Math.Min(2, cq));
         var sw = System.Diagnostics.Stopwatch.StartNew();
         string phase = "calibration";
 
@@ -1325,7 +1360,7 @@ public sealed class RipService : IRipService
             // against but its checksums still count as an independent read.
             phase = "test";
             ThrowIfStopRequested();
-            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, outputLayout: outputLayout);
+            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, salvage: salvage, outputLayout: outputLayout);
             if (!testResult.Ok) return Fail(testResult.Error);
             VerifyRecord? testRecord = testResult.Record;
             if (testRecord == null)
@@ -1340,7 +1375,7 @@ public sealed class RipService : IRipService
             // changing a mutable dropdown after Test cannot swap the publication contract.
             phase = "copy";
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
-            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
             if (!copyResult.Ok) return Fail(copyResult.Error);
             VerifyRecord? copyRecord = copyResult.Record;
             if (copyRecord == null)
@@ -1369,7 +1404,7 @@ public sealed class RipService : IRipService
                 try
                 {
                     ThrowIfStopRequested();
-                    thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+                    thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
                 }
                 catch (StopException)
                 {
@@ -1443,6 +1478,7 @@ public sealed class RipService : IRipService
                 {
                     Ok = true,
                     Outcome = TestCopyOutcome.Held,
+                    Salvaged = salvage,
                     HoldReason = holdReason,
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
@@ -1530,7 +1566,7 @@ public sealed class RipService : IRipService
                 var (outDir, fileCount, historyRecorded, history) = AssembleAndCommit(
                     resolve, reads, stagingAlbumDirs[whole], whole, outputBaseDir, discId,
                     driveSig, offset, failedWindows, fmt, copyResult.OutputRelDir,
-                    committedEncoded);
+                    committedEncoded, salvage);
                 keepStaging = false;   // committed - the staging is now redundant
                 // Evidence binds to the COMMITTED read's own database checks, never the newest
                 // read: in a three-read run they can differ, and a certificate must not carry a
@@ -1559,11 +1595,13 @@ public sealed class RipService : IRipService
                     committedEncoded.CtdbHasErrors &&
                     committedEncoded.CtdbCanRecover &&
                     committedEncoded.CtdbRepairSectors > 0;
-                string completedOutcome = repairableDamage
-                    ? "consistent-repairable"
-                    : failedWindows > 0
-                        ? "consistent-damaged"
-                        : "verified";
+                string completedOutcome = salvage
+                    ? "salvaged-consistent"
+                    : repairableDamage
+                        ? "consistent-repairable"
+                        : failedWindows > 0
+                            ? "consistent-damaged"
+                            : "verified";
                 _log.Info(
                     "rip",
                     $"testcopy disc={discId} reads={resolve.ReadsUsed} consistency=1 " +
@@ -1577,6 +1615,7 @@ public sealed class RipService : IRipService
                 {
                     Ok = true,
                     Outcome = TestCopyOutcome.Passed,
+                    Salvaged = salvage,
                     ReadsUsed = resolve.ReadsUsed,
                     Format = fmt,
                     OutputRelDir = copyResult.OutputRelDir,
@@ -1776,7 +1815,7 @@ public sealed class RipService : IRipService
         AssembleAndCommit(TestCopyResult resolve, List<VerifyRecord> reads,
             string sourceStagingAlbumDir, int sourceReadIndex, string outputBaseDir,
             string discId, string drive, int offset, int failedWindows, string format,
-            string albumRelDir, VerifyResult encodedResult)
+            string albumRelDir, VerifyResult encodedResult, bool salvage)
     {
         // Re-home the staged album folder using the RENDERED relative dir, not its last path segment:
         // a multi-disc scheme renders "Artist - Album [2-CD Set]/Disc 2", so taking the last segment
@@ -1828,7 +1867,7 @@ public sealed class RipService : IRipService
             Artist = newest?.Artist ?? "",
             Utc = DateTime.UtcNow,
             RipperVersion = "2026.1.0",
-            ReadKind = "TestAndCopy",
+            ReadKind = salvage ? "SalvageTestAndCopy" : "TestAndCopy",
             Format = format,
             OutputVerificationKnown =
                 encodedResult.OutputVerificationKnown,
@@ -1863,7 +1902,8 @@ public sealed class RipService : IRipService
             encodedResult.CtdbCanRecover,
             encodedResult.CtdbRepairSectors,
             encodedResult.CtdbRepairRanges,
-            committedReadIndex: sourceReadIndex);
+            committedReadIndex: sourceReadIndex,
+            salvage: salvage);
         if (encodedResult.OutputVerificationKnown)
             logText += "\nEncoded-output verification: " +
                 encodedResult.OutputVerificationDetail + "\n";

@@ -414,9 +414,14 @@ public sealed class RipViewModel : PageViewModel
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
 
-    // 0 = Burst, 1 = Secure, 2 = Paranoid (maps to the drive's CorrectionQuality)
+    // Picker index: 0 = Burst, 1 = Secure, 2 = Paranoid, 3 = Salvage (R119: a defective-disc
+    // capture - Burst-quality Test & Copy reads with C2 off at the drive's minimum speed).
     private int _correctionQuality = 1;
     public int CorrectionQuality { get => _correctionQuality; set { if (Set(ref _correctionQuality, value)) _settings.CorrectionQuality = value; } }
+    /// <summary>Engine quality for the picker selection: Salvage runs the engine at Burst.</summary>
+    public int EffectiveCorrectionQuality => _correctionQuality == 3 ? 0 : _correctionQuality;
+    /// <summary>True when the picker selects the Salvage capture mode (R119).</summary>
+    public bool SalvageRead => _correctionQuality == 3;
 
     private string _arText = "not checked";
     public string ArText { get => _arText; private set => Set(ref _arText, value); }
@@ -550,7 +555,7 @@ public sealed class RipViewModel : PageViewModel
         _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
             ? settings.OutputBaseDir
             : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
-        _correctionQuality = Math.Max(0, Math.Min(2, settings.CorrectionQuality));
+        _correctionQuality = Math.Max(0, Math.Min(3, settings.CorrectionQuality));
 
         void RebuildFormats()
         {
@@ -1250,7 +1255,7 @@ public sealed class RipViewModel : PageViewModel
         PersistPrimarySettingsSnapshot();
         DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         char drive = _selectedDrive;
-        int cq = CorrectionQuality;
+        int cq = EffectiveCorrectionQuality;   // a Salvage selection runs a plain job at Burst
         CodecLocked = encode;
         IsRipping = true;
         RipDone = false;
@@ -1444,7 +1449,8 @@ public sealed class RipViewModel : PageViewModel
         var previousHeld = _heldResult;
         if (previousHeld != null) { _heldResult = null; TestCopyHeld = false; }
         char drive = _selectedDrive;
-        int cq = CorrectionQuality;
+        int cq = EffectiveCorrectionQuality;
+        bool salvage = SalvageRead;   // frozen with the rest of the job snapshot
         CodecLocked = true;
         IsRipping = true;
         RipDone = false;
@@ -1525,7 +1531,8 @@ public sealed class RipViewModel : PageViewModel
                 Reread, cover, liveFormat: null,
                 onEncodeStart: LockCodec,
                 onCrcEvidence: PublishCrcEvidence,
-                outputLayout: outputLayout));
+                outputLayout: outputLayout,
+                salvage: salvage));
         }
         finally
         {
@@ -1590,7 +1597,7 @@ public sealed class RipViewModel : PageViewModel
             // this summary name the wrong format
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
             RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, "
-                + (damagedAgreement ? "consistent after " : "verified after ")
+                + (result.Salvaged ? "salvaged (drive-stable) after " : damagedAgreement ? "consistent after " : "verified after ")
                 + $"{result.ReadsUsed} reads (at least 2 agreed per track)"
                 + (repairRequired
                     ? $"; CTDB repair required for {result.CtdbRepairSectors} sector(s)"
@@ -1602,11 +1609,13 @@ public sealed class RipViewModel : PageViewModel
                         ? "; final output PCM verified after metadata"
                         : "; WARNING: final output not verified"
                     : "");
-            StatusText = damagedAgreement
-                ? repairRequired
-                    ? $"Test & Copy consistent; CTDB repair required -> {result.OutputDir}"
-                    : $"Test & Copy consistent; read damage remains -> {result.OutputDir}"
-                : $"Test & Copy verified -> {result.OutputDir}";
+            StatusText = result.Salvaged
+                ? $"Test & Copy salvaged (drive-stable capture, not verified) -> {result.OutputDir}"
+                : damagedAgreement
+                    ? repairRequired
+                        ? $"Test & Copy consistent; CTDB repair required -> {result.OutputDir}"
+                        : $"Test & Copy consistent; read damage remains -> {result.OutputDir}"
+                    : $"Test & Copy verified -> {result.OutputDir}";
             SetPostRipRepair(result);
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
@@ -1617,14 +1626,15 @@ public sealed class RipViewModel : PageViewModel
             PublishReport($"Test & Copy ({result.ReadsUsed} reads)", result.CorrectionQuality,
                 result.ArConfidence, result.ArTotal,
                 result.CtdbConfidence, result.CtdbTotal, result.Accurate,
-                (damagedAgreement ? "consistent" : "verified") +
+                (result.Salvaged ? "salvaged (drive-stable capture)" : damagedAgreement ? "consistent" : "verified") +
                 $" after {result.ReadsUsed} optical reads; at least 2 agreed per track" +
                 (repairRequired ? "; CTDB repair required" : ""),
                 result.OutputDir, result.FileCount, result.Format, result.ReadsUsed, 2,
                 result.OutputVerificationKnown, result.LosslessOutput,
                 result.OutputVerificationPerformed, result.OutputVerificationDetail,
                 failedWindows: result.FailedWindows,
-                damageRepairRequired: result.CtdbHasErrors);
+                damageRepairRequired: result.CtdbHasErrors,
+                salvaged: result.Salvaged);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -1880,7 +1890,8 @@ public sealed class RipViewModel : PageViewModel
                 outputVerificationPerformed: held.OutputVerificationPerformed,
                 outputVerificationDetail: held.OutputVerificationDetail,
                 failedWindows: held.FailedWindows,
-                damageRepairRequired: held.CtdbHasErrors);
+                damageRepairRequired: held.CtdbHasErrors,
+                salvaged: held.Salvaged);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
@@ -2162,7 +2173,8 @@ public sealed class RipViewModel : PageViewModel
         bool outputVerificationKnown = false, bool losslessOutput = false,
         bool outputVerificationPerformed = false,
         string outputVerificationDetail = "",
-        int failedWindows = 0, bool damageRepairRequired = false)
+        int failedWindows = 0, bool damageRepairRequired = false,
+        bool salvaged = false)
     {
         var d = _lastDisc;
         var report = new RipReport
@@ -2193,7 +2205,8 @@ public sealed class RipViewModel : PageViewModel
             TrackCount = d?.AudioTracks ?? Tracks.Count,
             TocId = d?.TocId ?? "",
             FailedWindows = failedWindows,
-            DamageRepairRequired = damageRepairRequired
+            DamageRepairRequired = damageRepairRequired,
+            Salvaged = salvaged
         };
         _reports.Publish(report);
         _history.Add(report);

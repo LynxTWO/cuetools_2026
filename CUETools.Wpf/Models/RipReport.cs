@@ -50,6 +50,10 @@ public sealed class RipReport
     public int FailedWindows { get; init; }
     /// <summary>True when the audio carries CTDB-detected damage (repairable or not).</summary>
     public bool DamageRepairRequired { get; init; }
+    /// <summary>Salvage capture (R119): Burst-quality reads with C2 off at minimum speed.
+    /// Read agreement then proves drive-stable output only, so the independent-reads leg of
+    /// verification never applies; an exact database match remains honest verification.</summary>
+    public bool Salvaged { get; init; }
 
     private static readonly string[] CqNames = { "Burst", "Secure", "Paranoid" };
     public string CorrectionQualityName => CqNames[Math.Clamp(CorrectionQuality, 0, 2)];
@@ -63,11 +67,12 @@ public sealed class RipReport
     /// different assurance source and must not be mislabeled as an AccurateRip/CTDB match.</summary>
     public bool Confirmed => DatabaseConfirmed;
     public bool IndependentReadsVerified =>
-        OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2 && !Damaged;
+        OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2 && !Damaged && !Salvaged;
     /// <summary>True when a database or multiple independent reads verified the audio AND no
     /// damage was recorded. A damaged result renders as consistent everywhere, including here:
-    /// the certificate headline, badge, and history must never outrank the log.</summary>
-    public bool Verified => (DatabaseConfirmed || (OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2)) && !Damaged;
+    /// the certificate headline, badge, and history must never outrank the log. Salvage removes
+    /// the reads leg only; a real database match still verifies the bytes.</summary>
+    public bool Verified => (DatabaseConfirmed || (OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2 && !Salvaged)) && !Damaged;
 
     public string OffsetText => Offset >= 0 ? "+" + Offset : Offset.ToString();
 
@@ -83,7 +88,9 @@ public sealed class RipReport
         sb.Append("Album         : ").Append(Album).Append(Year.Length > 0 ? " (" + Year + ")" : "").Append('\n');
         sb.Append("Drive         : ").Append(DriveName).Append('\n');
         sb.Append("Read offset   : ").Append(OffsetText).Append(" samples\n");
-        sb.Append("Accuracy mode : ").Append(CorrectionQualityName).Append('\n');
+        sb.Append("Accuracy mode : ").Append(Salvaged ? "Salvage (Burst, C2 off, minimum speed)" : CorrectionQualityName).Append('\n');
+        if (Salvaged)
+            sb.Append("Salvage       : drive-stable capture of a defective disc - read agreement is not verification\n");
         sb.Append("Tracks        : ").Append(TrackCount).Append('\n');
         if (TocId.Length > 0) sb.Append("TOC id        : ").Append(TocId).Append('\n');
         sb.Append("AccurateRip   : ").Append(Accurate
