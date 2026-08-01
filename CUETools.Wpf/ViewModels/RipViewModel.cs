@@ -1195,6 +1195,45 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // A real re-read: ReReads = extra passes over a stuck window, ErrorSectors = sectors still
+    // disagreeing. ReReads == 0 means the window cleared; the linger timer then hides the box.
+    // The Unreadable badge and StopOnUnrecoverable key on the ENGINE's give-up verdict
+    // (WindowGivenUpSectors > 0), surfaced once per window after the retry policy classified its
+    // sectors failed - never on running mid-pass counts, which a later chunk of the same pass can
+    // still converge, and never on a pass threshold, which would cut the deep-recovery extension
+    // short (R110).
+    private Action<RereadReport> MakeRereadHandler(System.Windows.Threading.Dispatcher? dispatcher)
+        => r => dispatcher?.BeginInvoke(new Action(() =>
+        {
+            if (r.ReReads > 0)
+            {
+                _lastRereadUtc = DateTime.UtcNow;
+                RereadVisible = true;
+                RereadCount = r.ReReads;
+                RereadMax = Math.Max(1, r.MaxReReads);
+                RereadErrors = r.ErrorSectors;
+                RereadFrac = r.WindowFrac;
+                RereadText = $"{(int)(r.WindowFrac * 100)}% in";
+
+                bool failed = r.WindowGivenUpSectors > 0;
+                RereadActive = !failed;
+                Unreadable = failed;
+                _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
+                if (failed && _settings.StopOnUnrecoverable && IsRipping)
+                {
+                    _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
+                    StatusText = $"Unrecoverable damage at {(int)(r.WindowFrac * 100)}% - stopping.";
+                    Task.Run(() => { try { _rip.Stop(); } catch { } });
+                }
+            }
+            else
+            {
+                RereadActive = false;   // cleared: stop animating, let the box linger then hide
+                RereadErrors = 0;
+                if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
+            }
+        }));
+
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy || (encode && ArtLoading)) return;
@@ -1245,42 +1284,7 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
-        // n == 0 means the window cleared; the linger timer then hides the box.
-        void Reread(int n, int max, int errs, double frac)
-            => dispatcher?.BeginInvoke(new Action(() =>
-            {
-                if (n > 0)
-                {
-                    _lastRereadUtc = DateTime.UtcNow;
-                    RereadVisible = true;
-                    RereadCount = n;
-                    RereadMax = Math.Max(1, max);
-                    RereadErrors = errs;
-                    RereadFrac = frac;
-                    RereadText = $"{(int)(frac * 100)}% in";
-
-                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
-                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
-                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
-                    bool failed = n >= RereadMax && errs > 0;
-                    RereadActive = !failed;
-                    Unreadable = failed;
-                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
-                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
-                    {
-                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
-                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
-                        Task.Run(() => { try { _rip.Stop(); } catch { } });
-                    }
-                }
-                else
-                {
-                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
-                    RereadErrors = 0;
-                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
-                }
-            }));
+        var Reread = MakeRereadHandler(dispatcher);
 
         StartRereadTimer();
 
@@ -1471,42 +1475,7 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
-        // n == 0 means the window cleared; the linger timer then hides the box.
-        void Reread(int n, int max, int errs, double frac)
-            => dispatcher?.BeginInvoke(new Action(() =>
-            {
-                if (n > 0)
-                {
-                    _lastRereadUtc = DateTime.UtcNow;
-                    RereadVisible = true;
-                    RereadCount = n;
-                    RereadMax = Math.Max(1, max);
-                    RereadErrors = errs;
-                    RereadFrac = frac;
-                    RereadText = $"{(int)(frac * 100)}% in";
-
-                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
-                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
-                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
-                    bool failed = n >= RereadMax && errs > 0;
-                    RereadActive = !failed;
-                    Unreadable = failed;
-                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
-                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
-                    {
-                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
-                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
-                        Task.Run(() => { try { _rip.Stop(); } catch { } });
-                    }
-                }
-                else
-                {
-                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
-                    RereadErrors = 0;
-                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
-                }
-            }));
+        var Reread = MakeRereadHandler(dispatcher);
 
         StartRereadTimer();
 
