@@ -1049,6 +1049,9 @@ public sealed class RipService : IRipService
                     $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
                     $"pinpoint_retries={reader.PinpointRetryCount} " +
                     $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
+                    $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
+                    $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
+                    $"given_up_windows={reader.GivenUpWindowCount} " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch

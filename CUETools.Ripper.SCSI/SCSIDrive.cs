@@ -82,6 +82,7 @@ namespace CUETools.Ripper.SCSI
 		private int _corroboratedUnreadablePinpointCount;
 		private int _givenUpWindowCount;
 		private int _shortPayloadTransferCount;
+		private int _extendedTimeoutReadCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
@@ -104,6 +105,9 @@ namespace CUETools.Ripper.SCSI
 		/// not match the exact request (R112). Live occurrence evidence for the open
 		/// GOOD-status-underrun unknown; expected to stay zero.</summary>
 		public int ShortPayloadTransferCount => _shortPayloadTransferCount;
+		/// <summary>Low-speed recovery reads issued with the extended R118 timeout instead of
+		/// the baseline. Activation evidence for the ERROR_SEM_TIMEOUT mitigation.</summary>
+		public int ExtendedTimeoutReadCount => _extendedTimeoutReadCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -1467,18 +1471,27 @@ namespace CUETools.Ripper.SCSI
 		private unsafe Device.CommandStatus FetchSectors(int sector, int Sectors2Read, bool abort)
 		{
 			Device.CommandStatus st;
+			// R118: a re-read of known trouble at low speed can exceed the fixed timeout while
+			// the drive's servo hunts a slipping zone; the port driver then resets the device
+			// and the read dies as IoctlFailed / ERROR_SEM_TIMEOUT, killing the whole job.
+			// Extend the timeout for exactly that observed shape; healthy reads keep the tight
+			// baseline so a dead drive still fails fast.
+			int timeoutSeconds = ReadTimeoutPolicy.SecondsFor(
+				_timeout, _appliedSpeedKbps, _currentErrorsCount > 0);
+			if (timeoutSeconds != _timeout)
+				_extendedTimeoutReadCount++;
 			fixed (byte* data = _readBuffer)
 			{
 				if (_debugMessages)
 				{
-					int size = (4 * 588 + (_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0)) 
+					int size = (4 * 588 + (_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0))
 						* (int)Sectors2Read;
 					AudioSamples.MemSet(data, 0xff, size);
 				}
 				if (_readCDCommand == ReadCDCommand.ReadCdBEh)
-					st = m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), _timeout);
+					st = m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), timeoutSeconds);
 				else
-					st = m_device.ReadCDDA(Device.SubChannelMode.None, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), _timeout);
+					st = m_device.ReadCDDA(Device.SubChannelMode.None, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), timeoutSeconds);
 			}
 
 			if (st == Device.CommandStatus.Success)
