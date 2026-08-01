@@ -151,6 +151,13 @@ public sealed class TestCopyRunResult
     public TrackCrc[] CrcEvidence { get; init; } = Array.Empty<TrackCrc>();
 }
 
+/// <summary>One re-read progress report from the secure read loop.
+/// <see cref="WindowGivenUpSectors"/> carries the engine's one-shot give-up verdict (-1 on
+/// ordinary reports): consumers that stop a job or badge a window "unreadable" key on it, never
+/// on running mid-pass counts, which a later chunk of the same pass can still converge (R110).</summary>
+public readonly record struct RereadReport(
+    int ReReads, int MaxReReads, int ErrorSectors, double WindowFrac, int WindowGivenUpSectors);
+
 public interface IRipService
 {
     /// <summary>Newest persisted per-track Test/Copy CRC evidence for an inserted disc.</summary>
@@ -159,10 +166,10 @@ public interface IRipService
     /// <summary>Verify the disc against AccurateRip + CTDB (reads the whole disc, writes nothing).
     /// <paramref name="telemetry"/> receives best-effort RMS and scope samples through a bounded
     /// mailbox; a stalled UI drops visualization instead of delaying the disc read.
-    /// <paramref name="onReread"/> reports a real sector re-read: (reReads, maxReReads, errorSectors,
-    /// discFrac); reReads &gt; 0 only when the drive is doing extra passes over a stuck window.
+    /// <paramref name="onReread"/> reports a real sector re-read (see <see cref="RereadReport"/>);
+    /// ReReads &gt; 0 only when the drive is doing extra passes over a stuck window.
     /// <paramref name="metadata"/>, when given, is the release the user chose (else auto-picked).</summary>
-    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null);
+    VerifyResult RunVerify(char drive, int correctionQuality, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null);
 
     /// <summary>Rip the disc (read + encode + verify) to the given format under
     /// <paramref name="outputBaseDir"/>\Artist - Album, using the chosen release metadata when
@@ -173,7 +180,7 @@ public interface IRipService
     /// <paramref name="onEncodeStart"/>, when
     /// given, fires once right before the actual encode begins (never on a verify-only pass) - the
     /// caller uses it to lock the codec choice at that moment.</summary>
-    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
+    VerifyResult RunEncode(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
 
     /// <summary>Ask the running rip/verify to stop at the next safe point. No-op if nothing runs.</summary>
     void Stop();
@@ -189,7 +196,7 @@ public interface IRipService
     /// codec choice once encoding actually starts. <paramref name="onCrcEvidence"/> receives a
     /// fresh named Test/Copy snapshot after each completed read; it is an ancillary notification
     /// and must not affect the read or final transaction result.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -273,7 +280,7 @@ public sealed class RipService : IRipService
             _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
     }
 
-    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null)
+    public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null)
     {
         // Hold one outer scope across calibration and the actual read. The nested scopes inside
         // those phases keep their own invariants, while this one prevents a drive selector from
@@ -294,7 +301,7 @@ public sealed class RipService : IRipService
         return Run(drive, cq, encode: false, "flac", metadata, "", onProgress, telemetry, onReread);
     }
 
-    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
+    public VerifyResult RunEncode(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         string selectedFormat = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         string codecFailure = ValidateCodecBeforeOpticalRead(selectedFormat);
@@ -352,7 +359,7 @@ public sealed class RipService : IRipService
         try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
     }
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
@@ -700,10 +707,11 @@ public sealed class RipService : IRipService
                         failedWindows++;
                         _log.Warn("rip.reread", $"gave up on window at {(int)(frac * 100)}% unresolvedSectors={e.WindowGivenUpSectors} (unreadable by drive)");
                     }
-                    if (onReread != null && (reReads > 0 || lastReReads > 0))
+                    if (onReread != null && (reReads > 0 || lastReReads > 0 || e.WindowGivenUpSectors > 0))
                     {
                         double wfrac = e.PassEnd > e.PassStart ? (double)e.PassStart / total : frac;
-                        onReread(reReads, maxReReads, e.ErrorsCount, Math.Min(1.0, Math.Max(0.0, wfrac)));
+                        onReread(new RereadReport(reReads, maxReReads, e.ErrorsCount,
+                            Math.Min(1.0, Math.Max(0.0, wfrac)), e.WindowGivenUpSectors));
                     }
                     // rip.recovery: one line per re-read pass of a stuck window (logged at the pass's
                     // last chunk, where its fresh count is complete), plus a per-window summary flushed
@@ -1226,7 +1234,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<int, int, int, double>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks)
     {
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         string codecFailure = ValidateCodecBeforeOpticalRead(fmt);

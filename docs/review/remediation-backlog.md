@@ -2937,7 +2937,11 @@ step before any fix.
 - **Smallest safe next step:** latch the stop only on a window the engine has
   classified given-up (post-window, not mid-pass), preserving the extension.
 - **Verification plan:** WPF suite reread-handler cases.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `RereadReport` carries the engine's one-shot
+  verdict through `onReread`; the two duplicated VM closures collapsed into one
+  `MakeRereadHandler` that latches Unreadable and Stop only on
+  `WindowGivenUpSectors > 0`. Source-contract tests pin both the VM latch and
+  the RipService forwarding; WPF 455/455.
 
 ### R111. CTDB repair applies the first server-ordered variant - bucket A, risk medium
 
