@@ -691,11 +691,14 @@ public sealed class RipService : IRipService
                     {
                         speedCtl.OnCleanRegion(); RequestSpeed(); lastEaseFrac = frac;
                     }
-                    // last pass and the sectors still disagree: the drive has given up on this window
-                    if (reReads >= maxReReads && e.ErrorsCount > 0 && lastReReads < maxReReads)
+                    // Engine give-up verdict, surfaced once per window after the retry policy
+                    // classified its sectors failed. The old mid-pass heuristic (reReads >=
+                    // maxReReads with a running error count) overcounted: deep recovery can
+                    // converge a window well past maxReReads (R106).
+                    if (e.WindowGivenUpSectors > 0)
                     {
                         failedWindows++;
-                        _log.Warn("rip.reread", $"gave up on window at {(int)(frac * 100)}% errors={e.ErrorsCount} (unreadable by drive)");
+                        _log.Warn("rip.reread", $"gave up on window at {(int)(frac * 100)}% unresolvedSectors={e.WindowGivenUpSectors} (unreadable by drive)");
                     }
                     if (onReread != null && (reReads > 0 || lastReReads > 0))
                     {

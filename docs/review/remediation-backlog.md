@@ -2857,7 +2857,12 @@ step before any fix.
   count; fix the byte-cast wrap; correct the gave-up counter.
 - **Verification plan:** deterministic ripper-suite cases for converged-late,
   never-converged, and baseline-cap sectors; canonical modern suites.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `FailedSectorAccounting.FinalizeWindow` marks
+  give-up as engine state at window end (legacy-sentinel equivalence proven by
+  test), `FailedSectors` is engine-maintained, the one-shot
+  `WindowGivenUpSectors` verdict rides `ReadProgressArgs` like the slip
+  verdict, and `RipService` counts engine verdicts instead of the mid-pass
+  heuristic. Ripper 40/40, WPF 453/453, legacy lane 22/113/10/17 all pass.
 
 ### R107. Deep-recovery pass counts can wrap 8-bit vote accumulators - bucket A, risk medium
 
@@ -2874,7 +2879,10 @@ step before any fix.
   bound; add a deterministic wrap regression test.
 - **Verification plan:** ripper suite; unknowns entry stays open for the
   telemetry ceiling question.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `RecoveryPolicy.MaxPasses = 252` bounds the
+  deep-recovery loop; the accumulator-capacity guard test pins pass + 2 within
+  a byte and passes below the 256-observation lane carry. The reachability
+  unknown stays open; the wrap is now unreachable by construction.
 
 ### R108. Held Copy deleted on Stop-during-confirm and on tray events - bucket A, risk high
 
