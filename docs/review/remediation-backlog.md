@@ -3141,7 +3141,19 @@ step before any fix.
   answers. The slip=1 zones also strengthen the parked slip-realignment
   question (R116): entire regions slip consistently, so offset-aware reads
   may be the only non-salvage recovery for this disc class.
-- **Status:** open.
+- **Status:** first mitigation implemented 2026-08-01 (software).
+  `ReadTimeoutPolicy` extends the per-command READ CD timeout to a bounded
+  45 s for exactly the observed shape - a window still in recovery at
+  <= 1500 kB/s (both live deaths: 1408 and 44 kB/s) - while every healthy
+  read keeps the 10 s baseline so a dead drive fails fast. The
+  `ExtendedTimeoutReadCount` counter plus the enriched rip.drive telemetry
+  line carry activation evidence; ripper 51/51 and all lanes green. Still
+  open: per-drive read-latency high-water calibration (fits the existing
+  `DriveCalibration` pattern - measure the drive's worst honest read time
+  and set timeouts just above it), the deferred-window retry ledger (bank a
+  near-timeout window, continue the rip, return to it later at a different
+  speed instead of dying mid-job; overlaps R116 persistence), the flush-speed
+  restoration, and the 20/00 read-command re-probe. All need live sessions.
 
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
