@@ -1,8 +1,79 @@
 # Unknowns: Adversarial Pass
 
-Current-state refresh: 2026-07-29.
+Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
 
 ## Entries
+
+### GOOD-status SCSI underruns in the wild
+
+- **Area or file:** `Bwg.Scsi/Device.cs:836-852`, `SCSIDrive.cs:1472-1489`.
+- **Concern:** the pass-through returns Success on `ScsiStatus == 0` without
+  re-reading `DataTransferLength`, so a GOOD-status underrun would fold stale
+  bytes from the reused read buffer into the vote as a clean pass. Whether any
+  real drive or USB/SATA bridge produces GOOD-status underruns is unknown.
+- **Why it matters:** if it occurs, wrong audio enters the secure vote with
+  clean-pass weight, and in burst mode goes straight to the published rip.
+- **Evidence found so far:** `f.DataTransferLength` is written before the ioctl
+  and never re-read; the buffer canary fill runs only under `_debugMessages`
+  (`SCSIDrive.cs:1474-1479`); no residual assertion exists anywhere in the
+  transport. Code fact verified 2026-08-01; live behavior unknown.
+- **Confidence:** verified (code), unknown (live occurrence).
+- **Likely owner:** optical/SCSI maintainer.
+- **Next best check:** assert `DataTransferLength == requested` after every
+  data-in pass-through and log a named counter; run one full H:/K: session and
+  retain the counter evidence.
+- **Risk level:** high.
+- **Status:** open.
+
+### Deep-recovery pass counts vs 8-bit vote accumulators
+
+- **Area or file:** `SCSIDrive.cs:1438-1447`, `SecureSectorVote.cs:33-46`,
+  `RecoveryPolicy.cs`.
+- **Concern:** `RecoveryPolicy` bounds a window by plateau (8 passes) and time
+  (120 s) but not by pass count; past 255 contributing passes the byte lanes
+  and `C2Count` wrap, which can flip a vote with a confident margin. Whether
+  more than 255 passes fit inside the ceiling on real hardware is unknown; it
+  plausibly requires cache-served sub-500 ms re-read passes.
+- **Why it matters:** a wrapped lane corrupts every sector in the stuck window,
+  including clean ones, and the result publishes as secure.
+- **Evidence found so far:** accumulator adds are plain byte/lane adds with no
+  saturation; baseline `max_scans` maxes at 128 and was safely under 256;
+  `RecoveryPolicyTests.cs` covers only the policy arithmetic. Inferred
+  2026-08-01, not personally re-traced end to end.
+- **Confidence:** inferred.
+- **Likely owner:** optical/SCSI maintainer.
+- **Next best check:** cap deep-recovery passes at 255 (or saturate the
+  accumulators) and add a max-pass-count telemetry counter to confirm real
+  ceilings; a deterministic TestRipper case can prove the wrap today.
+- **Risk level:** medium.
+- **Status:** open.
+
+### Recovery orchestration branches lack in-repo activation tests
+
+- **Area or file:** `SCSIDrive.cs` batch split/decomposition/transition-retry
+  orchestration; backlog R55, R57, R58, R59, cache-defeat transition retry.
+- **Concern:** the deterministic tests cover the pure classifiers
+  (`PayloadReadFailurePolicy`) and a source-string contract, but no test
+  drives the orchestration through a seam-injected failing Device, so the
+  wiring between classifier verdicts and loop behavior has no automated
+  activation evidence.
+- **Why it matters:** the branch-activation rule: a passing end-to-end run
+  does not exercise an intermittent recovery branch; regressions in the wiring
+  would ship silently. The 2026-08-01 addendum's inferred finding that the
+  multi-sector 24/00 transition retry is unreachable is exactly the class of
+  defect such tests would catch.
+- **Evidence found so far:** `ReadCommunicationRetrySourceContractTests.cs`
+  asserts source strings; `PayloadReadFailurePolicyTests.cs` tests the pure
+  policy; R105 has live H: route evidence; R55/R58/R59 medium-parent and
+  rejected-parent pinpoint branches have zero recorded activations.
+- **Confidence:** verified (absence of such tests), inferred (unreachability
+  claims).
+- **Likely owner:** optical/SCSI maintainer.
+- **Next best check:** an injectable `IScsiDevice` seam (or subclass hook) that
+  scripts exact sense sequences per command, then deterministic tests for the
+  R55/R57/R58/R59 routes including the 24/00-during-transition ordering.
+- **Risk level:** medium.
+- **Status:** open.
 
 ### H normal-read 08/0A communication retry activation
 
