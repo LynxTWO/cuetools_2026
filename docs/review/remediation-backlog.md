@@ -3118,8 +3118,17 @@ step before any fix.
 ## Ordering
 
 The locally actionable and hosted correctness queue is closed through R105.
-The 2026-08-01 recovery wave (R106-R116) is the active queue; R117 awaits a
-decision. Remaining work is ordered by the authority or evidence it requires:
+The 2026-08-01 recovery wave landed the same day: R106-R114 are fixed,
+R115 is fixed 2-of-4 with the remainder re-scoped, and R116 is the open next
+slice, in this order: the injectable device seam (also activates the R114
+routes), held-result persistence across app exit, the targeted-reread vote
+design (requires per-sector pass counts - the current margin math assumes
+uniform passes), CTDB-guided second-chance rereads, per-sector session
+persistence, and the two hardware-gated R115 items (pass-boundary speed on
+the drive matrix; adaptive quorum with TestRipper corpus evidence). One live
+H:/K: session should retain the new `ShortPayloadTransferCount` and
+`GivenUpWindowCount` counters. R117 awaits decision D8. Remaining work is
+ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -3160,6 +3169,13 @@ decision. Remaining work is ordered by the authority or evidence it requires:
   scenario-stress audit. User approved autonomous remediation, including protected areas.
 - 2026-08-01 - added R106-R117 from the damaged-disc recovery adversarial pass.
   User approved the full wave; R117 parked as decision D8.
+- 2026-08-01 - wave executed: R106-R114 fixed, R115 fixed 2-of-4 (rest
+  re-scoped to R116 with named evidence prerequisites), 12 commits, every
+  batch gated on both test lanes. Plan fields lived in the R-entries
+  themselves rather than a separate safe-fix-plan update. Scenario
+  stress-test gained the SR1-SR8 recovery scenarios; the accumulator-wrap
+  unknown resolved by construction, the underrun unknown moved to in
+  progress behind its named counter.
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
