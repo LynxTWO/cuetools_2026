@@ -38,19 +38,49 @@ namespace CUETools.Ripper.SCSI
         /// with 24/00 while accepting the same address range one sector at a time.
         /// This is a transfer-shape fallback, not damaged-media recovery: callers
         /// may continue only when every independently read sector succeeds.
+        /// While a control or cache-defeat transition is pending, a 24/00 is the
+        /// documented transition rejection, not transfer-shape evidence - it must
+        /// reach the one-shot transition retry instead of being decomposed into
+        /// per-sector media verdicts (R114); the repeat after that retry is fatal.
         /// </summary>
         public static bool ShouldDecomposeRejectedPayloadBatch(
+            bool controlTransitionPending,
             int sectorCount,
             Device.CommandStatus status,
             Device.SenseKeyType senseKey,
             byte asc,
             byte ascq)
         {
-            return sectorCount > 1 &&
+            return !controlTransitionPending &&
+                sectorCount > 1 &&
                 status == Device.CommandStatus.DeviceFailed &&
                 senseKey == Device.SenseKeyType.IllegalRequest &&
                 asc == 0x24 &&
                 ascq == 0x00;
+        }
+
+        /// <summary>
+        /// In the medium-error / legacy 64/00 batch split, decide whether a failed
+        /// single-sector child may be marked untrusted media evidence. A medium-error
+        /// child always may. Under the legacy 64/00 parent, only a child repeating the
+        /// exact 64/00 identity may - mixed-mode data tracks inside the audio range
+        /// fail exactly this way. Every other child class - removal, transport,
+        /// readiness, command, hardware - stays fatal under either parent (R114).
+        /// </summary>
+        public static bool MayMarkSplitChildUnreadable(
+            bool mediumErrorParent,
+            bool legacyTrackParent,
+            Device.CommandStatus childStatus,
+            Device.SenseKeyType childSenseKey,
+            byte childAsc,
+            byte childAscq)
+        {
+            if (IsMediumError(childStatus, childSenseKey))
+                return true;
+            return legacyTrackParent &&
+                childStatus == Device.CommandStatus.DeviceFailed &&
+                childAsc == 0x64 &&
+                childAscq == 0x00;
         }
 
         /// <summary>
@@ -91,7 +121,9 @@ namespace CUETools.Ripper.SCSI
             byte pinpointAsc,
             byte pinpointAscq)
         {
+            // The parent only decomposed because no transition was pending at that moment.
             return ShouldDecomposeRejectedPayloadBatch(
+                    false,
                     parentSectorCount,
                     parentStatus,
                     parentSenseKey,
