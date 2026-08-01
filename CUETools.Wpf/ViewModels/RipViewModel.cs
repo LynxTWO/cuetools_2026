@@ -443,6 +443,13 @@ public sealed class RipViewModel : PageViewModel
     private bool _testCopyIsWarning;
     public bool TestCopyIsWarning { get => _testCopyIsWarning; private set => Set(ref _testCopyIsWarning, value); }
     private TestCopyRunResult? _heldResult;
+    // A held result parked across a tray or disc-view clear (R108): a phantom tray event or an
+    // accidental eject must not destroy the only completed Copy. It is restored when the same
+    // disc returns, and discarded only when a different disc loads, a new job starts, or the
+    // user discards explicitly.
+    private TestCopyRunResult? _parkedHeldResult;
+    private string _parkedHeldDiscId = "";
+    private string _currentDiscId = "";
 
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
@@ -770,6 +777,8 @@ public sealed class RipViewModel : PageViewModel
         else
         {
             IsDiscPresent = true;
+            _currentDiscId = info.DiscId;
+            ResolveParkedHeld(info.DiscId);
             AlbumTitle = info.Album;
             AlbumArtist = string.IsNullOrWhiteSpace(info.Artist)
                 ? (string.IsNullOrWhiteSpace(info.DriveName) ? $"Drive {drive}:" : info.DriveName)
@@ -1239,6 +1248,7 @@ public sealed class RipViewModel : PageViewModel
         if (!IsDiscPresent || IsRipping || IsBusy || (encode && ArtLoading)) return;
         if (encode && !ValidateSelectedCodec("rip")) return;
         PersistPrimarySettingsSnapshot();
+        DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         char drive = _selectedDrive;
         int cq = CorrectionQuality;
         CodecLocked = encode;
@@ -1427,6 +1437,7 @@ public sealed class RipViewModel : PageViewModel
             return;
         if (!ValidateSelectedCodec("Test & Copy")) return;
         PersistPrimarySettingsSnapshot();
+        DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         // Keep the previous held staging until the NEW run has produced a result. Discarding it up
         // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
         // with nothing to accept - the verified reads they already had were gone.
@@ -1931,6 +1942,39 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // Parked-held resolution at disc arrival (R108): the same disc restores the held offer with
+    // its staging intact; a different disc proves the user moved on, so the parked staging is
+    // freed - it must never be committable under another disc's identity.
+    private void ResolveParkedHeld(string discId)
+    {
+        var parked = _parkedHeldResult;
+        if (parked == null) return;
+        if (_parkedHeldDiscId == discId)
+        {
+            _parkedHeldResult = null;
+            _parkedHeldDiscId = "";
+            _heldResult = parked;
+            TestCopyHeld = true;
+            TestCopyIsWarning = true;
+            TestCopyText =
+                "Held - the disc is back. The completed Copy is retained; re-run, accept it anyway, or discard.";
+        }
+        else
+        {
+            DiscardParkedHeld("a different disc was loaded");
+        }
+    }
+
+    private void DiscardParkedHeld(string reason)
+    {
+        var parked = _parkedHeldResult;
+        if (parked == null) return;
+        _parkedHeldResult = null;
+        _parkedHeldDiscId = "";
+        try { _rip.DiscardStaging(parked); } catch { }
+        _log.Info("rip", $"parked held Test & Copy freed - {reason}");
+    }
+
     // Drop back to the no-disc view (tray open or emptied). Keeps the disc read-map / tracks from
     // lingering after the media is gone.
     private void ClearDiscView(DriveTrayState tray)
@@ -1944,28 +1988,33 @@ public sealed class RipViewModel : PageViewModel
         Releases.Clear();
         _chosenMetadata = null;
         _selectedRelease = null;
-        // A held Test & Copy belongs to the disc that produced it. Leaving it live across a disc change
-        // meant "Accept anyway" would commit the PREVIOUS disc's audio while the page showed a different
-        // disc - and the panel is nested in the disc-present view, so it silently vanished rather than
-        // being dismissed. Release it here, and free its staging so a full album is not orphaned.
-        bool heldDropped = false;
+        // A held Test & Copy belongs to the disc that produced it. Leaving it live across a disc
+        // change meant "Accept anyway" would commit the PREVIOUS disc's audio while the page
+        // showed a different disc. But deleting it here destroyed the only completed Copy on a
+        // phantom tray event or an accidental eject (R108). So PARK it, keyed to its disc: the
+        // same disc returning restores the offer; a different disc, a new job, or an explicit
+        // Discard frees the staging.
+        bool heldParked = false;
         if (_heldResult != null)
         {
-            try { _rip.DiscardStaging(_heldResult); } catch { }
+            if (_parkedHeldResult != null)
+                try { _rip.DiscardStaging(_parkedHeldResult); } catch { }
+            _parkedHeldResult = _heldResult;
+            _parkedHeldDiscId = _currentDiscId;
             _heldResult = null;
             TestCopyHeld = false;
             TestCopyText = "";   // its only binding sits inside the panel that just collapsed
-            heldDropped = true;
+            heldParked = true;
         }
         bool open = tray == DriveTrayState.Open;
         AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc - insert an audio CD";
         AlbumArtist = "";
         DiscInfoText = "";
-        // Say why the held result vanished. It must be assigned AFTER the line above, which would
+        // Say why the held panel vanished. It must be assigned AFTER the line above, which would
         // otherwise overwrite it, and it cannot go in TestCopyText - that binding lives inside the
         // panel this same method collapses, so the explanation would never be rendered.
-        StatusText = heldDropped
-            ? "The held Test & Copy was dropped because the disc changed - its staging was freed."
+        StatusText = heldParked
+            ? "The held Test & Copy is parked - reinsert the same disc to resume it. A different disc frees it."
             : open ? "Tray open." : "Drive ready - insert an audio CD.";
         OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(SelectedRelease));

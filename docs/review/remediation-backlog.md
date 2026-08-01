@@ -2903,7 +2903,14 @@ step before any fix.
   change semantics stay: a genuinely different disc still invalidates).
 - **Verification plan:** WPF suite cases for stop-during-confirm hold,
   eject-with-held confirmation, and disc-change invalidation.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01, stronger than the planned confirmation: a stop
+  before or during the confirming read now holds the completed Copy
+  (`BuildHeld` gained `honorStop`), and no tray-driven path deletes held
+  staging at all - `ClearDiscView` parks the result keyed to its disc; the
+  same disc returning restores the offer, while a different disc, a new job,
+  or an explicit Discard frees it. Contract tests pin both; WPF 457/457.
+  Remaining (tracked in R116): a held result still does not survive app exit,
+  so the 24-hour startup sweep can free a crash-stranded stage.
 
 ### R109. Damage and evidence truth in report, history, and rip.verify - bucket A, risk high
 

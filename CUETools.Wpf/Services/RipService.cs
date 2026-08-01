@@ -1346,12 +1346,37 @@ public sealed class RipService : IRipService
                 // somewhere. Re-resolve with all three reads staged (Test is still index 0/unstaged).
                 // The same preflighted codec is used for the confirming read.
                 phase = "confirm";
-                ThrowIfStopRequested();
-                var thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+                VerifyResult thirdResult;
+                try
+                {
+                    ThrowIfStopRequested();
+                    thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+                }
+                catch (StopException)
+                {
+                    // A completed Copy is already staged; a stop here holds it, never deletes it.
+                    _log.Warn(
+                        "rip",
+                        "stopped before the confirming read; holding the completed Copy instead of deleting it");
+                    return BuildHeld(
+                        resolve.HeldTracks,
+                        "Stopped before the confirming read.",
+                        honorStop: false);
+                }
                 if (!thirdResult.Ok)
                 {
                     if (thirdResult.Error == "Stopped.")
-                        return Fail(thirdResult.Error);
+                    {
+                        // StopOnUnrecoverable can issue this stop automatically on a damaged
+                        // disc; the completed Copy from read 2 is the only encoded result.
+                        _log.Warn(
+                            "rip",
+                            "stop during the confirming read; holding the completed Copy instead of deleting it");
+                        return BuildHeld(
+                            resolve.HeldTracks,
+                            "Stopped during the confirming read.",
+                            honorStop: false);
+                    }
                     _log.Warn(
                         "rip",
                         "confirming read failed after a complete staged Copy; holding the Copy instead of deleting it");
@@ -1383,9 +1408,14 @@ public sealed class RipService : IRipService
             // Discard / Re-run follow-ups; keepStaging suppresses the finally-block cleanup.
             TestCopyRunResult BuildHeld(
                 int[] heldTracks,
-                string holdReason = "")
+                string holdReason = "",
+                bool honorStop = true)
             {
-                ThrowIfStopRequested();   // do not commit an album the user cancelled
+                // A stop before any completed Copy exists cancels the album outright. Once a
+                // completed Copy is staged, the confirm-phase callers pass honorStop: false -
+                // holding is preservation, not publication, and deleting the only completed
+                // result would force 2-3 more reads of degraded media (R108).
+                if (honorStop) ThrowIfStopRequested();
                 keepStaging = true;
                 var last = reads[reads.Count - 1];
                 return new TestCopyRunResult
