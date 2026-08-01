@@ -8,6 +8,12 @@ namespace CUETools.Ripper.SCSI
     {
         public const int PlateauPasses = 8;       // stop after this many passes with no new best
         public const double CeilingSeconds = 120; // hard wall-clock stop per window
+        /// <summary>Absolute pass cap for a deep-recovery window (R107). Every per-sector vote
+        /// accumulator is 8-bit: the UserData bit lanes carry into their neighbor at 256
+        /// observations, and C2Count and the retry entries wrap at 256. The cap keeps pass counts
+        /// (and the pass + 2 retry encoding) strictly inside those bounds; the plateau and time
+        /// ceiling almost always stop a window first.</summary>
+        public const int MaxPasses = 252;
 
         private int _best = int.MaxValue;
         private int _sinceImproved;

@@ -78,6 +78,7 @@ namespace CUETools.Ripper.SCSI
 		private int _payloadBatchFallbackCount;
 		private int _pinpointRetryCount;
 		private int _corroboratedUnreadablePinpointCount;
+		private int _givenUpWindowCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int ReadCommunicationRetryCount => _readCommunicationRetryCount;
@@ -92,6 +93,9 @@ namespace CUETools.Ripper.SCSI
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
 			_corroboratedUnreadablePinpointCount;
+		/// <summary>Windows whose pass loop ended with unresolved sectors (engine-classified
+		/// give-up, R106). Complements FailedSectors, which carries the per-sector bits.</summary>
+		public int GivenUpWindowCount => _givenUpWindowCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -193,27 +197,13 @@ namespace CUETools.Ripper.SCSI
         {
             get
             {
+                // Maintained by the engine: FailedSectorAccounting.FinalizeWindow sets bits when
+                // a window's pass loop ends unresolved (R106). The lazy fallback covers a drive
+                // that never ripped (or was closed, when _toc is null) so log generation reports
+                // "no failures" instead of throwing. Never derive failure from retry-count
+                // arithmetic here: deep recovery's extension overshoots the legacy sentinel.
                 if (m_failedSectors == null)
-                {
-                    // Burst mode (CorrectionQuality 0) never allocates the per-sector retry
-                    // array, and _toc is null once the drive is closed. Guard both so log
-                    // generation after a burst read reports "no failures" instead of throwing.
                     m_failedSectors = new BitArray(_toc == null ? 0 : (int)_toc.AudioLength);
-                    if (m_retryCount != null)
-                    {
-                        // A sector is "failed" only when it exhausted the retry budget without the
-                        // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
-                        // the +1 marking give-up rather than "resolved on the last allowed pass".
-                        int n = m_failedSectors.Length;
-                        for (int i = 0; i < n; i++)
-                        {
-                            int retryIndex = i - _retrySectorBase;
-                            if (retryIndex >= 0 && retryIndex < m_retryCount.Length)
-                                m_failedSectors[i] =
-                                    m_retryCount[retryIndex] == (16 << _correctionQuality) + 1;
-                        }
-                    }
-                }
                 return m_failedSectors;
             }
         }
@@ -2279,12 +2269,16 @@ namespace CUETools.Ripper.SCSI
 			// Deep recovery: the blind cap becomes progress-aware. RecoveryPolicy keeps us going while
 			// the error count is still improving and stops on a plateau or a time ceiling. When deep
 			// recovery is off, hard_cap stays at max_scans and the policy is never consulted, so this
-			// loop is identical to before.
-			int hard_cap = DeepRecovery ? int.MaxValue : max_scans;
+			// loop is identical to before. MaxPasses bounds the extension because every per-sector
+			// vote accumulator is 8-bit (R107): an unbounded window would carry bit lanes into
+			// their neighbors and wrap C2Count, flipping votes with confident margins.
+			int hard_cap = DeepRecovery ? RecoveryPolicy.MaxPasses : max_scans;
 			DateTime recoveryStart = DateTime.Now;
 			if (DeepRecovery) _recovery.StartWindow();
+			int lastExecutedPass = -1;
 			for (int pass = 0; pass < hard_cap; pass++)
 			{
+				lastExecutedPass = pass;
 //				dbg_pass = pass;
 				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
 				// cache defeat: on pass >= 1 (a re-read), evict the window first so this read hits media,
@@ -2441,6 +2435,34 @@ namespace CUETools.Ripper.SCSI
 					bool keepGoing = _recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds);
 					if (pass + 1 >= max_scans && !keepGoing)
 						break;
+				}
+			}
+			// Window give-up classification (R106): the pass loop stopped with sectors still
+			// unresolved. Mark exactly the sectors flagged on the final executed pass and surface
+			// one engine verdict event; consumers that stop on unrecoverable damage key on this,
+			// never on running mid-pass counts (a mid-pass count includes sectors a later chunk of
+			// the same pass could still converge).
+			if (_currentErrorsCount > 0 && lastExecutedPass >= _correctionQuality
+				&& m_retryCount.Length > 0 && m_failedSectors != null)
+			{
+				int givenUp = FailedSectorAccounting.FinalizeWindow(
+					m_retryCount, _retrySectorBase, _currentStart, _currentEnd,
+					lastExecutedPass, m_failedSectors);
+				_givenUpWindowCount++;
+				if (ReadProgress != null)
+				{
+					progressArgs.Action = Resource1.StatusRipping;
+					progressArgs.Position = _currentEnd;
+					progressArgs.Pass = lastExecutedPass;
+					progressArgs.PassStart = _currentStart;
+					progressArgs.PassEnd = _currentEnd;
+					progressArgs.ErrorsCount = _currentErrorsCount;
+					progressArgs.ThisPassErrors = _thisPassErrors;
+					progressArgs.SlipStrengthPct = -1;
+					progressArgs.WindowGivenUpSectors = givenUp;
+					progressArgs.PassTime = DateTime.Now;
+					ReadProgress(this, progressArgs);
+					progressArgs.WindowGivenUpSectors = -1;   // surfaced once
 				}
 			}
 		}
@@ -2625,7 +2647,8 @@ namespace CUETools.Ripper.SCSI
 			m_retryCount = new byte[(int)_toc.AudioLength + leadInSectors + leadOutSectors];
 			for (int i = 0; i < m_retryCount.Length; i++)
 				m_retryCount[i] = (byte)(_correctionQuality + 1);
-			m_failedSectors = null;
+			// A fresh read session starts with no failed sectors; window finalization repopulates.
+			m_failedSectors = new BitArray((int)_toc.AudioLength);
 		}
 
 		public string RipperVersion
