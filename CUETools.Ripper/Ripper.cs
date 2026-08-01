@@ -27,6 +27,10 @@ namespace CUETools.Ripper
 		int CorrectionQuality { get; set; }
 		BitArray FailedSectors { get; }
         byte[] RetryCount { get; }
+		/// <summary>Bytes the reader evicts per secure re-read pass to defeat the drive cache;
+		/// 0 when cache defeat is not active. Human-facing logs must report this truthfully
+		/// instead of hardcoding a claim (R113).</summary>
+		int CacheDefeatBytes { get; }
 
 		event EventHandler<ReadProgressArgs> ReadProgress;
 	}

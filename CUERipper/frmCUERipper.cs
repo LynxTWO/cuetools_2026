@@ -189,7 +189,9 @@ namespace CUERipper
 			}
 			SelectedOutputAudioType = (AudioEncoderType?)sr.LoadInt32("OutputAudioType", null, null) ?? AudioEncoderType.Lossless;
 			bnComboBoxImage.SelectedIndex = sr.LoadInt32("ComboImage", 0, bnComboBoxImage.Items.Count - 1) ?? 0;
-			trackBarSecureMode.Value = sr.LoadInt32("SecureMode", 0, trackBarSecureMode.Maximum - 1) ?? 1;
+			// The full slider range is persistable: "Maximum - 1" silently downgraded a saved
+			// Paranoid (2) to the Secure default on every restart (R113).
+			trackBarSecureMode.Value = sr.LoadInt32("SecureMode", 0, trackBarSecureMode.Maximum) ?? 1;
 			trackBarSecureMode_Scroll(this, new EventArgs());
             this.checkBoxTestAndCopy.Checked = this.testAndCopy = sr.LoadBoolean("TestAndCopy") ?? this.testAndCopy;
 
@@ -594,8 +596,15 @@ namespace CUERipper
 					if (_config.ejectAfterRip)
 						audioSource.EjectDisk();
 
-                    DialogResult dlgRes = audioSource.FailedSectors.PopulationCount() != 0 ? 
-						MessageBox.Show(this, cueSheet.GenerateVerifyStatus() + (canFix ? "\n" + Properties.Resources.DoneRippingRepair : "") + ".", Properties.Resources.DoneRippingErrors, MessageBoxButtons.OK, MessageBoxIcon.Error) :
+                    // A Test/Copy CRC mismatch is a completion ERROR, not a success: the published
+                    // Copy does not match what the Test pass read (R113).
+                    int testCopyMismatch = cueSheet.TestCopyMismatchTracks;
+                    string mismatchNote = testCopyMismatch > 0
+                        ? "\nTest and Copy CRCs differ on " + testCopyMismatch +
+                          " track(s) - the copy is NOT verified"
+                        : "";
+                    DialogResult dlgRes = audioSource.FailedSectors.PopulationCount() != 0 || testCopyMismatch > 0 ?
+						MessageBox.Show(this, cueSheet.GenerateVerifyStatus() + mismatchNote + (canFix ? "\n" + Properties.Resources.DoneRippingRepair : "") + ".", Properties.Resources.DoneRippingErrors, MessageBoxButtons.OK, MessageBoxIcon.Error) :
 						MessageBox.Show(this, cueSheet.GenerateVerifyStatus() + ".", Properties.Resources.DoneRipping, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 });
 			}
