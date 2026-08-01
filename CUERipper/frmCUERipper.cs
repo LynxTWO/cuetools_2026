@@ -1291,6 +1291,15 @@ namespace CUERipper
 		{
 			string[] modes = new string[] { "Burst", "Secure", "Paranoid" };
 			labelSecureMode.Text = modes[trackBarSecureMode.Value];
+			// Decision D8 (B): classic is a frozen legacy surface. Its secure modes never
+			// defeat the drive cache, so re-reads on a caching drive can be served from the
+			// cached first read. Say so at the point of choice; CUETools 2026 (WPF) is the
+			// assured, calibrated rip path.
+			toolTip1.SetToolTip(trackBarSecureMode, trackBarSecureMode.Value > 0
+				? "Classic secure mode re-reads without defeating the drive cache - on a caching " +
+				  "drive the re-reads can repeat the cached first read. Use CUETools 2026 (WPF) " +
+				  "for calibrated, cache-defeating rips."
+				: "Single-pass read; no re-read verification.");
 		}
 
 		private void toolStripStatusLabelMusicBrainz_Click(object sender, EventArgs e)

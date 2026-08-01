@@ -166,7 +166,20 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
-### D8. Classic secure-rip calibration and cache-defeat port - OPEN 2026-08-01
+### D8. Classic secure-rip calibration and cache-defeat port - RESOLVED 2026-08-01 (B)
+
+- **User chose (B):** classic stays a frozen legacy surface with no behavior
+  change. Implemented same day: the secure-mode slider tooltip states that
+  classic re-reads do not defeat the drive cache and points at CUETools 2026,
+  and the EAC-style log gains one behavior-conditioned note line (emitted only
+  when secure re-reads actually ran without cache defeat, so WPF logs never
+  carry it). R113's honest CRC comparison and truthful header lines stand.
+  CLAUDE.md's calibration/held-state invariants are now scoped to the modern
+  path. R117 closes.
+
+Original decision record:
+
+### D8 (original). Classic secure-rip calibration and cache-defeat port - OPEN 2026-08-01
 
 - **Finding:** classic CUERipper and `CUETools.Ripper.Console` run Secure and
   Paranoid with no calibration gate and no cache defeat (`frmCUERipper.cs:715`;
