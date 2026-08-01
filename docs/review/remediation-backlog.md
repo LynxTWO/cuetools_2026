@@ -3103,6 +3103,34 @@ step before any fix.
   hardware session for the reread strategies.
 - **Status:** open.
 
+### R118. Floor-speed damaged-region states starve the flush and payload paths - bucket B, risk high, hardware-gated
+
+- **Area or slice:** `SCSIDrive.cs` cache-defeat flush and pinpoint reads;
+  deep-recovery floor speed interaction.
+- **Why it matters:** live 2026-08-01 evidence from two discs and both drives.
+  After deep recovery drops to the 44 kB/s floor inside a damaged region:
+  (a) the ASUS BW-16D1HT rejected cache-defeat flush reads with 24/00 until
+  the full policy exhausted (30 regions, 30 transient retries, 8 chunk
+  fallbacks, wake attempted) and the Test & Copy failed closed mid-Test at a
+  deep position; (b) H: died with a bare IoctlFailed on a single-sector
+  pinpoint (Win32 error now captured); (c) separately, the ASUS rejected the
+  BEh read outright with ASC 20/00 at 40x on a scratched CD-R (fail-fast,
+  correct, but a bounded read-command re-probe might recover the state).
+  Each failure was policy-correct and cost the user a 25-minute Test phase.
+- **Evidence found:** diagnostic logs `...-p41020-...` and `...-p52100-...`
+  (2026-08-01 16:09/17:02 sessions); three user screenshots; scrubbed
+  contexts carry exact sector/shape/speed/transition identity.
+- **Confidence:** verified (logs). **Approval needed:** no, but every
+  mitigation needs live drive-matrix evidence before landing.
+- **Candidate mitigations (design, not yet decided):** restore a moderate
+  eviction speed before flush reads and return to the floor afterward (speed
+  transitions are already serialized and retry-covered); one bounded
+  read-command re-probe after an exact 20/00 rejection; bound consecutive
+  floor-speed given-up windows before easing speed back up; persist the Test
+  phase so a late transport death does not discard 25 minutes of evidence
+  (overlaps R116 persistence).
+- **Status:** open.
+
 ### R117. Classic calibration/cache-defeat gate port - decision needed
 
 - **Area or slice:** classic CUERipper and `CUETools.Ripper.Console` secure

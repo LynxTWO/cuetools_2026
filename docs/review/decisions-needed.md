@@ -201,6 +201,21 @@ Original decision record:
 - **Recommendation:** (B) now; revisit (A) only if classic remains a shipped
   rip surface after the WPF app is the default.
 
+### D9. Burst-mode re-read semantics - OPEN 2026-08-01
+
+- **Observation (user, live):** Burst appears to "get recovery". Two causes,
+  both by design today: Test & Copy always forces at least Secure plus cache
+  defeat regardless of the dropdown (documented in `IRipService`), and in a
+  plain Rip the engine has always re-read windows the vote flags even at
+  quality 0 (legacy 16-pass cap), which default-on DeepRecovery now extends
+  with the progress-aware zone.
+- **Decision required:** keep and label, or gate the deep-recovery extension
+  to quality > 0 so Burst retains only the legacy 16-pass behavior.
+- **Recommendation:** gate the extension to quality > 0 (Burst stays "fast
+  until trouble" with the historical cap; Secure/Paranoid keep deep
+  recovery), and say in the Burst tooltip that flagged windows still re-read
+  up to 16 passes. Test & Copy stays forced-Secure: it is the assured mode.
+
 ## Resolved / actioned
 
 - **D1 AccurateRip HTTPS - DONE 2026-07-02.** Flipped both `http://www.accuraterip.com` literals to `https://` (`AccurateRip.cs:833` dBAR lookup, `:1247` DriveOffsets.bin). No http fallback: a failed AR lookup degrades to "not verified" (corroborative, no data loss), so retrying over cleartext buys nothing. Verified: AccurateRip builds; the HTTPS dBAR path returns 404 for a fake id (proves TLS+routing) and DriveOffsets.bin returned 200 earlier; TestParity 18/18 green. Committed as `27b565f`.
