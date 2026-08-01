@@ -378,7 +378,10 @@ public sealed class RipService : IRipService
         // stranded the keep-awake request when the user turned it off mid-rip, so the machine
         // would not sleep again until the app closed. Deep recovery had the mirror problem:
         // one consumer re-read it live, so a mid-run toggle produced a half-deep run.
-        bool deepRecovery = _settings.DeepRecovery;
+        // Decision D9: deep recovery applies to Secure/Paranoid only; Burst keeps the classic
+        // 16-pass cap. The engine enforces the same gate; this keeps floor-speed drops and the
+        // recorded DeepRecovery flag consistent with what actually ran.
+        bool deepRecovery = _settings.DeepRecovery && cq > 0;
         bool keepAwakeTaken = _settings.PreventSleepDuringRip;
         bool trayLockTaken = _settings.LockTrayDuringRip;
         // Tell the rest of the app this drive is in use, so the Drive & Read page cannot Detect or
@@ -409,6 +412,7 @@ public sealed class RipService : IRipService
             // verify record reported whichever value happened to be current at the end.
             reader.DeepRecovery = deepRecovery;
             if (reader.DeepRecovery) _log.Info("rip", "deep recovery ON: progress-aware cap + slow-to-floor + slip probe");
+            else if (_settings.DeepRecovery) _log.Info("rip", "deep recovery gated off at Burst quality (D9): classic 16-pass cap only");
 
             // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive
             // gets stuck on a window, ease back up after clean stretches. Only REQUESTS are made

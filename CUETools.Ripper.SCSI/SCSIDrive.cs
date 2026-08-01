@@ -45,7 +45,9 @@ namespace CUETools.Ripper.SCSI
 		DriveC2ErrorModeSetting _driveC2ErrorMode = DriveC2ErrorModeSetting.Auto;
 		int _correctionQuality = 1;
 
-		/// <summary>Opt-in deep recovery (see AppSettings.DeepRecovery). When false the re-read loop
+		/// <summary>Opt-in deep recovery (see AppSettings.DeepRecovery). Effective only at
+		/// CorrectionQuality &gt; 0 (decision D9): Burst keeps the classic 16-pass cap and never
+		/// enters the extension. When false the re-read loop
 		/// and read path behave exactly as before. Set before the rip starts.</summary>
 		public bool DeepRecovery { get; set; } = false;
 		int _currentStart = -1, _currentEnd = -1, _currentErrorsCount = 0;
@@ -2303,9 +2305,14 @@ namespace CUETools.Ripper.SCSI
 			// loop is identical to before. MaxPasses bounds the extension because every per-sector
 			// vote accumulator is 8-bit (R107): an unbounded window would carry bit lanes into
 			// their neighbors and wrap C2Count, flipping votes with confident margins.
-			int hard_cap = DeepRecovery ? RecoveryPolicy.MaxPasses : max_scans;
+			// Decision D9: deep recovery is a Secure/Paranoid capability. Burst (quality 0)
+			// keeps only the historical 16-pass cap so it stays "fast until trouble"; the
+			// progress-aware extension, the slip probe, and the floor-speed grind never run
+			// at quality 0.
+			bool deepRecoveryActive = DeepRecovery && _correctionQuality > 0;
+			int hard_cap = deepRecoveryActive ? RecoveryPolicy.MaxPasses : max_scans;
 			DateTime recoveryStart = DateTime.Now;
-			if (DeepRecovery) _recovery.StartWindow();
+			if (deepRecoveryActive) _recovery.StartWindow();
 			int lastExecutedPass = -1;
 			for (int pass = 0; pass < hard_cap; pass++)
 			{
@@ -2437,7 +2444,7 @@ namespace CUETools.Ripper.SCSI
 				}
 				// Deep recovery: classify a persistent slip ONCE per window (read-only probe - repeated
 				// raw reads of the first chunk, correlated; never touches the vote or the audio bytes).
-				if (DeepRecovery && !_slipClassified && pass > _correctionQuality)
+				if (deepRecoveryActive && !_slipClassified && pass > _correctionQuality)
 				{
 					int windowSize = _currentEnd - _currentStart;
 					if (_currentErrorsCount >= (windowSize * 85) / 100)
@@ -2461,7 +2468,7 @@ namespace CUETools.Ripper.SCSI
 				// like today (a window that only resolves at pass 15 still does - the plateau rule must
 				// never cut it off early), and only EXTENDS beyond the old cap while the error count is
 				// still improving. It can never stop earlier than today.
-				if (DeepRecovery && pass >= _correctionQuality)
+				if (deepRecoveryActive && pass >= _correctionQuality)
 				{
 					bool keepGoing = _recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds);
 					if (pass + 1 >= max_scans && !keepGoing)

@@ -3131,6 +3131,36 @@ step before any fix.
   (overlaps R116 persistence).
 - **Status:** open.
 
+### R119. Salvage read mode for defective-by-design discs - bucket D, design
+
+- **Area or slice:** RipService Test & Copy variant, SCSIDrive read
+  configuration, report/history labeling.
+- **User proposal (2026-08-01):** ignore C2, rip twice at low speed, compare
+  CRCs. Refined design, reusing the existing machinery:
+  - Reuse Test & Copy's per-track CRC agreement and held-track handling as
+    the comparator; do not build a parallel one.
+  - Run the reads at quality 0 with `C2ErrorMode.None` so the drive's own
+    concealment output is accepted (post-D9 Burst: 16-pass cap, no deep
+    recovery, no floor grind), at a pinned low speed (the calibrated
+    minimum, not literal 1x, which many drives emulate poorly).
+  - Cache defeat stays ON. Without it the second read can be the first
+    read's cached bytes and agreement is fake. What salvage agreement
+    proves is that the DRIVE's output is stable - deterministic concealment -
+    which is the strongest claim available for an unstable master.
+  - Output labels as salvaged, never verified: certificate, history, and
+    `rip.verify` carry the salvage grade plus FailedSectors; AR/CTDB still
+    checked and recorded (they will not match).
+  - Requires an explicit expert mode: normal Test & Copy keeps its
+    forced-Secure contract untouched.
+- **Why it matters:** the 2026-08-01 Reggae Roots evidence shows a class of
+  disc whose pits are unstable (wholesale fresh disagreement every pass,
+  slip=0); re-reading cannot verify them, but a stable-concealment capture
+  with honest labeling is a real preservation outcome.
+- **Confidence:** design. **Approval needed:** user approved exploring;
+  implementation lands as its own reviewed slice with live evidence from the
+  problem discs.
+- **Status:** open.
+
 ### R117. Classic calibration/cache-defeat gate port - decision needed
 
 - **Area or slice:** classic CUERipper and `CUETools.Ripper.Console` secure
