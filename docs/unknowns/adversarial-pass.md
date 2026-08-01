@@ -23,7 +23,11 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   data-in pass-through and log a named counter; run one full H:/K: session and
   retain the counter evidence.
 - **Risk level:** high.
-- **Status:** open.
+- **Status:** in progress. 2026-08-01: the exact-length guard and
+  `ShortPayloadTransferCount` counter landed (R112); the payload path now
+  fails loudly instead of silently consuming stale bytes. Remaining: one live
+  H:/K: session retaining the counter (expected zero) to prove the guard
+  passes on real hardware.
 
 ### Deep-recovery pass counts vs 8-bit vote accumulators
 
@@ -46,7 +50,10 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   accumulators) and add a max-pass-count telemetry counter to confirm real
   ceilings; a deterministic TestRipper case can prove the wrap today.
 - **Risk level:** medium.
-- **Status:** open.
+- **Status:** resolved 2026-08-01. `RecoveryPolicy.MaxPasses = 252` bounds the
+  loop (R107), and the accumulator-capacity guard test pins the arithmetic.
+  The wrap is unreachable by construction; the live-ceiling question no
+  longer matters.
 
 ### Recovery orchestration branches lack in-repo activation tests
 
