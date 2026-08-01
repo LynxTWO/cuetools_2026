@@ -161,6 +161,11 @@ namespace CUETools.TestParity
             CDRepairFix fix = decode.VerifyParity(encode.AR.GetSyndrome(), encode.CRC, actualOffset);
 			Assert.IsTrue(fix.HasErrors, "doesn't have errors");
 			Assert.IsTrue(fix.CanRecover, "cannot recover");
+			// R115 repair headroom: a recoverable fix names how close its worst stripe came to
+			// the npar/2 capacity, so the user can weigh re-ripping against repairing.
+			Assert.IsTrue(fix.StripeCapacity > 0, "stripe capacity must be populated");
+			Assert.IsTrue(fix.WorstStripeErrors > 0, "a fix with errors uses at least one stripe slot");
+			Assert.IsTrue(fix.WorstStripeErrors <= fix.StripeCapacity, "a recoverable fix fits capacity");
 			generator2.Write(fix);
 			Assert.AreEqual<uint>(encode.CRC, fix.CRC);
 		}

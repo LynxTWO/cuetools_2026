@@ -72,6 +72,10 @@ public sealed class VerifyResult
     public bool CtdbCanRecover { get; init; }
     public int CtdbRepairSectors { get; init; }
     public string CtdbRepairRanges { get; init; } = "";
+    /// <summary>Repair headroom (R115): the fix's worst per-stripe error count vs the npar/2
+    /// capacity. At capacity, one more error would have been unrecoverable. Zero when unknown.</summary>
+    public int CtdbRepairWorstStripe { get; init; }
+    public int CtdbRepairStripeCapacity { get; init; }
     /// <summary>
     /// Exact published input for the source-preserving repair transaction. This is the album's sole
     /// top-level cue for track sets, or the sole lossless audio file for image mode. Empty means the
@@ -112,6 +116,9 @@ public sealed class TestCopyRunResult
     public bool CtdbCanRecover { get; init; }
     public int CtdbRepairSectors { get; init; }
     public string CtdbRepairRanges { get; init; } = "";
+    /// <summary>Repair headroom (R115), carried from the underlying read's assessment.</summary>
+    public int CtdbRepairWorstStripe { get; init; }
+    public int CtdbRepairStripeCapacity { get; init; }
     /// <summary>Recovery windows that exhausted every optical reread. A passed checksum vote with
     /// this value above zero proves repeatability, not pristine media.</summary>
     public int FailedWindows { get; init; }
@@ -986,8 +993,14 @@ public sealed class RipService : IRipService
 
             try
             {
+                // C2ErrorMode.None on a Secure rip means the vote ran with majority-only
+                // evidence (no C2 plane); say so instead of leaving it silent (R115).
+                if (cq > 0 && reader.DriveC2ErrorMode == 0)
+                    _log.Warn("rip",
+                        "drive voted without C2 pointers (C2ErrorMode=None) - re-read agreement was the only per-byte evidence plane for this job");
                 _log.Info("rip", $"done mode={(encode ? "encode" : "verify")} elapsed={sw.Elapsed.TotalSeconds:0}s " +
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
+                    $"c2_mode={reader.DriveC2ErrorMode} cache_defeat_bytes={reader.CacheDefeatBytes} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
                     $"control_transition_retries={reader.ControlTransitionRetryCount} " +
                     $"read_communication_retries={reader.ReadCommunicationRetryCount} " +
@@ -1050,6 +1063,8 @@ public sealed class RipService : IRipService
                     (repairAssessment?.CanRecover ?? false),
                 CtdbRepairSectors = repairAssessment?.RepairSectors ?? 0,
                 CtdbRepairRanges = repairAssessment?.RepairRanges ?? "",
+                CtdbRepairWorstStripe = repairAssessment?.RepairWorstStripeErrors ?? 0,
+                CtdbRepairStripeCapacity = repairAssessment?.RepairStripeCapacity ?? 0,
                 RepairSourcePath = ResolvePublishedRepairSource(
                     outDir,
                     repairSourceRelativePath),
@@ -1445,6 +1460,8 @@ public sealed class RipService : IRipService
                     CtdbCanRecover = copyResult.CtdbCanRecover,
                     CtdbRepairSectors = copyResult.CtdbRepairSectors,
                     CtdbRepairRanges = copyResult.CtdbRepairRanges,
+                    CtdbRepairWorstStripe = copyResult.CtdbRepairWorstStripe,
+                    CtdbRepairStripeCapacity = copyResult.CtdbRepairStripeCapacity,
                     FailedWindows = failedWindows,
                     RepairSourceRelativePath =
                         GetRepairSourceRelativePath(copyResult),
@@ -1573,6 +1590,10 @@ public sealed class RipService : IRipService
                         committedEncoded.CtdbRepairSectors,
                     CtdbRepairRanges =
                         committedEncoded.CtdbRepairRanges,
+                    CtdbRepairWorstStripe =
+                        committedEncoded.CtdbRepairWorstStripe,
+                    CtdbRepairStripeCapacity =
+                        committedEncoded.CtdbRepairStripeCapacity,
                     FailedWindows = failedWindows,
                     RepairSourceRelativePath =
                         GetRepairSourceRelativePath(committedEncoded),

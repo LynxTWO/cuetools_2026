@@ -179,6 +179,7 @@ namespace CUETools.AccurateRip
             fix.correctableErrors = 0;
             fix.hasErrors = false;
             fix.canRecover = true;
+            fix.columnCapacity = npar / 2;
 
 			fixed (ushort *psyn2 = syn2, psyn1 = syn1)
 			{
@@ -213,6 +214,8 @@ namespace CUETools.AccurateRip
                             fix.canRecover = false;
                             return fix;
                         }
+                        if (errcount > fix.worstColumnErrors)
+                            fix.worstColumnErrors = errcount;
 
                         galois.mulPoly(_omega, _sigma, syn, ofLen, sfLen, npar);
 
@@ -267,6 +270,8 @@ namespace CUETools.AccurateRip
 		internal bool hasErrors = false, canRecover = true;
 		internal int actualOffset = 0;
 		internal int correctableErrors = 0;
+		internal int worstColumnErrors = 0;
+		internal int columnCapacity = 0;
         internal int[] erroffsorted;
 		internal ushort[] forneysorted;
 		private BitArray affectedSectorArray;
@@ -286,6 +291,21 @@ namespace CUETools.AccurateRip
 			{
                 return this.GetAffectedSectors(0, finalSampleCount);
 			}
+		}
+
+		/// <summary>The worst per-stripe error count this fix needs. Together with
+		/// <see cref="StripeCapacity"/> this is the repair headroom (R115): at capacity, one
+		/// more error in that stripe would have made the disc unrecoverable, so the user can
+		/// weigh re-ripping against repairing.</summary>
+		public int WorstStripeErrors
+		{
+			get { return worstColumnErrors; }
+		}
+
+		/// <summary>Correctable errors per parity stripe (npar / 2) for this fix.</summary>
+		public int StripeCapacity
+		{
+			get { return columnCapacity; }
 		}
 
 		public BitArray AffectedSectorArray

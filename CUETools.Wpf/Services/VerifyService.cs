@@ -31,6 +31,11 @@ public sealed class VerifyFilesResult
     public int RepairSectors { get; init; }
     public int RepairTotalSectors { get; init; }
     public int RepairNpar { get; init; }
+    /// <summary>Repair headroom (R115): the fix's worst per-stripe error count vs the npar/2
+    /// stripe capacity. At capacity, one more error in that stripe would have been
+    /// unrecoverable - the honest basis for a re-rip vs repair decision. Zero when unknown.</summary>
+    public int RepairWorstStripeErrors { get; init; }
+    public int RepairStripeCapacity { get; init; }
     public double[] RepairSectorMap { get; init; } = System.Array.Empty<double>();
     public string RepairRanges { get; init; } = "";
     public bool RepairApplied { get; init; }   // true only after a repaired copy was verified and published
@@ -370,6 +375,7 @@ public sealed class VerifyService : IVerifyService
         // Pull the real Reed-Solomon repair detail off the chosen entry: how many samples parity can
         // reconstruct, the parity depth, and the exact damaged-sector map (downsampled for drawing).
         int repSamples = 0, repSectors = 0, repTotal = 0, repNpar = 0;
+        int repWorstStripe = 0, repStripeCapacity = 0;
         double[] repMap = System.Array.Empty<double>();
         string repRanges = "";
         if (rep != null)
@@ -379,6 +385,8 @@ public sealed class VerifyService : IVerifyService
                 var fx = rep.repair;
                 repSamples = fx.CorrectableErrors;
                 repNpar = rep.Npar;
+                repWorstStripe = fx.WorstStripeErrors;
+                repStripeCapacity = fx.StripeCapacity;
                 var arr = fx.AffectedSectorArray;   // one bit per CD sector, true = a sample there was corrected
                 repTotal = arr.Length;
                 const int B = 200;
@@ -415,6 +423,8 @@ public sealed class VerifyService : IVerifyService
             RepairSectors = repSectors,
             RepairTotalSectors = repTotal,
             RepairNpar = repNpar,
+            RepairWorstStripeErrors = repWorstStripe,
+            RepairStripeCapacity = repStripeCapacity,
             RepairSectorMap = repMap,
             RepairRanges = repRanges,
             // "Applied" is the explicit engine-state proof (CTDB-fix branch, processed encode).

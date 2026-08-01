@@ -1719,7 +1719,8 @@ public sealed class RipViewModel : PageViewModel
         CanRepairLastRip = true;
         RepairLastRipText =
             $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
-            "Repair creates and independently verifies a sibling copy; this rip stays unchanged.";
+            "Repair creates and independently verifies a sibling copy; this rip stays unchanged." +
+            RepairHeadroomText(result.CtdbRepairWorstStripe, result.CtdbRepairStripeCapacity);
     }
 
     private void SetPostRipRepair(
@@ -1749,8 +1750,20 @@ public sealed class RipViewModel : PageViewModel
         CanRepairLastRip = true;
         RepairLastRipText =
             $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
-            "Repair creates and independently verifies a sibling copy; this output stays unchanged.";
+            "Repair creates and independently verifies a sibling copy; this output stays unchanged." +
+            RepairHeadroomText(result.CtdbRepairWorstStripe, result.CtdbRepairStripeCapacity);
     }
+
+    // Repair headroom (R115): how close the fix's worst parity stripe came to the npar/2
+    // capacity. At capacity, one more error there would have been unrecoverable - the honest
+    // basis for choosing re-rip vs repair.
+    private static string RepairHeadroomText(int worstStripe, int stripeCapacity)
+        => stripeCapacity > 0
+            ? $" Worst parity stripe uses {worstStripe} of {stripeCapacity} correctable errors" +
+              (worstStripe >= stripeCapacity
+                  ? " - at capacity; prefer a re-rip if the disc still reads."
+                  : ".")
+            : "";
 
     private async Task RepairLastRipAsync()
     {
