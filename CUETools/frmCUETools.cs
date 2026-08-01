@@ -21,7 +21,7 @@
 // ****************************************************************************
 // ****************************************************************************
 // Access to AccurateRip is regulated, see
-// http://www.accuraterip.com/3rdparty-access.htm for details.
+// https://www.accuraterip.com/3rdparty-access.htm for details.
 // ****************************************************************************
 using System;
 using System.Collections.Generic;
