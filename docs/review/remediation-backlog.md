@@ -2833,10 +2833,228 @@ does not relax evidence, rollback, or verification requirements.
   retry counters remained zero; the open adversarial record keeps branch activation
   distinct from the passed user outcome.
 
+## 2026-08-01 recovery adversarial-pass remediation wave
+
+Source: the damaged-disc recovery addendum in `adversarial-pass.md` (2026-08-01).
+The user approved the full wave ("do it all"). Findings labeled verified there
+were re-opened line by line by the orchestrator; inferred items get a verify
+step before any fix.
+
+### R106. DeepRecovery breaks failed-sector accounting - bucket A, risk high
+
+- **Area or slice:** `CUETools.Ripper.SCSI/SCSIDrive.cs` sentinel and retry
+  bookkeeping; `CUETools.Wpf/Services/RipService.cs` failedWindows counter.
+- **Why it matters:** never-converged sectors under DeepRecovery (default on)
+  are reported clean in `FailedSectors`, so rip logs show no suspicious
+  positions for low-confidence audio; the converse mislabels late-converged
+  sectors as failed; `failedWindows` counts windows deep recovery later
+  converged.
+- **Evidence found:** `SCSIDrive.cs:213` exact-sentinel equality vs `:1798`
+  `pass + 2` store vs `:2439-2443` extension break; `RipService.cs:695-698`.
+  Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** mark give-up as a state, not an exact pass
+  count; fix the byte-cast wrap; correct the gave-up counter.
+- **Verification plan:** deterministic ripper-suite cases for converged-late,
+  never-converged, and baseline-cap sectors; canonical modern suites.
+- **Status:** ready.
+
+### R107. Deep-recovery pass counts can wrap 8-bit vote accumulators - bucket A, risk medium
+
+- **Area or slice:** `SCSIDrive.cs` accumulators, `RecoveryPolicy.cs`.
+- **Why it matters:** past 255 contributing passes the UserData bit lanes carry
+  into neighbors and `C2Count` wraps, which can flip votes with confident
+  margins across the whole stuck window.
+- **Evidence found:** `SCSIDrive.cs:1438-1447`, `SecureSectorVote.cs:33-46`,
+  no pass cap in `RecoveryPolicy.cs:9-23`. Inferred (wrap is arithmetic fact;
+  reachability inside the 120 s ceiling unproven).
+- **Confidence:** verified (arithmetic), inferred (reachability).
+  **Approval needed:** no.
+- **Smallest safe next step:** cap deep-recovery passes at 255 in the loop
+  bound; add a deterministic wrap regression test.
+- **Verification plan:** ripper suite; unknowns entry stays open for the
+  telemetry ceiling question.
+- **Status:** ready.
+
+### R108. Held Copy deleted on Stop-during-confirm and on tray events - bucket A, risk high
+
+- **Area or slice:** `RipService.cs` confirming-read failure routing and
+  `RipViewModel.cs` `ClearDiscView`/eject.
+- **Why it matters:** the only completed encoded result is destroyed: a
+  `"Stopped."` confirm result takes the Fail path (workspace deleted) while
+  every other confirm failure holds, StopOnUnrecoverable automates that Stop
+  on damaged discs, and user eject or a multi-poll phantom tray event discards
+  a held Copy with no confirmation.
+- **Evidence found:** `RipService.cs:1342-1343` vs `:1344-1349`;
+  `RipViewModel.cs:1270-1274`, `:1982-1990`, phantom-tray note `:688-696`.
+  Verified 2026-08-01 (refuter and trigger-tracer concurred).
+- **Confidence:** verified. **Approval needed:** no (CLAUDE.md already states
+  the held-state contract; this enforces it).
+- **Smallest safe next step:** route Stop-during-confirm to Held; require an
+  explicit confirmation before a tray/eject path discards a held Copy (disc
+  change semantics stay: a genuinely different disc still invalidates).
+- **Verification plan:** WPF suite cases for stop-during-confirm hold,
+  eject-with-held confirmation, and disc-change invalidation.
+- **Status:** ready.
+
+### R109. Damage and evidence truth in report, history, and rip.verify - bucket A, risk high
+
+- **Area or slice:** `RipReport.cs`, `ReportViewModel.cs`, `HistoryStore.cs`,
+  `RipService.cs` committed-record assembly.
+- **Why it matters:** damaged-consistent Test & Copy renders as "Verified"
+  (headline, badge, history) while the log says CONSISTENT; committed AR/CTDB
+  confidences come from the newest read, not the committed read, so a
+  certificate can claim database verification for bytes it does not cover.
+- **Evidence found:** `RipReport.cs:56-59` (no damage field);
+  `RipService.cs:1737-1748` (`newest` under a committed-read comment), Held
+  path `:1379`, `:1397-1408`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** carry a damage field through report, history,
+  and `rip.verify`; bind AR/CTDB numbers to the committed (or held Copy) read.
+- **Verification plan:** WPF suite report/history/labeling cases.
+- **Status:** ready.
+
+### R110. StopOnUnrecoverable fires before classification and blocks deep recovery - bucket A, risk medium
+
+- **Area or slice:** `RipViewModel.cs` reread handler, `RipService.cs` reread
+  math.
+- **Why it matters:** the stop latches mid-final-pass on the running error
+  count, aborting jobs whose final pass would converge, branding media
+  Unreadable without classification, and making the DeepRecovery extension
+  unreachable whenever both settings are on. CLAUDE.md requires the stop only
+  after the evidence policy classifies a sector unrecoverable.
+- **Evidence found:** `RipViewModel.cs:1266-1274` (and the duplicate block),
+  `RipService.cs:636-637`, `:700-703`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** latch the stop only on a window the engine has
+  classified given-up (post-window, not mid-pass), preserving the extension.
+- **Verification plan:** WPF suite reread-handler cases.
+- **Status:** ready.
+
+### R111. CTDB repair applies the first server-ordered variant - bucket A, risk medium
+
+- **Area or slice:** `RepairTransaction.cs`, `CUESheet.cs` choice assembly.
+- **Why it matters:** with several recoverable variants the repair converges on
+  whichever the server listed first, so a conf=1 pressing can outrank conf=40
+  and the receipt records that variant as success.
+- **Evidence found:** `RepairTransaction.cs:68` (`selection = 0`),
+  `CUESheet.cs:4764-4783` (server-order list, no confidence sort). Verified
+  2026-08-01.
+- **Confidence:** verified. **Approval needed:** user approved the wave; the
+  change is deterministic ranking inside the existing repair transaction.
+- **Smallest safe next step:** select the highest-confidence recoverable
+  entry (stable tie-break), leaving single-entry behavior unchanged.
+- **Verification plan:** deterministic selection test; existing repair
+  preservation suites unchanged.
+- **Status:** ready.
+
+### R112. SCSI transport evidence hardening - bucket A, risk high (latent)
+
+- **Area or slice:** `Bwg.Scsi/Device.cs` pass-through and sense lifetime.
+- **Why it matters:** GOOD-status underruns would fold stale buffer bytes into
+  the vote (residual never checked); `SCSIException` NREs when autosense is
+  absent, destroying failure identity; `IoctlFailed` leaves the previous
+  command's sense readable as current.
+- **Evidence found:** `Device.cs:836-852`/`887-903` (verified 2026-08-01);
+  `Device.cs:1077`, `:828` (inferred, verify before fix).
+- **Confidence:** verified (residual), inferred (NRE, stale sense).
+  **Approval needed:** no.
+- **Smallest safe next step:** fail reads whose transferred length differs
+  from the request with a named counter; verify then fix the NRE and
+  stale-sense paths without changing classifier identities.
+- **Verification plan:** ripper suite; classifier route tests unchanged;
+  unknowns entry for live underrun occurrence stays open.
+- **Status:** ready.
+
+### R113. Classic path honesty - bucket A, risk high
+
+- **Area or slice:** `CUESheet.cs` Test & Copy, `CUESheetLogWriter.cs`,
+  `frmCUERipper.cs` persistence.
+- **Why it matters:** classic Test & Copy never compares Test CRC to Copy CRC
+  and prints "Copy OK" unconditionally; the EAC-style log hardcodes "Make use
+  of C2 pointers : No" and "Defeat audio cache : Yes" regardless of reality;
+  persisted Paranoid silently downgrades to Secure on restart.
+- **Evidence found:** `CUESheetLogWriter.cs:184`, `:200-203`, `:115`;
+  `CUESheet.cs:2823-2838` (`_arTestVerify` never compared);
+  `frmCUERipper.cs:192`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no for honesty fixes; the
+  full calibration/cache-defeat port is R117 (decision).
+- **Smallest safe next step:** compare Test vs Copy CRCs and report mismatch
+  per track/range; make the two hardcoded log lines truthful; honor persisted
+  Paranoid.
+- **Verification plan:** processor-suite log cases; classic suites green.
+- **Status:** ready.
+
+### R114. Read-loop inferred defects: 24/00 transition ordering and 64/00 child guard - bucket A, risk medium
+
+- **Area or slice:** `SCSIDrive.cs` FetchSectors decomposition and legacy
+  batch split.
+- **Why it matters:** if confirmed, a transition-state multi-sector 24/00 is
+  decomposed as media evidence before the R57 transition retry can see it (and
+  the documented one-shot retry is unreachable for multi-sector shapes); the
+  legacy 64/00 split can mark transport/hardware/not-ready child failures as
+  unreadable sectors.
+- **Evidence found:** `SCSIDrive.cs:1519-1529` vs catch filters `:2313-2345`;
+  `:1631-1637`, `:1723`. Inferred; not personally re-opened.
+- **Confidence:** inferred. **Approval needed:** no, but verify first.
+- **Smallest safe next step:** re-open the routes; if confirmed, check
+  transition flags before decomposition and gate the child keep-fatal guard on
+  failure class, with deterministic route tests for both orderings.
+- **Verification plan:** new orchestration-seam tests (see R116 note); full
+  ripper suite.
+- **Status:** ready (verify step first).
+
+### R115. Recovery improvements, small and medium - bucket D, risk low
+
+- **Area or slice:** repair headroom surfacing, C2ErrorMode.None downgrade
+  warning, adaptive vote quorum in flapping regions, speed drops at pass
+  boundaries inside stuck windows.
+- **Why it matters:** each recovers more correct audio or surfaces evidence
+  the user needs to choose re-rip vs repair; all reality-checked feasible
+  2026-08-01.
+- **Evidence found:** adversarial addendum improvement list; existing
+  `AdaptiveSpeedController.cs` applies drops only at fresh windows.
+- **Confidence:** verified (current behavior). **Approval needed:** no.
+- **Smallest safe next step:** implement in that order, each with its own
+  deterministic test.
+- **Verification plan:** ripper and WPF suites per item.
+- **Status:** open.
+
+### R116. Recovery improvements, large - bucket D, risk medium
+
+- **Area or slice:** targeted rereads of still-disagreeing sectors,
+  CTDB-guided second-chance rereads, per-sector evidence persistence for
+  resumable damaged-disc sessions, plus the injectable device seam for
+  orchestration-route activation tests (unknowns entry 2026-08-01).
+- **Why it matters:** multiplies useful passes on damaged regions, uses parity
+  knowledge before surrendering, and turns a second session into a resume;
+  the seam turns R55/R57/R58/R59 wiring into testable routes.
+- **Evidence found:** adversarial addendum; reality-checked feasible.
+- **Confidence:** inferred (designs). **Approval needed:** no, but each lands
+  as its own reviewed slice.
+- **Smallest safe next step:** the device seam first (it also verifies R114),
+  then targeted rereads.
+- **Verification plan:** deterministic seam tests; ripper suite; live
+  hardware session for the reread strategies.
+- **Status:** open.
+
+### R117. Classic calibration/cache-defeat gate port - decision needed
+
+- **Area or slice:** classic CUERipper and `CUETools.Ripper.Console` secure
+  paths.
+- **Why it matters:** classic Secure/Paranoid can vote against the drive
+  cache; porting the WPF gates is a behavior change to a legacy product
+  surface (rips that started silently may now refuse until calibration).
+- **Evidence found:** R113 evidence; `ICDRipper` lacks the gate members.
+- **Confidence:** verified. **Approval needed:** yes - product decision
+  (port vs freeze-and-label); parked in `decisions-needed.md` as D8.
+- **Status:** blocked on decision.
+
 ## Ordering
 
 The locally actionable and hosted correctness queue is closed through R105.
-Remaining work is ordered by the authority or evidence it requires:
+The 2026-08-01 recovery wave (R106-R116) is the active queue; R117 awaits a
+decision. Remaining work is ordered by the authority or evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -2875,6 +3093,8 @@ Remaining work is ordered by the authority or evidence it requires:
 - 2026-07-02 - backlog created from the first full anti-dark-code rollout (comment loop S1-S13, logging audit, adversarial, scenario passes) and the user's decisions D1-D7.
 - 2026-07-26 - added R19-R43 from the modern WPF, codec, security, CI, release, and
   scenario-stress audit. User approved autonomous remediation, including protected areas.
+- 2026-08-01 - added R106-R117 from the damaged-disc recovery adversarial pass.
+  User approved the full wave; R117 parked as decision D8.
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
