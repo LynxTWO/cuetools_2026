@@ -62,12 +62,14 @@ namespace CUETools.Ripper.Tests
         public void InvalidFieldBatchCanDecomposeOnlyWhenItContainsMultipleSectors()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x24,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 1,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
@@ -79,18 +81,21 @@ namespace CUETools.Ripper.Tests
         public void BatchDecompositionDoesNotCoverOtherPayloadFailures()
         {
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x21,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.MediumError,
                 0x24,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.IoctlFailed,
                 Device.SenseKeyType.IllegalRequest,

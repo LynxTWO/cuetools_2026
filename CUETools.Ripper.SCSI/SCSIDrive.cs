@@ -1532,6 +1532,7 @@ namespace CUETools.Ripper.SCSI
 			}
 
 			if (PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+				_speedChangeJustApplied || _cacheDefeatJustFlushed,
 				Sectors2Read,
 				st,
 				senseKey,
@@ -1735,14 +1736,19 @@ namespace CUETools.Ripper.SCSI
 							}
 							throw repeatedFailure;
 						}
-						if (mediumError &&
-							!PayloadReadFailurePolicy.IsMediumError(
+						if (!PayloadReadFailurePolicy.MayMarkSplitChildUnreadable(
+								mediumError,
+								legacyTrackMode,
 								singleStatus,
-								singleFailure.SenseKey))
+								singleFailure.SenseKey,
+								singleFailure.Asc,
+								singleFailure.Ascq))
 						{
-							// A batch-level media fault may expose a different failure on the
-							// pinpoint read. Do not mislabel device removal, transport, readiness,
-							// command, or hardware failures as damage that CTDB can repair.
+							// A batch-level fault may expose a different failure on the pinpoint
+							// read. Do not mislabel device removal, transport, readiness, command,
+							// or hardware failures as damage that CTDB can repair - under the
+							// medium-error parent AND the legacy 64/00 parent, whose children may
+							// only repeat the exact 64/00 track fault (mixed-mode discs) (R114).
 							throw singleFailure;
 						}
 						iErrors ++;

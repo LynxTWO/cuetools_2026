@@ -3047,7 +3047,16 @@ step before any fix.
   failure class, with deterministic route tests for both orderings.
 - **Verification plan:** new orchestration-seam tests (see R116 note); full
   ripper suite.
-- **Status:** ready (verify step first).
+- **Status:** fixed 2026-08-01, both claims verified at source first.
+  `ShouldDecomposeRejectedPayloadBatch` now refuses while a speed or
+  cache-defeat transition is pending, so the multi-sector 24/00 reaches the
+  one-shot transition retry (whose in-catch repeat already propagates
+  fatally); `MayMarkSplitChildUnreadable` gates split children by failure
+  class - media always, the exact 64/00 track fault only under the legacy
+  parent (mixed-mode discs preserved), transport/hardware/readiness/
+  unit-attention fatal under either parent. Policy tests cover both
+  orderings; ripper 48/48, legacy lanes green. The orchestration-seam
+  activation tests remain R116 work.
 
 ### R115. Recovery improvements, small and medium - bucket D, risk low
 
