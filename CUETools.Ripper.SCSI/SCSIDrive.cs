@@ -2723,8 +2723,13 @@ namespace CUETools.Ripper.SCSI
 		public byte Asc { get; private set; }
 		public byte Ascq { get; private set; }
 
+		// IoctlFailed carries its Win32 error: without it, a device timeout, a removal, and a
+		// handle failure all collapse into one opaque word and the scrubbed failure context
+		// cannot distinguish them (observed live on H: during a damaged-region pinpoint read).
 		public SCSIException(string args, Device device, Device.CommandStatus st)
-			: base(args + ": " + (st == Device.CommandStatus.DeviceFailed ? device.GetErrorString() : st.ToString()))
+			: base(args + ": " + (st == Device.CommandStatus.DeviceFailed ? device.GetErrorString()
+				: st == Device.CommandStatus.IoctlFailed ? "IoctlFailed (Win32 error " + device.LastError + ")"
+				: st.ToString()))
 		{
 			Status = st;
 			SenseKey = st == Device.CommandStatus.DeviceFailed
