@@ -2972,7 +2972,10 @@ step before any fix.
   entry (stable tie-break), leaving single-entry behavior unchanged.
 - **Verification plan:** deterministic selection test; existing repair
   preservation suites unchanged.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `CueRepairEngine.SelectBestVariant` ranks the
+  engine's recoverable variants by `DBEntry.conf` with a stable earliest-entry
+  tie-break; five deterministic selection tests pass and the repair
+  preservation suites are unchanged. WPF 466/466.
 
 ### R112. SCSI transport evidence hardening - bucket A, risk high (latent)
 
