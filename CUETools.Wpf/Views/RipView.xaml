@@ -424,10 +424,11 @@
                      HorizontalAlignment="Right">
             <ComboBox Width="104" Margin="0,0,10,6" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}"
                       IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
-                      ToolTip="Burst: fast, single pass - windows the vote flags still re-read up to 16 passes, but deep recovery never runs. Secure: read twice + compare, with deep recovery. Paranoid: deepest re-reads.">
+                      ToolTip="Burst: fast, single pass - windows the vote flags still re-read up to 16 passes, but deep recovery never runs. Secure: read twice + compare, with deep recovery. Paranoid: deepest re-reads. Salvage: for defective-by-design discs - Test &amp; Copy at Burst quality with C2 off at minimum speed; agreement proves the drive's output is stable, and the result is labeled salvaged, never verified.">
               <ComboBoxItem>Burst</ComboBoxItem>
               <ComboBoxItem>Secure</ComboBoxItem>
               <ComboBoxItem>Paranoid</ComboBoxItem>
+              <ComboBoxItem>Salvage</ComboBoxItem>
             </ComboBox>
             <Button Width="210" MinWidth="150" Margin="0,0,6,6"
                     VerticalAlignment="Center" IsEnabled="{Binding CodecUnlocked}"

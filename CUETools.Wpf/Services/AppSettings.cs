@@ -32,7 +32,7 @@ public sealed class AppSettings
     // page falls back to its default (MyMusic\CUETools, flac, Secure).
     public string OutputBaseDir { get; set; } = "";
     public string SelectedFormat { get; set; } = "";
-    public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid
+    public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid, 3=Salvage picker selection (engine runs Burst)
 
     /// <summary>Adaptive read speed: start at the drive's max, request a step down when the drive
     /// gets stuck on a window, ease back up over clean stretches. The reader applies requests only

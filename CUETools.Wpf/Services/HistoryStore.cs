@@ -94,8 +94,11 @@ public sealed class HistoryStore : IHistoryStore
                     : "; WARNING: encoded output not verified"
                 : "; lossy output (output verification not applicable)";
         // A damaged result reads "consistent", never "verified" - same policy as the log (R109).
+        // A salvage capture reads "salvaged" (R119).
         bool damaged = r.FailedWindows > 0 || r.DamageRepairRequired;
-        string grade = damaged ? "consistent (damage recorded)" : "verified";
+        string grade = r.Salvaged
+            ? (damaged ? "salvaged (damage recorded)" : "salvaged")
+            : damaged ? "consistent (damage recorded)" : "verified";
         if (r.OpticalReadsUsed >= 2 && r.MinimumAgreeingReads >= 2)
             return $"{mode} - {grade} after {r.OpticalReadsUsed} optical reads; "
                 + $"at least {r.MinimumAgreeingReads} agreed per track"
@@ -146,7 +149,8 @@ public sealed class HistoryStore : IHistoryStore
                         LosslessOutput = r.LosslessOutput,
                         OutputVerificationPerformed = r.OutputVerificationPerformed,
                         FailedWindows = r.FailedWindows,
-                        DamageRepairRequired = r.DamageRepairRequired
+                        DamageRepairRequired = r.DamageRepairRequired,
+                        Salvaged = r.Salvaged
                     });
                     if (rows.Count > Cap)
                         rows.RemoveRange(Cap, rows.Count - Cap);
@@ -235,5 +239,7 @@ public sealed class HistoryStore : IHistoryStore
         // false, which correctly renders the old "verified" wording rather than inventing damage.
         public int FailedWindows { get; set; }
         public bool DamageRepairRequired { get; set; }
+        // Salvage capture (R119); old rows deserialize false.
+        public bool Salvaged { get; set; }
     }
 }
