@@ -3113,7 +3113,11 @@ step before any fix.
 - **Evidence found:** R113 evidence; `ICDRipper` lacks the gate members.
 - **Confidence:** verified. **Approval needed:** yes - product decision
   (port vs freeze-and-label); parked in `decisions-needed.md` as D8.
-- **Status:** blocked on decision.
+- **Status:** closed 2026-08-01 by decision D8 (B): classic is a frozen
+  legacy surface. The secure-mode tooltip and a behavior-conditioned log
+  note now state that classic re-reads do not defeat the drive cache and
+  point at CUETools 2026; no classic behavior changed. CLAUDE.md scopes the
+  calibration/held-state invariants to the modern path.
 
 ## Ordering
 

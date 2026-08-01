@@ -277,6 +277,15 @@ namespace CUETools.Processor
                     logWriter.WriteLine("No errors occurred");
                 logWriter.WriteLine();
             }
+            // Decision D8 (B): when secure re-reads ran without cache defeat (the frozen classic
+            // path), the log says so - on a caching drive those re-reads can be served from the
+            // cached first read, so agreement is weaker evidence than it looks. The WPF path
+            // always rips with calibrated cache defeat and never emits this line.
+            if (sheet.CDRipper.CorrectionQuality > 0 && sheet.CDRipper.CacheDefeatBytes == 0)
+            {
+                logWriter.WriteLine("Note: secure re-reads ran without drive-cache defeat; on a caching drive they can repeat the cached first read. CUETools 2026 performs calibrated cache-defeating rips.");
+                logWriter.WriteLine();
+            }
             logWriter.WriteLine("End of status report");
             logWriter.Close();
 

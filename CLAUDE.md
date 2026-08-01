@@ -76,6 +76,11 @@ progress documents for it belong here, under `docs/review/`.
   demonstrated caching, retain the largest proven safe flush size across noisy later
   calibrations. Lead-in/out flags are valid only when the exact offset-sized boundary
   range was probed and the SCSI reader consumes it.
+- The calibration, cache-defeat, and Test & Copy held-state invariants bind the
+  modern WPF rip path. Classic CUERipper is a frozen legacy surface (decision D8-B):
+  its secure modes never defeat the drive cache, its UI and log say so explicitly,
+  and no new assurance work targets it. Do not present classic secure output as
+  equivalent to a WPF calibrated rip.
 - Multi-drive UI evidence must remain bound to its physical drive. Keep Drive & Read
   selection synchronized with Rip, clear stale identity/calibration on changes, and
   lock selection while an operation owns the hardware. UI observers and progress
