@@ -2993,7 +2993,14 @@ step before any fix.
   stale-sense paths without changing classifier identities.
 - **Verification plan:** ripper suite; classifier route tests unchanged;
   unknowns entry for live underrun occurrence stays open.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01 (software). Both pass-through twins now clear
+  stale sense/status on IoctlFailed and capture the written-back transfer
+  length; `FetchSectors` rejects GOOD-status payload underruns fatally with
+  the `ShortPayloadTransferCount` counter; absent autosense reads as
+  NoSense/0/0 (never matches a retry classifier) instead of a
+  NullReferenceException. Ripper 43/43, legacy lanes green. Pending: one live
+  H:/K: session to confirm the underrun guard passes on real hardware (its
+  failure direction is loud and safe, not silent).
 
 ### R113. Classic path honesty - bucket A, risk high
 
