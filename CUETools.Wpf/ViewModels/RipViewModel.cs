@@ -1622,7 +1622,9 @@ public sealed class RipViewModel : PageViewModel
                 (repairRequired ? "; CTDB repair required" : ""),
                 result.OutputDir, result.FileCount, result.Format, result.ReadsUsed, 2,
                 result.OutputVerificationKnown, result.LosslessOutput,
-                result.OutputVerificationPerformed, result.OutputVerificationDetail);
+                result.OutputVerificationPerformed, result.OutputVerificationDetail,
+                failedWindows: result.FailedWindows,
+                damageRepairRequired: result.CtdbHasErrors);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -1863,7 +1865,9 @@ public sealed class RipViewModel : PageViewModel
                 outputVerificationKnown: held.OutputVerificationKnown,
                 losslessOutput: held.LosslessOutput,
                 outputVerificationPerformed: held.OutputVerificationPerformed,
-                outputVerificationDetail: held.OutputVerificationDetail);
+                outputVerificationDetail: held.OutputVerificationDetail,
+                failedWindows: held.FailedWindows,
+                damageRepairRequired: held.CtdbHasErrors);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
@@ -2131,7 +2135,9 @@ public sealed class RipViewModel : PageViewModel
             outputVerificationKnown: result.OutputVerificationKnown,
             losslessOutput: result.LosslessOutput,
             outputVerificationPerformed: result.OutputVerificationPerformed,
-            outputVerificationDetail: result.OutputVerificationDetail);
+            outputVerificationDetail: result.OutputVerificationDetail,
+            failedWindows: result.FailedWindows,
+            damageRepairRequired: result.CtdbHasErrors);
 
     /// <summary>Record a finished job in the report page and the history list. Every completed operation
     /// belongs here - a Test &amp; Copy most of all, since it is the highest-assurance mode and used to be
@@ -2142,7 +2148,8 @@ public sealed class RipViewModel : PageViewModel
         string format = "", int opticalReadsUsed = 0, int minimumAgreeingReads = 0,
         bool outputVerificationKnown = false, bool losslessOutput = false,
         bool outputVerificationPerformed = false,
-        string outputVerificationDetail = "")
+        string outputVerificationDetail = "",
+        int failedWindows = 0, bool damageRepairRequired = false)
     {
         var d = _lastDisc;
         var report = new RipReport
@@ -2171,7 +2178,9 @@ public sealed class RipViewModel : PageViewModel
             OutputVerificationPerformed = outputVerificationPerformed,
             OutputVerificationDetail = outputVerificationDetail,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
-            TocId = d?.TocId ?? ""
+            TocId = d?.TocId ?? "",
+            FailedWindows = failedWindows,
+            DamageRepairRequired = damageRepairRequired
         };
         _reports.Publish(report);
         _history.Add(report);

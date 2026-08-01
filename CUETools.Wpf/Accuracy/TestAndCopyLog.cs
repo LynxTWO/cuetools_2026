@@ -11,7 +11,8 @@ namespace CUETools.Wpf.Accuracy
         public static string Format(TestCopyResult result, IReadOnlyList<VerifyRecord> reads,
             string discId, string drive, int readOffset, int failedWindows,
             bool ctdbHasErrors = false, bool ctdbCanRecover = false,
-            int ctdbRepairSectors = 0, string ctdbRepairRanges = "")
+            int ctdbRepairSectors = 0, string ctdbRepairRanges = "",
+            int committedReadIndex = -1)
         {
             var sb = new StringBuilder();
             sb.AppendLine("Test & Copy log");
@@ -64,7 +65,13 @@ namespace CUETools.Wpf.Accuracy
                 sb.AppendLine("Test & Copy HELD - no agreement on track(s): " + string.Join(", ", oneBased));
             }
 
-            VerifyRecord? last = reads.Count > 0 ? reads[reads.Count - 1] : null;
+            // AR/CTDB lines describe the COMMITTED read's own database checks when the caller
+            // names one; the newest read's verdict must not stand in for bytes it does not
+            // cover (R109). Callers that held or did not commit leave the index at -1.
+            VerifyRecord? last =
+                committedReadIndex >= 0 && committedReadIndex < reads.Count
+                    ? reads[committedReadIndex]
+                    : reads.Count > 0 ? reads[reads.Count - 1] : null;
             int arConf = last?.ArConfidence ?? 0, arTotal = last?.ArTotal ?? 0;
             int ctConf = last?.CtdbConfidence ?? 0, ctTotal = last?.CtdbTotal ?? 0;
             sb.AppendLine(
