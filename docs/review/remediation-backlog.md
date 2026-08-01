@@ -3019,7 +3019,16 @@ step before any fix.
   per track/range; make the two hardcoded log lines truthful; honor persisted
   Paranoid.
 - **Verification plan:** processor-suite log cases; classic suites green.
-- **Status:** ready.
+- **Status:** fixed 2026-08-01. `CUESheet.TestCopyMismatchTracks` compares the
+  Test and Copy CRCs; the EAC-style log prints "COPY MISMATCH" per
+  track/range, a summary line, and counts mismatches as errors; the classic
+  completion dialog escalates to the error form on mismatch. The cache-defeat
+  and C2 header lines now report `ICDRipper.CacheDefeatBytes` and
+  `DriveC2ErrorMode` truthfully (new interface member; all three implementors
+  updated). Persisted Paranoid survives restart (`Maximum - 1` off-by-one).
+  Legacy 18/112/9/17 and modern 43/466 lanes green; classic CUERipper GUI
+  builds clean. No in-repo automated test drives `GetExactAudioCopyLog`
+  (unchanged gap, noted); behavior verified by code read and suite compile.
 
 ### R114. Read-loop inferred defects: 24/00 transition ordering and 64/00 child guard - bucket A, risk medium
 

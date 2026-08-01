@@ -81,6 +81,7 @@ namespace CUETools.Ripper.SCSI
 		private int _givenUpWindowCount;
 		private int _shortPayloadTransferCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
+		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int ReadCommunicationRetryCount => _readCommunicationRetryCount;
 		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
