@@ -201,7 +201,20 @@ Original decision record:
 - **Recommendation:** (B) now; revisit (A) only if classic remains a shipped
   rip surface after the WPF app is the default.
 
-### D9. Burst-mode re-read semantics - OPEN 2026-08-01
+### D9. Burst-mode re-read semantics - RESOLVED 2026-08-01 (gate to Secure/Paranoid)
+
+- **User chose:** gate the deep-recovery extension to quality > 0. Implemented
+  same day: the engine derives `deepRecoveryActive` from the setting AND the
+  quality (extension, slip probe, and policy window all keyed on it),
+  `RipService` gates its floor-speed drops and the recorded `DeepRecovery`
+  flag the same way and logs the gated state, and the Burst tooltip plus the
+  deep-recovery settings tooltip both say Burst keeps the classic 16-pass
+  cap. Test & Copy stays forced-Secure by design. Contract tests pin both
+  layers.
+
+Original decision record:
+
+### D9 (original). Burst-mode re-read semantics - OPEN 2026-08-01
 
 - **Observation (user, live):** Burst appears to "get recovery". Two causes,
   both by design today: Test & Copy always forces at least Secure plus cache

@@ -424,7 +424,7 @@
                      HorizontalAlignment="Right">
             <ComboBox Width="104" Margin="0,0,10,6" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}"
                       IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
-                      ToolTip="Burst: fast, single pass. Secure: read twice + compare. Paranoid: deepest re-reads.">
+                      ToolTip="Burst: fast, single pass - windows the vote flags still re-read up to 16 passes, but deep recovery never runs. Secure: read twice + compare, with deep recovery. Paranoid: deepest re-reads.">
               <ComboBoxItem>Burst</ComboBoxItem>
               <ComboBoxItem>Secure</ComboBoxItem>
               <ComboBoxItem>Paranoid</ComboBoxItem>
