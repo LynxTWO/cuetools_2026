@@ -79,6 +79,7 @@ namespace CUETools.Ripper.SCSI
 		private int _pinpointRetryCount;
 		private int _corroboratedUnreadablePinpointCount;
 		private int _givenUpWindowCount;
+		private int _shortPayloadTransferCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
 		public int ReadCommunicationRetryCount => _readCommunicationRetryCount;
@@ -96,6 +97,10 @@ namespace CUETools.Ripper.SCSI
 		/// <summary>Windows whose pass loop ended with unresolved sectors (engine-classified
 		/// give-up, R106). Complements FailedSectors, which carries the per-sector bits.</summary>
 		public int GivenUpWindowCount => _givenUpWindowCount;
+		/// <summary>GOOD-status payload reads rejected because the transferred byte count did
+		/// not match the exact request (R112). Live occurrence evidence for the open
+		/// GOOD-status-underrun unknown; expected to stay zero.</summary>
+		public int ShortPayloadTransferCount => _shortPayloadTransferCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -1475,6 +1480,25 @@ namespace CUETools.Ripper.SCSI
 
 			if (st == Device.CommandStatus.Success)
 			{
+				// Transport underrun guard (R112): GOOD status with fewer bytes DMA'd than the
+				// exact per-sector layout ReorganiseSectors consumes would fold the reused
+				// buffer's stale tail into the vote as fresh audio. A short transfer is
+				// transport evidence and stays fatal; it is never damaged-media evidence.
+				uint expectedBytes = (uint)((4 * 588 +
+					(_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 :
+					 _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0)) * Sectors2Read);
+				if (m_device.LastDataTransferLength != expectedBytes)
+				{
+					_shortPayloadTransferCount++;
+					throw new ReadCDException(string.Format(
+						"READ CD returned GOOD status but transferred {0} of {1} bytes " +
+						"[relative-sector={2}, sectors={3}, command={4}]",
+						m_device.LastDataTransferLength,
+						expectedBytes,
+						sector,
+						Sectors2Read,
+						_readCDCommand));
+				}
 				ReorganiseSectors(sector, Sectors2Read);
 				return st;
 			}

@@ -113,6 +113,7 @@ namespace Bwg.Scsi
         private bool m_ignore_long_write_error;
         private byte[] m_sense_info;
         private byte m_scsi_status;
+        private uint m_last_transfer_length;
         private Logger m_logger;
         private int m_MaximumTransferLength;
         #endregion
@@ -830,10 +831,18 @@ namespace Bwg.Scsi
                 string str ;
                 str = "IOCTL_SCSI_PASS_THROUGH_DIRECT failed - " + Win32ErrorToString(LastError);
                 m_logger.LogMessage(new UserMessage(UserMessage.Category.Error, 0, str));
+                // The command never completed, so the previous command's sense and status must
+                // not be readable as if they were this command's identity (R112).
+                m_scsi_status = 0;
+                m_sense_info = null;
+                m_last_transfer_length = 0;
                 return CommandStatus.IoctlFailed;
             }
 
             m_scsi_status = f.ScsiStatus;
+            // The port driver writes the actual number of bytes transferred back into
+            // DataTransferLength; callers that require an exact-length payload compare it (R112).
+            m_last_transfer_length = f.DataTransferLength;
             if (f.SenseInfoLength != 0)
             {
                 m_sense_info = new byte[f.SenseInfoLength];
@@ -881,10 +890,18 @@ namespace Bwg.Scsi
                 string str ;
                 str = "IOCTL_SCSI_PASS_THROUGH_DIRECT failed - " + Win32ErrorToString(LastError);
                 m_logger.LogMessage(new UserMessage(UserMessage.Category.Error, 0, str));
+                // The command never completed, so the previous command's sense and status must
+                // not be readable as if they were this command's identity (R112).
+                m_scsi_status = 0;
+                m_sense_info = null;
+                m_last_transfer_length = 0;
                 return CommandStatus.IoctlFailed;
             }
 
             m_scsi_status = f.ScsiStatus;
+            // The port driver writes the actual number of bytes transferred back into
+            // DataTransferLength; callers that require an exact-length payload compare it (R112).
+            m_last_transfer_length = f.DataTransferLength;
             if (f.SenseInfoLength != 0)
             {
                 m_sense_info = new byte[f.SenseInfoLength];
@@ -1071,21 +1088,25 @@ namespace Bwg.Scsi
         }
 
         /// <summary>
-        /// Get the ASC byte from the sense information
+        /// Get the ASC byte from the sense information. Absent or short autosense reads as 0:
+        /// a CHECK CONDITION can legally arrive with no sense bytes, and throwing here would
+        /// replace the SCSI failure identity with a NullReferenceException (R112). 0/0 never
+        /// matches a retry classifier, so missing sense can never authorize a retry.
         /// </summary>
         /// <returns>asc byte</returns>
         public byte GetSenseAsc()
         {
-            return m_sense_info[12];
+            return m_sense_info != null && m_sense_info.Length > 12 ? m_sense_info[12] : (byte)0;
         }
 
         /// <summary>
-        /// Get the ASCQ byte from the sense information
+        /// Get the ASCQ byte from the sense information. Absent or short autosense reads as 0
+        /// (see GetSenseAsc).
         /// </summary>
         /// <returns>ascq byte</returns>
         public byte GetSenseAscq()
         {
-            return m_sense_info[13];
+            return m_sense_info != null && m_sense_info.Length > 13 ? m_sense_info[13] : (byte)0;
         }
 
         /// <summary>
@@ -1112,7 +1133,19 @@ namespace Bwg.Scsi
         /// <returns>The SenseKeyType value that indicates the sense key for the sense information</returns>
         public SenseKeyType GetSenseKey()
         {
-            return (SenseKeyType)(m_sense_info[2] & 0x0f);
+            // Absent or short autosense reads as NoSense (see GetSenseAsc).
+            return m_sense_info != null && m_sense_info.Length > 2
+                ? (SenseKeyType)(m_sense_info[2] & 0x0f)
+                : SenseKeyType.NoSense;
+        }
+
+        /// <summary>The actual number of bytes the last completed pass-through command
+        /// transferred, as written back by the port driver. Zero after an IoctlFailed. A caller
+        /// that requires an exact-length payload (READ CD) must compare this to its request: a
+        /// GOOD-status underrun would otherwise let stale buffer bytes pass as fresh data (R112).</summary>
+        public uint LastDataTransferLength
+        {
+            get { return m_last_transfer_length; }
         }
 
 
