@@ -8,6 +8,23 @@ namespace CUETools.Ripper.SCSI
     {
         public const int PlateauPasses = 8;       // stop after this many passes with no new best
         public const double CeilingSeconds = 120; // hard wall-clock stop per window
+        /// <summary>Absolute wall-clock budget for ONE window, enforced inside the chunk loop
+        /// instead of between passes (R123). Every rule above is evaluated once per COMPLETED
+        /// pass, so none of them can stop a window whose single pass runs for hours - observed
+        /// live: each 16-sector batch of a window failed and decomposed into 16 slow
+        /// single-sector reads, one pass consumed more than six hours, and the app logged
+        /// nothing the whole time because logging is per pass. A window that has spent this
+        /// long has stopped being recovery and become a hang; it ends through the normal
+        /// give-up path with its unresolved sectors flagged. Generous on purpose: a legitimate
+        /// stuck window that converged on the live matrix took about five minutes.</summary>
+        public const double WindowHardBudgetSeconds = 1200;
+
+        /// <summary>True when this window has consumed its absolute wall-clock budget.</summary>
+        public static bool WindowBudgetExhausted(double elapsedSeconds)
+        {
+            return elapsedSeconds >= WindowHardBudgetSeconds;
+        }
+
         /// <summary>Absolute pass cap for a deep-recovery window (R107). Every per-sector vote
         /// accumulator is 8-bit: the UserData bit lanes carry into their neighbor at 256
         /// observations, and C2Count and the retry entries wrap at 256. The cap keeps pass counts

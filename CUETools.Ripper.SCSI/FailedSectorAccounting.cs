@@ -13,26 +13,37 @@ namespace CUETools.Ripper.SCSI
         /// <summary>Mark, in <paramref name="failedSectors"/>, every window sector whose retry
         /// entry shows it was still flagged on the window's final executed pass. Call only for a
         /// window that ended with a nonzero error count. Sectors outside the failed array (lead-in
-        /// or lead-out overread) are skipped. Returns the number of newly marked sectors.</summary>
+        /// or lead-out overread) are skipped. Returns the number of newly marked sectors.
+        /// <para><paramref name="partialFromSector"/> supports a window cut mid-pass by the
+        /// wall-clock budget (R123): sectors below it were re-read on the final partial pass, so
+        /// only the current pass's flag counts, while sectors at or above it never got that pass
+        /// and are still unresolved if the pass before flagged them. Leave it at (or above) the
+        /// window end for a completed pass.</para></summary>
         public static int FinalizeWindow(
             byte[] retryCount,
             int retrySectorBase,
             int windowStartSector,
             int windowEndSector,
             int lastExecutedPass,
-            BitArray failedSectors)
+            BitArray failedSectors,
+            int partialFromSector = int.MaxValue)
         {
             // CorrectSectors stores pass + 2 for a sector flagged on that pass, so the final
             // executed pass leaves exactly this value behind. RecoveryPolicy.MaxPasses keeps
             // pass + 2 within a byte, so the cast cannot alias an earlier pass.
             byte stillFailing = (byte)(lastExecutedPass + 2);
+            // A sector the budget cut off before its turn keeps the previous pass's flag.
+            byte flaggedLastPass = (byte)(lastExecutedPass + 1);
             int marked = 0;
             for (int sector = windowStartSector; sector < windowEndSector; sector++)
             {
                 int retryIndex = sector - retrySectorBase;
                 if (retryIndex < 0 || retryIndex >= retryCount.Length)
                     continue;
-                if (retryCount[retryIndex] != stillFailing)
+                byte retry = retryCount[retryIndex];
+                bool unresolved = retry == stillFailing ||
+                    (sector >= partialFromSector && retry == flaggedLastPass);
+                if (!unresolved)
                     continue;
                 if (sector < 0 || sector >= failedSectors.Count)
                     continue;

@@ -85,6 +85,7 @@ namespace CUETools.Ripper.SCSI
 		private int _extendedTimeoutReadCount;
 		private int _driveReportedTimeoutPinpointCount;
 		private int _driveReportedTimeoutBatchCount;
+		private int _windowBudgetStopCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
@@ -117,6 +118,9 @@ namespace CUETools.Ripper.SCSI
 		/// <summary>Whole batches the drive surrendered with 3E/02 that decomposed to
 		/// independent single-sector reads instead of failing the job (R118).</summary>
 		public int DriveReportedTimeoutBatchCount => _driveReportedTimeoutBatchCount;
+		/// <summary>Windows ended by the wall-clock budget because a single pass was grinding
+		/// far past any useful recovery rate (R123).</summary>
+		public int WindowBudgetStopCount => _windowBudgetStopCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -2389,6 +2393,13 @@ namespace CUETools.Ripper.SCSI
 			DateTime recoveryStart = DateTime.Now;
 			if (deepRecoveryActive) _recovery.StartWindow();
 			int lastExecutedPass = -1;
+			// Wall-clock safety valve (R123). The plateau, ceiling and pass rules are all
+			// evaluated BETWEEN passes, so none of them can stop a window whose single pass
+			// grinds for hours (every batch failing and decomposing into slow single-sector
+			// reads). partialFromSector records how far the cut pass got, so finalization can
+			// tell "re-read and still failing" from "never revisited this pass".
+			bool windowBudgetStopped = false;
+			int partialFromSector = int.MaxValue;
 			for (int pass = 0; pass < hard_cap; pass++)
 			{
 				lastExecutedPass = pass;
@@ -2516,7 +2527,20 @@ namespace CUETools.Ripper.SCSI
 						ReadProgress(this, progressArgs);
 						_slipVerdictPending = false;   // surfaced once
 					}
+					// Only past the minimum vote passes: every sector has then been written by
+					// at least one COMPLETE pass, so cutting here leaves no unvoted audio.
+					if (pass > _correctionQuality &&
+						RecoveryPolicy.WindowBudgetExhausted(
+							(DateTime.Now - recoveryStart).TotalSeconds))
+					{
+						partialFromSector = sector + Sectors2Read;
+						windowBudgetStopped = true;
+						_windowBudgetStopCount++;
+						break;
+					}
 				}
+				if (windowBudgetStopped)
+					break;
 				// Deep recovery: classify a persistent slip ONCE per window (read-only probe - repeated
 				// raw reads of the first chunk, correlated; never touches the vote or the audio bytes).
 				if (deepRecoveryActive && !_slipClassified && pass > _correctionQuality)
@@ -2560,7 +2584,7 @@ namespace CUETools.Ripper.SCSI
 			{
 				int givenUp = FailedSectorAccounting.FinalizeWindow(
 					m_retryCount, _retrySectorBase, _currentStart, _currentEnd,
-					lastExecutedPass, m_failedSectors);
+					lastExecutedPass, m_failedSectors, partialFromSector);
 				_givenUpWindowCount++;
 				if (ReadProgress != null)
 				{
