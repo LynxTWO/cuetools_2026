@@ -2527,16 +2527,34 @@ namespace CUETools.Ripper.SCSI
 						ReadProgress(this, progressArgs);
 						_slipVerdictPending = false;   // surfaced once
 					}
-					// Only past the minimum vote passes: every sector has then been written by
-					// at least one COMPLETE pass, so cutting here leaves no unvoted audio.
-					if (pass > _correctionQuality &&
-						RecoveryPolicy.WindowBudgetExhausted(
-							(DateTime.Now - recoveryStart).TotalSeconds))
+					// Past the minimum vote passes every sector has been written by at least one
+					// COMPLETE pass, so the window can be cut here without leaving unvoted audio.
+					double windowElapsed = (DateTime.Now - recoveryStart).TotalSeconds;
+					if (RecoveryPolicy.WindowBudgetExhausted(windowElapsed))
 					{
-						partialFromSector = sector + Sectors2Read;
-						windowBudgetStopped = true;
-						_windowBudgetStopCount++;
-						break;
+						if (pass > _correctionQuality)
+						{
+							partialFromSector = sector + Sectors2Read;
+							windowBudgetStopped = true;
+							_windowBudgetStopCount++;
+							break;
+						}
+						// Still inside the minimum vote passes: cutting would publish sectors
+						// this window never read. A drive this slow is not recovering, so fail
+						// loudly with the exact position instead of grinding on invisibly - the
+						// live shape was a first pass burning its full read timeout per chunk
+						// for four hours with no output at all (R124).
+						throw new ReadCDException(string.Format(
+							"The drive made no usable progress on this window: {0:F0}s spent " +
+							"before the minimum {1} vote pass(es) completed " +
+							"[relative-sector={2}, window={3}-{4}, pass={5}, speed={6}kB/s]",
+							windowElapsed,
+							_correctionQuality + 1,
+							sector,
+							_currentStart,
+							_currentEnd,
+							pass,
+							_appliedSpeedKbps));
 					}
 				}
 				if (windowBudgetStopped)
