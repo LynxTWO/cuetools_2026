@@ -3154,6 +3154,18 @@ step before any fix.
   near-timeout window, continue the rip, return to it later at a different
   speed instead of dying mid-job; overlaps R116 persistence), the flush-speed
   restoration, and the 20/00 read-command re-probe. All need live sessions.
+- **Live confirmation (2026-08-01 late):** with the extended timeout the
+  ERROR_SEM_TIMEOUT class is gone. H: ran an 86-minute Paranoid Test read to
+  99.96% of the scratched CD-R (deep recovery converged 53- and 30-pass
+  windows through the 76-84% zone) and the terminal failure is now the
+  DRIVE's own sense verdict: a single-sector pinpoint after a MediumError
+  parent returned HardwareError "TIMEOUT ON LOGICAL UNIT" (ASC 3E family) at
+  sector 356562, about 140 sectors from the disc edge. Next classifier
+  candidate, per the R105/R58 pattern (exact drive gate, parent
+  corroboration, bounded): let that exact drive-reported timeout verdict
+  mark the pinpoint sector untrusted instead of failing the job at 99.96%.
+  Observability gap found: the counter telemetry line is emitted only on
+  completed jobs; failure paths should carry it too.
 
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
@@ -3190,8 +3202,15 @@ step before any fix.
   Log, certificate, history, and status all label the result salvaged; the
   reads leg of verification never applies, while an exact database match
   still verifies the bytes. Four salvage tests plus source contracts pass;
-  WPF 472/472, ripper 48/48, legacy lanes green. Pending: a live session on
-  the defective discs (which may also exercise the R118 floor-speed hazards).
+  WPF 472/472, ripper 48/48, legacy lanes green. Live session 2026-08-01:
+  three complete 17-minute minimum-speed reads of the defective disc on the
+  ASUS with zero read failures, zero rereads, and zero timeouts - and the
+  honest verdict Held on all 20 tracks: no two reads agree anywhere, so even
+  the drive's concealment is unstable on this disc. That is the designed
+  outcome: the user can accept one complete, internally coherent capture
+  (labeled not verified), and all-tracks disagreement plus the slip=1 zones
+  make stream-wide misalignment the likely mechanism (R116 slip-realignment
+  evidence).
 
 ### R120. Live per-track evidence during reads - bucket D, design (user request 2026-08-01)
 
