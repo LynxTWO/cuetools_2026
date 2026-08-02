@@ -3349,6 +3349,12 @@ step before any fix.
   match (0/1 each) all fit stream-wide per-read misalignment. If reads can be
   offset-corrected before voting, this disc class may verify - and a
   CTDB-repairable alignment would turn presence into database-verified audio.
+- **Cross-drive confirmation (2026-08-02):** the same disc now has three
+  complete salvage reads on the LG WH16NS40 as well, again holding all 20
+  tracks with no agreement, after three earlier complete reads on the ASUS.
+  Six full reads, two drives, zero repeatable tracks: the non-determinism is
+  the pressing, not one drive's servo, which is exactly the shape realignment
+  would have to address.
 - **Design constraints (from the reality-check that originally rejected a
   naive version):** realignment must be an explicit, evidence-carrying stage,
   not a silent vote input: correlate per window, record the applied offset in
@@ -3380,17 +3386,43 @@ step before any fix.
 ## Ordering
 
 The locally actionable and hosted correctness queue is closed through R105.
-The 2026-08-01 recovery wave landed the same day: R106-R114 are fixed,
-R115 is fixed 2-of-4 with the remainder re-scoped, and R116 is the open next
-slice, in this order: the injectable device seam (also activates the R114
-routes), held-result persistence across app exit, the targeted-reread vote
-design (requires per-sector pass counts - the current margin math assumes
-uniform passes), CTDB-guided second-chance rereads, per-sector session
-persistence, and the two hardware-gated R115 items (pass-boundary speed on
-the drive matrix; adaptive quorum with TestRipper corpus evidence). One live
-H:/K: session should retain the new `ShortPayloadTransferCount` and
-`GivenUpWindowCount` counters. R117 awaits decision D8. Remaining work is
-ordered by the authority or evidence it requires:
+
+The 2026-08-01/02 recovery wave is complete for everything software evidence
+can settle. Fixed: R106-R114, R115 (2 of 4), R118 (five mitigations across
+two nights of live evidence), R119 salvage mode, R123 and R124. Closed by
+decision: R117 (D8-B, classic frozen as a legacy surface) and D9 (Burst keeps
+the classic 16-pass cap). The live matrix now shows the intended behaviour:
+19,500 extended-timeout reads carried three complete salvage reads of a
+defective disc that no previous build could finish, heartbeats made a slow
+grind legible, and a cache-defeat exhaustion failed closed at 82 percent
+instead of publishing unproven audio.
+
+Open, in the order they should run:
+
+1. R120 live per-track evidence - the highest user-visible payoff and pure
+   surfacing of values the engine already computes.
+2. R122 slip-aware realignment - now backed by six complete reads across two
+   drives with zero repeatable tracks; the measurement increment comes before
+   anything touches the vote.
+3. R116 - the injectable device seam (which also gives the R114 and R118
+   routes real activation tests), held-result persistence across app exit,
+   the targeted-reread vote design (needs per-sector pass counts; the current
+   margin math assumes uniform passes), CTDB-guided second-chance rereads,
+   and per-sector session persistence.
+4. R118 leftovers - the deferred-window retry ledger, per-drive read-latency
+   high-water calibration, flush-speed restoration, and the 20/00
+   read-command re-probe.
+5. R121 album metadata editing and the unshown MusicBrainz fields.
+6. The two hardware-gated R115 items (pass-boundary speed on the drive
+   matrix; adaptive quorum with TestRipper corpus evidence).
+
+One live session should still retain the `ShortPayloadTransferCount`,
+`GivenUpWindowCount`, `WindowBudgetStopCount` and drive-reported-timeout
+counters, and the scratched CD-R deserves a run on the LG, which reached
+99.96 percent of it before the 3E/02 and timeout work landed.
+
+Remaining work beyond the recovery domain is ordered by the authority or
+evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -3438,6 +3470,13 @@ ordered by the authority or evidence it requires:
   stress-test gained the SR1-SR8 recovery scenarios; the accumulator-wrap
   unknown resolved by construction, the underrun unknown moved to in
   progress behind its named counter.
+- 2026-08-01/02 - live hardware evidence drove a second wave on two damaged
+  discs and both matrix drives: decisions D8-B and D9, R119 salvage mode
+  (proven end to end - three complete reads and a user-accepted capture of a
+  disc no build had finished before), five R118 mitigations, and R123/R124
+  after a six-hour invisible grind and a four-hour silent stall were
+  diagnosed from logs and a live stack capture. R120, R121, R122 filed from
+  user requests and the cross-drive evidence. 27 commits, every batch gated.
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
