@@ -501,11 +501,13 @@ public sealed class RipService : IRipService
                     "rip",
                     "calibrated overread range does not match the current known read offset; using edge zero-padding");
 
-            // A drive left in a bad state by an aborted read reports a degraded capability
-            // rather than an error: the live signature was an ASUS BW-16D1HT advertising a 4x
-            // maximum after a killed six-hour grind (it reports 40-48x healthy), then rejecting
-            // READ CD outright with 20/00. Say so plainly - the fix is a tray cycle, not a
-            // code change, and the user cannot see this from a generic read failure (R124).
+            // A drive reporting a fraction of its calibrated maximum has two live explanations,
+            // and the log must not assert the wrong one: the ASUS advertised 4x against a
+            // calibrated 40x both after a killed six-hour grind (a wedge, cured by a tray
+            // cycle) AND immediately after assessing a badly scratched CD-R, where derating
+            // itself is correct drive behaviour for marginal media. Either way the user needs
+            // to know why the run is crawling, so name the observation and both readings
+            // rather than a diagnosis (R124).
             try
             {
                 int[] reported = reader.GetSupportedSpeeds();
@@ -515,10 +517,12 @@ public sealed class RipService : IRipService
                 if (reportedMax > 0 && calibratedMax > 0 && reportedMax * 4 < calibratedMax)
                     _log.Warn(
                         "rip",
-                        $"drive reports a degraded maximum read speed: {reportedMax} kB/s " +
-                        $"({reportedMax / 176}x) against a calibrated {calibratedMax} kB/s " +
-                        $"({calibratedMax / 176}x). The drive may be wedged from an aborted " +
-                        "read; eject and reinsert the disc before trusting this run.");
+                        $"drive reports a much lower maximum read speed for this disc: " +
+                        $"{reportedMax} kB/s ({reportedMax / 176}x) against a calibrated " +
+                        $"{calibratedMax} kB/s ({calibratedMax / 176}x). Expect a slow run. " +
+                        "Either the drive derated itself for marginal media, which is normal, " +
+                        "or it is wedged from an aborted read - if reads then fail with " +
+                        "command rejections, eject and reinsert the disc and retry.");
             }
             catch (Exception ex)
             {
@@ -2139,8 +2143,16 @@ public sealed class RipService : IRipService
                 throw new InvalidDataException("The held Copy staging transfer is incomplete.");
 
             string heldList = string.Join(", ", System.Array.ConvertAll(held.HeldTracks, x => (x + 1).ToString()));
+            // The sidecar log is the artifact that travels with the audio, so it must name the
+            // capture mode too: a salvage capture read at Burst quality with C2 off at the drive
+            // minimum, which is a materially weaker read contract than an ordinary Test & Copy
+            // (R119). The certificate and history already carry the salvaged grade.
             string log = "Test & Copy log\n\n" +
                 "NOT test-verified - accepted by user without agreement.\n" +
+                (held.Salvaged
+                    ? "SALVAGE capture: Burst quality, C2 pointers off, minimum read speed - " +
+                      "intended for defective-by-design discs that no drive reads repeatably.\n"
+                    : "") +
                 $"Reads used: {held.ReadsUsed}\n" +
                 $"Held track(s) (no agreement): {heldList}\n" +
                 (held.OutputVerificationKnown
