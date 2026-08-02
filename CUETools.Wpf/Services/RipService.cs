@@ -501,6 +501,30 @@ public sealed class RipService : IRipService
                     "rip",
                     "calibrated overread range does not match the current known read offset; using edge zero-padding");
 
+            // A drive left in a bad state by an aborted read reports a degraded capability
+            // rather than an error: the live signature was an ASUS BW-16D1HT advertising a 4x
+            // maximum after a killed six-hour grind (it reports 40-48x healthy), then rejecting
+            // READ CD outright with 20/00. Say so plainly - the fix is a tray cycle, not a
+            // code change, and the user cannot see this from a generic read failure (R124).
+            try
+            {
+                int[] reported = reader.GetSupportedSpeeds();
+                int reportedMax = 0;
+                foreach (int s in reported) if (s > reportedMax) reportedMax = s;
+                int calibratedMax = cal?.MaxSpeedKbps ?? 0;
+                if (reportedMax > 0 && calibratedMax > 0 && reportedMax * 4 < calibratedMax)
+                    _log.Warn(
+                        "rip",
+                        $"drive reports a degraded maximum read speed: {reportedMax} kB/s " +
+                        $"({reportedMax / 176}x) against a calibrated {calibratedMax} kB/s " +
+                        $"({calibratedMax / 176}x). The drive may be wedged from an aborted " +
+                        "read; eject and reinsert the disc before trusting this run.");
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("rip", "drive capability sanity check failed: " + ex.GetType().Name);
+            }
+
             AdaptiveSpeedController? speedCtl = null;
             int lastRequested = 0;
             if (salvage)
@@ -718,6 +742,13 @@ public sealed class RipService : IRipService
             // exactly like a hang: no log line, and the UI fraction barely moves inside one
             // window. A bounded heartbeat keeps a slow grind visible and diagnosable.
             DateTime lastHeartbeat = DateTime.UtcNow;
+            // Stall detector (R124). The heartbeat above only speaks while a window is
+            // re-reading; a FIRST pass that crawls - every chunk burning its full read timeout -
+            // produced four hours of complete silence on the live matrix. This watches raw
+            // position advance and is blind to pass structure, so nothing can grind invisibly.
+            int lastStallPosition = -1;
+            DateTime lastAdvance = DateTime.UtcNow;
+            DateTime lastStallReport = DateTime.UtcNow;
             void RcFlushWindow()
             {
                 if (rcWin >= 0 && rcPasses > 0)
@@ -766,6 +797,21 @@ public sealed class RipService : IRipService
                     if (speedCtl != null && reReads == 0 && lastReReads == 0 && frac - lastEaseFrac >= 0.05)
                     {
                         speedCtl.OnCleanRegion(); RequestSpeed(); lastEaseFrac = frac;
+                    }
+                    if (e.Position != lastStallPosition)
+                    {
+                        lastStallPosition = e.Position;
+                        lastAdvance = DateTime.UtcNow;
+                    }
+                    else if ((DateTime.UtcNow - lastAdvance).TotalSeconds >= 60 &&
+                             (DateTime.UtcNow - lastStallReport).TotalSeconds >= 60)
+                    {
+                        lastStallReport = DateTime.UtcNow;
+                        _log.Warn("rip.recovery",
+                            $"no read progress for {(int)(DateTime.UtcNow - lastAdvance).TotalSeconds}s " +
+                            $"at position={e.Position} window={e.PassStart}-{e.PassEnd} pass={e.Pass} " +
+                            $"running={e.ErrorsCount} speed={(lastRequested > 0 ? lastRequested / 176 : 0)}x " +
+                            "- the drive is answering slowly or not at all");
                     }
                     if (reReads > 0 && (DateTime.UtcNow - lastHeartbeat).TotalSeconds >= 30)
                     {

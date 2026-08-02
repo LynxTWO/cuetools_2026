@@ -3226,6 +3226,37 @@ step before any fix.
   the minimum vote passes) is still unbounded by design - cutting it would
   leave unvoted audio - and needs the read-level fatal path instead.
 
+### R124. Invisible first-pass stalls and wedged-drive capability - bucket A, risk high
+
+- **Area or slice:** `SCSIDrive` window loop, `RipService` progress handling
+  and drive capability check.
+- **Why it matters (live 2026-08-02):** two distinct follow-ons to R123.
+  (a) The H: salvage Copy read logged its start at 09:33:55 and then
+  produced nothing at all for four hours: no completion, no failure, no
+  heartbeat. The R123 heartbeat only speaks while a window is re-reading, and
+  the R123 budget only cuts past the minimum vote passes, so a FIRST pass
+  crawling at its full read timeout per chunk (about 150 chunks per window,
+  up to 45 s each after the R118 extension) stayed both invisible and
+  unbounded. (b) The K: ASUS reported `readx=4` at startup - a 4x maximum
+  against the 40-48x it reports healthy - then rejected READ CD with
+  IllegalRequest 20/00 (INVALID COMMAND OPERATION CODE) at all three
+  cache-defeat regions, 94 s into the job. That is the drive left wedged by
+  the previous aborted grind, and nothing told the user that; the remedy is a
+  tray cycle, not a code change.
+- **Evidence found:** logs `...p63780...` (silent Copy read) and
+  `...p42764...` (`readx=4`, `adaptive speed: drive reports no speed list`,
+  20/00 at three regions, `speed=0kB/s` because no speed was ever accepted).
+- **Confidence:** verified. **Approval needed:** no.
+- **Status:** fixed 2026-08-02. A stall detector in the progress handler
+  watches raw position advance, blind to pass structure, and warns every
+  60 s with position, window, pass, error count and speed - nothing can grind
+  invisibly now. Inside the minimum vote passes the window budget can no
+  longer cut safely, so it instead fails loudly with the exact position and
+  elapsed time rather than continuing. A drive whose reported maximum speed
+  falls below a quarter of its calibrated maximum is named as probably
+  wedged, with the tray-cycle remedy, before the read begins. Ripper 59/59,
+  WPF 472/472, legacy lanes green.
+
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
 - **Area or slice:** RipService Test & Copy variant, SCSIDrive read
