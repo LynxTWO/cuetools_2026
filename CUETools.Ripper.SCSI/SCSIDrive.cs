@@ -84,6 +84,7 @@ namespace CUETools.Ripper.SCSI
 		private int _shortPayloadTransferCount;
 		private int _extendedTimeoutReadCount;
 		private int _driveReportedTimeoutPinpointCount;
+		private int _driveReportedTimeoutBatchCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
@@ -109,9 +110,13 @@ namespace CUETools.Ripper.SCSI
 		/// <summary>Low-speed recovery reads issued with the extended R118 timeout instead of
 		/// the baseline. Activation evidence for the ERROR_SEM_TIMEOUT mitigation.</summary>
 		public int ExtendedTimeoutReadCount => _extendedTimeoutReadCount;
-		/// <summary>Pinpoint sectors the drive itself surrendered on (3E/02 after a MediumError
-		/// parent) that entered the untrusted path instead of failing the job (R118).</summary>
+		/// <summary>Pinpoint sectors the drive itself surrendered on (3E/02 inside a
+		/// corroborated media batch) that entered the untrusted path instead of failing the
+		/// job (R118).</summary>
 		public int DriveReportedTimeoutPinpointCount => _driveReportedTimeoutPinpointCount;
+		/// <summary>Whole batches the drive surrendered with 3E/02 that decomposed to
+		/// independent single-sector reads instead of failing the job (R118).</summary>
+		public int DriveReportedTimeoutBatchCount => _driveReportedTimeoutBatchCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -1314,41 +1319,57 @@ namespace CUETools.Ripper.SCSI
 			_autodetectResult = "";
 			_currentStart = 0;
 			m_max_sectors = Math.Min(NSECTORS, m_device.MaximumTransferLength / CB_AUDIO - 1);
-			int sector = 3;
 			int pass = 0;
 
-			for (int c = 0; c <= c2mode.Length - 1 && !found; c++)
-				for (int r = 0; r <= 1 && !found; r++)
-					for (int m = 0; m <= 1 && !found; m++)
-					{
-						_readCDCommand = readmode[r];
-						_c2ErrorMode = c2mode[c];
-						_mainChannelMode = mainmode[m];
-						if (_forceReadCommand != ReadCDCommand.Unknown && _readCDCommand != _forceReadCommand)
-							continue;
-                        if (_readCDCommand == ReadCDCommand.ReadCdD8h && (_c2ErrorMode != Device.C2ErrorMode.None || _mainChannelMode != Device.MainChannelSelection.UserData))
-							continue;
-						Array.Clear(_readBuffer, 0, _readBuffer.Length); // fill with something nasty instead?
-						DateTime tm = DateTime.Now;
-						if (ReadProgress != null)
+			// One fixed probe region turned a damaged disc START into "failed to autodetect
+			// read command" on a drive that had just read the same disc end to end (observed
+			// live: NO SEEK COMPLETE plus an OS-killed probe at the defective lead-in). The
+			// probe decides drive CAPABILITY, not disc health, so sweep the same command matrix
+			// at up to three disc regions before giving up. Region one keeps the legacy start
+			// position so healthy discs behave exactly as before.
+			int audioLen = _toc != null ? (int)_toc.AudioLength : 0;
+			int[] probeStarts = audioLen > m_max_sectors * 8
+				? new int[] { 3, audioLen / 2, (audioLen / 4) * 3 }
+				: new int[] { 3 };
+
+			for (int region = 0; region < probeStarts.Length && !found; region++)
+			{
+				int sector = probeStarts[region];
+				if (region > 0)
+					_autodetectResult += string.Format(
+						"probe region unreadable - retrying the command matrix at sector {0}\n",
+						sector);
+				for (int c = 0; c <= c2mode.Length - 1 && !found; c++)
+					for (int r = 0; r <= 1 && !found; r++)
+						for (int m = 0; m <= 1 && !found; m++)
 						{
-							progressArgs.Action = Resource1.StatusDetectingDriveFeatures;
-							progressArgs.Pass = -1;
-							progressArgs.Position = pass++;
-							progressArgs.PassStart = 0;
-							progressArgs.PassEnd = 2 * 3 * 2 - 1;
-							progressArgs.ErrorsCount = 0;
-							progressArgs.PassTime = tm;
-							ReadProgress(this, progressArgs);
+							_readCDCommand = readmode[r];
+							_c2ErrorMode = c2mode[c];
+							_mainChannelMode = mainmode[m];
+							if (_forceReadCommand != ReadCDCommand.Unknown && _readCDCommand != _forceReadCommand)
+								continue;
+	                        if (_readCDCommand == ReadCDCommand.ReadCdD8h && (_c2ErrorMode != Device.C2ErrorMode.None || _mainChannelMode != Device.MainChannelSelection.UserData))
+								continue;
+							Array.Clear(_readBuffer, 0, _readBuffer.Length); // fill with something nasty instead?
+							DateTime tm = DateTime.Now;
+							if (ReadProgress != null)
+							{
+								progressArgs.Action = Resource1.StatusDetectingDriveFeatures;
+								progressArgs.Pass = -1;
+								progressArgs.Position = pass++;
+								progressArgs.PassStart = 0;
+								progressArgs.PassEnd = 2 * 3 * 2 - 1;
+								progressArgs.ErrorsCount = 0;
+								progressArgs.PassTime = tm;
+								ReadProgress(this, progressArgs);
+							}
+							System.Diagnostics.Trace.WriteLine("Trying " + CurrentReadCommand);
+							Device.CommandStatus st = FetchSectors(sector, m_max_sectors, false);
+							TimeSpan delay = DateTime.Now - tm;
+							_autodetectResult += string.Format("{0}: {1} ({2}ms)\n", CurrentReadCommand, (st == Device.CommandStatus.DeviceFailed ? Device.LookupSenseError(m_device.GetSenseAsc(), m_device.GetSenseAscq()) : st.ToString()), delay.TotalMilliseconds);
+							found = st == Device.CommandStatus.Success;
 						}
-						System.Diagnostics.Trace.WriteLine("Trying " + CurrentReadCommand);
-						Device.CommandStatus st = FetchSectors(sector, m_max_sectors, false);
-						TimeSpan delay = DateTime.Now - tm;
-						_autodetectResult += string.Format("{0}: {1} ({2}ms)\n", CurrentReadCommand, (st == Device.CommandStatus.DeviceFailed ? Device.LookupSenseError(m_device.GetSenseAsc(), m_device.GetSenseAscq()) : st.ToString()), delay.TotalMilliseconds);
-						found = st == Device.CommandStatus.Success;
-						
-						//sector += m_max_sectors;
-					}
+			}
 			//if (found)
 			//    for (int n = 1; n <= m_max_sectors; n++)
 			//    {
@@ -1543,6 +1564,13 @@ namespace CUETools.Ripper.SCSI
 			bool legacyTrackMode =
 				sector != 0 && st == Device.CommandStatus.DeviceFailed &&
 				asc == 0x64 && ascq == 0x00;
+			// The drive deliberated for its whole (possibly extended) window and surrendered the
+			// batch with the assigned 3E/02 verdict; decompose it like a medium-error batch (R118).
+			bool driveTimeoutBatch =
+				PayloadReadFailurePolicy.IsDriveReportedTimeoutBatch(
+					Sectors2Read, st, senseKey, asc, ascq);
+			if (driveTimeoutBatch)
+				_driveReportedTimeoutBatchCount++;
 
 			if (Sectors2Read == 1 && mediumError)
 			{
@@ -1664,12 +1692,12 @@ namespace CUETools.Ripper.SCSI
 			}
 
 			if (Sectors2Read > 1 &&
-				PayloadReadFailurePolicy.ShouldSplitBatch(
+				((PayloadReadFailurePolicy.ShouldSplitBatch(
 					st,
 					senseKey,
 					asc,
 					ascq) &&
-				(mediumError || legacyTrackMode))
+				(mediumError || legacyTrackMode)) || driveTimeoutBatch))
 			{
 				if (_debugMessages)
 					System.Console.WriteLine("\n{0}: retrying one sector at a time", ex.Message);
@@ -1756,11 +1784,9 @@ namespace CUETools.Ripper.SCSI
 							throw repeatedFailure;
 						}
 						if (PayloadReadFailurePolicy.IsDriveReportedTimeoutPinpoint(
-								mediumError,
+								mediumError || driveTimeoutBatch,
 								Sectors2Read,
 								1,
-								_speedChangeJustApplied,
-								_cacheDefeatJustFlushed,
 								singleFailure.Status,
 								singleFailure.SenseKey,
 								singleFailure.Asc,
@@ -1801,7 +1827,7 @@ namespace CUETools.Ripper.SCSI
 				// StopOnUnrecoverable decides whether the job stops after retries exhaust.
 				// Preserve the legacy 64/00 behavior, which required at least one readable
 				// sector to prove that the command still worked in this region.
-				if (mediumError || iErrors < Sectors2Read)
+				if (mediumError || driveTimeoutBatch || iErrors < Sectors2Read)
 					return Device.CommandStatus.Success;
 			}
 			throw ex;

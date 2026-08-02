@@ -112,12 +112,16 @@ progress documents for it belong here, under `docs/review/`.
   drive is dead. Split a failed batch to isolate sectors and feed persistent
   single-sector medium errors into the existing flagged vote and retry policy.
   Transport, removal, not-ready, unit-attention, illegal-command, and hardware
-  failures remain fatal, with one corroboration-gated carve-out: a single-sector
-  pinpoint inside a MediumError batch that returns the assigned HardwareError
-  3E/02 (TIMEOUT ON LOGICAL UNIT) verdict, with no transition pending, is the
-  drive's own per-sector surrender and enters the untrusted path with its
-  counter recorded; 3E with any other qualifier and every other hardware
-  failure stays fatal. `StopOnUnrecoverable` is applied only after the configured
+  failures remain fatal, with one corroboration-gated carve-out: the assigned
+  HardwareError 3E/02 (TIMEOUT ON LOGICAL UNIT) verdict is the drive's own
+  surrender, observed live on both matrix drives. A surrendered multi-sector
+  batch decomposes to independent single-sector reads like a medium-error
+  batch; a surrendered single-sector pinpoint inside a corroborated media
+  batch (MediumError or 3E/02 parent) enters the untrusted path. Both forms
+  record counters and are transition-agnostic - a verdict the drive
+  deliberated for tens of seconds is not a transition blip - while an
+  uncorroborated single-sector 3E/02, 3E with any other qualifier, and every
+  other hardware failure stays fatal. `StopOnUnrecoverable` is applied only after the configured
   evidence and retry policy has classified a sector as unrecoverable.
 - An accepted optical-drive control command does not prove the payload path is ready.
   Serialize speed, seek, cache, and mode transitions with READ CD, apply only a
