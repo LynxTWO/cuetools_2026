@@ -25,13 +25,21 @@ namespace CUETools.Ripper.SCSI
         /// sectors, i.e. this is a re-read of known trouble.</param>
         public static int SecondsFor(int baselineSeconds, int appliedSpeedKbps, bool windowInRecovery)
         {
-            if (!windowInRecovery)
+            // 0 means no speed was ever requested (drive default, normally fast); an unknown
+            // read context keeps the tight baseline.
+            if (appliedSpeedKbps <= 0)
                 return baselineSeconds;
-            // 0 means no speed was ever requested (drive default, normally fast). Only the
-            // OBSERVED low-speed recovery shape gets the extension; unknown stays baseline.
-            if (appliedSpeedKbps <= 0 || appliedSpeedKbps > SlowSpeedKbps)
-                return baselineSeconds;
-            return baselineSeconds >= RecoverySeconds ? baselineSeconds : RecoverySeconds;
+            // A LOW APPLIED SPEED IS ITSELF THE RECOVERY SIGNAL, independent of whether this
+            // window has recorded errors yet. The drive only reads this slowly because adaptive
+            // speed stepped down, deep recovery hit the floor, or salvage pinned the minimum -
+            // all deliberate responses to difficult media. Gating on recorded errors alone
+            // missed the observed shape: the FIRST pass of a fresh window at pinned minimum
+            // speed on a defective zone exceeded the baseline and the OS killed the ioctl
+            // (ERROR_SEM_TIMEOUT) before the drive answered. A re-read of known trouble also
+            // qualifies at any speed; both paths stay bounded by RecoverySeconds.
+            if (appliedSpeedKbps <= SlowSpeedKbps || windowInRecovery)
+                return baselineSeconds >= RecoverySeconds ? baselineSeconds : RecoverySeconds;
+            return baselineSeconds;
         }
     }
 }
