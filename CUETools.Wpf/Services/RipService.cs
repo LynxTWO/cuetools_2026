@@ -389,6 +389,7 @@ public sealed class RipService : IRipService
         $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
         $"drive_reported_timeout_pinpoints={reader.DriveReportedTimeoutPinpointCount} " +
         $"drive_reported_timeout_batches={reader.DriveReportedTimeoutBatchCount} " +
+        $"window_budget_stops={reader.WindowBudgetStopCount} " +
         $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
         $"given_up_windows={reader.GivenUpWindowCount}";
@@ -712,6 +713,11 @@ public sealed class RipService : IRipService
             // A pass whose fresh count is near the whole window is a drive slip, not new damage.
             int rcWin = -1, rcMinFresh = int.MaxValue, rcSlips = 0, rcPasses = 0, rcLastPass = -1;
             bool rcConverged = false;
+            // Within-pass heartbeat (R123). rip.recovery logs once per PASS, so a pass that
+            // grinds for hours (every batch decomposing into slow single-sector reads) looked
+            // exactly like a hang: no log line, and the UI fraction barely moves inside one
+            // window. A bounded heartbeat keeps a slow grind visible and diagnosable.
+            DateTime lastHeartbeat = DateTime.UtcNow;
             void RcFlushWindow()
             {
                 if (rcWin >= 0 && rcPasses > 0)
@@ -760,6 +766,14 @@ public sealed class RipService : IRipService
                     if (speedCtl != null && reReads == 0 && lastReReads == 0 && frac - lastEaseFrac >= 0.05)
                     {
                         speedCtl.OnCleanRegion(); RequestSpeed(); lastEaseFrac = frac;
+                    }
+                    if (reReads > 0 && (DateTime.UtcNow - lastHeartbeat).TotalSeconds >= 30)
+                    {
+                        lastHeartbeat = DateTime.UtcNow;
+                        _log.Info("rip.recovery",
+                            $"heartbeat window={e.PassStart} pass={e.Pass} pos={e.Position} " +
+                            $"running={e.ErrorsCount} fresh={e.ThisPassErrors} " +
+                            $"speed={(lastRequested > 0 ? lastRequested / 176 : 0)}x");
                     }
                     // Engine give-up verdict, surfaced once per window after the retry policy
                     // classified its sectors failed. The old mid-pass heuristic (reReads >=

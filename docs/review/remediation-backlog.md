@@ -3193,6 +3193,39 @@ step before any fix.
   regions before giving up, with the legacy start position first so healthy
   discs behave identically. Ripper 55/55, WPF 472/472, legacy lanes green.
 
+### R123. A single recovery pass can run unbounded and invisibly - bucket A, risk high
+
+- **Area or slice:** `SCSIDrive.PrefetchSector` window loop, `RecoveryPolicy`,
+  `FailedSectorAccounting`, `RipService` recovery logging.
+- **Why it matters (live 2026-08-02):** a Paranoid Test read sat at 64% for
+  six hours and eighteen minutes with no log output and no UI change. It was
+  not hung - a stack capture showed `FetchSectors` nested inside itself, so
+  every 16-sector batch of window 230400 was failing and decomposing into 16
+  slow single-sector reads, and one pass had been running for hours (~32% of
+  a core, 2h39m CPU). Two defects: (a) every stop rule - plateau, time
+  ceiling, pass cap - is evaluated BETWEEN passes, so none can bound a window
+  whose single pass never ends; the deep-recovery ceiling additionally only
+  acts once `pass + 1 >= max_scans` (pass 64 at Paranoid), which that window
+  would have needed another six hours to reach. (b) `rip.recovery` logs once
+  per pass and the UI fraction barely moves inside one window, so a grind and
+  a hang are indistinguishable to the user.
+- **Evidence found:** log `...p46768...` last line `window=230400 pass=49` at
+  02:11:27 against an 08:29 stack capture; identical screenshots six hours
+  apart; disk space and process responsiveness ruled out the alternatives.
+- **Confidence:** verified. **Approval needed:** no.
+- **Status:** fixed 2026-08-02. `RecoveryPolicy.WindowHardBudgetSeconds`
+  (1200 s) is checked inside the chunk loop, and only past the minimum vote
+  passes so every sector has been written by a complete pass. A cut window
+  ends through the normal give-up path: `FinalizeWindow` gained
+  `partialFromSector` so sectors below the cut are judged by the cut pass's
+  own flag while sectors above it keep the previous pass's verdict, with
+  `WindowBudgetStopCount` in the telemetry. A 30-second `rip.recovery`
+  heartbeat now reports window, pass, position, running and fresh error
+  counts, and speed, so a slow grind is always visible. Ripper 59/59, WPF
+  472/472, legacy lanes green. Remaining: a pathological FIRST pass (before
+  the minimum vote passes) is still unbounded by design - cutting it would
+  leave unvoted audio - and needs the read-level fatal path instead.
+
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
 - **Area or slice:** RipService Test & Copy variant, SCSIDrive read
