@@ -84,8 +84,11 @@ public sealed class SalvageModeTests
 
         StringAssert.Contains(source, "int rq = salvage ? 0 : Math.Max(1, Math.Min(2, cq));",
             "salvage runs Burst quality; everything else keeps forced-Secure");
-        StringAssert.Contains(source, "reader.DriveC2ErrorMode = 0;",
-            "salvage accepts the drive's concealment output");
+        StringAssert.Contains(source, "reader.ConcealUnconfirmedSamples = true;",
+            "salvage conceals what the vote cannot confirm - a raw guess is audible garbage");
+        Assert.IsFalse(source.Contains("reader.DriveC2ErrorMode = 0;"),
+            "C2 must stay ON: it is how the drive reports which samples it could not correct, " +
+            "and silencing it produced an unlistenable capture");
         StringAssert.Contains(source, "requireIndependentReads: true",
             "the calibration gate must survive salvage - agreement from a cache echo is fake");
     }

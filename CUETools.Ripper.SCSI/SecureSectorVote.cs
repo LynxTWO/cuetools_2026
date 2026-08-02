@@ -13,6 +13,11 @@ namespace CUETools.Ripper.SCSI
         /// <summary>
         /// Reconstruct one sector from the accumulated clean/C2 bit lanes. Returns true when any
         /// byte lacks the winning margin required by <paramref name="correctionQuality"/>.
+        /// <para><paramref name="unconfidentBytes"/>, when given, records WHICH bytes fell short
+        /// (1 = the vote could not confirm this byte), indexed exactly like
+        /// <paramref name="destination"/>. Salvage concealment needs that map: the reconstructed
+        /// byte is still the best guess, but a guess the vote never confirmed is audible garbage
+        /// unless something conceals it (R119).</para>
         /// </summary>
         internal static bool CorrectSector(
             long[,,] userData,
@@ -20,7 +25,8 @@ namespace CUETools.Ripper.SCSI
             byte[] destination,
             int sectorPosition,
             int passCount,
-            int correctionQuality)
+            int correctionQuality,
+            byte[] unconfidentBytes = null)
         {
             bool hasLowConfidenceByte = false;
             const int c2WeightDivisor = 128;
@@ -38,6 +44,7 @@ namespace CUETools.Ripper.SCSI
                     (passCount - flaggedPasses) * c2WeightDivisor +
                     flaggedPasses;
                 int bestValue = 0;
+                bool byteUnconfident = false;
 
                 for (int bit = 0; bit < 8; bit++)
                 {
@@ -45,15 +52,19 @@ namespace CUETools.Ripper.SCSI
                         (cleanVotes & 0xff) * c2WeightDivisor +
                         (c2Votes & 0xff));
                     int sign = margin >> 31;
-                    hasLowConfidenceByte |=
-                        (margin ^ sign) < errorLimit;
+                    byteUnconfident |= (margin ^ sign) < errorLimit;
                     bestValue += sign & (1 << bit);
                     cleanVotes >>= 8;
                     c2Votes >>= 8;
                 }
+                hasLowConfidenceByte |= byteUnconfident;
 
                 destination[destinationOffset + byteIndex] =
                     (byte)bestValue;
+                if (unconfidentBytes != null &&
+                    destinationOffset + byteIndex < unconfidentBytes.Length)
+                    unconfidentBytes[destinationOffset + byteIndex] =
+                        (byte)(byteUnconfident ? 1 : 0);
             }
 
             return hasLowConfidenceByte;
