@@ -3166,6 +3166,16 @@ step before any fix.
   mark the pinpoint sector untrusted instead of failing the job at 99.96%.
   Observability gap found: the counter telemetry line is emitted only on
   completed jobs; failure paths should carry it too.
+- **Second mitigation implemented 2026-08-01 (software):**
+  `IsDriveReportedTimeoutPinpoint` sends the exact corroborated 3E/02
+  surrender into the untrusted-sector path with the
+  `DriveReportedTimeoutPinpointCount` counter; the gate is the corroboration
+  set (MediumError parent batch, single-sector child, no transitions, exact
+  assigned code) rather than a drive identity, because 3E/02 has standard
+  semantics unlike the unassigned 08/0A - and the user's swapped-drive retry
+  is the cross-drive evidence run. CLAUDE.md records the carve-out. The
+  failure path now logs the full counter line (`counters at failure:`), so a
+  dead job carries the same activation evidence as a completed one.
 
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
@@ -3247,6 +3257,29 @@ step before any fix.
   naming tokens that already exist (per-track artist parity is a recorded
   naming-system todo).
 - **Status:** open.
+
+### R122. Slip-aware realignment for defective discs - bucket B, research (user-approved 2026-08-01)
+
+- **Area or slice:** `SlipCorrelator`, the secure read loop, and a
+  realignment stage that must never contaminate the untrusted-evidence
+  design.
+- **Why it matters:** the Reggae Roots evidence chain points one way: slip=1
+  zones (consistent-offset raw reads), salvage's all-20-tracks disagreement
+  across three complete minimum-speed captures, and AR/CTDB presence without
+  match (0/1 each) all fit stream-wide per-read misalignment. If reads can be
+  offset-corrected before voting, this disc class may verify - and a
+  CTDB-repairable alignment would turn presence into database-verified audio.
+- **Design constraints (from the reality-check that originally rejected a
+  naive version):** realignment must be an explicit, evidence-carrying stage,
+  not a silent vote input: correlate per window, record the applied offset in
+  the log and telemetry, keep unaligned evidence distinguishable, and treat
+  an alignment that fails verification as no alignment. The earlier
+  wave's adversarial rule stands: the slip correlator's verdict alone is
+  diagnostic; only a verified realigned result may claim recovery.
+- **Confidence:** research. **Approval needed:** granted 2026-08-01
+  ("slip-aware realignment would be awesome"); lands as its own designed and
+  live-verified slice.
+- **Status:** open, after R120.
 
 ### R117. Classic calibration/cache-defeat gate port - decision needed
 

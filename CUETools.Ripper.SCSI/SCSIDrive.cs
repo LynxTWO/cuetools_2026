@@ -83,6 +83,7 @@ namespace CUETools.Ripper.SCSI
 		private int _givenUpWindowCount;
 		private int _shortPayloadTransferCount;
 		private int _extendedTimeoutReadCount;
+		private int _driveReportedTimeoutPinpointCount;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
@@ -108,6 +109,9 @@ namespace CUETools.Ripper.SCSI
 		/// <summary>Low-speed recovery reads issued with the extended R118 timeout instead of
 		/// the baseline. Activation evidence for the ERROR_SEM_TIMEOUT mitigation.</summary>
 		public int ExtendedTimeoutReadCount => _extendedTimeoutReadCount;
+		/// <summary>Pinpoint sectors the drive itself surrendered on (3E/02 after a MediumError
+		/// parent) that entered the untrusted path instead of failing the job (R118).</summary>
+		public int DriveReportedTimeoutPinpointCount => _driveReportedTimeoutPinpointCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -1750,6 +1754,26 @@ namespace CUETools.Ripper.SCSI
 								continue;
 							}
 							throw repeatedFailure;
+						}
+						if (PayloadReadFailurePolicy.IsDriveReportedTimeoutPinpoint(
+								mediumError,
+								Sectors2Read,
+								1,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								singleFailure.Status,
+								singleFailure.SenseKey,
+								singleFailure.Asc,
+								singleFailure.Ascq))
+						{
+							// The drive itself surrendered on this exact address (3E/02) after
+							// the extended timeout, and the parent batch independently proved
+							// media trouble. That is per-sector media evidence, not a device
+							// death: mark it untrusted and keep the job alive (R118).
+							_driveReportedTimeoutPinpointCount++;
+							iErrors++;
+							MarkSectorUnreadable(singleSector);
+							continue;
 						}
 						if (!PayloadReadFailurePolicy.MayMarkSplitChildUnreadable(
 								mediumError,

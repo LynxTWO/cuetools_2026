@@ -201,6 +201,40 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// The drive's own per-sector surrender (R118, observed live at the outer edge of a
+        /// scratched CD-R): a single-sector pinpoint inside a batch that independently reported
+        /// MediumError returns the ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT ON LOGICAL
+        /// UNIT) after the extended recovery timeout let the drive finish deciding. Unlike the
+        /// unassigned 08/0A qualifier this code has standard semantics - the logical unit timed
+        /// out reading that address - so the classifier is corroboration-gated, not drive-gated:
+        /// medium-error parent, exact single-sector shape, exact 3E/02, no pending transitions.
+        /// The drive already spent its whole extended window internally retrying, so no
+        /// additional retry is issued; the sector enters the untrusted vote/CTDB path and every
+        /// other hardware failure remains fatal.
+        /// </summary>
+        public static bool IsDriveReportedTimeoutPinpoint(
+            bool mediumErrorParent,
+            int parentSectorCount,
+            int childSectorCount,
+            bool speedTransitionPending,
+            bool cacheTransitionPending,
+            Device.CommandStatus childStatus,
+            Device.SenseKeyType childSenseKey,
+            byte childAsc,
+            byte childAscq)
+        {
+            return mediumErrorParent &&
+                parentSectorCount > 1 &&
+                childSectorCount == 1 &&
+                !speedTransitionPending &&
+                !cacheTransitionPending &&
+                childStatus == Device.CommandStatus.DeviceFailed &&
+                childSenseKey == Device.SenseKeyType.HardwareError &&
+                childAsc == 0x3E &&
+                childAscq == 0x02;
+        }
+
+        /// <summary>
         /// Some optical firmware briefly rejects the first READ CD after an accepted
         /// control-plane transition such as SET CD SPEED. Retry only the exact
         /// observed 24/00 rejection, only while that transition is still pending.

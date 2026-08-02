@@ -374,6 +374,24 @@ public sealed class RipService : IRipService
         try { _log.Redact(Path.GetFullPath(stagingDirectory)); } catch { }
     }
 
+    // One line of recovery-route counters, shared by the done line and the failure path so a
+    // dead job carries the same activation evidence as a completed one.
+    private static string ReaderCounterTelemetry(CDDriveReader reader) =>
+        $"control_transition_retries={reader.ControlTransitionRetryCount} " +
+        $"read_communication_retries={reader.ReadCommunicationRetryCount} " +
+        $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
+        $"cache_defeat_chunk_fallbacks={reader.CacheDefeatChunkFallbackCount} " +
+        $"cache_defeat_wakes={reader.CacheDefeatWakeCount} " +
+        $"cache_defeat_wake_readiness_retries={reader.CacheDefeatWakeReadinessRetryCount} " +
+        $"cache_defeat_wake_readiness_indeterminate={reader.CacheDefeatWakeReadinessIndeterminateCount} " +
+        $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
+        $"pinpoint_retries={reader.PinpointRetryCount} " +
+        $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
+        $"drive_reported_timeout_pinpoints={reader.DriveReportedTimeoutPinpointCount} " +
+        $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
+        $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
+        $"given_up_windows={reader.GivenUpWindowCount}";
+
     private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
@@ -1039,19 +1057,7 @@ public sealed class RipService : IRipService
                     $"ar_conf={arConf}/{arTotal} ctdb_conf={ctConf}/{ctTotal} accurate={arConf > 0} files={files} " +
                     $"c2_mode={reader.DriveC2ErrorMode} cache_defeat_bytes={reader.CacheDefeatBytes} " +
                     $"output_verify={(outputAssurance.Performed ? 1 : 0)} " +
-                    $"control_transition_retries={reader.ControlTransitionRetryCount} " +
-                    $"read_communication_retries={reader.ReadCommunicationRetryCount} " +
-                    $"cache_defeat_retries={reader.CacheDefeatRetryCount} " +
-                    $"cache_defeat_chunk_fallbacks={reader.CacheDefeatChunkFallbackCount} " +
-                    $"cache_defeat_wakes={reader.CacheDefeatWakeCount} " +
-                    $"cache_defeat_wake_readiness_retries={reader.CacheDefeatWakeReadinessRetryCount} " +
-                    $"cache_defeat_wake_readiness_indeterminate={reader.CacheDefeatWakeReadinessIndeterminateCount} " +
-                    $"payload_batch_fallbacks={reader.PayloadBatchFallbackCount} " +
-                    $"pinpoint_retries={reader.PinpointRetryCount} " +
-                    $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
-                    $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
-                    $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
-                    $"given_up_windows={reader.GivenUpWindowCount} " +
+                    ReaderCounterTelemetry(reader) + " " +
                     $"reread_windows={rereadWindows} reread_peak={peakReRead} failed_windows={failedWindows} status={status}");
             }
             catch
@@ -1119,6 +1125,10 @@ public sealed class RipService : IRipService
         catch (Exception ex)
         {
             try { _log.Error("rip", $"failed after {sw.Elapsed.TotalSeconds:0}s", ex); }
+            catch { }
+            // A failed job must still surface its recovery counters - the R118 investigations
+            // needed exactly this evidence and completed-only logging withheld it.
+            try { _log.Info("rip", "counters at failure: " + ReaderCounterTelemetry(reader)); }
             catch { }
             string incomplete = "";
             if (publication != null && !publication.IsPublished)
