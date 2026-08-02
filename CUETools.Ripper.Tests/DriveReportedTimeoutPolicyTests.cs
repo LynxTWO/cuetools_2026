@@ -5,69 +5,93 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace CUETools.Ripper.Tests
 {
     /// <summary>
-    /// R118: the drive's own per-sector surrender - HardwareError 3E/02 (TIMEOUT ON LOGICAL
-    /// UNIT) on a single-sector pinpoint whose parent batch independently reported MediumError -
-    /// enters the untrusted path instead of failing a nearly complete job. The code is ASSIGNED
-    /// with standard semantics, so the gate is the corroboration set, not a drive identity;
-    /// every other hardware failure stays fatal.
+    /// R118: the drive's own surrender - the assigned HardwareError 3E/02 (TIMEOUT ON LOGICAL
+    /// UNIT) verdict - is media evidence, not a device death. A surrendered multi-sector batch
+    /// decomposes to independent single-sector reads; a surrendered pinpoint inside a
+    /// corroborated media batch (MediumError or 3E/02 parent) enters the untrusted path. The
+    /// code is ASSIGNED with standard semantics, so the gates are corroboration sets, not drive
+    /// identities, and they are transition-agnostic: a verdict the drive deliberated for tens
+    /// of seconds is not a transition blip (both live observations prove the shapes - the H:
+    /// pinpoint arrived with no transitions, the K: batch with a cache transition pending).
+    /// Every other hardware failure stays fatal.
     /// </summary>
     [TestClass]
     public class DriveReportedTimeoutPolicyTests
     {
-        private static bool Classify(
-            bool mediumParent = true,
+        private static bool Pinpoint(
+            bool corroboratedParent = true,
             int parentSectors = 16,
             int childSectors = 1,
-            bool speedTransition = false,
-            bool cacheTransition = false,
             Device.CommandStatus status = Device.CommandStatus.DeviceFailed,
             Device.SenseKeyType key = Device.SenseKeyType.HardwareError,
             byte asc = 0x3E,
             byte ascq = 0x02)
         {
             return PayloadReadFailurePolicy.IsDriveReportedTimeoutPinpoint(
-                mediumParent, parentSectors, childSectors,
-                speedTransition, cacheTransition,
-                status, key, asc, ascq);
+                corroboratedParent, parentSectors, childSectors, status, key, asc, ascq);
+        }
+
+        private static bool Batch(
+            int sectors = 16,
+            Device.CommandStatus status = Device.CommandStatus.DeviceFailed,
+            Device.SenseKeyType key = Device.SenseKeyType.HardwareError,
+            byte asc = 0x3E,
+            byte ascq = 0x02)
+        {
+            return PayloadReadFailurePolicy.IsDriveReportedTimeoutBatch(
+                sectors, status, key, asc, ascq);
         }
 
         [TestMethod]
-        public void TheObservedShapeIsAccepted()
+        public void BothObservedShapesAreAccepted()
         {
-            // The live H: failure: sector 356562, 16-sector MediumError parent, single-sector
-            // child, no transitions, HardwareError / 3E/02.
-            Assert.IsTrue(Classify());
+            // H: live - sector 356562, single-sector pinpoint under a 16-sector MediumError parent.
+            Assert.IsTrue(Pinpoint());
+            // K: live - sector 266400, the whole 16-sector batch surrendered directly.
+            Assert.IsTrue(Batch());
         }
 
         [TestMethod]
-        public void EveryMissingCorroborationStaysFatal()
+        public void PinpointMissingCorroborationStaysFatal()
         {
-            Assert.IsFalse(Classify(mediumParent: false),
-                "no medium-error parent, no media corroboration");
-            Assert.IsFalse(Classify(parentSectors: 1),
+            Assert.IsFalse(Pinpoint(corroboratedParent: false),
+                "no MediumError or surrendered parent, no media corroboration");
+            Assert.IsFalse(Pinpoint(parentSectors: 1),
                 "a single-sector parent has no batch corroboration");
-            Assert.IsFalse(Classify(childSectors: 16),
+            Assert.IsFalse(Pinpoint(childSectors: 16),
                 "only the exact pinpoint shape is covered");
-            Assert.IsFalse(Classify(speedTransition: true),
-                "a pending speed transition owns its own recovery");
-            Assert.IsFalse(Classify(cacheTransition: true),
-                "a pending cache transition owns its own recovery");
         }
 
         [TestMethod]
-        public void EveryOtherFailureClassStaysFatal()
+        public void OnlyTheExactAssignedVerdictQualifies()
         {
-            Assert.IsFalse(Classify(status: Device.CommandStatus.IoctlFailed,
+            Assert.IsFalse(Pinpoint(status: Device.CommandStatus.IoctlFailed,
                 key: Device.SenseKeyType.NoSense, asc: 0, ascq: 0),
                 "an OS-level ioctl death is transport, not a drive verdict");
-            Assert.IsFalse(Classify(key: Device.SenseKeyType.MediumError, asc: 0x11, ascq: 0x05),
-                "a medium-error child already has its own path");
-            Assert.IsFalse(Classify(asc: 0x3E, ascq: 0x00),
+            Assert.IsFalse(Pinpoint(asc: 0x3E, ascq: 0x00),
                 "3E/00 LOGICAL UNIT FAILURE is a different verdict than the timeout");
-            Assert.IsFalse(Classify(asc: 0x08, ascq: 0x0A),
+            Assert.IsFalse(Pinpoint(asc: 0x08, ascq: 0x0A),
                 "the unassigned communication qualifier keeps its own drive-gated policy");
-            Assert.IsFalse(Classify(key: Device.SenseKeyType.IllegalRequest, asc: 0x24, ascq: 0x00),
+            Assert.IsFalse(Pinpoint(key: Device.SenseKeyType.IllegalRequest, asc: 0x24, ascq: 0x00),
                 "24/00 keeps its own corroborated pinpoint policy");
+
+            Assert.IsFalse(Batch(sectors: 1),
+                "a single-sector 3E/02 with no parent has no corroboration and stays fatal");
+            Assert.IsFalse(Batch(key: Device.SenseKeyType.MediumError),
+                "a medium-error batch already has its own split path");
+            Assert.IsFalse(Batch(ascq: 0x00),
+                "3E/00 is a different verdict");
+            Assert.IsFalse(Batch(status: Device.CommandStatus.IoctlFailed,
+                key: Device.SenseKeyType.NoSense, asc: 0, ascq: 0));
+        }
+
+        [TestMethod]
+        public void SurrenderedBatchCorroboratesItsOwnSurrenderedChildren()
+        {
+            // The K: unlock end-to-end: the batch surrenders, decomposes, and a child that
+            // repeats the drive's surrender is marked untrusted rather than fatal.
+            Assert.IsTrue(Batch());
+            Assert.IsTrue(Pinpoint(corroboratedParent: true));
         }
     }
 }

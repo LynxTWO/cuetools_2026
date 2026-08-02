@@ -201,33 +201,54 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// The drive's own whole-batch surrender (R118, observed live on both matrix drives):
+        /// a multi-sector READ CD returns the ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT
+        /// ON LOGICAL UNIT) after the extended recovery timeout let the drive finish deciding.
+        /// A surrendered batch does not prove every contained sector is bad, so it decomposes
+        /// to independent single-sector reads exactly like a medium-error batch. Deliberately
+        /// transition-agnostic: the observed batch surrender arrived with a cache transition
+        /// pending, and a verdict the drive deliberated for tens of seconds is not a
+        /// transition blip (the 24/00 transition rules are unchanged and separate).
+        /// </summary>
+        public static bool IsDriveReportedTimeoutBatch(
+            int sectorCount,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return sectorCount > 1 &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.HardwareError &&
+                asc == 0x3E &&
+                ascq == 0x02;
+        }
+
+        /// <summary>
         /// The drive's own per-sector surrender (R118, observed live at the outer edge of a
-        /// scratched CD-R): a single-sector pinpoint inside a batch that independently reported
-        /// MediumError returns the ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT ON LOGICAL
-        /// UNIT) after the extended recovery timeout let the drive finish deciding. Unlike the
-        /// unassigned 08/0A qualifier this code has standard semantics - the logical unit timed
-        /// out reading that address - so the classifier is corroboration-gated, not drive-gated:
-        /// medium-error parent, exact single-sector shape, exact 3E/02, no pending transitions.
-        /// The drive already spent its whole extended window internally retrying, so no
-        /// additional retry is issued; the sector enters the untrusted vote/CTDB path and every
-        /// other hardware failure remains fatal.
+        /// scratched CD-R): a single-sector pinpoint inside a corroborated media batch (a
+        /// MediumError parent, or a parent that itself surrendered with 3E/02) returns the
+        /// ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT ON LOGICAL UNIT) after the extended
+        /// recovery timeout let the drive finish deciding. Unlike the unassigned 08/0A
+        /// qualifier this code has standard semantics - the logical unit timed out reading that
+        /// address - so the classifier is corroboration-gated, not drive-gated, and
+        /// transition-agnostic for the same reason as the batch form. The drive already spent
+        /// its whole extended window internally retrying, so no additional retry is issued;
+        /// the sector enters the untrusted vote/CTDB path and every other hardware failure
+        /// remains fatal.
         /// </summary>
         public static bool IsDriveReportedTimeoutPinpoint(
-            bool mediumErrorParent,
+            bool corroboratedMediaParent,
             int parentSectorCount,
             int childSectorCount,
-            bool speedTransitionPending,
-            bool cacheTransitionPending,
             Device.CommandStatus childStatus,
             Device.SenseKeyType childSenseKey,
             byte childAsc,
             byte childAscq)
         {
-            return mediumErrorParent &&
+            return corroboratedMediaParent &&
                 parentSectorCount > 1 &&
                 childSectorCount == 1 &&
-                !speedTransitionPending &&
-                !cacheTransitionPending &&
                 childStatus == Device.CommandStatus.DeviceFailed &&
                 childSenseKey == Device.SenseKeyType.HardwareError &&
                 childAsc == 0x3E &&

@@ -388,6 +388,7 @@ public sealed class RipService : IRipService
         $"pinpoint_retries={reader.PinpointRetryCount} " +
         $"corroborated_unreadable_pinpoints={reader.CorroboratedUnreadablePinpointCount} " +
         $"drive_reported_timeout_pinpoints={reader.DriveReportedTimeoutPinpointCount} " +
+        $"drive_reported_timeout_batches={reader.DriveReportedTimeoutBatchCount} " +
         $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
         $"given_up_windows={reader.GivenUpWindowCount}";

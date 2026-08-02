@@ -3176,6 +3176,22 @@ step before any fix.
   is the cross-drive evidence run. CLAUDE.md records the carve-out. The
   failure path now logs the full counter line (`counters at failure:`), so a
   dead job carries the same activation evidence as a completed one.
+- **Third mitigation implemented 2026-08-02, from the swapped-drive runs:**
+  the counter line proved the timeout extension carried the ASUS through the
+  71-74% scratch zone with `extended_timeout_reads=8405`, and both remaining
+  deaths were new shapes now closed. (a) The ASUS surrendered a whole
+  16-sector batch with 3E/02 at sector 266400: `IsDriveReportedTimeoutBatch`
+  now decomposes a surrendered batch to independent single-sector reads like
+  a medium-error batch, the surrendered parent corroborates its own
+  surrendered children, and both forms are transition-agnostic (the batch
+  arrived with a cache transition pending; a deliberated verdict is not a
+  blip). Counter: `drive_reported_timeout_batches`. (b) H: completed the
+  whole defective disc's Test read cleanly at Burst, then the Copy read's
+  command autodetect died probing the damaged disc START (NO SEEK COMPLETE
+  plus an OS-killed probe) - the audit's one-fixed-probe-region finding gone
+  live. `TestReadCommand` now sweeps the command matrix at up to three disc
+  regions before giving up, with the legacy start position first so healthy
+  discs behave identically. Ripper 55/55, WPF 472/472, legacy lanes green.
 
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
