@@ -2018,6 +2018,14 @@ namespace CUETools.Ripper.SCSI
 			int sectorCount,
 			IntPtr scratch)
 		{
+			// A flush only ever runs before a secure re-read, so it is recovery context by
+			// definition: at low speed it gets the same extended timeout as payload reads
+			// (R118). Observed live: a flush read at the salvage floor was OS-killed at the
+			// 10 s baseline (IoctlFailed with honest NoSense) and failed a whole Test & Copy.
+			int timeoutSeconds = ReadTimeoutPolicy.SecondsFor(
+				_timeout, _appliedSpeedKbps, windowInRecovery: true);
+			if (timeoutSeconds != _timeout)
+				_extendedTimeoutReadCount++;
 			return _readCDCommand == ReadCDCommand.ReadCdBEh
 				? m_device.ReadCDAndSubChannel(
 					_mainChannelMode,
@@ -2028,13 +2036,13 @@ namespace CUETools.Ripper.SCSI
 					lba,
 					(uint)sectorCount,
 					scratch,
-					_timeout)
+					timeoutSeconds)
 				: m_device.ReadCDDA(
 					Device.SubChannelMode.None,
 					lba,
 					(uint)sectorCount,
 					scratch,
-					_timeout);
+					timeoutSeconds);
 		}
 
 		private Device.CommandStatus ReadCacheDefeatChunk(
@@ -2060,6 +2068,10 @@ namespace CUETools.Ripper.SCSI
 			while (status != Device.CommandStatus.Success)
 			{
 				ReadFailureIdentity(status, out senseKey, out asc, out ascq);
+				// An IoctlFailed carries no sense; the Win32 error is its identity (R118).
+				string win32 = status == Device.CommandStatus.IoctlFailed
+					? $", win32-error={m_device.LastError}"
+					: "";
 				if (retriesForCommand == 0)
 				{
 					failure =
@@ -2069,7 +2081,7 @@ namespace CUETools.Ripper.SCSI
 						$"speed={_appliedSpeedKbps}kB/s, " +
 						$"current-window={_currentStart}-{_currentEnd}, " +
 						$"status={status}, sense={senseKey}, " +
-						$"ASC={asc:X2}, ASCQ={ascq:X2}";
+						$"ASC={asc:X2}, ASCQ={ascq:X2}{win32}";
 				}
 				else
 				{
@@ -2080,7 +2092,7 @@ namespace CUETools.Ripper.SCSI
 						$"speed={_appliedSpeedKbps}kB/s, " +
 						$"current-window={_currentStart}-{_currentEnd}, " +
 						$"retry-status={status}, retry-sense={senseKey}, " +
-						$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+						$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}{win32}";
 				}
 
 				if (!PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
