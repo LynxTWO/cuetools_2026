@@ -3285,10 +3285,34 @@ step before any fix.
 - **Confidence:** design. **Approval needed:** user approved exploring;
   implementation lands as its own reviewed slice with live evidence from the
   problem discs.
-- **Status:** implemented 2026-08-01 (software). The quality picker gains an
-  explicit Salvage entry: Test & Copy at Burst quality (post-D9: 16-pass cap,
-  no deep recovery), `C2ErrorMode.None`, read speed pinned to the drive
-  minimum, cache defeat and the independent-reads calibration gate intact.
+- **CORRECTION 2026-08-02 - the first build's premise was wrong.** The user
+  listened to the accepted capture: "all pulsing and clearly a terrible rip,
+  unlistenable". Measured against a known-good rip of Disc 1 from the same
+  set, the salvage track carried about fourteen times the sample-glitch rate
+  (44,464 vs 6,145 jumps over 12,000 LSB), spread across 211 of its 222
+  seconds. It was not a layout bug: only 0.2 percent of the glitches sat on a
+  sector boundary, FLAC sizes matched the good discs (so the audio compresses
+  like music, not noise), and an amplitude-envelope spectrum showed no
+  periodicity at the sector (75 Hz), chunk (4.69 Hz) or window rates - the
+  strongest modulation was the music's own beat, in both discs. The design
+  error was the premise: a CD PLAYER conceals uncorrectable samples, which is
+  why a damaged disc still sounds like music, but a CD-ROM drive reading in
+  data mode does not - it returns what came off the disc and uses C2 pointers
+  to say which samples it could not correct. Turning C2 off did not buy the
+  drive's concealment; it removed the only report of which samples were bad,
+  and the raw guesses were published as audio. Corroborating detail: the same
+  disc read almost cleanly at Paranoid with C2 on, and AccurateRip holds one
+  submission for this pressing, so the disc is rippable.
+- **Status:** implemented 2026-08-01, corrected 2026-08-02. The quality picker
+  gains an explicit Salvage entry: Test & Copy at Burst quality (post-D9:
+  16-pass cap, no deep recovery), read speed pinned to the drive minimum,
+  cache defeat and the independent-reads calibration gate intact, and C2
+  pointers ON so the drive keeps reporting what it could not correct.
+  `SecureSectorVote` now returns a per-byte confidence map and
+  `SampleConcealment` interpolates short runs the vote never confirmed, fades
+  wide ones to silence, mutes when there is nothing to anchor on, and counts
+  every concealed frame into `ConcealedFrameCount` and the telemetry line -
+  the job a player does for a damaged disc, measured rather than hidden.
   Log, certificate, history, and status all label the result salvaged; the
   reads leg of verification never applies, while an exact database match
   still verifies the bytes. Four salvage tests plus source contracts pass;

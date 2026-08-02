@@ -390,6 +390,7 @@ public sealed class RipService : IRipService
         $"drive_reported_timeout_pinpoints={reader.DriveReportedTimeoutPinpointCount} " +
         $"drive_reported_timeout_batches={reader.DriveReportedTimeoutBatchCount} " +
         $"window_budget_stops={reader.WindowBudgetStopCount} " +
+        $"concealed_frames={reader.ConcealedFrameCount} " +
         $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
         $"given_up_windows={reader.GivenUpWindowCount}";
@@ -443,11 +444,16 @@ public sealed class RipService : IRipService
             else if (_settings.DeepRecovery && !salvage) _log.Info("rip", "deep recovery gated off at Burst quality (D9): classic 16-pass cap only");
             if (salvage)
             {
-                // Salvage capture (R119): accept the drive's own concealment output. C2 off
-                // makes the vote majority-only, so a stable concealment converges instead of
-                // being held low-confidence forever on a defective master.
-                reader.DriveC2ErrorMode = 0;
-                _log.Info("rip", "salvage capture: C2 pointers off, Burst quality - agreement proves drive-stable output, not disc health");
+                // Salvage capture (R119). The first build turned C2 pointers OFF here, assuming
+                // the drive already concealed its own uncorrectable samples the way a CD player
+                // does. It does not: reading in data mode it hands back whatever came off the
+                // disc, and C2 is how it says which samples are bad. Silencing that report
+                // produced a capture with fourteen times a good rip's sample-glitch rate,
+                // audibly pulsing and unlistenable. So C2 stays ON - the drive keeps telling us
+                // what it could not correct - and salvage instead CONCEALS the samples the vote
+                // never confirms, which is exactly the job a player does for a damaged disc.
+                reader.ConcealUnconfirmedSamples = true;
+                _log.Info("rip", "salvage capture: Burst quality, C2 pointers ON, minimum speed; samples the vote cannot confirm are concealed and counted");
             }
 
             // Adaptive read speed (Feature 3): start at the drive's max, drop a step when the drive

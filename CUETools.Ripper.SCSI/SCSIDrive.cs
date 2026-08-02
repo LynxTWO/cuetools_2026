@@ -86,6 +86,8 @@ namespace CUETools.Ripper.SCSI
 		private int _driveReportedTimeoutPinpointCount;
 		private int _driveReportedTimeoutBatchCount;
 		private int _windowBudgetStopCount;
+		private int _concealedFrameCount;
+		private byte[] _unconfidentMap;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
 		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
@@ -121,6 +123,14 @@ namespace CUETools.Ripper.SCSI
 		/// <summary>Windows ended by the wall-clock budget because a single pass was grinding
 		/// far past any useful recovery rate (R123).</summary>
 		public int WindowBudgetStopCount => _windowBudgetStopCount;
+		/// <summary>Conceal samples the vote never confirmed instead of publishing its raw
+		/// best guess (R119). A drive reading in data mode does not conceal for us, so a
+		/// salvage capture is audible garbage without this.</summary>
+		public bool ConcealUnconfirmedSamples { get; set; }
+		/// <summary>Frames concealed by <see cref="ConcealUnconfirmedSamples"/>, summed per
+		/// channel. This is the honest measure of how much of a salvage capture is
+		/// reconstruction rather than disc.</summary>
+		public int ConcealedFrameCount => _concealedFrameCount;
 		private bool IsObservedReadCommunicationDrive =>
 			m_inqury_result != null &&
 			string.Equals(
@@ -1876,7 +1886,8 @@ namespace CUETools.Ripper.SCSI
 					currentData.Bytes,
 					pos,
 					pass + 1,
-					_correctionQuality);
+					_correctionQuality,
+					_unconfidentMap);
                 
                 if (fError) _thisPassErrors++;   // diagnostic (read-only): sector flagged on THIS pass
 
@@ -2392,6 +2403,14 @@ namespace CUETools.Ripper.SCSI
 			int hard_cap = deepRecoveryActive ? RecoveryPolicy.MaxPasses : max_scans;
 			DateTime recoveryStart = DateTime.Now;
 			if (deepRecoveryActive) _recovery.StartWindow();
+			if (ConcealUnconfirmedSamples)
+			{
+				int mapBytes = (_currentEnd - _currentStart) * SecureSectorVote.BytesPerSector;
+				if (_unconfidentMap == null || _unconfidentMap.Length < mapBytes)
+					_unconfidentMap = new byte[mapBytes];
+				else
+					Array.Clear(_unconfidentMap, 0, mapBytes);
+			}
 			int lastExecutedPass = -1;
 			// Wall-clock safety valve (R123). The plateau, ceiling and pass rules are all
 			// evaluated BETWEEN passes, so none of them can stop a window whose single pass
@@ -2592,6 +2611,18 @@ namespace CUETools.Ripper.SCSI
 						break;
 				}
 			}
+			// Salvage concealment (R119): every byte the final vote could not confirm is a
+			// guess, and a guess published raw is the pulsing garbage a drive hands back when
+			// nobody conceals for it. Interpolate or mute those samples and count them, so the
+			// capture is listenable and its reconstruction is measured rather than hidden.
+			if (ConcealUnconfirmedSamples && _unconfidentMap != null && currentData != null)
+			{
+				_concealedFrameCount += SampleConcealment.Conceal(
+					currentData.Bytes,
+					_unconfidentMap,
+					(_currentEnd - _currentStart) * 588);
+			}
+
 			// Window give-up classification (R106): the pass loop stopped with sectors still
 			// unresolved. Mark exactly the sectors flagged on the final executed pass and surface
 			// one engine verdict event; consumers that stop on unrecoverable damage key on this,
