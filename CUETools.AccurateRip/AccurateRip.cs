@@ -564,6 +564,14 @@ namespace CUETools.AccurateRip
 		private int _samplesRemTrack = 0;
 		private int _samplesDoneTrack = 0;
 
+		/// <summary>Raised with the 1-based track number the moment that track's last sample has
+		/// been consumed, so its per-track checksums are final and safe to read. Handlers run on
+		/// the consuming thread and are strictly ancillary: exceptions are swallowed and must not
+		/// be able to disturb a rip. Do not call CRC32/CRCWONULL for a track before its event -
+		/// those results are memoized permanently, so an early call poisons the value for the
+		/// whole run.</summary>
+		public event EventHandler<int> TrackCompleted;
+
 		public long Position
 		{
 			get
@@ -658,6 +666,20 @@ namespace CUETools.AccurateRip
 
 					while (_samplesRemTrack <= 0)
 					{
+						// The track that just ran out of samples is now complete: its CRC rows are
+						// frozen and will never be written again, so its per-track checksums are
+						// final HERE and nowhere earlier. This is the only honest clock for live
+						// per-track evidence - the drive's sector position runs far ahead of what
+						// this class has actually consumed (the audio pipe buffers seconds of
+						// samples), and CRC32/CRCWONULL memoize permanently, so asking one sample
+						// early would cache a wrong value for the whole rip. Ancillary by
+						// contract: a listener must never be able to break the read.
+						int completedTrack = _currentTrack;
+						if (completedTrack >= 1 && TrackCompleted != null)
+						{
+							try { TrackCompleted(this, completedTrack); }
+							catch { }
+						}
 						if (++_currentTrack > _toc.AudioTracks)
 							return;
 						_samplesRemTrack = (int)_toc[_currentTrack + _toc.FirstAudio - 1].Length * 588;

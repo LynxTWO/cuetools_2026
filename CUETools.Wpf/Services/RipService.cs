@@ -169,6 +169,25 @@ public sealed class TestCopyRunResult
 public readonly record struct RereadReport(
     int ReReads, int MaxReReads, int ErrorSectors, double WindowFrac, int WindowGivenUpSectors);
 
+/// <summary>One track's checksum the moment that track finished reading (R120).
+/// <see cref="IsCopyRead"/> routes it to the Test or the Copy column. Presentation only: the
+/// immutable evidence records keep their existing assembly points.</summary>
+public readonly record struct TrackCrcLive(int TrackNumber, uint Crc32, bool IsCopyRead);
+
+/// <summary>One completed read's database verdict (R120), so the Test phase can report what it
+/// found instead of the page waiting for the whole Test &amp; Copy transaction. Arrays are private
+/// copies - the live engine instances must never escape into the UI.</summary>
+public readonly record struct ReadVerdict(
+    int ReadIndex,
+    string ReadKind,
+    int ArConfidence,
+    int ArTotal,
+    int CtdbConfidence,
+    int CtdbTotal,
+    bool Accurate,
+    int[] ArPerTrack,
+    int[] CtdbPerTrack);
+
 public interface IRipService
 {
     /// <summary>Newest persisted per-track Test/Copy CRC evidence for an inserted disc.</summary>
@@ -211,7 +230,7 @@ public interface IRipService
     /// at the drive's minimum speed for defective-by-design discs. Cache defeat and the
     /// calibration gate still apply - without independent reads, "agreement" could be the
     /// drive's cache echoing itself. The result is labeled salvaged, never read-verified.</summary>
-    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false);
+    TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null, Action<ReadVerdict>? onReadVerdict = null);
 
     /// <summary>Accept a held Test & Copy's Copy read into the output folder anyway, flagged not
     /// test-verified, and discard the staging. Returns the committed output directory, or "" on
@@ -395,12 +414,16 @@ public sealed class RipService : IRipService
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
         $"given_up_windows={reader.GivenUpWindowCount}";
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         AlbumOutputTransaction? publication = null;
+        // Live per-track evidence subscription (R120); declared out here so the finally can
+        // always detach it, even when the read throws.
+        AccurateRipVerify? liveAr = null;
+        EventHandler<int>? onArTrackCompleted = null;
         int expectedAudioFiles = 0;
         // Snapshot the toggles this job runs under, BEFORE the try - the finally releases
         // keep-awake and the tray lock on these locals. Re-reading the live settings there
@@ -621,6 +644,32 @@ public sealed class RipService : IRipService
             var cue = new CUESheet(_config);
             lock (_stopGate) _current = cue;   // so Stop() can abort this run
             cue.OpenCD(ripper);
+            // Live per-track evidence (R120). AccurateRipVerify raises this the instant a track's
+            // last sample is consumed - the only point where its checksums are final. Deliberately
+            // NOT driven from ReadProgress: that carries the DRIVE's sector position, which the
+            // audio pipe lets run seconds ahead of what the CRC engine has actually seen, and
+            // CRC32 memoizes permanently so one early call would poison the value for the rip.
+            if (onTrackCrc != null)
+            {
+                liveAr = cue.ArVerify;
+                if (liveAr != null)
+                {
+                    onArTrackCompleted = (_, track) =>
+                    {
+                        try
+                        {
+                            onTrackCrc(new TrackCrcLive(track, liveAr.CRC32(track), encode));
+                        }
+                        catch (Exception ex)
+                        {
+                            // A display listener must never disturb the read.
+                            try { _log.Warn("rip", "live track CRC publish failed: " + ex.GetType().Name); }
+                            catch { }
+                        }
+                    };
+                    liveAr.TrackCompleted += onArTrackCompleted;
+                }
+            }
             var toc = reader.TOC ??
                 throw new InvalidDataException(
                     "The opened audio disc did not provide a table of contents.");
@@ -1223,6 +1272,8 @@ public sealed class RipService : IRipService
         }
         finally
         {
+            if (liveAr != null && onArTrackCompleted != null)
+                try { liveAr.TrackCompleted -= onArTrackCompleted; } catch { }
             publication?.Dispose();
             lock (_stopGate) _current = null;
             // always re-allow eject; if this fails the eject button stays dead until the handle closes
@@ -1370,7 +1421,7 @@ public sealed class RipService : IRipService
 
     // ---- Test & Copy ---------------------------------------------------------------------
 
-    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false)
+    public TestCopyRunResult RunTestAndCopy(char drive, int cq, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null, Action<ReadVerdict>? onReadVerdict = null)
     {
         string fmt = string.IsNullOrWhiteSpace(format) ? "flac" : format;
         string codecFailure = ValidateCodecBeforeOpticalRead(fmt);
@@ -1405,6 +1456,33 @@ public sealed class RipService : IRipService
             BuildTestCopyFailure(_log, sw.Elapsed, phase, error);
 
         Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
+        // One completed read's database verdict (R120), so the Test phase reports what it found
+        // instead of the page waiting for the whole transaction. The arrays are COPIED: the
+        // VerifyResult instances stay live inside the resolve/commit path, and handing the UI a
+        // reference to engine state would let a later read mutate what the user is looking at.
+        void PublishReadVerdict(int readIndex, string kind, VerifyResult read)
+        {
+            if (onReadVerdict == null || read == null) return;
+            try
+            {
+                onReadVerdict(new ReadVerdict(
+                    readIndex,
+                    kind,
+                    read.ArConfidence,
+                    read.ArTotal,
+                    read.CtdbConfidence,
+                    read.CtdbTotal,
+                    read.Accurate,
+                    (int[])(read.ArPerTrack ?? Array.Empty<int>()).Clone(),
+                    (int[])(read.CtdbPerTrack ?? Array.Empty<int>()).Clone()));
+            }
+            catch (Exception ex)
+            {
+                try { _log.Warn("rip", "live read verdict publish failed: " + ex.GetType().Name); }
+                catch { }
+            }
+        }
+
         void PublishCrcEvidence(
             IReadOnlyList<VerifyRecord> completedReads,
             int sourceReadIndex)
@@ -1444,7 +1522,8 @@ public sealed class RipService : IRipService
             // against but its checksums still count as an independent read.
             phase = "test";
             ThrowIfStopRequested();
-            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, salvage: salvage, outputLayout: outputLayout);
+            var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, salvage: salvage, outputLayout: outputLayout, onTrackCrc: onTrackCrc);
+            PublishReadVerdict(0, "Test", testResult);
             if (!testResult.Ok) return Fail(testResult.Error);
             VerifyRecord? testRecord = testResult.Record;
             if (testRecord == null)
@@ -1459,7 +1538,8 @@ public sealed class RipService : IRipService
             // changing a mutable dropdown after Test cannot swap the publication contract.
             phase = "copy";
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
-            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+            var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout, onTrackCrc: onTrackCrc);
+            PublishReadVerdict(1, "Copy", copyResult);
             if (!copyResult.Ok) return Fail(copyResult.Error);
             VerifyRecord? copyRecord = copyResult.Record;
             if (copyRecord == null)
@@ -1488,7 +1568,8 @@ public sealed class RipService : IRipService
                 try
                 {
                     ThrowIfStopRequested();
-                    thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+                    thirdResult = Run(drive, rq, encode: true, fmt, metadata, stage2, WithLabel("Confirming (read 3)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout, onTrackCrc: onTrackCrc);
+                    PublishReadVerdict(2, "Confirming", thirdResult);
                 }
                 catch (StopException)
                 {

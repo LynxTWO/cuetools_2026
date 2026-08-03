@@ -1264,6 +1264,11 @@ public sealed class RipViewModel : PageViewModel
         _lastRepairSource = "";
         RipProgress = 0;
         HistoryText = "";
+        // R120 hygiene: live per-track and database evidence is about to be written as this job
+        // reads, so clear the previous job's values first. Without this a new disc would show
+        // the last disc's verdict until its own reads reported.
+        ArText = "not checked"; CtdbText = "not checked";
+        foreach (var resetTrack in Tracks) { resetTrack.ArResult = "-"; resetTrack.CtdbResult = "-"; }
         HistoryIsWarning = false;
         _baseActivity = encode ? AppActivity.Ripping : AppActivity.Verifying;
         _status.Report(_baseActivity, 0);
@@ -1457,6 +1462,11 @@ public sealed class RipViewModel : PageViewModel
         TestCopyHeld = false;
         RipProgress = 0;
         HistoryText = "";
+        // R120 hygiene: live per-track and database evidence is about to be written as this job
+        // reads, so clear the previous job's values first. Without this a new disc would show
+        // the last disc's verdict until its own reads reported.
+        ArText = "not checked"; CtdbText = "not checked";
+        foreach (var resetTrack in Tracks) { resetTrack.ArResult = "-"; resetTrack.CtdbResult = "-"; }
         HistoryIsWarning = false;
         _baseActivity = AppActivity.Ripping;
         _status.Report(_baseActivity, 0);
@@ -1520,6 +1530,39 @@ public sealed class RipViewModel : PageViewModel
             else
                 Apply();
         }
+        // Live per-track CRC (R120): one track's checksum as that track finishes reading,
+        // instead of the whole grid staying empty until the read ends.
+        void PublishTrackCrc(TrackCrcLive live)
+        {
+            void Apply()
+            {
+                try
+                {
+                    int index = live.TrackNumber - 1;
+                    if (index >= 0 && index < Tracks.Count)
+                        Tracks[index].ApplyLiveCrc(live.Crc32, live.IsCopyRead);
+                }
+                catch { }
+            }
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.BeginInvoke((Action)Apply);
+            else
+                Apply();
+        }
+        // Live database verdict (R120): what the Test read found, reported when that read ends
+        // rather than after the whole transaction.
+        void PublishReadVerdict(ReadVerdict verdict)
+        {
+            void Apply()
+            {
+                try { ApplyLiveReadVerdict(verdict); }
+                catch { }
+            }
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.BeginInvoke((Action)Apply);
+            else
+                Apply();
+        }
         // The codec was health-checked and locked before the Test read. Copy and a possible
         // confirming read use that immutable format snapshot.
         RipTelemetryMailbox telemetry = StartTelemetry();
@@ -1532,7 +1575,9 @@ public sealed class RipViewModel : PageViewModel
                 onEncodeStart: LockCodec,
                 onCrcEvidence: PublishCrcEvidence,
                 outputLayout: outputLayout,
-                salvage: salvage));
+                salvage: salvage,
+                onTrackCrc: PublishTrackCrc,
+                onReadVerdict: PublishReadVerdict));
         }
         finally
         {
@@ -2150,6 +2195,27 @@ public sealed class RipViewModel : PageViewModel
                     : null;
             Tracks[i].ApplyCrcEvidence(crc);
         }
+    }
+
+    // R120: light the AR and CTDB columns and the side panel from one completed read. This is
+    // presentation only - the immutable records are still assembled at their existing points -
+    // and it is deliberately silent about tracks the read had no verdict for.
+    private void ApplyLiveReadVerdict(ReadVerdict verdict)
+    {
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            if (i < verdict.ArPerTrack.Length && verdict.ArPerTrack[i] > 0)
+                Tracks[i].ArResult = verdict.ArPerTrack[i].ToString();
+            if (i < verdict.CtdbPerTrack.Length && verdict.CtdbPerTrack[i] > 0)
+                Tracks[i].CtdbResult = verdict.CtdbPerTrack[i].ToString();
+        }
+        ArText = verdict.Accurate
+            ? $"{verdict.ArConfidence} / {verdict.ArTotal} accurate"
+            : verdict.ArTotal > 0 ? $"{verdict.ArConfidence} / {verdict.ArTotal}" : "not in database";
+        CtdbText = verdict.CtdbConfidence > 0
+            ? $"match . conf {verdict.CtdbConfidence}"
+            : verdict.CtdbTotal > 0 ? "found, no exact match" : "not found";
+        StatusText = $"{verdict.ReadKind} read complete - {ArText} (AccurateRip), {CtdbText} (CTDB).";
     }
 
     private void PublishReport(bool encode, VerifyResult result, int correctionQualityUsed)
