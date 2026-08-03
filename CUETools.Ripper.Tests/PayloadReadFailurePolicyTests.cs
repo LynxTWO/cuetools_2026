@@ -62,12 +62,14 @@ namespace CUETools.Ripper.Tests
         public void InvalidFieldBatchCanDecomposeOnlyWhenItContainsMultipleSectors()
         {
             Assert.IsTrue(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x24,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 1,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
@@ -79,18 +81,21 @@ namespace CUETools.Ripper.Tests
         public void BatchDecompositionDoesNotCoverOtherPayloadFailures()
         {
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.IllegalRequest,
                 0x21,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.DeviceFailed,
                 Device.SenseKeyType.MediumError,
                 0x24,
                 0x00));
             Assert.IsFalse(PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+                false,
                 16,
                 Device.CommandStatus.IoctlFailed,
                 Device.SenseKeyType.IllegalRequest,
@@ -289,6 +294,173 @@ namespace CUETools.Ripper.Tests
                 Device.SenseKeyType.IllegalRequest,
                 0x24,
                 0x00));
+        }
+
+        [TestMethod]
+        public void ObservedReadCommunicationFailureGetsOneExactRetry()
+        {
+            Assert.IsTrue(
+                PayloadReadFailurePolicy
+                    .ShouldRetryObservedReadCommunicationFailure(
+                        0,
+                        isObservedDrive: true,
+                        isReadCdBeh: true,
+                        sectorCount: 16,
+                        speedTransitionPending: false,
+                        cacheTransitionPending: false,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.HardwareError,
+                        0x08,
+                        0x0A));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy
+                    .ShouldRetryObservedReadCommunicationFailure(
+                        1,
+                        isObservedDrive: true,
+                        isReadCdBeh: true,
+                        sectorCount: 16,
+                        speedTransitionPending: false,
+                        cacheTransitionPending: false,
+                        Device.CommandStatus.DeviceFailed,
+                        Device.SenseKeyType.HardwareError,
+                        0x08,
+                        0x0A));
+        }
+
+        [TestMethod]
+        public void ReadCommunicationRetryRejectsEveryUnobservedAncestry()
+        {
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: false,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: false,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 1,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: true,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: true,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.IoctlFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.MediumError,
+                0x08,
+                0x0A));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x08,
+                0x00));
+            Assert.IsFalse(RetryObservedCommunication(
+                isObservedDrive: true,
+                isReadCdBeh: true,
+                sectorCount: 16,
+                speedTransitionPending: false,
+                cacheTransitionPending: false,
+                Device.CommandStatus.DeviceFailed,
+                Device.SenseKeyType.HardwareError,
+                0x44,
+                0x0A));
+        }
+
+        [TestMethod]
+        public void UnassignedCommunicationQualifierKeepsFamilyAndRawIdentity()
+        {
+            string description = Device.LookupSenseError(0x08, 0x0A);
+
+            StringAssert.Contains(
+                description,
+                "LOGICAL UNIT COMMUNICATION FAILURE");
+            StringAssert.Contains(description, "UNASSIGNED QUALIFIER 0A");
+            StringAssert.Contains(description, "ASC=08, ASCQ=0A");
+            Assert.IsFalse(description.Contains("NO SENSE STRING"));
+            Assert.AreEqual(
+                "LOGICAL UNIT COMMUNICATION TIME-OUT",
+                Device.LookupSenseError(0x08, 0x01));
+        }
+
+        private static bool RetryObservedCommunication(
+            bool isObservedDrive,
+            bool isReadCdBeh,
+            int sectorCount,
+            bool speedTransitionPending,
+            bool cacheTransitionPending,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return PayloadReadFailurePolicy
+                .ShouldRetryObservedReadCommunicationFailure(
+                    0,
+                    isObservedDrive,
+                    isReadCdBeh,
+                    sectorCount,
+                    speedTransitionPending,
+                    cacheTransitionPending,
+                    status,
+                    senseKey,
+                    asc,
+                    ascq);
         }
 
         [TestMethod]

@@ -95,6 +95,7 @@ public sealed class LevelMeteringRipper : ICDRipper
     public int CorrectionQuality { get => _inner.CorrectionQuality; set => _inner.CorrectionQuality = value; }
     public BitArray FailedSectors => _inner.FailedSectors;
     public byte[] RetryCount => _inner.RetryCount;
+    public int CacheDefeatBytes => _inner.CacheDefeatBytes;
 
     public event EventHandler<ReadProgressArgs> ReadProgress
     {

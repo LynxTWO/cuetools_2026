@@ -30,9 +30,12 @@ as covered.
   A deliberately damaged known image also passed opt-in CTDB repair, independent
   post-verification, and source-hash preservation. Remaining gaps are failure
   injection/cancellation/disagreement, cross-vendor OpenCL, Icecast HTTPS/certificate
-  and Mono, and release-lane repeatability. A first H: attempt's transient SCSI
-  ASC/ASCQ 08/0A during an overlapping build is retained as diagnostic evidence; the
-  isolated final-source rerun crossed the same Copy phase and passed. Simultaneous
+  and Mono, and release-lane repeatability. Four H: attempts now retain SCSI
+  `HardwareError / ASC 08 / ASCQ 0A` on normal 16-sector BEh reads at unrelated
+  addresses; the isolated final-source rerun crossed the first Copy phase and passed.
+  R105 adds one exact command-local retry and raw qualifier diagnostics. Four address
+  probes and a full 846-second H: Test & Copy passed while K: copied concurrently;
+  both H: phases recorded zero retries, so live branch activation remains pending. Simultaneous
   H:/K: jobs and damaged K:'s completed Test & Copy/CTDB repair add real
   multi-drive and error-media evidence without claiming a universal drive matrix.
 - **Confidence:** medium

@@ -54,6 +54,32 @@ public sealed class TrackItem : ViewModelBase
         private set => Set(ref _crcEvidenceTip, value);
     }
 
+    /// <summary>Show one CRC the moment its track finished reading (R120), before the whole
+    /// album completes. Live values fill only the column the read owns and never clear the
+    /// other one, so a Copy read cannot erase the Test evidence beside it. The authoritative
+    /// snapshot still arrives through <see cref="ApplyCrcEvidence"/> at read end and overwrites
+    /// this; live cells are presentation only.</summary>
+    public void ApplyLiveCrc(uint crc32, bool isCopyRead)
+    {
+        if (crc32 == 0) return;
+        string formatted = crc32.ToString("X8");
+        if (isCopyRead) CopyCrc = formatted; else TestCrc = formatted;
+
+        uint test = ParseCrc(TestCrc), copy = ParseCrc(CopyCrc);
+        CrcsMatch = test != 0 && copy != 0 && test == copy;
+        CrcsDiffer = test != 0 && copy != 0 && test != copy;
+        CrcEvidenceTip =
+            $"Live from the {(isCopyRead ? "Copy" : "Test")} read as this track finished. " +
+            "The complete evidence is recorded when the read ends.";
+    }
+
+    private static uint ParseCrc(string text)
+        => uint.TryParse(
+            (text ?? "").Split(' ')[0],
+            System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out uint value) ? value : 0u;
+
     public void ApplyCrcEvidence(CUETools.Wpf.Accuracy.TrackCrc? evidence)
     {
         uint test = evidence?.TestCrc32 ?? 0;

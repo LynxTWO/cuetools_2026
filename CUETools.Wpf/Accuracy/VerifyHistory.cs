@@ -57,6 +57,14 @@ namespace CUETools.Wpf.Accuracy
         public bool LosslessOutput { get; set; }
         public bool OutputVerificationPerformed { get; set; }
         public string OutputVerificationDetail { get; set; } = "";
+        /// <summary>Sector windows the drive gave up on across the reads behind this record
+        /// (R109). Older records deserialize to 0, which claims nothing.</summary>
+        public int FailedWindows { get; set; }
+        /// <summary>This read's offset-safe whole-disc fingerprint (R122 measurement). Two reads
+        /// of the same disc can be compared through it to see whether one is a constant sample
+        /// shift of the other, without keeping either audio stream. Empty when the read did not
+        /// complete; older records deserialize to empty and simply are not comparable.</summary>
+        public string OffsetSafeCrcBase64 { get; set; } = "";
     }
 
     /// <summary>Result of comparing a new read against this disc's stored history.</summary>

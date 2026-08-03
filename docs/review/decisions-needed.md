@@ -164,6 +164,71 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   configure the protected GitHub environment values described in
   `docs/security/release-signing.md`.
 
+## Open decisions
+
+### D8. Classic secure-rip calibration and cache-defeat port - RESOLVED 2026-08-01 (B)
+
+- **User chose (B):** classic stays a frozen legacy surface with no behavior
+  change. Implemented same day: the secure-mode slider tooltip states that
+  classic re-reads do not defeat the drive cache and points at CUETools 2026,
+  and the EAC-style log gains one behavior-conditioned note line (emitted only
+  when secure re-reads actually ran without cache defeat, so WPF logs never
+  carry it). R113's honest CRC comparison and truthful header lines stand.
+  CLAUDE.md's calibration/held-state invariants are now scoped to the modern
+  path. R117 closes.
+
+Original decision record:
+
+### D8 (original). Classic secure-rip calibration and cache-defeat port - OPEN 2026-08-01
+
+- **Finding:** classic CUERipper and `CUETools.Ripper.Console` run Secure and
+  Paranoid with no calibration gate and no cache defeat (`frmCUERipper.cs:715`;
+  `ICDRipper` lacks the members), so on a caching drive the secure vote can
+  agree with the drive cache. The WPF path fails closed on exactly this. Full
+  evidence: R113/R117 and the 2026-08-01 adversarial addendum.
+- **What is already being fixed without a decision (R113):** classic Test CRC
+  vs Copy CRC comparison, truthful log lines, and Paranoid persistence.
+- **Decision required:** pick one:
+  - (A) Port the WPF calibration/cache-defeat gate to the classic secure path.
+    Honest but behavior-changing: classic secure rips on caching drives would
+    refuse until calibrated, and `ICDRipper` gains members.
+  - (B) Freeze classic as a legacy surface: keep R113's honest logs, add a
+    one-line log/UI note that classic secure mode does not defeat drive
+    caching, and point users at the WPF app for assured rips. No behavior
+    change.
+  - (C) Retire classic Secure/Paranoid labels (Burst-only), strongest truth,
+    largest user-visible change.
+- **Recommendation:** (B) now; revisit (A) only if classic remains a shipped
+  rip surface after the WPF app is the default.
+
+### D9. Burst-mode re-read semantics - RESOLVED 2026-08-01 (gate to Secure/Paranoid)
+
+- **User chose:** gate the deep-recovery extension to quality > 0. Implemented
+  same day: the engine derives `deepRecoveryActive` from the setting AND the
+  quality (extension, slip probe, and policy window all keyed on it),
+  `RipService` gates its floor-speed drops and the recorded `DeepRecovery`
+  flag the same way and logs the gated state, and the Burst tooltip plus the
+  deep-recovery settings tooltip both say Burst keeps the classic 16-pass
+  cap. Test & Copy stays forced-Secure by design. Contract tests pin both
+  layers.
+
+Original decision record:
+
+### D9 (original). Burst-mode re-read semantics - OPEN 2026-08-01
+
+- **Observation (user, live):** Burst appears to "get recovery". Two causes,
+  both by design today: Test & Copy always forces at least Secure plus cache
+  defeat regardless of the dropdown (documented in `IRipService`), and in a
+  plain Rip the engine has always re-read windows the vote flags even at
+  quality 0 (legacy 16-pass cap), which default-on DeepRecovery now extends
+  with the progress-aware zone.
+- **Decision required:** keep and label, or gate the deep-recovery extension
+  to quality > 0 so Burst retains only the legacy 16-pass behavior.
+- **Recommendation:** gate the extension to quality > 0 (Burst stays "fast
+  until trouble" with the historical cap; Secure/Paranoid keep deep
+  recovery), and say in the Burst tooltip that flagged windows still re-read
+  up to 16 passes. Test & Copy stays forced-Secure: it is the assured mode.
+
 ## Resolved / actioned
 
 - **D1 AccurateRip HTTPS - DONE 2026-07-02.** Flipped both `http://www.accuraterip.com` literals to `https://` (`AccurateRip.cs:833` dBAR lookup, `:1247` DriveOffsets.bin). No http fallback: a failed AR lookup degrades to "not verified" (corroborative, no data loss), so retrying over cleartext buys nothing. Verified: AccurateRip builds; the HTTPS dBAR path returns 404 for a fake id (proves TLS+routing) and DriveOffsets.bin returned 200 earlier; TestParity 18/18 green. Committed as `27b565f`.

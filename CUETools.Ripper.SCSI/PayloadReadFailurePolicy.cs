@@ -38,19 +38,49 @@ namespace CUETools.Ripper.SCSI
         /// with 24/00 while accepting the same address range one sector at a time.
         /// This is a transfer-shape fallback, not damaged-media recovery: callers
         /// may continue only when every independently read sector succeeds.
+        /// While a control or cache-defeat transition is pending, a 24/00 is the
+        /// documented transition rejection, not transfer-shape evidence - it must
+        /// reach the one-shot transition retry instead of being decomposed into
+        /// per-sector media verdicts (R114); the repeat after that retry is fatal.
         /// </summary>
         public static bool ShouldDecomposeRejectedPayloadBatch(
+            bool controlTransitionPending,
             int sectorCount,
             Device.CommandStatus status,
             Device.SenseKeyType senseKey,
             byte asc,
             byte ascq)
         {
-            return sectorCount > 1 &&
+            return !controlTransitionPending &&
+                sectorCount > 1 &&
                 status == Device.CommandStatus.DeviceFailed &&
                 senseKey == Device.SenseKeyType.IllegalRequest &&
                 asc == 0x24 &&
                 ascq == 0x00;
+        }
+
+        /// <summary>
+        /// In the medium-error / legacy 64/00 batch split, decide whether a failed
+        /// single-sector child may be marked untrusted media evidence. A medium-error
+        /// child always may. Under the legacy 64/00 parent, only a child repeating the
+        /// exact 64/00 identity may - mixed-mode data tracks inside the audio range
+        /// fail exactly this way. Every other child class - removal, transport,
+        /// readiness, command, hardware - stays fatal under either parent (R114).
+        /// </summary>
+        public static bool MayMarkSplitChildUnreadable(
+            bool mediumErrorParent,
+            bool legacyTrackParent,
+            Device.CommandStatus childStatus,
+            Device.SenseKeyType childSenseKey,
+            byte childAsc,
+            byte childAscq)
+        {
+            if (IsMediumError(childStatus, childSenseKey))
+                return true;
+            return legacyTrackParent &&
+                childStatus == Device.CommandStatus.DeviceFailed &&
+                childAsc == 0x64 &&
+                childAscq == 0x00;
         }
 
         /// <summary>
@@ -91,7 +121,9 @@ namespace CUETools.Ripper.SCSI
             byte pinpointAsc,
             byte pinpointAscq)
         {
+            // The parent only decomposed because no transition was pending at that moment.
             return ShouldDecomposeRejectedPayloadBatch(
+                    false,
                     parentSectorCount,
                     parentStatus,
                     parentSenseKey,
@@ -169,6 +201,61 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// The drive's own whole-batch surrender (R118, observed live on both matrix drives):
+        /// a multi-sector READ CD returns the ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT
+        /// ON LOGICAL UNIT) after the extended recovery timeout let the drive finish deciding.
+        /// A surrendered batch does not prove every contained sector is bad, so it decomposes
+        /// to independent single-sector reads exactly like a medium-error batch. Deliberately
+        /// transition-agnostic: the observed batch surrender arrived with a cache transition
+        /// pending, and a verdict the drive deliberated for tens of seconds is not a
+        /// transition blip (the 24/00 transition rules are unchanged and separate).
+        /// </summary>
+        public static bool IsDriveReportedTimeoutBatch(
+            int sectorCount,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return sectorCount > 1 &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.HardwareError &&
+                asc == 0x3E &&
+                ascq == 0x02;
+        }
+
+        /// <summary>
+        /// The drive's own per-sector surrender (R118, observed live at the outer edge of a
+        /// scratched CD-R): a single-sector pinpoint inside a corroborated media batch (a
+        /// MediumError parent, or a parent that itself surrendered with 3E/02) returns the
+        /// ASSIGNED verdict HardwareError / 3E/02 (TIMEOUT ON LOGICAL UNIT) after the extended
+        /// recovery timeout let the drive finish deciding. Unlike the unassigned 08/0A
+        /// qualifier this code has standard semantics - the logical unit timed out reading that
+        /// address - so the classifier is corroboration-gated, not drive-gated, and
+        /// transition-agnostic for the same reason as the batch form. The drive already spent
+        /// its whole extended window internally retrying, so no additional retry is issued;
+        /// the sector enters the untrusted vote/CTDB path and every other hardware failure
+        /// remains fatal.
+        /// </summary>
+        public static bool IsDriveReportedTimeoutPinpoint(
+            bool corroboratedMediaParent,
+            int parentSectorCount,
+            int childSectorCount,
+            Device.CommandStatus childStatus,
+            Device.SenseKeyType childSenseKey,
+            byte childAsc,
+            byte childAscq)
+        {
+            return corroboratedMediaParent &&
+                parentSectorCount > 1 &&
+                childSectorCount == 1 &&
+                childStatus == Device.CommandStatus.DeviceFailed &&
+                childSenseKey == Device.SenseKeyType.HardwareError &&
+                childAsc == 0x3E &&
+                childAscq == 0x02;
+        }
+
+        /// <summary>
         /// Some optical firmware briefly rejects the first READ CD after an accepted
         /// control-plane transition such as SET CD SPEED. Retry only the exact
         /// observed 24/00 rejection, only while that transition is still pending.
@@ -186,6 +273,39 @@ namespace CUETools.Ripper.SCSI
                 senseKey == Device.SenseKeyType.IllegalRequest &&
                 asc == 0x24 &&
                 ascq == 0x00;
+        }
+
+        /// <summary>
+        /// The HL-DT-ST BD-RE WH16NS40 firmware 1.05 on the hardware matrix has
+        /// intermittently returned HardwareError/08/0A for otherwise valid normal
+        /// 16-sector BEh payload reads at unrelated addresses. ASC 08 identifies
+        /// the logical-unit communication family; 0A is an unassigned qualifier.
+        /// Permit one retry
+        /// for only that observed command shape when no control transition is in
+        /// flight. This is transport recovery, never damaged-media evidence.
+        /// </summary>
+        public static bool ShouldRetryObservedReadCommunicationFailure(
+            int retriesForCommand,
+            bool isObservedDrive,
+            bool isReadCdBeh,
+            int sectorCount,
+            bool speedTransitionPending,
+            bool cacheTransitionPending,
+            Device.CommandStatus status,
+            Device.SenseKeyType senseKey,
+            byte asc,
+            byte ascq)
+        {
+            return retriesForCommand == 0 &&
+                isObservedDrive &&
+                isReadCdBeh &&
+                sectorCount == 16 &&
+                !speedTransitionPending &&
+                !cacheTransitionPending &&
+                status == Device.CommandStatus.DeviceFailed &&
+                senseKey == Device.SenseKeyType.HardwareError &&
+                asc == 0x08 &&
+                ascq == 0x0A;
         }
 
         /// <summary>

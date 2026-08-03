@@ -53,6 +53,35 @@ internal sealed class CueRepairEngine : IRepairEngine
         _log = log;
     }
 
+    /// <summary>R111: rank the engine's recoverable CTDB variants by confidence and return the
+    /// winning index. Entries without a DBEntry payload rank lowest; ties keep the earliest
+    /// entry; an empty or null list keeps the engine's default first choice.</summary>
+    internal static int SelectBestVariant(object[]? choices)
+    {
+        if (choices == null || choices.Length == 0)
+            return 0;
+        var confidences = new int[choices.Length];
+        for (int i = 0; i < choices.Length; i++)
+            confidences[i] = (choices[i] as CUEToolsSourceFile)?.data is DBEntry entry
+                ? entry.conf
+                : int.MinValue;
+        return SelectBestConfidence(confidences);
+    }
+
+    internal static int SelectBestConfidence(int[] confidences)
+    {
+        int best = 0, bestConf = int.MinValue;
+        for (int i = 0; i < confidences.Length; i++)
+        {
+            if (confidences[i] > bestConf)
+            {
+                bestConf = confidences[i];
+                best = i;
+            }
+        }
+        return best;
+    }
+
     public RepairEngineResult Repair(
         string sourcePath,
         string stagingDirectory,
@@ -63,9 +92,12 @@ internal sealed class CueRepairEngine : IRepairEngine
         try
         {
             cue.CUEToolsProgress += (_, e) => onProgress(Clamp(e.percent), e.status);
-            // A single candidate is selected internally. Choose deterministically only when the
-            // engine presents multiple recoverable CTDB variants.
-            cue.CUEToolsSelection += (_, e) => e.selection = 0;
+            // When the engine presents multiple recoverable CTDB variants, pick the
+            // highest-confidence one deterministically. Server list order is not an assurance
+            // ranking: a conf=1 pressing can be listed above a conf=40 pressing, and repairing
+            // toward it would rewrite the rip toward the wrong variant while the receipt records
+            // success (R111). Ties keep the earliest entry so the choice stays stable.
+            cue.CUEToolsSelection += (_, e) => e.selection = SelectBestVariant(e.choices);
             cue.Open(sourcePath);
 
             string sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath))

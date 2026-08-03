@@ -1,5 +1,74 @@
 # Scenario Stress-Test
 
+## Damaged-disc recovery addendum - 2026-08-01
+
+The 2026-08-01 adversarial pass found this document contained no scenarios for
+the R55-R105 optical recovery machinery. This addendum adds the scenarios that
+wave exposed, in the state the R106-R115 remediation left them. Score key
+matches the original pass (0 missed / 1 partial / 2 covered); the score given
+is the CURRENT state after remediation.
+
+### SR1. Deep recovery converges late, or never, on a scratched disc - score 2
+
+A stuck window extends past the baseline pass cap. Before R106, a
+never-converged sector was reported clean (the give-up sentinel compared an
+exact pass count that the extension overshot) and a late-converged sector was
+reported failed. Closed by engine-maintained give-up state
+(`FailedSectorAccounting`, one-shot `WindowGivenUpSectors` verdict) with
+legacy-sentinel equivalence proven by test.
+
+### SR2. StopOnUnrecoverable during the final pass of a recoverable window - score 2
+
+The old mid-pass latch aborted jobs whose final pass would still converge and
+made the deep-recovery extension unreachable. Closed by R110: the stop keys on
+the engine's post-classification verdict; source contracts pin both the VM
+latch and the service forwarding.
+
+### SR3. Damaged disc, Test & Copy held, then the user presses eject - score 2
+
+Before R108 the only completed encoded Copy was silently deleted by eject,
+a multi-poll phantom tray event, or a Stop during the confirming read (which
+StopOnUnrecoverable could issue automatically). Closed: stop routes hold, tray
+routes park keyed to the disc, and only a different disc, a new job, or an
+explicit Discard frees the staging. Residual (R116): a held result does not
+survive app exit.
+
+### SR4. Damaged-consistent result read as clean verification - score 2
+
+The certificate headline, badge, and history rows said "Verified" while the
+log said CONSISTENT, and committed AR/CTDB numbers could come from a read
+other than the committed one. Closed by R109 damage-aware labeling and
+committed-read evidence binding, including a database match over damaged
+media staying consistent.
+
+### SR5. Multi-sector 24/00 during a speed or cache transition - score 2
+
+Decomposition consumed the transition rejection as media evidence before the
+one-shot transition retry could see it, and a transition state could mark good
+sectors untrusted. Closed by R114: decomposition refuses while a transition is
+pending; the repeat after the retry stays fatal. Deterministic policy tests
+cover both orderings; live activation evidence remains open (R116 seam).
+
+### SR6. Drive completes a READ CD with GOOD status but fewer bytes - score 1
+
+Stale bytes from the reused buffer would have entered the vote as a clean
+pass. R112 rejects the underrun fatally with a named counter; score 1 because
+live behavior on real bridges is unobserved (open unknown; the counter is the
+instrument).
+
+### SR7. Classic CUERipper secure rip on a caching drive - score 1
+
+The classic path still has no cache defeat or calibration gate (decision D8
+pending). R113 closed the honesty half: Test/Copy CRCs are compared, the
+hardcoded cache/C2 log lines are truthful, mismatches escalate the completion
+dialog, and persisted Paranoid survives restart. Score 1 until D8 resolves
+the gate itself.
+
+### SR8. CTDB offers two recoverable pressings, the wrong one first - score 2
+
+Repair applied the first server-ordered variant regardless of confidence.
+Closed by R111 confidence-ranked selection with a stable tie-break.
+
 ## Current-state addendum - 2026-07-26
 
 The scenarios below are the preserved 2026-07-02 pass. SC2, SC3, SC4, SC6, and SC8

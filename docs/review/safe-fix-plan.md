@@ -1677,3 +1677,119 @@ and GitHub job annotations.
 downloaded artifact both passed exact classic 97/97 and WPF 557/557 SPDX
 validation, populated CycloneDX graph checks, final sidecar checks, and zero
 hosted annotations.
+
+### Bind packaged native wrappers to the manifest-approved production path
+
+**Scope:** add one process-local approved native-path registry in
+`CUETools.Codecs`; publish each already hashed, full-path-loaded dependency from
+`PluginTrustManifest`; migrate the five codec wrappers from `Assembly.CodeBase`
+to that registry with their existing assembly-relative architecture folder as
+the classic-host fallback; make Monkey's Audio finalizer cleanup nonthrowing.
+
+**Safety:** a packaged codec may use only the exact path that the trust manifest
+rehashes, loads, and confirms through the Windows module path. Do not add a bare
+DLL name, application-root search, `PATH` search, or a second native copy. Reject
+conflicting registrations. The classic fallback remains one exact
+`<managed-assembly>/<architecture>/<native-name>` path.
+
+**Checks:** resolver path and conflict tests; all five wrapper source guards;
+focused native settings/version probes; real encode/decode tests; self-contained
+WPF publication; a child WPF apphost probe launched from the published layout;
+artifact validation with no root `x64` workaround.
+
+**Rollback:** revert the registry, manifest handoff, wrapper migrations, and
+process probe together. Do not regain a passing artifact probe by copying native
+DLLs beside the root managed duplicates.
+
+**Observability:** manifest relative path, managed codec identity, bounded native
+filename, readiness category, child-process exit, and probe receipt. Do not log
+user paths or command arguments.
+
+**Status:** closed 2026-07-31. The trust loader now registers only the exact
+rehashes-and-loaded native path, conflicting bindings fail closed, and all five
+wrappers use that approved path with the classic assembly-relative fallback.
+The clean self-contained WPF artifact launched its real apphost with root-loaded
+managed wrappers, then initialized and finalized real FLAC, WavPack, Monkey's
+Audio, and LAME outputs plus HDCD. Lossless smoke outputs decoded and compared
+inside their wrappers. The artifact contract passed with 77 required files, 14
+runtime trust entries, 19 registrations, five native probes, and no root native
+copy. Monkey's Audio finalizer cleanup is nonthrowing after partial initialization.
+
+### Make codec selection truthful before optical work starts
+
+**Scope:** normalize stale command-encoder verification fields, hide structural
+profile properties from the generic editor, model every format face with one
+health/status/origin descriptor, add a grouped and sortable codec picker, and
+validate the selected encoder before Rip or Test & Copy takes hardware ownership.
+
+**Safety:** lossless command encoders still require an independently executable
+verification contract. Lossy profiles must not inherit that contract. Unavailable
+rows stay visible for explanation but cannot be selected. Readiness probing may
+touch settings/version metadata only; it must not create output files or read a
+disc. Preserve the extension plus persisted lossless/lossy face as the engine
+contract.
+
+**Checks:** JSON migration tests for stale lossy profiles; browsable-property
+guard; command and native health tests; deterministic grouping and guidance-sort
+tests; Rip/Test & Copy preflight tests; XAML reachability and light/dark token
+inspection; full WPF suite and warning gate.
+
+**Rollback:** revert the descriptor/picker and preflight together while retaining
+the native-path repair. Do not restore a raw extension list that silently removes
+unavailable codecs or lets a known-bad selection begin reading the disc.
+
+**Observability:** codec display name, extension, selected implementation,
+lossless/lossy category, origin class, readiness class, and bounded failure type.
+
+**Status:** closed 2026-07-31. Lossy profiles normalize stale verifier state only
+at controlled load/catalog boundaries; a mutable property assignment still cannot
+weaken an existing lossless verification contract. Structural fields are hidden.
+Rip, Convert, and Queue share one grouped picker with full names, extensions,
+implementations, origins, readiness, licensing, history, best use, unavailable
+rows, and honest guidance sorts. Queue records retain the exact implementation
+identity. Rip and Test & Copy validate that implementation before settings
+publication or drive ownership and freeze it for the complete evidence transaction.
+The canonical gate passed 643 discovered tests with 637 passes, zero failures, six
+declared skips, and zero managed warning fingerprints.
+
+### Recover the observed BEh logical-unit communication rejection once
+
+**Scope:** give the observed H: `HL-DT-ST BD-RE WH16NS40` firmware 1.05 exact
+normal payload `ReadCdBEh` 16-sector command one local retry when it returns
+`DeviceFailed / HardwareError / 08/0A` outside speed and cache transitions;
+preserve that retry in completion telemetry; format the
+unassigned qualifier as the standard ASC 08 communication family plus raw
+ASC/ASCQ rather than `NO SENSE STRING`.
+
+**Safety:** this is a command-local retry for the repeated real H: signature at
+widely separated addresses, not damaged-media evidence. It does not apply to
+another drive or firmware, `ReadCdD8h`, one-sector pinpoints, batch decomposition,
+cache eviction, control transitions, another transfer size, another sense identity,
+or a second failure.
+Only bytes from a successful retry may be reorganized or voted. A failed retry
+remains fatal with retry context and never marks a sector untrusted.
+
+**Checks:** deterministic positive and negative policy matrix; known and
+unassigned ASC 08 formatting tests; source guard proving the retry stays in the
+top-level payload loop; focused ripper tests; all SCSI target builds; full managed
+test and warning gates; source-bound H: Test & Copy crossing the previously
+observed addresses.
+
+**Rollback:** revert the policy, top-level retry, diagnostic counter, formatter,
+and tests together. Do not replace the exact policy with a general hardware-error
+retry or teach the medium-error pipeline to consume this failure.
+
+**Observability:** relative sector, sector count, command, speed, transition
+flags, raw sense key/ASC/ASCQ, `communication-retry=True` on a failed repeat, and
+one aggregate successful/attempted retry counter. Never log sector payload.
+
+**Status:** closed 2026-07-31. Four retained H: failures show the same
+`HardwareError / 08/0A` on normal 16-sector BEh reads at relative sectors 36,000,
+36,576, 192,224, and 241,968. The exact classifier/source-contract suite passes
+32/32, all three SCSI targets build, the 641/647 canonical suite and empty warning
+gate pass, release safety passes, and the separate R105 self-contained artifact
+passes its production contract. Source-bound probes crossed all four addresses,
+then a full concurrent H: Test & Copy passed in 846 seconds: 412-second Test,
+413-second Copy, 11 verified FLAC files, AR 107/424, CTDB 114/544, zero reread or
+failed windows, and decoded-output verification. Both phases recorded zero
+communication retries, so live branch activation remains an explicit unknown.

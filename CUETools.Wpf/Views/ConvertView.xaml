@@ -15,10 +15,16 @@
         <TextBlock DockPanel.Dock="Left" Text="Source" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,12,0"/>
         <Button DockPanel.Dock="Right" Content="Convert" Command="{Binding ConvertCommand}" Style="{StaticResource Accent}" Padding="16,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Right" Content="tune" FontFamily="{StaticResource Mono}" FontSize="11" Padding="9,6" Margin="6,0,0,0" VerticalAlignment="Center"
-                Click="EncoderSettings_Click"
+                Click="EncoderSettings_Click" IsEnabled="{Binding CodecUnlocked}"
                 ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
-        <ComboBox DockPanel.Dock="Right" Width="90" VerticalAlignment="Center" Margin="8,0,0,0"
-                  ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"/>
+        <Button DockPanel.Dock="Right" Width="230" MinWidth="150"
+                VerticalAlignment="Center" Margin="8,0,0,0"
+                Click="CodecPicker_Click" IsEnabled="{Binding CodecUnlocked}"
+                ToolTip="{Binding SelectedCodecTooltip}"
+                AutomationProperties.Name="Choose output codec">
+          <TextBlock Text="{Binding SelectedCodecLabel}"
+                     TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+        </Button>
         <TextBlock DockPanel.Dock="Right" Text="to" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
         <Button DockPanel.Dock="Right" Content="Folder..." Command="{Binding BrowseFolderCommand}" Padding="12,7" Margin="8,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Right" Content="File..." Command="{Binding BrowseFileCommand}" Padding="12,7" VerticalAlignment="Center"/>

@@ -27,6 +27,10 @@ namespace CUETools.Ripper
 		int CorrectionQuality { get; set; }
 		BitArray FailedSectors { get; }
         byte[] RetryCount { get; }
+		/// <summary>Bytes the reader evicts per secure re-read pass to defeat the drive cache;
+		/// 0 when cache defeat is not active. Human-facing logs must report this truthfully
+		/// instead of hardcoding a claim (R113).</summary>
+		int CacheDefeatBytes { get; }
 
 		event EventHandler<ReadProgressArgs> ReadProgress;
 	}
@@ -59,6 +63,11 @@ namespace CUETools.Ripper
 		/// recoverable jitter; high with offset 0 = identical reads; low = dead media. -1 = no verdict.</summary>
 		public int SlipStrengthPct = -1;
 		public int SlipOffset;
+		/// <summary>Engine give-up verdict, surfaced exactly once per window like the slip verdict:
+		/// -1 = no verdict this event; &gt;= 0 means the window's pass loop just ended with this many
+		/// sectors still unresolved after the retry policy classified them failed. Consumers that
+		/// stop on unrecoverable damage must key on this, not on running mid-pass error counts.</summary>
+		public int WindowGivenUpSectors = -1;
 		public DateTime PassTime;
 
 		public ReadProgressArgs()

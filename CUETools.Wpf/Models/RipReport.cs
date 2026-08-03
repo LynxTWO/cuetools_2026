@@ -44,19 +44,35 @@ public sealed class RipReport
     public string OutputVerificationDetail { get; init; } = "";
     public int TrackCount { get; init; }
     public string TocId { get; init; } = "";
+    /// <summary>Sector windows the drive gave up on across the reads behind this result. Old
+    /// archived reports leave this 0, which is why it must only ever WIDEN a warning, never
+    /// upgrade one.</summary>
+    public int FailedWindows { get; init; }
+    /// <summary>True when the audio carries CTDB-detected damage (repairable or not).</summary>
+    public bool DamageRepairRequired { get; init; }
+    /// <summary>Salvage capture (R119): Burst-quality reads with C2 off at minimum speed.
+    /// Read agreement then proves drive-stable output only, so the independent-reads leg of
+    /// verification never applies; an exact database match remains honest verification.</summary>
+    public bool Salvaged { get; init; }
 
     private static readonly string[] CqNames = { "Burst", "Secure", "Paranoid" };
     public string CorrectionQualityName => CqNames[Math.Clamp(CorrectionQuality, 0, 2)];
 
+    /// <summary>Matching reads with unrecoverable windows or CTDB-detected damage are CONSISTENT,
+    /// not cleanly verified - the same policy the Test &amp; Copy log applies.</summary>
+    public bool Damaged => FailedWindows > 0 || DamageRepairRequired;
     /// <summary>True when the disc was confirmed by at least one independent database.</summary>
     public bool DatabaseConfirmed => Accurate || CtdbConfidence > 0;
     /// <summary>Compatibility name for database confirmation. Independent read agreement is a
     /// different assurance source and must not be mislabeled as an AccurateRip/CTDB match.</summary>
     public bool Confirmed => DatabaseConfirmed;
     public bool IndependentReadsVerified =>
-        OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2;
-    /// <summary>True when either a database or multiple independent reads verified the audio.</summary>
-    public bool Verified => DatabaseConfirmed || IndependentReadsVerified;
+        OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2 && !Damaged && !Salvaged;
+    /// <summary>True when a database or multiple independent reads verified the audio AND no
+    /// damage was recorded. A damaged result renders as consistent everywhere, including here:
+    /// the certificate headline, badge, and history must never outrank the log. Salvage removes
+    /// the reads leg only; a real database match still verifies the bytes.</summary>
+    public bool Verified => (DatabaseConfirmed || (OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2 && !Salvaged)) && !Damaged;
 
     public string OffsetText => Offset >= 0 ? "+" + Offset : Offset.ToString();
 
@@ -72,7 +88,9 @@ public sealed class RipReport
         sb.Append("Album         : ").Append(Album).Append(Year.Length > 0 ? " (" + Year + ")" : "").Append('\n');
         sb.Append("Drive         : ").Append(DriveName).Append('\n');
         sb.Append("Read offset   : ").Append(OffsetText).Append(" samples\n");
-        sb.Append("Accuracy mode : ").Append(CorrectionQualityName).Append('\n');
+        sb.Append("Accuracy mode : ").Append(Salvaged ? "Salvage (Burst, C2 off, minimum speed)" : CorrectionQualityName).Append('\n');
+        if (Salvaged)
+            sb.Append("Salvage       : drive-stable capture of a defective disc - read agreement is not verification\n");
         sb.Append("Tracks        : ").Append(TrackCount).Append('\n');
         if (TocId.Length > 0) sb.Append("TOC id        : ").Append(TocId).Append('\n');
         sb.Append("AccurateRip   : ").Append(Accurate
@@ -81,10 +99,18 @@ public sealed class RipReport
         sb.Append("CTDB          : ").Append(CtdbConfidence > 0
             ? "verified (confidence " + CtdbConfidence + ")"
             : "not found").Append('\n');
-        if (IndependentReadsVerified)
-            sb.Append("Independent   : verified after ").Append(OpticalReadsUsed)
+        if (OpticalReadsUsed >= 2 && MinimumAgreeingReads >= 2)
+            sb.Append("Independent   : ").Append(Damaged ? "consistent" : "verified")
+              .Append(" after ").Append(OpticalReadsUsed)
               .Append(" optical reads; every track agreed across at least ")
               .Append(MinimumAgreeingReads).Append(" reads\n");
+        if (Damaged)
+            sb.Append("Damage        : ")
+              .Append(FailedWindows > 0
+                  ? FailedWindows + " unrecoverable sector window(s) during reads"
+                  : "CTDB-detected damage")
+              .Append(FailedWindows > 0 && DamageRepairRequired ? "; CTDB-detected damage" : "")
+              .Append(" - agreement over damaged media is consistency, not proof\n");
         // Any mode that WROTE something, not just Mode=="Rip": a Test & Copy writes files too, and
         // gating on the literal "Rip" left the highest-assurance mode's certificate naming neither
         // its file count nor its output folder. The codec is reported rather than assumed - this

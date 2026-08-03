@@ -196,8 +196,22 @@ namespace CUETools.Codecs.MACLib
                 }
             }
 
-            if (pAPECompress != null) MACLibDll.c_APECompress_Destroy(pAPECompress);
+            IntPtr compressor = pAPECompress;
             pAPECompress = IntPtr.Zero;
+            if (compressor == IntPtr.Zero)
+                return;
+
+            if (disposing)
+            {
+                MACLibDll.c_APECompress_Destroy(compressor);
+                return;
+            }
+
+            // A finalizer must never terminate the process. Constructor failure can leave this
+            // object queued after the native wrapper's type initializer failed, so even cleanup
+            // can throw. Explicit Dispose still reports cleanup failures to its caller.
+            try { MACLibDll.c_APECompress_Destroy(compressor); }
+            catch { }
         }
 
         ~AudioEncoder()

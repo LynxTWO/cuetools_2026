@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -28,6 +29,7 @@ internal sealed class PluginProbe
 {
     public string ProcessorAssembly { get; set; } = "";
     public string PluginDirectory { get; set; } = "plugins";
+    public string ApplicationExecutable { get; set; } = "";
     public List<string> ExpectedPluginFiles { get; set; } = new();
     public List<ExpectedRegistration> ExpectedRegistrations { get; set; } = new();
     public List<NativeRegistrationProbe> NativeProbes { get; set; } = new();
@@ -578,6 +580,16 @@ internal static class Program
                             $"Unknown native plugin probe operation '{nativeProbe.Operation}'.");
                 }
             }
+            if (!string.IsNullOrWhiteSpace(probe.ApplicationExecutable))
+            {
+                int processProbeCount = ValidateWpfProcessCodecProbe(
+                    artifactRoot,
+                    probe.ApplicationExecutable);
+                if (processProbeCount != probe.NativeProbes.Count)
+                    throw new InvalidDataException(
+                        "The WPF process codec probe count did not match the native " +
+                        "artifact contract.");
+            }
             nativeProbeCount = probe.NativeProbes.Count;
             return probe.ExpectedRegistrations.Count;
         }
@@ -585,6 +597,79 @@ internal static class Program
         {
             AppDomain.CurrentDomain.AssemblyResolve -= resolver;
             Environment.SetEnvironmentVariable(DevelopmentPluginOverride, oldOverride);
+        }
+    }
+
+    private static int ValidateWpfProcessCodecProbe(
+        string artifactRoot,
+        string applicationExecutable)
+    {
+        string executable = ResolveContainedPath(
+            artifactRoot,
+            applicationExecutable);
+        ValidateRegularFile(executable, applicationExecutable);
+        string probeDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "cuetools-wpf-codec-probe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(probeDirectory);
+        string receipt = Path.Combine(probeDirectory, "codec-probe.txt");
+        try
+        {
+            var start = new ProcessStartInfo
+            {
+                FileName = executable,
+                WorkingDirectory = artifactRoot,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("--codec-probe-output");
+            start.ArgumentList.Add(receipt);
+            using Process process = Process.Start(start)
+                ?? throw new InvalidDataException(
+                    "The WPF codec probe process did not start.");
+            if (!process.WaitForExit(60000))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+                throw new InvalidDataException(
+                    "The WPF codec probe process timed out.");
+            }
+            if (process.ExitCode != 0 || !File.Exists(receipt))
+                throw new InvalidDataException(
+                    "The WPF codec probe process failed with exit code " +
+                    process.ExitCode + ".");
+            string[] lines = File.ReadAllLines(receipt);
+            if (lines.Length < 2 ||
+                !string.Equals(
+                    lines[0],
+                    "CUETools.Wpf.CodecProbe.v1",
+                    StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "The WPF codec probe receipt has an invalid schema.");
+            string[] expected =
+                { "HDCD", "LAME", "MonkeyAudio", "WavPack", "libFLAC" };
+            string[] actual = lines.Skip(1)
+                .Where(line => line.StartsWith("PASS\t", StringComparison.Ordinal))
+                .Select(line => line.Split('\t')[1])
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray();
+            if (!actual.SequenceEqual(
+                    expected.OrderBy(value => value, StringComparer.Ordinal)))
+                throw new InvalidDataException(
+                    "The WPF codec probe receipt is incomplete.");
+            if (lines.Any(line => line.StartsWith("FAIL\t", StringComparison.Ordinal)))
+                throw new InvalidDataException(
+                    "The WPF codec probe receipt reports a native failure.");
+            return actual.Length;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(probeDirectory))
+                    Directory.Delete(probeDirectory, recursive: true);
+            }
+            catch { }
         }
     }
 

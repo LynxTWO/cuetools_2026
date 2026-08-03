@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using CUETools.Codecs;
 using CUETools.Processor;
@@ -41,6 +42,15 @@ public sealed class ExternalEncoderInfo
 /// </summary>
 public sealed class EncoderCatalog
 {
+    private static readonly HashSet<string> NativeEncoderSettingsTypes =
+        new(StringComparer.Ordinal)
+        {
+            "CUETools.Codecs.libFLAC.EncoderSettings",
+            "CUETools.Codecs.libwavpack.EncoderSettings",
+            "CUETools.Codecs.MACLib.EncoderSettings",
+            "CUETools.Codecs.libmp3lame.VBREncoderSettings",
+            "CUETools.Codecs.libmp3lame.CBREncoderSettings",
+        };
     private readonly IDiagnosticLog _log;
     private readonly AppSettings _app;
     private readonly string _encodersDir;
@@ -223,7 +233,14 @@ public sealed class EncoderCatalog
             // built-in identities whose self-decoder syntax is already evidenced in this repo.
             foreach (var encoder in config.Encoders)
             {
-                if (encoder.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli ||
+                if (encoder.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli)
+                    continue;
+                if (cli.NormalizeVerificationContract())
+                    _log.Info(
+                        "encoders",
+                        "removed a stale lossless verification contract from " +
+                        cli.Name);
+                if (
                     !cli.Lossless ||
                     (cli.VerificationRequired && cli.HasLosslessVerifier))
                     continue;
@@ -319,19 +336,293 @@ public sealed class EncoderCatalog
     /// executable also resolves on this machine (either the encoder itself or a separate decoder).
     /// Pre-contract custom profiles remain usable but are explicitly labeled unverified until the
     /// user supplies a decoder contract.</summary>
-    public bool IsUsable(AudioEncoderSettingsViewModel? enc)
+    public bool IsUsable(AudioEncoderSettingsViewModel? enc) =>
+        GetHealth(enc).IsReady;
+
+    /// <summary>
+    /// Performs only side-effect-free readiness work: resolve a command executable and verifier,
+    /// or read a native wrapper's version property. It never opens a drive or creates output.
+    /// </summary>
+    public CodecHealth GetHealth(AudioEncoderSettingsViewModel? enc)
     {
-        if (enc == null) return false;
-        if (enc.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli) return true;
+        if (enc == null)
+            return CodecHealth.SetupRequired("Not configured", "No encoder is selected.");
+        if (enc.Settings is not CUETools.Codecs.CommandLine.EncoderSettings cli)
+            return ProbeInProcessHealth(enc);
+
         if (ResolveExe(enc) == null)
-            return false;
-        if (!cli.VerificationRequired)
-            return true;
+            return CodecHealth.SetupRequired(
+                "External command",
+                "The encoder executable is not installed or did not pass its approval check.");
+        if (!cli.Lossless || !cli.VerificationRequired)
+            return CodecHealth.Ready(CommandOrigin(enc));
         if (!cli.HasLosslessVerifier)
-            return false;
-        return cli.VerificationUsesEncoder ||
-            ResolveVerificationExe(cli) != null;
+            return CodecHealth.SetupRequired(
+                CommandOrigin(enc),
+                "This lossless command encoder needs an independent decode command.");
+        if (!cli.VerificationUsesEncoder && ResolveVerificationExe(cli) == null)
+            return CodecHealth.SetupRequired(
+                CommandOrigin(enc),
+                "The independent verification decoder is not available.");
+        return CodecHealth.Ready(CommandOrigin(enc));
     }
+
+    private CodecHealth ProbeInProcessHealth(AudioEncoderSettingsViewModel enc)
+    {
+        string typeName = enc.Settings.GetType().FullName ?? "";
+        string origin = NativeEncoderSettingsTypes.Contains(typeName)
+            ? "Bundled native"
+            : typeName.StartsWith("CUETools.Codecs.WMA.", StringComparison.Ordinal)
+                ? "Windows Media runtime"
+                : "Built in";
+        if (!NativeEncoderSettingsTypes.Contains(typeName))
+            return CodecHealth.Ready(origin);
+
+        try
+        {
+            PropertyInfo? versionProperty = enc.Settings.GetType().GetProperty(
+                "Version",
+                BindingFlags.Public | BindingFlags.Instance);
+            string version = versionProperty?.GetValue(enc.Settings)?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(version))
+                return CodecHealth.LoadFailed(
+                    origin,
+                    "The native library returned no version identity.");
+            return CodecHealth.Ready(origin, version.Trim());
+        }
+        catch (Exception ex)
+        {
+            Exception failure = ex is TargetInvocationException { InnerException: not null }
+                ? ex.InnerException
+                : ex;
+            _log.Warn(
+                "encoders",
+                "native codec readiness failed: " + typeName + " (" +
+                failure.GetType().Name + ")");
+            return CodecHealth.LoadFailed(
+                origin,
+                "The native library could not initialize (" +
+                failure.GetType().Name + ").");
+        }
+    }
+
+    private string CommandOrigin(AudioEncoderSettingsViewModel enc)
+    {
+        string path = enc.Path ?? "";
+        try
+        {
+            if (path.Length > 0 && Path.IsPathRooted(path))
+            {
+                if (IsWithinManagedDirectory(path))
+                    return "User import";
+                if (IsWithinBundledDirectory(path))
+                    return "Bundled command";
+            }
+        }
+        catch { }
+        return "External command";
+    }
+
+    public IReadOnlyList<CodecChoice> BuildChoices(CUEConfig config)
+    {
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+        var choices = new List<CodecChoice>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (AudioEncoderSettingsViewModel encoder in config.Encoders)
+        {
+            if (!config.formats.TryGetValue(encoder.Extension, out CUEToolsFormat? format))
+                continue;
+            if (encoder.Lossless ? !format.allowLossless : !format.allowLossy)
+                continue;
+            string stableId = encoder.Extension + "|" +
+                (encoder.Lossless ? "lossless|" : "lossy|") + encoder.Name;
+            if (!seen.Add(stableId))
+                continue;
+
+            CodecHealth health = GetHealth(encoder);
+            (string name, string description, string history, string bestUse, string distribution) =
+                Describe(encoder);
+            choices.Add(new CodecChoice
+            {
+                StableId = stableId,
+                Extension = encoder.Extension,
+                FormatName = name,
+                Implementation = ImplementationName(encoder),
+                Lossless = encoder.Lossless,
+                Encoder = encoder,
+                Health = health,
+                Description = description,
+                History = history,
+                BestUse = bestUse,
+                Distribution = distribution,
+                RecommendedRank = RecommendedRank(encoder),
+                CompressionRank = CompressionRank(encoder),
+                EfficiencyRank = EfficiencyRank(encoder),
+            });
+        }
+        return choices
+            .OrderBy(choice => choice.CategoryOrder)
+            .ThenBy(choice => choice.RecommendedRank)
+            .ThenBy(choice => choice.FormatName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(choice => choice.Implementation, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public CodecChoice? GetSelectedChoice(CUEConfig config, string extension)
+    {
+        if (!config.formats.TryGetValue(extension, out CUEToolsFormat? format))
+            return null;
+        bool lossy = IsLossyFormat(format);
+        AudioEncoderSettingsViewModel? selected = lossy
+            ? format.encoderLossy
+            : format.encoderLossless;
+        IReadOnlyList<CodecChoice> choices = BuildChoices(config);
+        return choices.FirstOrDefault(choice =>
+            ReferenceEquals(choice.Encoder, selected));
+    }
+
+    public void SelectCodec(CUEConfig config, CodecChoice choice)
+    {
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+        if (choice == null)
+            throw new ArgumentNullException(nameof(choice));
+        CodecHealth health = GetHealth(choice.Encoder);
+        if (!health.IsReady ||
+            !config.formats.TryGetValue(choice.Extension, out CUEToolsFormat? format))
+            throw new InvalidOperationException(
+                "The selected codec is not ready on this machine.");
+        if (choice.Lossless)
+            format.encoderLossless = choice.Encoder;
+        else
+            format.encoderLossy = choice.Encoder;
+        if (format.allowLossless && format.allowLossy)
+            _app.SetFormatTypeOverride(choice.Extension, !choice.Lossless);
+        _log.Info(
+            "encoders",
+            "selected " + choice.Extension + " / " + choice.Encoder.Name);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static string ImplementationName(AudioEncoderSettingsViewModel encoder) =>
+        encoder.Name switch
+        {
+            "cuetools" => "CUETools managed encoder",
+            "libFLAC" => "Reference libFLAC",
+            "libwavpack" => "WavPack library",
+            "MACLib" => "Monkey's Audio SDK",
+            "libmp3lame-VBR" => "LAME VBR",
+            "libmp3lame-CBR" => "LAME CBR",
+            "wma lossless" => "Windows Media runtime",
+            "wma lossy" => "Windows Media runtime",
+            _ => encoder.Name,
+        };
+
+    private static (string, string, string, string, string) Describe(
+        AudioEncoderSettingsViewModel encoder)
+    {
+        foreach (var known in Known)
+        {
+            if (string.Equals(known.enc, encoder.Name, StringComparison.Ordinal) &&
+                string.Equals(known.ext, encoder.Extension, StringComparison.OrdinalIgnoreCase))
+                return (known.name, known.description, known.history, known.bestUse, known.distribution);
+        }
+
+        return encoder.Extension.ToLowerInvariant() switch
+        {
+            "flac" => ("FLAC", "Open lossless audio with strong integrity metadata and broad support.",
+                "FLAC has been the dominant open lossless music format since 2001.",
+                "Primary archival copies and interoperable lossless libraries.",
+                "Bundled in-process implementation."),
+            "wv" => ("WavPack", "Open lossless audio with strong compression and optional hybrid modes.",
+                "WavPack has been developed since the late 1990s and remains actively maintained.",
+                "Lossless archives that value compression and flexible metadata.",
+                "Bundled source-built native implementation."),
+            "ape" => ("Monkey's Audio", "Lossless audio focused on strong compression on Windows.",
+                "Monkey's Audio has been available since 2000 and uses the APE container.",
+                "Windows-centric archives where decode support and speed tradeoffs are acceptable.",
+                "Bundled from the official SDK with notices."),
+            "m4a" when encoder.Lossless => ("Apple Lossless (ALAC)",
+                "Lossless audio in the MPEG-4 container with broad Apple ecosystem support.",
+                "Apple released ALAC as open source in 2011 after introducing it in 2004.",
+                "Lossless libraries centered on Apple hardware and M4A metadata.",
+                "Bundled managed implementation."),
+            "mp3" => ("MP3", "Mature perceptual audio with nearly universal playback support.",
+                "MPEG Layer III became the dominant portable music format in the 1990s.",
+                "Compatibility copies; keep a lossless master for preservation.",
+                "Bundled LAME native implementation."),
+            "wma" when encoder.Lossless => ("WMA Lossless",
+                "Microsoft's lossless Windows Media Audio profile.",
+                "WMA Lossless is part of the Windows Media codec family introduced in the 2000s.",
+                "Windows-specific lossless compatibility; FLAC is more portable.",
+                "Uses the installed Windows Media runtime."),
+            "wma" => ("Windows Media Audio", "Microsoft's perceptual Windows Media Audio profile.",
+                "WMA was introduced in 1999 for Windows media playback and streaming.",
+                "Legacy Windows playback compatibility.",
+                "Uses the installed Windows Media runtime."),
+            "wav" => ("WAV (PCM)", "Uncompressed PCM audio in a RIFF/WAVE container.",
+                "RIFF/WAVE has been a standard interchange format since the early 1990s.",
+                "Editing, interchange, and maximum simplicity; files are much larger.",
+                "Built-in implementation."),
+            "tta" => ("True Audio (TTA)", "Open lossless audio with fast, simple decoding.",
+                "TTA originated in the early 2000s as a compact lossless codec.",
+                "Specialized lossless archives where player support is known.",
+                "Source-built plugin when present."),
+            _ => (encoder.Extension.ToUpperInvariant(),
+                "Audio encoder registered with CUETools.",
+                "See the encoder project's documentation for its format history.",
+                encoder.Lossless ? "Lossless archival output." : "Lossy compatibility output.",
+                "Availability and origin are shown for this installation."),
+        };
+    }
+
+    private static int RecommendedRank(AudioEncoderSettingsViewModel encoder) =>
+        encoder.Extension.ToLowerInvariant() switch
+        {
+            "flac" => encoder.Name == "cuetools" ? 0 : 1,
+            "wv" => 10,
+            "m4a" when encoder.Lossless => 20,
+            "tak" => 30,
+            "ape" => 40,
+            "tta" => 50,
+            "ofr" => 60,
+            "wav" => 90,
+            "opus" => 100,
+            "m4a" => 110,
+            "ogg" => 120,
+            "mpc" => 130,
+            "mp3" => 140,
+            "wma" => 150,
+            _ => 500,
+        };
+
+    private static int CompressionRank(AudioEncoderSettingsViewModel encoder) =>
+        encoder.Extension.ToLowerInvariant() switch
+        {
+            "ofr" => 0,
+            "ape" => 10,
+            "tak" => 20,
+            "wv" => 30,
+            "flac" => 40,
+            "m4a" when encoder.Lossless => 45,
+            "tta" => 50,
+            "wav" => 100,
+            _ => 500,
+        };
+
+    private static int EfficiencyRank(AudioEncoderSettingsViewModel encoder) =>
+        encoder.Extension.ToLowerInvariant() switch
+        {
+            "opus" => 0,
+            "m4a" when encoder.Name == "exhale.exe" => 5,
+            "m4a" => 10,
+            "ogg" => 20,
+            "mpc" => 25,
+            "mp3" => 40,
+            "wma" => 50,
+            _ => 500,
+        };
 
     /// <summary>
     /// Resolve and freeze a separately configured verification decoder. Unlike imported encoders,

@@ -73,6 +73,23 @@ public sealed class MultiDriveWindowTests
     }
 
     [TestMethod]
+    public void CodecProbeRequiresAnExplicitAbsoluteReceiptPath()
+    {
+        string absolute = Path.GetFullPath(
+            Path.Combine(Path.GetTempPath(), "cuetools-codec-probe.txt"));
+        AppLaunchOptions parsed = AppLaunchOptions.Parse(
+            new[] { "--codec-probe-output", absolute });
+
+        Assert.IsTrue(parsed.IsCodecProbe);
+        Assert.AreEqual(absolute, parsed.CodecProbeOutputPath);
+        Assert.IsFalse(parsed.IsSecondaryDriveWindow);
+
+        AppLaunchOptions relative = AppLaunchOptions.Parse(
+            new[] { "--codec-probe-output", "codec-probe.txt" });
+        Assert.IsFalse(relative.IsCodecProbe);
+    }
+
+    [TestMethod]
     public void RipPageOffersOnlyOtherDrivesThroughIsolatedWindowCommand()
     {
         string repoRoot = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
