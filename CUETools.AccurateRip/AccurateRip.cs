@@ -11,6 +11,8 @@ using CUETools.Codecs;
 
 namespace CUETools.AccurateRip
 {
+	public delegate void TrackCompletedEventHandler(object sender, int trackNumber);
+
 	public class AccurateRipVerify : IAudioDest
 	{
         public const int maxNpar = 16;
@@ -570,7 +572,7 @@ namespace CUETools.AccurateRip
 		/// be able to disturb a rip. Do not call CRC32/CRCWONULL for a track before its event -
 		/// those results are memoized permanently, so an early call poisons the value for the
 		/// whole run.</summary>
-		public event EventHandler<int> TrackCompleted;
+		public event TrackCompletedEventHandler TrackCompleted;
 
 		public long Position
 		{
