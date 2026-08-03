@@ -61,6 +61,7 @@ $vendors = @(
 try {
     [void][IO.Directory]::CreateDirectory($tempRoot)
     [void](Invoke-TestGit $tempRoot @("init", "--quiet"))
+    [void](Invoke-TestGit $tempRoot @("config", "core.autocrlf", "false"))
     [void](Invoke-TestGit $tempRoot @("config", "user.name", "CUETools Test"))
     [void](Invoke-TestGit $tempRoot @(
         "config",
@@ -75,6 +76,7 @@ try {
                 [IO.Path]::DirectorySeparatorChar))
         [void][IO.Directory]::CreateDirectory($submodulePath)
         [void](Invoke-TestGit $submodulePath @("init", "--quiet"))
+        [void](Invoke-TestGit $submodulePath @("config", "core.autocrlf", "false"))
         [void](Invoke-TestGit $submodulePath @(
             "config",
             "user.name",
@@ -124,7 +126,8 @@ try {
     $rootPaths = @(".gitmodules", ".gitignore")
     $rootPaths += @($vendors | ForEach-Object { [string]$_.path })
     $rootPaths += @($vendors | ForEach-Object { [string]$_.patch })
-    [void](Invoke-TestGit $tempRoot (@("add", "--") + $rootPaths))
+    [void](Invoke-TestGit $tempRoot (
+        @("add", "--no-warn-embedded-repo", "--") + $rootPaths))
     [void](Invoke-TestGit $tempRoot @(
         "commit",
         "--quiet",
