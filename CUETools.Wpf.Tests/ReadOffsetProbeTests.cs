@@ -44,7 +44,7 @@ public sealed class ReadOffsetProbeTests
     [TestMethod]
     public void IdenticalReadsMeasureAsAligned()
     {
-        var pairs = ReadOffsetProbe.Compare(new List<string?> { Fingerprint(0), Fingerprint(0) });
+        var pairs = ReadOffsetProbe.Compare(new List<string> { Fingerprint(0), Fingerprint(0) });
 
         Assert.AreEqual(1, pairs.Count);
         Assert.IsTrue(pairs[0].Comparable);
@@ -58,7 +58,7 @@ public sealed class ReadOffsetProbeTests
     [TestMethod]
     public void AConstantShiftIsMeasuredWithItsSizeAndDirection()
     {
-        var pairs = ReadOffsetProbe.Compare(new List<string?> { Fingerprint(0), Fingerprint(640) });
+        var pairs = ReadOffsetProbe.Compare(new List<string> { Fingerprint(0), Fingerprint(640) });
 
         Assert.IsTrue(pairs[0].Comparable);
         Assert.IsTrue(pairs[0].OffsetFound, "a shift inside the search window must be found");
@@ -81,7 +81,7 @@ public sealed class ReadOffsetProbeTests
         for (int i = 0; i < TotalSamples; i++) { samples[i, 0] = (i * 7919) % 20000 - 10000; samples[i, 1] = (i * 6271) % 20000 - 10000; }
         other.Write(buffer);
 
-        var pairs = ReadOffsetProbe.Compare(new List<string?> { a, other.OffsetSafeCRC.Base64 });
+        var pairs = ReadOffsetProbe.Compare(new List<string> { a, other.OffsetSafeCRC.Base64 });
 
         Assert.IsTrue(pairs[0].Comparable);
         Assert.IsFalse(pairs[0].OffsetFound);
@@ -92,7 +92,7 @@ public sealed class ReadOffsetProbeTests
     [TestMethod]
     public void MissingOrCorruptFingerprintsAreNotComparable()
     {
-        var pairs = ReadOffsetProbe.Compare(new List<string?> { Fingerprint(0), "", null, "not base64 at all" });
+        var pairs = ReadOffsetProbe.Compare(new List<string> { Fingerprint(0), "", null, "not base64 at all" });
 
         foreach (var pair in pairs)
             if (pair.FromRead != 0 || pair.ToRead != 0)
@@ -105,7 +105,7 @@ public sealed class ReadOffsetProbeTests
     public void ThreeReadsProduceEveryOrderedPair()
     {
         var pairs = ReadOffsetProbe.Compare(
-            new List<string?> { Fingerprint(0), Fingerprint(0), Fingerprint(0) });
+            new List<string> { Fingerprint(0), Fingerprint(0), Fingerprint(0) });
 
         Assert.AreEqual(3, pairs.Count, "read1->read2, read1->read3, read2->read3");
     }
