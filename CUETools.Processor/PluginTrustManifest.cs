@@ -268,7 +268,22 @@ namespace CUETools.Processor
                     LoadNativeLibrary,
                     GetNativeModulePath,
                     handle => NativeMethods.FreeLibrary(handle));
-                ApprovedNativeModuleHandles.Add(module);
+                try
+                {
+                    CUETools.Codecs.NativeDependencyPathRegistry.
+                        RegisterManifestApprovedPath(
+                            Path.GetFileName(dependency.FullPath),
+                            dependency.FullPath);
+                    ApprovedNativeModuleHandles.Add(module);
+                }
+                catch (Exception ex)
+                {
+                    NativeMethods.FreeLibrary(module);
+                    throw new PluginTrustException(
+                        "An approved native dependency could not be bound to its managed " +
+                        "wrapper: " + dependency.RelativePath + " (" +
+                        ex.GetType().Name + ").");
+                }
             }
         }
 

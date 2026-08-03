@@ -1,5 +1,238 @@
 # Adversarial Edge-Case Review
 
+## Damaged-disc recovery addendum - 2026-08-01
+
+This pass challenged the complete damaged-media recovery surface at commit
+`082fe25`: the secure read loop and its retry/fallback policies, SCSI transport
+and sense handling, the sector vote and C2 evidence, CTDB parity repair and its
+WPF transaction, verify and Test & Copy held states, the classic parallel path,
+and the recovery closure claims in the backlog and ledger. Method: orchestrated
+pass 07 with 8 blind challenger lenses, adversarial verification (refuter plus
+trigger-tracer for high-risk claims), one bounded reality-check of improvement
+suggestions, and a completeness critic (26 agents total, read-only on code).
+The verification stage capped at 16 verifier calls with 63 wanted-but-dropped,
+so most lens claims entered at `inferred`; the orchestrator then personally
+re-opened every citation for the findings labeled verified below. No build,
+test, or hardware was executed; all activation-evidence judgments are from
+source, tests, and recorded receipts.
+
+### What the earlier recovery work got right
+
+- The R55-R105 classifier architecture holds up under challenge. Parent/child
+  sense identity is preserved through batch decomposition, rejected payload
+  bytes are never consumed, the 08/0A retry is bound to the exact drive and
+  command shape, and cache eviction is complete-or-fatal. No lens found a path
+  that consumes a rejected payload or reports a child failure with its parent's
+  range.
+- The WPF calibration gate fails closed exactly as documented: Secure and
+  Paranoid rips refuse to start without an independent-reread strategy
+  (`RipService.cs:288-315`, `1689-1696`).
+- The held-state design intent is real: a failed confirming read holds the
+  completed Copy instead of deleting it (`RipService.cs:1344-1349`), and the
+  repair transaction seals SHA-256 proofs before the atomic move.
+- The vote core is a single shared implementation (`SecureSectorVote.cs`)
+  exercised by the deterministic TestRipper corpus, not a drifted test copy.
+
+### Verified findings (orchestrator re-opened every citation)
+
+1. **DeepRecovery breaks the failed-sector sentinel; never-converged sectors
+   are reported clean.** Risk high, defect. `SCSIDrive.cs:213` marks a sector
+   failed only on exact equality with the sentinel `(16 << cq) + 1`;
+   `SCSIDrive.cs:1798` stores `pass + 2`; the deep-recovery extension zone
+   (`SCSIDrive.cs:2283`, `2439-2443`) lets the last failing pass exceed the
+   baseline cap, so the stored count overshoots the sentinel and the sector is
+   never flagged. The rip log then prints no suspicious positions for audio
+   that never converged (`CUESheet.cs:2519-2526`, `2719-2722`). The converse
+   also holds: a sector whose last failure was exactly at `max_scans - 1` but
+   which converges during the extension stays flagged as failed. DeepRecovery
+   defaults on (`AppSettings.cs:48`). Three lenses filed this independently.
+   Secondary: past pass 253 the `(byte)` cast at `SCSIDrive.cs:1798` wraps and
+   the `olderr` comparison at `1795` can no longer match.
+2. **A Stop during the confirming read deletes the completed Copy, and
+   StopOnUnrecoverable issues that Stop automatically.** Risk high, defect.
+   `RipService.cs:1342-1343` returns plain `Fail` for `"Stopped."` while every
+   other confirming-read failure takes the `BuildHeld` path two lines later;
+   the finally block then disposes the staging workspace holding the completed
+   Copy. `RipViewModel.cs:1270-1274` auto-invokes Stop on unrecoverable damage,
+   so a damaged disc can trigger the deletion with no user action. Refuter and
+   trigger-tracer both confirmed.
+3. **Eject or a tray event discards the held Copy without confirmation.** Risk
+   high, defect. `RipViewModel.cs:1982-1990` (`ClearDiscView`) discards the
+   held staging on any tray-open or media-gone signal. The discard on a real
+   disc change is deliberate and documented at `RipViewModel.cs:1978-1981`
+   (accept-anyway must not commit the previous disc's audio); the defect is
+   that a user eject while the held panel offers "accept it anyway" deletes the
+   only completed result with no prompt, and a multi-poll phantom tray-open (a
+   measured 15 s phantom is recorded at `RipViewModel.cs:688-696`) could do the
+   same with the disc still loaded.
+4. **Damaged-consistent Test & Copy results are labeled Verified in the report,
+   badge, and history.** Risk high, defect. `RipReport.cs:56-59` derives
+   `Verified` from read agreement alone; the report model carries no damage
+   field, so a CONSISTENT completion with failed windows renders "Verified by
+   independent reads" (`ReportViewModel.cs:69-72`) and a clean history row
+   (`HistoryStore.cs:96-100`) while the Test & Copy log for the same job
+   correctly says CONSISTENT. Contradicts the ledger S15 claim that damaged
+   agreement is distinguished from clean verification on every surface, and
+   narrows the R71 closure wording.
+5. **Committed AR/CTDB evidence binds to the newest read, not the committed
+   read.** Risk high, defect. `RipService.cs:1737-1748` builds the committed
+   `VerifyRecord` under a comment promising "the single committed read's own
+   checksums" but takes `ArConfidence`/`CtdbConfidence` from
+   `reads[reads.Count - 1]`. In a three-read run that commits read 1, the
+   certificate can carry read 2's database verdict for bytes it did not verify.
+   The held path (`RipService.cs:1379`, `1397-1408`) has the same shape.
+6. **Classic Test & Copy never compares Test CRC to Copy CRC and prints
+   "Copy OK" unconditionally.** Risk high, defect. `CUESheetLogWriter.cs:184`
+   and `200-203` print both CRCs and then an unconditional "Copy OK";
+   repo-wide, `_arTestVerify` is written (`CUESheet.cs:2830-2834`) and printed
+   but never compared. A drive glitch between passes publishes mismatched audio
+   under a log line asserting verification. Refuter and tracer both confirmed.
+7. **Classic Secure/Paranoid rips run with no calibration gate and no cache
+   defeat.** Risk high, gap. `frmCUERipper.cs:715` sets only
+   `CorrectionQuality`; `ICDRipper` does not expose the calibration or
+   cache-defeat members, so on a caching drive every secure re-read can be
+   served from cache and the vote agrees with itself - the exact condition the
+   WPF path fails closed on. Classic also publishes directly to the final
+   destination with no staging or held state (`CUESheet.cs:2871-2879`,
+   refuter-confirmed), and persisted Paranoid downgrades to Secure on restart
+   (`frmCUERipper.cs:192`). CLAUDE.md states the calibration and held-state
+   invariants unscoped; the classic path implements none of them.
+8. **StopOnUnrecoverable fires mid-final-pass on the running error count and
+   makes the DeepRecovery extension unreachable.** Risk medium, defect.
+   `RipViewModel.cs:1266-1274` latches Stop when `reReads >= max` and the
+   running count is nonzero, which occurs during the final baseline pass while
+   later chunks could still converge; because the extension zone begins only
+   after that pass ends with errors, StopOnUnrecoverable plus DeepRecovery
+   means the extension never runs. CLAUDE.md requires the stop only after the
+   evidence policy classifies a sector unrecoverable.
+9. **CTDB repair applies the first server-ordered variant.** Risk medium,
+   defect. `RepairTransaction.cs:68` hard-codes `e.selection = 0`;
+   `CUESheet.cs:4764-4783` builds the recoverable-entry list in raw server
+   order with no confidence sort, so a conf=1 pressing listed first wins over a
+   conf=40 pressing, and the post-repair gate only requires confidence > 0.
+10. **The SCSI pass-through never checks residual transfer length.** Risk
+    high, gap (latent). `Device.cs:836-852` (and the 32-bit twin) returns
+    Success purely on `ScsiStatus == 0`; `DataTransferLength` is never re-read
+    after the ioctl, and the reused read buffer is only canary-filled under
+    debug (`SCSIDrive.cs:1474-1479`), so a GOOD-status underrun would fold
+    stale bytes from the previous batch into the vote as a clean pass. Whether
+    any real drive/bridge produces GOOD-status underruns is unknown (entry
+    filed).
+11. **Two identical C2-clean passes are a confident vote at quality 1.** Risk
+    medium, design gap. `SecureSectorVote.cs:26-49` uses an absolute margin
+    (`128*(1+cq)-1`), not an agreement quorum, and `SCSIDrive.cs:2431-2432`
+    ends the window at the first zero-error pass, so a drive doing stable
+    error concealment (identical wrong bytes, no C2 flags) converges "secure"
+    on pass 1. Cache defeat makes the two reads independent media reads, which
+    is the real mitigation; drives that autodetect to `C2ErrorMode.None`
+    (`SCSIDrive.cs:1296-1298`) vote with majority-only evidence and no surfaced
+    downgrade warning.
+
+### Inferred findings (cited by lenses; not personally re-opened)
+
+- A multi-sector 24/00 during a speed or cache transition is decomposed as
+  transfer-shape evidence before the transition-bound retry filters can see it
+  (`SCSIDrive.cs:1519-1529` vs the catch filters at `2313-2345`), so the R57
+  one-shot transition retry is reachable only for single-sector commands and a
+  transition-state rejection can mark good sectors untrusted via per-child
+  24/00 corroboration.
+- The legacy 64/00 batch-split path gates its keep-fatal guard on
+  `mediumError`, so transport, hardware, and not-ready child failures can fall
+  through to `MarkSectorUnreadable` (`SCSIDrive.cs:1631-1637`, `1723`).
+- Deep-recovery pass counts above 255 would wrap the byte-sized vote
+  accumulators and C2 counters (`SCSIDrive.cs:1438-1447`,
+  `SecureSectorVote.cs:33-46`); reachability needs sub-500 ms passes inside
+  the 120 s ceiling, which plausibly requires cache-served re-reads (entry
+  filed).
+- `failedWindows` counts a window as given-up even when deep recovery later
+  converges it (`RipService.cs:695-698`), overstating damage in telemetry.
+- Transport-layer latents: `SCSIException` NRE when autosense is absent
+  (`Device.cs:1077`), stale sense reported after `IoctlFailed`
+  (`Device.cs:828`), `m_max_sectors` computable to 0 (`SCSIDrive.cs:331`),
+  `Device.Seek` never writes the LBA (`Device.cs:3175`, no live callers),
+  `RequestSense`/`Verify` declare buffers with the wrong direction
+  (`Device.cs:3097`), and the EAC-style log hardcodes "Make use of C2
+  pointers : No" and "Defeat audio cache : Yes" regardless of reality
+  (`CUESheetLogWriter.cs:115`).
+- The repair machinery has a dead drifted duplicate (`CUETools.CDRepair/`
+  lacks the miscorrection CRC gate present in
+  `CUETools.AccurateRip/CDRepair.cs`), the classic repair script publishes
+  with no post-apply cross-check, and parity capacity exceedance is reported
+  as generic "could not be verified".
+
+### Overclaims and activation-evidence gaps in the records
+
+- Backlog R55, R57, R58, R59 and the cache-defeat transition retry have no
+  deterministic in-repo test that activates the orchestration branches (the
+  tests cover the pure classifiers and a source-string contract). Some have
+  recorded live hardware activation (R105 crossed four retained 08/0A
+  addresses on H:); state these as "no in-repo automated activation evidence",
+  not "never ran".
+- The "closed through R105" ordering line and ledger S2 `tested` status read
+  stronger than that evidence; R71's "damaged agreement is reported as
+  CONSISTENT" is true of the log and Rip page but not of the report headline,
+  badge, or history rows (finding 4).
+- `docs/review/scenario-stress-test.md` predates the R55-R105 recovery wave
+  and contains no scenarios for it; pass 08 should refresh it.
+- CLAUDE.md's calibration, Test & Copy CRC, and held-state invariants are
+  written unscoped but hold only for the WPF path (finding 7); steering pass
+  01 should scope them or the classic path needs a decision.
+
+### Improvement opportunities (reality-checked against the code)
+
+Feasible within the current architecture (one bounded reality-check pass; not
+adversarially verified):
+
+1. Fix the failed-sector sentinel and gave-up accounting under deep recovery
+   (finding 1 plus the `failedWindows` mislabel). Small effort, restores the
+   integrity of every damage report downstream.
+2. Re-read only still-disagreeing sectors instead of the whole window on every
+   retry pass (`SCSIDrive.cs:2298-2311` re-reads the full window). Large
+   effort; multiplies useful passes on the damaged region inside the same time
+   budget and shrinks the accumulator-overflow exposure.
+3. Apply requested speed drops at pass boundaries inside a stuck window. The
+   adaptive controller exists (`AdaptiveSpeedController.cs`) but a mid-window
+   drop takes effect only at the next fresh window, so a stuck window keeps
+   rereading at the speed that produced the errors. Medium effort; must
+   respect the R57 transition serialization.
+4. CTDB-guided second-chance rereads: when a rip ends with unrecoverable
+   windows and parity identifies the exact bad sectors, re-read just those
+   before surrendering, instead of only post-rip parity repair. Large effort.
+5. Expose Reed-Solomon repair headroom (worst stride-column utilization vs
+   npar/2) so the user can choose re-rip vs repair. Small effort.
+6. Persist per-sector evidence so a second session on the same damaged disc
+   resumes instead of restarting. Large effort.
+7. Adaptive vote quorum in high-disagreement regions (demand more than the
+   absolute margin where passes have been flapping; finding 11). Medium
+   effort.
+
+Rejected by the reality check: realigning slipped reads into the vote via the
+slip correlator (the correlator is a diagnostic; realignment contradicts the
+untrusted-evidence design), and cross-drive tie-break reads for held tracks
+(contradicts the one-drive-per-job lease and process-per-drive invariants).
+
+### Risks that moved
+
+- Up: DeepRecovery-mode damage reporting (finding 1) and Test & Copy held-state
+  lifecycle (findings 2, 3) are the highest-risk recovery defects now known.
+- Up: classic-path secure ripping is now evidence-backed as materially weaker
+  than its log claims (findings 6, 7), previously recorded only as
+  "per-file rather than album-transactional".
+- Down: none. The classifier core survived; its risks were confirmed bounded.
+
+### Coverage of this pass
+
+Not read by any lens (confirmed present by the completeness critic):
+`DriveService.cs` SCSI gate, `OpticalDriveLease.cs`, AccurateRip verdict
+internals (`AccurateRip.cs:54-80`), classic CUETools CTDB submit path
+(`frmCUETools.cs:1012-1057`), `CacheDefeatSearch.cs`,
+`DriveCalibration.cs`/`GzJson.cs` persistence, `CUETools.Fuzz` (fuzzes six
+Bwg.Scsi parsers; none of the recovery orchestration), and
+`CUETools.Ripper.Console` (a third rip frontend exposing Paranoid with the
+same missing gates as classic). 57 of 67 lens findings were not adversarially
+verified due to the verifier cap; the verified list above reflects the
+orchestrator's own re-checks instead.
+
 ## R69 cache-defeat addendum - 2026-07-29
 
 This pass reviewed only the secure reread cache-eviction slice at commit

@@ -162,16 +162,19 @@ namespace CUETools.Codecs.libFLAC
 
         static FLACDLL()
         {
-            var myPath = new Uri(typeof(FLACDLL).Assembly.CodeBase).LocalPath;
-            var myFolder = System.IO.Path.GetDirectoryName(myPath);
-            var is64 = IntPtr.Size == 8;
-            var subfolder = is64 ? "x64" : "win32";
-            IntPtr Dll = LoadLibrary(System.IO.Path.Combine(System.IO.Path.Combine(myFolder, subfolder), DllName + ".dll"));
+            string nativePath = NativeDependencyPathRegistry.ResolvePath(
+                typeof(FLACDLL).Assembly,
+                DllName + ".dll");
+            IntPtr Dll = LoadLibrary(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException();
+                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
             IntPtr addr = GetProcAddress(Dll, "FLAC__VERSION_STRING");
+            if (addr == IntPtr.Zero)
+                throw new EntryPointNotFoundException("FLAC__VERSION_STRING");
             IntPtr ptr = Marshal.ReadIntPtr(addr);
             version = Marshal.PtrToStringAnsi(ptr);
+            if (String.IsNullOrEmpty(version))
+                throw new EntryPointNotFoundException("FLAC__VERSION_STRING");
         }
     };
 }

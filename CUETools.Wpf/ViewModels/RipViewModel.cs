@@ -56,6 +56,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IDiagnosticLog _log;
     private readonly IConvertService _codecs;
     private readonly AppStatusService _status;
+    private readonly EncoderCatalog _catalog;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
@@ -70,12 +71,42 @@ public sealed class RipViewModel : PageViewModel
 
     // Real output formats (only those with a working encoder in this build), not a fixed list.
     public ObservableCollection<string> Formats { get; } = new();
+    public ObservableCollection<CodecChoice> CodecChoices { get; } = new();
+
+    private CodecChoice? _selectedCodecChoice;
+    public CodecChoice? SelectedCodecChoice
+    {
+        get => _selectedCodecChoice;
+        private set
+        {
+            if (ReferenceEquals(_selectedCodecChoice, value)) return;
+            _selectedCodecChoice = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedCodecLabel));
+            OnPropertyChanged(nameof(SelectedCodecTooltip));
+        }
+    }
+    public string SelectedCodecLabel =>
+        SelectedCodecChoice?.CompactLabel ?? SelectedFormat.ToUpperInvariant();
+    public string SelectedCodecTooltip => SelectedCodecChoice == null
+        ? "Choose an output codec."
+        : SelectedCodecChoice.AccessibleLabel + ". " +
+          SelectedCodecChoice.HealthDetail;
 
     private string _selectedFormat = "flac";
     public string SelectedFormat
     {
         get => _selectedFormat;
-        set { if (Set(ref _selectedFormat, value)) { _settings.SelectedFormat = value; OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode)); } }
+        set
+        {
+            if (Set(ref _selectedFormat, value))
+            {
+                _settings.SelectedFormat = value;
+                RefreshSelectedCodecChoice();
+                OnPropertyChanged(nameof(ScopeCodec));
+                OnPropertyChanged(nameof(ScopeMode));
+            }
+        }
     }
 
     public string[] OutputLayouts { get; } =
@@ -310,9 +341,9 @@ public sealed class RipViewModel : PageViewModel
     /// </summary>
     public bool ControlsUnlocked => !IsRipping;
 
-    // The codec dropdown stays editable through a Test read (a change there is honored - see
-    // RunTestCopyAsync's liveFormat), but locks the instant the first track actually starts
-    // encoding so it stops "lying": from then on the encode is guaranteed to use what's shown.
+    // The codec is immutable for every encoded job. Test & Copy freezes one health-checked codec
+    // before its Test read, so the Copy and possible confirming read cannot drift to another
+    // implementation after the evidence transaction has begun.
     // Cleared back to false wherever IsRipping is reset to false, on every path (success/error/stop).
     private bool _codecLocked;
     public bool CodecLocked { get => _codecLocked; private set { if (Set(ref _codecLocked, value)) OnPropertyChanged(nameof(CodecUnlocked)); } }
@@ -383,9 +414,14 @@ public sealed class RipViewModel : PageViewModel
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
 
-    // 0 = Burst, 1 = Secure, 2 = Paranoid (maps to the drive's CorrectionQuality)
+    // Picker index: 0 = Burst, 1 = Secure, 2 = Paranoid, 3 = Salvage (R119: a defective-disc
+    // capture - Burst-quality Test & Copy reads with C2 off at the drive's minimum speed).
     private int _correctionQuality = 1;
     public int CorrectionQuality { get => _correctionQuality; set { if (Set(ref _correctionQuality, value)) _settings.CorrectionQuality = value; } }
+    /// <summary>Engine quality for the picker selection: Salvage runs the engine at Burst.</summary>
+    public int EffectiveCorrectionQuality => _correctionQuality == 3 ? 0 : _correctionQuality;
+    /// <summary>True when the picker selects the Salvage capture mode (R119).</summary>
+    public bool SalvageRead => _correctionQuality == 3;
 
     private string _arText = "not checked";
     public string ArText { get => _arText; private set => Set(ref _arText, value); }
@@ -412,6 +448,13 @@ public sealed class RipViewModel : PageViewModel
     private bool _testCopyIsWarning;
     public bool TestCopyIsWarning { get => _testCopyIsWarning; private set => Set(ref _testCopyIsWarning, value); }
     private TestCopyRunResult? _heldResult;
+    // A held result parked across a tray or disc-view clear (R108): a phantom tray event or an
+    // accidental eject must not destroy the only completed Copy. It is restored when the same
+    // disc returns, and discarded only when a different disc loads, a new job starts, or the
+    // user discards explicitly.
+    private TestCopyRunResult? _parkedHeldResult;
+    private string _parkedHeldDiscId = "";
+    private string _currentDiscId = "";
 
     // per-disc options, bound to the live config
     public bool CreateCue { get => _config.createCUEFileInTracksMode; set { _config.createCUEFileInTracksMode = value; OnPropertyChanged(); } }
@@ -505,19 +548,23 @@ public sealed class RipViewModel : PageViewModel
         _launchOptions = launchOptions;
         _log = log;
         _status = status;
+        _catalog = catalog;
         _codecs = codecs;
         _drives.SelectedDriveChanged += OnSharedSelectedDriveChanged;
         // restore the persisted rip prefs; empty means never set - fall back to defaults
         _outputBaseDir = !string.IsNullOrWhiteSpace(settings.OutputBaseDir) && System.IO.Directory.Exists(settings.OutputBaseDir)
             ? settings.OutputBaseDir
             : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "CUETools");
-        _correctionQuality = Math.Max(0, Math.Min(2, settings.CorrectionQuality));
+        _correctionQuality = Math.Max(0, Math.Min(3, settings.CorrectionQuality));
 
         void RebuildFormats()
         {
             Formats.Clear();
             foreach (var f in codecs.LosslessFormats()) Formats.Add(f);
             foreach (var f in codecs.LossyFormats()) Formats.Add(f);   // lossy last, e.g. mp3, wma
+            CodecChoices.Clear();
+            foreach (CodecChoice choice in catalog.BuildChoices(config))
+                CodecChoices.Add(choice);
         }
         RebuildFormats();
         // an imported external encoder (e.g. mppenc.exe for Musepack) lights its format up live
@@ -525,6 +572,7 @@ public sealed class RipViewModel : PageViewModel
         {
             var keep = SelectedFormat; RebuildFormats();
             SelectedFormat = Formats.Contains(keep) ? keep : (Formats.Count > 0 ? Formats[0] : "flac");
+            RefreshSelectedCodecChoice();
             OnPropertyChanged(nameof(ScopeCodec)); OnPropertyChanged(nameof(ScopeMode));   // a type flip changes what the scope draws + its mode
         };
         // a cover-size change in Settings re-derives the already-fetched cover at the new size
@@ -544,6 +592,7 @@ public sealed class RipViewModel : PageViewModel
         };
         if (Formats.Contains(settings.SelectedFormat)) _selectedFormat = settings.SelectedFormat;
         if (!Formats.Contains(_selectedFormat)) _selectedFormat = Formats.Count > 0 ? Formats[0] : "flac";
+        RefreshSelectedCodecChoice();
 
         // canExecute, not just the early-return guard inside ReadDiscOrClose: without it the button
         // stays fully enabled during a rip and does nothing when pressed.
@@ -733,6 +782,8 @@ public sealed class RipViewModel : PageViewModel
         else
         {
             IsDiscPresent = true;
+            _currentDiscId = info.DiscId;
+            ResolveParkedHeld(info.DiscId);
             AlbumTitle = info.Album;
             AlbumArtist = string.IsNullOrWhiteSpace(info.Artist)
                 ? (string.IsNullOrWhiteSpace(info.DriveName) ? $"Drive {drive}:" : info.DriveName)
@@ -1158,12 +1209,54 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // A real re-read: ReReads = extra passes over a stuck window, ErrorSectors = sectors still
+    // disagreeing. ReReads == 0 means the window cleared; the linger timer then hides the box.
+    // The Unreadable badge and StopOnUnrecoverable key on the ENGINE's give-up verdict
+    // (WindowGivenUpSectors > 0), surfaced once per window after the retry policy classified its
+    // sectors failed - never on running mid-pass counts, which a later chunk of the same pass can
+    // still converge, and never on a pass threshold, which would cut the deep-recovery extension
+    // short (R110).
+    private Action<RereadReport> MakeRereadHandler(System.Windows.Threading.Dispatcher? dispatcher)
+        => r => dispatcher?.BeginInvoke(new Action(() =>
+        {
+            if (r.ReReads > 0)
+            {
+                _lastRereadUtc = DateTime.UtcNow;
+                RereadVisible = true;
+                RereadCount = r.ReReads;
+                RereadMax = Math.Max(1, r.MaxReReads);
+                RereadErrors = r.ErrorSectors;
+                RereadFrac = r.WindowFrac;
+                RereadText = $"{(int)(r.WindowFrac * 100)}% in";
+
+                bool failed = r.WindowGivenUpSectors > 0;
+                RereadActive = !failed;
+                Unreadable = failed;
+                _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
+                if (failed && _settings.StopOnUnrecoverable && IsRipping)
+                {
+                    _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
+                    StatusText = $"Unrecoverable damage at {(int)(r.WindowFrac * 100)}% - stopping.";
+                    Task.Run(() => { try { _rip.Stop(); } catch { } });
+                }
+            }
+            else
+            {
+                RereadActive = false;   // cleared: stop animating, let the box linger then hide
+                RereadErrors = 0;
+                if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
+            }
+        }));
+
     private async Task RunJobAsync(bool encode)
     {
         if (!IsDiscPresent || IsRipping || IsBusy || (encode && ArtLoading)) return;
+        if (encode && !ValidateSelectedCodec("rip")) return;
         PersistPrimarySettingsSnapshot();
+        DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         char drive = _selectedDrive;
-        int cq = CorrectionQuality;
+        int cq = EffectiveCorrectionQuality;   // a Salvage selection runs a plain job at Burst
+        CodecLocked = encode;
         IsRipping = true;
         RipDone = false;
         CanRepairLastRip = false;
@@ -1171,6 +1264,11 @@ public sealed class RipViewModel : PageViewModel
         _lastRepairSource = "";
         RipProgress = 0;
         HistoryText = "";
+        // R120 hygiene: live per-track and database evidence is about to be written as this job
+        // reads, so clear the previous job's values first. Without this a new disc would show
+        // the last disc's verdict until its own reads reported.
+        ArText = "not checked"; CtdbText = "not checked";
+        foreach (var resetTrack in Tracks) { resetTrack.ArResult = "-"; resetTrack.CtdbResult = "-"; }
         HistoryIsWarning = false;
         _baseActivity = encode ? AppActivity.Ripping : AppActivity.Verifying;
         _status.Report(_baseActivity, 0);
@@ -1206,42 +1304,7 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
-        // n == 0 means the window cleared; the linger timer then hides the box.
-        void Reread(int n, int max, int errs, double frac)
-            => dispatcher?.BeginInvoke(new Action(() =>
-            {
-                if (n > 0)
-                {
-                    _lastRereadUtc = DateTime.UtcNow;
-                    RereadVisible = true;
-                    RereadCount = n;
-                    RereadMax = Math.Max(1, max);
-                    RereadErrors = errs;
-                    RereadFrac = frac;
-                    RereadText = $"{(int)(frac * 100)}% in";
-
-                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
-                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
-                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
-                    bool failed = n >= RereadMax && errs > 0;
-                    RereadActive = !failed;
-                    Unreadable = failed;
-                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
-                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
-                    {
-                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
-                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
-                        Task.Run(() => { try { _rip.Stop(); } catch { } });
-                    }
-                }
-                else
-                {
-                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
-                    RereadErrors = 0;
-                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
-                }
-            }));
+        var Reread = MakeRereadHandler(dispatcher);
 
         StartRereadTimer();
 
@@ -1324,6 +1387,56 @@ public sealed class RipViewModel : PageViewModel
         _status.Report(result.Ok && encode ? AppActivity.Done : AppActivity.Idle);   // green badge until dismissed
     }
 
+    public void SelectCodec(CodecChoice choice)
+    {
+        if (choice == null)
+            throw new ArgumentNullException(nameof(choice));
+        _catalog.SelectCodec(_config, choice);
+        _selectedFormat = choice.Extension;
+        _settings.SelectedFormat = choice.Extension;
+        OnPropertyChanged(nameof(SelectedFormat));
+        RefreshSelectedCodecChoice(choice.StableId);
+        OnPropertyChanged(nameof(ScopeCodec));
+        OnPropertyChanged(nameof(ScopeMode));
+    }
+
+    private void RefreshSelectedCodecChoice(string? preferredStableId = null)
+    {
+        SelectedCodecChoice = CodecChoices.FirstOrDefault(choice =>
+                preferredStableId != null &&
+                string.Equals(
+                    choice.StableId,
+                    preferredStableId,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? _catalog.GetSelectedChoice(_config, _selectedFormat)
+            ?? CodecChoices.FirstOrDefault(choice =>
+                string.Equals(
+                    choice.Extension,
+                    _selectedFormat,
+                    StringComparison.OrdinalIgnoreCase) &&
+                choice.CanSelect)
+            ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
+    }
+
+    private bool ValidateSelectedCodec(string operation)
+    {
+        CodecChoice? selected = _catalog.GetSelectedChoice(
+            _config,
+            SelectedFormat);
+        if (selected != null)
+        {
+            CodecHealth health = _catalog.GetHealth(selected.Encoder);
+            if (health.IsReady)
+                return true;
+            StatusText = operation + " cannot start: " + selected.CompactLabel +
+                " is not ready. " + health.Detail;
+            return false;
+        }
+        StatusText = operation + " cannot start: no encoder is configured for " +
+            SelectedFormat + ". Open the codec picker to choose a ready encoder.";
+        return false;
+    }
+
     // Test & Copy: read the disc twice (a third time on a mismatch) and write only tracks two
     // independent reads agree on bit-for-bit. Mirrors RunJobAsync's progress/level/re-read wiring
     // and IsRipping lifecycle so the same live visuals work across the 2-3 reads; the result
@@ -1332,19 +1445,28 @@ public sealed class RipViewModel : PageViewModel
     {
         if (!CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading))
             return;
+        if (!ValidateSelectedCodec("Test & Copy")) return;
         PersistPrimarySettingsSnapshot();
+        DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         // Keep the previous held staging until the NEW run has produced a result. Discarding it up
         // front meant a re-run that failed early (calibration refused, no disc, stopped) left the user
         // with nothing to accept - the verified reads they already had were gone.
         var previousHeld = _heldResult;
         if (previousHeld != null) { _heldResult = null; TestCopyHeld = false; }
         char drive = _selectedDrive;
-        int cq = CorrectionQuality;
+        int cq = EffectiveCorrectionQuality;
+        bool salvage = SalvageRead;   // frozen with the rest of the job snapshot
+        CodecLocked = true;
         IsRipping = true;
         RipDone = false;
         TestCopyHeld = false;
         RipProgress = 0;
         HistoryText = "";
+        // R120 hygiene: live per-track and database evidence is about to be written as this job
+        // reads, so clear the previous job's values first. Without this a new disc would show
+        // the last disc's verdict until its own reads reported.
+        ArText = "not checked"; CtdbText = "not checked";
+        foreach (var resetTrack in Tracks) { resetTrack.ArResult = "-"; resetTrack.CtdbResult = "-"; }
         HistoryIsWarning = false;
         _baseActivity = AppActivity.Ripping;
         _status.Report(_baseActivity, 0);
@@ -1380,42 +1502,7 @@ public sealed class RipViewModel : PageViewModel
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
             }));
-        // A real re-read: n = extra passes over a stuck window, errs = sectors still disagreeing.
-        // n == 0 means the window cleared; the linger timer then hides the box.
-        void Reread(int n, int max, int errs, double frac)
-            => dispatcher?.BeginInvoke(new Action(() =>
-            {
-                if (n > 0)
-                {
-                    _lastRereadUtc = DateTime.UtcNow;
-                    RereadVisible = true;
-                    RereadCount = n;
-                    RereadMax = Math.Max(1, max);
-                    RereadErrors = errs;
-                    RereadFrac = frac;
-                    RereadText = $"{(int)(frac * 100)}% in";
-
-                    // Exhausted every retry and the sectors still disagree: the drive cannot read this
-                    // spot. Flag it unreadable (red, held zoom on the 3D disc) and, if the user asked to
-                    // stop on unrecoverable damage, stop here rather than leaving it silently unread.
-                    bool failed = n >= RereadMax && errs > 0;
-                    RereadActive = !failed;
-                    Unreadable = failed;
-                    _status.Report(failed ? AppActivity.Unreadable : AppActivity.Rereading);   // taskbar badge
-                    if (failed && _settings.StopOnUnrecoverable && IsRipping)
-                    {
-                        _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
-                        StatusText = $"Unrecoverable damage at {(int)(frac * 100)}% - stopping.";
-                        Task.Run(() => { try { _rip.Stop(); } catch { } });
-                    }
-                }
-                else
-                {
-                    RereadActive = false;   // cleared: stop animating, let the box linger then hide
-                    RereadErrors = 0;
-                    if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
-                }
-            }));
+        var Reread = MakeRereadHandler(dispatcher);
 
         StartRereadTimer();
 
@@ -1443,18 +1530,54 @@ public sealed class RipViewModel : PageViewModel
             else
                 Apply();
         }
-        // liveFormat is polled just before each encode read (Copy, and the third read on a mismatch),
-        // so a codec change made while the Test read is still running is honored.
+        // Live per-track CRC (R120): one track's checksum as that track finishes reading,
+        // instead of the whole grid staying empty until the read ends.
+        void PublishTrackCrc(TrackCrcLive live)
+        {
+            void Apply()
+            {
+                try
+                {
+                    int index = live.TrackNumber - 1;
+                    if (index >= 0 && index < Tracks.Count)
+                        Tracks[index].ApplyLiveCrc(live.Crc32, live.IsCopyRead);
+                }
+                catch { }
+            }
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.BeginInvoke((Action)Apply);
+            else
+                Apply();
+        }
+        // Live database verdict (R120): what the Test read found, reported when that read ends
+        // rather than after the whole transaction.
+        void PublishReadVerdict(ReadVerdict verdict)
+        {
+            void Apply()
+            {
+                try { ApplyLiveReadVerdict(verdict); }
+                catch { }
+            }
+            if (dispatcher != null && !dispatcher.CheckAccess())
+                _ = dispatcher.BeginInvoke((Action)Apply);
+            else
+                Apply();
+        }
+        // The codec was health-checked and locked before the Test read. Copy and a possible
+        // confirming read use that immutable format snapshot.
         RipTelemetryMailbox telemetry = StartTelemetry();
         TestCopyRunResult result;
         try
         {
             result = await Task.Run(() => _rip.RunTestAndCopy(
                 drive, cq, fmt, meta, outBase, Report, telemetry,
-                Reread, cover, liveFormat: () => SelectedFormat,
+                Reread, cover, liveFormat: null,
                 onEncodeStart: LockCodec,
                 onCrcEvidence: PublishCrcEvidence,
-                outputLayout: outputLayout));
+                outputLayout: outputLayout,
+                salvage: salvage,
+                onTrackCrc: PublishTrackCrc,
+                onReadVerdict: PublishReadVerdict));
         }
         finally
         {
@@ -1519,7 +1642,7 @@ public sealed class RipViewModel : PageViewModel
             // this summary name the wrong format
             string wroteFmt = string.IsNullOrWhiteSpace(result.Format) ? fmt : result.Format;
             RipSummary = $"Test & Copy: {result.FileCount} {wroteFmt} files, "
-                + (damagedAgreement ? "consistent after " : "verified after ")
+                + (result.Salvaged ? "salvaged (drive-stable) after " : damagedAgreement ? "consistent after " : "verified after ")
                 + $"{result.ReadsUsed} reads (at least 2 agreed per track)"
                 + (repairRequired
                     ? $"; CTDB repair required for {result.CtdbRepairSectors} sector(s)"
@@ -1531,11 +1654,13 @@ public sealed class RipViewModel : PageViewModel
                         ? "; final output PCM verified after metadata"
                         : "; WARNING: final output not verified"
                     : "");
-            StatusText = damagedAgreement
-                ? repairRequired
-                    ? $"Test & Copy consistent; CTDB repair required -> {result.OutputDir}"
-                    : $"Test & Copy consistent; read damage remains -> {result.OutputDir}"
-                : $"Test & Copy verified -> {result.OutputDir}";
+            StatusText = result.Salvaged
+                ? $"Test & Copy salvaged (drive-stable capture, not verified) -> {result.OutputDir}"
+                : damagedAgreement
+                    ? repairRequired
+                        ? $"Test & Copy consistent; CTDB repair required -> {result.OutputDir}"
+                        : $"Test & Copy consistent; read damage remains -> {result.OutputDir}"
+                    : $"Test & Copy verified -> {result.OutputDir}";
             SetPostRipRepair(result);
             // Record it. A Test & Copy is the highest-assurance mode and was the ONE that left no
             // trace: it never published, so the report page and RECENTLY RIPPED had no record that
@@ -1546,12 +1671,15 @@ public sealed class RipViewModel : PageViewModel
             PublishReport($"Test & Copy ({result.ReadsUsed} reads)", result.CorrectionQuality,
                 result.ArConfidence, result.ArTotal,
                 result.CtdbConfidence, result.CtdbTotal, result.Accurate,
-                (damagedAgreement ? "consistent" : "verified") +
+                (result.Salvaged ? "salvaged (drive-stable capture)" : damagedAgreement ? "consistent" : "verified") +
                 $" after {result.ReadsUsed} optical reads; at least 2 agreed per track" +
                 (repairRequired ? "; CTDB repair required" : ""),
                 result.OutputDir, result.FileCount, result.Format, result.ReadsUsed, 2,
                 result.OutputVerificationKnown, result.LosslessOutput,
-                result.OutputVerificationPerformed, result.OutputVerificationDetail);
+                result.OutputVerificationPerformed, result.OutputVerificationDetail,
+                failedWindows: result.FailedWindows,
+                damageRepairRequired: result.CtdbHasErrors,
+                salvaged: result.Salvaged);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
             await FinishRipAsync(result.OutputDir, drive);
@@ -1646,7 +1774,8 @@ public sealed class RipViewModel : PageViewModel
         CanRepairLastRip = true;
         RepairLastRipText =
             $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
-            "Repair creates and independently verifies a sibling copy; this rip stays unchanged.";
+            "Repair creates and independently verifies a sibling copy; this rip stays unchanged." +
+            RepairHeadroomText(result.CtdbRepairWorstStripe, result.CtdbRepairStripeCapacity);
     }
 
     private void SetPostRipRepair(
@@ -1676,8 +1805,20 @@ public sealed class RipViewModel : PageViewModel
         CanRepairLastRip = true;
         RepairLastRipText =
             $"CTDB parity can recover {result.CtdbRepairSectors} damaged sector(s). " +
-            "Repair creates and independently verifies a sibling copy; this output stays unchanged.";
+            "Repair creates and independently verifies a sibling copy; this output stays unchanged." +
+            RepairHeadroomText(result.CtdbRepairWorstStripe, result.CtdbRepairStripeCapacity);
     }
+
+    // Repair headroom (R115): how close the fix's worst parity stripe came to the npar/2
+    // capacity. At capacity, one more error there would have been unrecoverable - the honest
+    // basis for choosing re-rip vs repair.
+    private static string RepairHeadroomText(int worstStripe, int stripeCapacity)
+        => stripeCapacity > 0
+            ? $" Worst parity stripe uses {worstStripe} of {stripeCapacity} correctable errors" +
+              (worstStripe >= stripeCapacity
+                  ? " - at capacity; prefer a re-rip if the disc still reads."
+                  : ".")
+            : "";
 
     private async Task RepairLastRipAsync()
     {
@@ -1792,7 +1933,10 @@ public sealed class RipViewModel : PageViewModel
                 outputVerificationKnown: held.OutputVerificationKnown,
                 losslessOutput: held.LosslessOutput,
                 outputVerificationPerformed: held.OutputVerificationPerformed,
-                outputVerificationDetail: held.OutputVerificationDetail);
+                outputVerificationDetail: held.OutputVerificationDetail,
+                failedWindows: held.FailedWindows,
+                damageRepairRequired: held.CtdbHasErrors,
+                salvaged: held.Salvaged);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
@@ -1871,6 +2015,39 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // Parked-held resolution at disc arrival (R108): the same disc restores the held offer with
+    // its staging intact; a different disc proves the user moved on, so the parked staging is
+    // freed - it must never be committable under another disc's identity.
+    private void ResolveParkedHeld(string discId)
+    {
+        var parked = _parkedHeldResult;
+        if (parked == null) return;
+        if (_parkedHeldDiscId == discId)
+        {
+            _parkedHeldResult = null;
+            _parkedHeldDiscId = "";
+            _heldResult = parked;
+            TestCopyHeld = true;
+            TestCopyIsWarning = true;
+            TestCopyText =
+                "Held - the disc is back. The completed Copy is retained; re-run, accept it anyway, or discard.";
+        }
+        else
+        {
+            DiscardParkedHeld("a different disc was loaded");
+        }
+    }
+
+    private void DiscardParkedHeld(string reason)
+    {
+        var parked = _parkedHeldResult;
+        if (parked == null) return;
+        _parkedHeldResult = null;
+        _parkedHeldDiscId = "";
+        try { _rip.DiscardStaging(parked); } catch { }
+        _log.Info("rip", $"parked held Test & Copy freed - {reason}");
+    }
+
     // Drop back to the no-disc view (tray open or emptied). Keeps the disc read-map / tracks from
     // lingering after the media is gone.
     private void ClearDiscView(DriveTrayState tray)
@@ -1884,28 +2061,33 @@ public sealed class RipViewModel : PageViewModel
         Releases.Clear();
         _chosenMetadata = null;
         _selectedRelease = null;
-        // A held Test & Copy belongs to the disc that produced it. Leaving it live across a disc change
-        // meant "Accept anyway" would commit the PREVIOUS disc's audio while the page showed a different
-        // disc - and the panel is nested in the disc-present view, so it silently vanished rather than
-        // being dismissed. Release it here, and free its staging so a full album is not orphaned.
-        bool heldDropped = false;
+        // A held Test & Copy belongs to the disc that produced it. Leaving it live across a disc
+        // change meant "Accept anyway" would commit the PREVIOUS disc's audio while the page
+        // showed a different disc. But deleting it here destroyed the only completed Copy on a
+        // phantom tray event or an accidental eject (R108). So PARK it, keyed to its disc: the
+        // same disc returning restores the offer; a different disc, a new job, or an explicit
+        // Discard frees the staging.
+        bool heldParked = false;
         if (_heldResult != null)
         {
-            try { _rip.DiscardStaging(_heldResult); } catch { }
+            if (_parkedHeldResult != null)
+                try { _rip.DiscardStaging(_parkedHeldResult); } catch { }
+            _parkedHeldResult = _heldResult;
+            _parkedHeldDiscId = _currentDiscId;
             _heldResult = null;
             TestCopyHeld = false;
             TestCopyText = "";   // its only binding sits inside the panel that just collapsed
-            heldDropped = true;
+            heldParked = true;
         }
         bool open = tray == DriveTrayState.Open;
         AlbumTitle = open ? "Tray open - insert a disc, then Close" : "No disc - insert an audio CD";
         AlbumArtist = "";
         DiscInfoText = "";
-        // Say why the held result vanished. It must be assigned AFTER the line above, which would
+        // Say why the held panel vanished. It must be assigned AFTER the line above, which would
         // otherwise overwrite it, and it cannot go in TestCopyText - that binding lives inside the
         // panel this same method collapses, so the explanation would never be rendered.
-        StatusText = heldDropped
-            ? "The held Test & Copy was dropped because the disc changed - its staging was freed."
+        StatusText = heldParked
+            ? "The held Test & Copy is parked - reinsert the same disc to resume it. A different disc frees it."
             : open ? "Tray open." : "Drive ready - insert an audio CD.";
         OnPropertyChanged(nameof(HasReleases));
         OnPropertyChanged(nameof(SelectedRelease));
@@ -2015,6 +2197,27 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
+    // R120: light the AR and CTDB columns and the side panel from one completed read. This is
+    // presentation only - the immutable records are still assembled at their existing points -
+    // and it is deliberately silent about tracks the read had no verdict for.
+    private void ApplyLiveReadVerdict(ReadVerdict verdict)
+    {
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            if (i < verdict.ArPerTrack.Length && verdict.ArPerTrack[i] > 0)
+                Tracks[i].ArResult = verdict.ArPerTrack[i].ToString();
+            if (i < verdict.CtdbPerTrack.Length && verdict.CtdbPerTrack[i] > 0)
+                Tracks[i].CtdbResult = verdict.CtdbPerTrack[i].ToString();
+        }
+        ArText = verdict.Accurate
+            ? $"{verdict.ArConfidence} / {verdict.ArTotal} accurate"
+            : verdict.ArTotal > 0 ? $"{verdict.ArConfidence} / {verdict.ArTotal}" : "not in database";
+        CtdbText = verdict.CtdbConfidence > 0
+            ? $"match . conf {verdict.CtdbConfidence}"
+            : verdict.CtdbTotal > 0 ? "found, no exact match" : "not found";
+        StatusText = $"{verdict.ReadKind} read complete - {ArText} (AccurateRip), {CtdbText} (CTDB).";
+    }
+
     private void PublishReport(bool encode, VerifyResult result, int correctionQualityUsed)
         => PublishReport(encode ? "Rip" : "Verify", correctionQualityUsed, result.ArConfidence, result.ArTotal,
             result.CtdbConfidence, result.CtdbTotal, result.Accurate, result.Status, result.OutputDir,
@@ -2022,7 +2225,9 @@ public sealed class RipViewModel : PageViewModel
             outputVerificationKnown: result.OutputVerificationKnown,
             losslessOutput: result.LosslessOutput,
             outputVerificationPerformed: result.OutputVerificationPerformed,
-            outputVerificationDetail: result.OutputVerificationDetail);
+            outputVerificationDetail: result.OutputVerificationDetail,
+            failedWindows: result.FailedWindows,
+            damageRepairRequired: result.CtdbHasErrors);
 
     /// <summary>Record a finished job in the report page and the history list. Every completed operation
     /// belongs here - a Test &amp; Copy most of all, since it is the highest-assurance mode and used to be
@@ -2033,7 +2238,9 @@ public sealed class RipViewModel : PageViewModel
         string format = "", int opticalReadsUsed = 0, int minimumAgreeingReads = 0,
         bool outputVerificationKnown = false, bool losslessOutput = false,
         bool outputVerificationPerformed = false,
-        string outputVerificationDetail = "")
+        string outputVerificationDetail = "",
+        int failedWindows = 0, bool damageRepairRequired = false,
+        bool salvaged = false)
     {
         var d = _lastDisc;
         var report = new RipReport
@@ -2062,7 +2269,10 @@ public sealed class RipViewModel : PageViewModel
             OutputVerificationPerformed = outputVerificationPerformed,
             OutputVerificationDetail = outputVerificationDetail,
             TrackCount = d?.AudioTracks ?? Tracks.Count,
-            TocId = d?.TocId ?? ""
+            TocId = d?.TocId ?? "",
+            FailedWindows = failedWindows,
+            DamageRepairRequired = damageRepairRequired,
+            Salvaged = salvaged
         };
         _reports.Publish(report);
         _history.Add(report);

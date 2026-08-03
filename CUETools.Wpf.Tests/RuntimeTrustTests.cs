@@ -522,21 +522,68 @@ public sealed class PluginManifestTrustTests
     }
 
     [TestMethod]
-    public void LibMp3LameWrapper_HasNoBareNameOrApplicationRootFallback()
+    public void NativeCodecWrappers_UseOnlyApprovedOrAssemblyRelativePaths()
     {
         string repoRoot = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
         Assert.IsNotNull(repoRoot);
-        string source = File.ReadAllText(Path.Combine(
-            repoRoot,
-            "CUETools.Codecs.libmp3lame",
-            "libmp3lamedll.cs"));
+        string[] wrappers =
+        {
+            "CUETools.Codecs.HDCD/HDCDDLL.cs",
+            "CUETools.Codecs.libFLAC/FLACDLL.cs",
+            "CUETools.Codecs.libmp3lame/libmp3lamedll.cs",
+            "CUETools.Codecs.libwavpack/wavpackdll.cs",
+            "CUETools.Codecs.MACLib/MACLibDll.cs",
+        };
+        foreach (string relativePath in wrappers)
+        {
+            string source = File.ReadAllText(Path.Combine(
+                repoRoot,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            StringAssert.Contains(
+                source,
+                "NativeDependencyPathRegistry.ResolvePath");
+            Assert.IsFalse(
+                source.Contains("Assembly.CodeBase", StringComparison.Ordinal),
+                relativePath + " must not use the obsolete code-base URI path.");
+            Assert.IsFalse(
+                source.Contains("LoadLibrary(DllName +", StringComparison.Ordinal),
+                relativePath + " must not fall back to a bare native DLL name.");
+        }
+    }
 
-        Assert.IsFalse(
-            source.Contains("LoadLibrary(DllName +", StringComparison.Ordinal),
-            "LAME must not fall back to process search paths or the application root.");
-        StringAssert.Contains(
-            source,
-            "Path.Combine(myFolder, subfolder)");
+    [TestMethod]
+    public void NativePathRegistry_PrefersApprovedPathAndRejectsConflict()
+    {
+        using var tree = new TempTree("cuetools-native-path-registry");
+        string name = "codec-" + Guid.NewGuid().ToString("N") + ".dll";
+        string approved = tree.Write(name, "approved native bytes");
+        string conflicting = tree.Write("other/" + name, "different native bytes");
+
+        NativeDependencyPathRegistry.RegisterManifestApprovedPath(name, approved);
+
+        Assert.AreEqual(
+            Path.GetFullPath(approved),
+            NativeDependencyPathRegistry.ResolvePath(typeof(CUEConfig).Assembly, name),
+            true);
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            NativeDependencyPathRegistry.RegisterManifestApprovedPath(
+                name,
+                conflicting));
+    }
+
+    [TestMethod]
+    public void NativePathRegistry_UnregisteredFallbackIsOneArchitectureSubdirectory()
+    {
+        string name = "unregistered-" + Guid.NewGuid().ToString("N") + ".dll";
+        string expected = Path.Combine(
+            Path.GetDirectoryName(typeof(CUEConfig).Assembly.Location),
+            IntPtr.Size == 8 ? "x64" : "win32",
+            name);
+
+        Assert.AreEqual(
+            Path.GetFullPath(expected),
+            NativeDependencyPathRegistry.ResolvePath(typeof(CUEConfig).Assembly, name),
+            true);
     }
 
     [TestMethod]

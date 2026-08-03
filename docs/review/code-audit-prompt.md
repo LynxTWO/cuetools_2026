@@ -203,6 +203,13 @@ hard-edged paths, and they have DIFFERENT rules from ordinary application code:
     validator to report success. A parseable file or zero generator exit is
     insufficient. Inspect hosted annotations for expected warnings and either close
     their cause or suppress them only behind stronger explicit postconditions.
+33. UNASSIGNED PROTOCOL CODES KEEP RAW IDENTITY. A known parent code does not assign
+    meaning to an unknown qualifier. Report the known family and the raw numeric
+    child code, then scope any compatibility retry to the exact observed device and
+    firmware when the code is vendor-specific, plus the command, shape, transition
+    state, and attempt count. A repeat or different failure keeps
+    its own fatal class. Never convert an unknown transport or device qualifier into
+    damaged-subject evidence.
 
 ### How to choose the extraction
 

@@ -67,9 +67,16 @@ public sealed class ReportViewModel : PageViewModel
         }
 
         Confirmed = r.Verified;
-        Headline = r.DatabaseConfirmed
-            ? "Accurately ripped"
-            : r.IndependentReadsVerified ? "Verified by independent reads" : "Not confirmed";
+        // Damage outranks every verification headline: the log says CONSISTENT for these jobs,
+        // and the certificate must never say more than the log (R109). A salvage capture says
+        // so unless a real database match verified the bytes anyway (R119).
+        Headline = r.Damaged
+            ? (r.Salvaged ? "Salvaged capture - damage recorded" : "Consistent - damage recorded")
+            : r.DatabaseConfirmed
+                ? "Accurately ripped"
+                : r.Salvaged
+                    ? "Salvaged capture - not verified"
+                    : r.IndependentReadsVerified ? "Verified by independent reads" : "Not confirmed";
         Album = r.Album;
         Artist = string.IsNullOrWhiteSpace(r.Year) ? r.Artist : $"{r.Artist}  ({r.Year})";
         Subhead = $"{r.Mode}  .  {r.CorrectionQualityName}  .  {r.Timestamp:yyyy-MM-dd HH:mm}";

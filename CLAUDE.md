@@ -76,6 +76,11 @@ progress documents for it belong here, under `docs/review/`.
   demonstrated caching, retain the largest proven safe flush size across noisy later
   calibrations. Lead-in/out flags are valid only when the exact offset-sized boundary
   range was probed and the SCSI reader consumes it.
+- The calibration, cache-defeat, and Test & Copy held-state invariants bind the
+  modern WPF rip path. Classic CUERipper is a frozen legacy surface (decision D8-B):
+  its secure modes never defeat the drive cache, its UI and log say so explicitly,
+  and no new assurance work targets it. Do not present classic secure output as
+  equivalent to a WPF calibrated rip.
 - Multi-drive UI evidence must remain bound to its physical drive. Keep Drive & Read
   selection synchronized with Rip, clear stale identity/calibration on changes, and
   lock selection while an operation owns the hardware. UI observers and progress
@@ -107,7 +112,16 @@ progress documents for it belong here, under `docs/review/`.
   drive is dead. Split a failed batch to isolate sectors and feed persistent
   single-sector medium errors into the existing flagged vote and retry policy.
   Transport, removal, not-ready, unit-attention, illegal-command, and hardware
-  failures remain fatal. `StopOnUnrecoverable` is applied only after the configured
+  failures remain fatal, with one corroboration-gated carve-out: the assigned
+  HardwareError 3E/02 (TIMEOUT ON LOGICAL UNIT) verdict is the drive's own
+  surrender, observed live on both matrix drives. A surrendered multi-sector
+  batch decomposes to independent single-sector reads like a medium-error
+  batch; a surrendered single-sector pinpoint inside a corroborated media
+  batch (MediumError or 3E/02 parent) enters the untrusted path. Both forms
+  record counters and are transition-agnostic - a verdict the drive
+  deliberated for tens of seconds is not a transition blip - while an
+  uncorroborated single-sector 3E/02, 3E with any other qualifier, and every
+  other hardware failure stays fatal. `StopOnUnrecoverable` is applied only after the configured
   evidence and retry policy has classified a sector as unrecoverable.
 - An accepted optical-drive control command does not prove the payload path is ready.
   Serialize speed, seek, cache, and mode transitions with READ CD, apply only a
@@ -115,6 +129,12 @@ progress documents for it belong here, under `docs/review/`.
   real hardware evidence. A repeated or unrelated failure stays fatal. Include
   relative sector, transfer count, command mode, and applied speed in scrubbed
   failure context; never include sector payload bytes.
+- Keep unassigned SCSI qualifiers raw. Report the known ASC family plus the numeric
+  ASC/ASCQ; do not invent a standard name from vendor behavior. The recurrent H:
+  `HardwareError / 08/0A` may settle for 80 ms and retry once only on the observed
+  `HL-DT-ST BD-RE WH16NS40` firmware 1.05, for a normal 16-sector BEh payload read
+  outside speed and cache transitions. The retry is local to that exact command. A
+  failed retry remains fatal and cannot mark media untrusted.
 - A rejected multi-sector READ CD transfer is not damaged-media evidence. The exact
   observed `DeviceFailed / IllegalRequest / 24/00` batch shape may fall back to
   single-sector payload reads. Each child must succeed independently unless the exact
@@ -134,6 +154,18 @@ progress documents for it belong here, under `docs/review/`.
   WPF release and runtime checks repeat the hashes. A receipt-bound user import is
   resolved first and may override the bundled fallback; never replace or trust a
   packaged executable by filename alone.
+- Packaged native codec wrappers must resolve the exact path registered by
+  `PluginTrustManifest` after hash and loaded-module validation. Do not add app-root,
+  current-directory, `PATH`, or bare-name fallback searches, and do not copy native
+  DLLs beside duplicate root managed wrappers. Release evidence must launch the real
+  apphost from the staged layout and exercise initialize, write, finalize, and read
+  back; a validator-local assembly load or version getter is insufficient.
+- Codec readiness is a precondition for scarce work. Resolve the exact selected
+  encoder implementation before publishing settings, claiming an optical drive, or
+  reading media. Persist a stable implementation id in queued jobs and freeze one
+  checked implementation for the complete Rip or Test & Copy transaction. Keep
+  unavailable picker rows explanatory and unselectable; an extension alone is not
+  implementation identity.
 - Keep executable support separate from redistribution. A working imported codec
   does not authorize packaging. Real CLI execution, license/source compliance,
   runtime dependencies, and patent or notification boundaries must all be recorded.

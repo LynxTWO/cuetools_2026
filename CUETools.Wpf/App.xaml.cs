@@ -56,7 +56,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         // persist every user setting (engine config + app prefs) on the way out
-        if (!_launchOptions.IsSecondaryDriveWindow &&
+        if (!_launchOptions.IsCodecProbe &&
+            !_launchOptions.IsSecondaryDriveWindow &&
             _settingsStore != null && _config != null && _appSettings != null)
             _settingsStore.Save(_config, _appSettings);
         else if (_launchOptions.IsSecondaryDriveWindow)
@@ -70,6 +71,21 @@ public partial class App : Application
         base.OnStartup(e);
 
         _launchOptions = AppLaunchOptions.Parse(e.Args);
+        if (_launchOptions.IsCodecProbe)
+        {
+            int exitCode;
+            try
+            {
+                exitCode = WpfCodecRuntimeProbe.WriteReceipt(
+                    _launchOptions.CodecProbeOutputPath);
+            }
+            catch
+            {
+                exitCode = 3;
+            }
+            Shutdown(exitCode);
+            return;
+        }
         var services = new ServiceCollection();
         services.AddSingleton(_launchOptions);
 

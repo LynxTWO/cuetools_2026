@@ -45,7 +45,9 @@ namespace CUETools.Ripper.SCSI
 		DriveC2ErrorModeSetting _driveC2ErrorMode = DriveC2ErrorModeSetting.Auto;
 		int _correctionQuality = 1;
 
-		/// <summary>Opt-in deep recovery (see AppSettings.DeepRecovery). When false the re-read loop
+		/// <summary>Opt-in deep recovery (see AppSettings.DeepRecovery). Effective only at
+		/// CorrectionQuality &gt; 0 (decision D9): Burst keeps the classic 16-pass cap and never
+		/// enters the extension. When false the re-read loop
 		/// and read path behave exactly as before. Set before the rip starts.</summary>
 		public bool DeepRecovery { get; set; } = false;
 		int _currentStart = -1, _currentEnd = -1, _currentErrorsCount = 0;
@@ -74,11 +76,22 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatWakeReadinessIndeterminateCount;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
+		private int _readCommunicationRetryCount;
 		private int _payloadBatchFallbackCount;
 		private int _pinpointRetryCount;
 		private int _corroboratedUnreadablePinpointCount;
+		private int _givenUpWindowCount;
+		private int _shortPayloadTransferCount;
+		private int _extendedTimeoutReadCount;
+		private int _driveReportedTimeoutPinpointCount;
+		private int _driveReportedTimeoutBatchCount;
+		private int _windowBudgetStopCount;
+		private int _concealedFrameCount;
+		private byte[] _unconfidentMap;
 		public void SetCacheDefeat(int flushBytes) => _cacheDefeatBytes = Math.Max(0, flushBytes);
+		public int CacheDefeatBytes => _cacheDefeatBytes;
 		public int ControlTransitionRetryCount => _controlTransitionRetryCount;
+		public int ReadCommunicationRetryCount => _readCommunicationRetryCount;
 		public int CacheDefeatRetryCount => _cacheDefeatRetryCount;
 		public int CacheDefeatChunkFallbackCount => _cacheDefeatChunkFallbackCount;
 		public int CacheDefeatWakeCount => _cacheDefeatWakeCount;
@@ -90,6 +103,48 @@ namespace CUETools.Ripper.SCSI
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
 			_corroboratedUnreadablePinpointCount;
+		/// <summary>Windows whose pass loop ended with unresolved sectors (engine-classified
+		/// give-up, R106). Complements FailedSectors, which carries the per-sector bits.</summary>
+		public int GivenUpWindowCount => _givenUpWindowCount;
+		/// <summary>GOOD-status payload reads rejected because the transferred byte count did
+		/// not match the exact request (R112). Live occurrence evidence for the open
+		/// GOOD-status-underrun unknown; expected to stay zero.</summary>
+		public int ShortPayloadTransferCount => _shortPayloadTransferCount;
+		/// <summary>Low-speed recovery reads issued with the extended R118 timeout instead of
+		/// the baseline. Activation evidence for the ERROR_SEM_TIMEOUT mitigation.</summary>
+		public int ExtendedTimeoutReadCount => _extendedTimeoutReadCount;
+		/// <summary>Pinpoint sectors the drive itself surrendered on (3E/02 inside a
+		/// corroborated media batch) that entered the untrusted path instead of failing the
+		/// job (R118).</summary>
+		public int DriveReportedTimeoutPinpointCount => _driveReportedTimeoutPinpointCount;
+		/// <summary>Whole batches the drive surrendered with 3E/02 that decomposed to
+		/// independent single-sector reads instead of failing the job (R118).</summary>
+		public int DriveReportedTimeoutBatchCount => _driveReportedTimeoutBatchCount;
+		/// <summary>Windows ended by the wall-clock budget because a single pass was grinding
+		/// far past any useful recovery rate (R123).</summary>
+		public int WindowBudgetStopCount => _windowBudgetStopCount;
+		/// <summary>Conceal samples the vote never confirmed instead of publishing its raw
+		/// best guess (R119). A drive reading in data mode does not conceal for us, so a
+		/// salvage capture is audible garbage without this.</summary>
+		public bool ConcealUnconfirmedSamples { get; set; }
+		/// <summary>Frames concealed by <see cref="ConcealUnconfirmedSamples"/>, summed per
+		/// channel. This is the honest measure of how much of a salvage capture is
+		/// reconstruction rather than disc.</summary>
+		public int ConcealedFrameCount => _concealedFrameCount;
+		private bool IsObservedReadCommunicationDrive =>
+			m_inqury_result != null &&
+			string.Equals(
+				m_inqury_result.VendorIdentification.TrimEnd(' ', '\0'),
+				"HL-DT-ST",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.ProductIdentification.TrimEnd(' ', '\0'),
+				"BD-RE  WH16NS40",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.FirmwareVersion.TrimEnd(' ', '\0'),
+				"1.05",
+				StringComparison.OrdinalIgnoreCase);
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -177,27 +232,13 @@ namespace CUETools.Ripper.SCSI
         {
             get
             {
+                // Maintained by the engine: FailedSectorAccounting.FinalizeWindow sets bits when
+                // a window's pass loop ends unresolved (R106). The lazy fallback covers a drive
+                // that never ripped (or was closed, when _toc is null) so log generation reports
+                // "no failures" instead of throwing. Never derive failure from retry-count
+                // arithmetic here: deep recovery's extension overshoots the legacy sentinel.
                 if (m_failedSectors == null)
-                {
-                    // Burst mode (CorrectionQuality 0) never allocates the per-sector retry
-                    // array, and _toc is null once the drive is closed. Guard both so log
-                    // generation after a burst read reports "no failures" instead of throwing.
                     m_failedSectors = new BitArray(_toc == null ? 0 : (int)_toc.AudioLength);
-                    if (m_retryCount != null)
-                    {
-                        // A sector is "failed" only when it exhausted the retry budget without the
-                        // vote ever converging: m_retryCount hits the sentinel (16 << quality)+1,
-                        // the +1 marking give-up rather than "resolved on the last allowed pass".
-                        int n = m_failedSectors.Length;
-                        for (int i = 0; i < n; i++)
-                        {
-                            int retryIndex = i - _retrySectorBase;
-                            if (retryIndex >= 0 && retryIndex < m_retryCount.Length)
-                                m_failedSectors[i] =
-                                    m_retryCount[retryIndex] == (16 << _correctionQuality) + 1;
-                        }
-                    }
-                }
                 return m_failedSectors;
             }
         }
@@ -1292,41 +1333,57 @@ namespace CUETools.Ripper.SCSI
 			_autodetectResult = "";
 			_currentStart = 0;
 			m_max_sectors = Math.Min(NSECTORS, m_device.MaximumTransferLength / CB_AUDIO - 1);
-			int sector = 3;
 			int pass = 0;
 
-			for (int c = 0; c <= c2mode.Length - 1 && !found; c++)
-				for (int r = 0; r <= 1 && !found; r++)
-					for (int m = 0; m <= 1 && !found; m++)
-					{
-						_readCDCommand = readmode[r];
-						_c2ErrorMode = c2mode[c];
-						_mainChannelMode = mainmode[m];
-						if (_forceReadCommand != ReadCDCommand.Unknown && _readCDCommand != _forceReadCommand)
-							continue;
-                        if (_readCDCommand == ReadCDCommand.ReadCdD8h && (_c2ErrorMode != Device.C2ErrorMode.None || _mainChannelMode != Device.MainChannelSelection.UserData))
-							continue;
-						Array.Clear(_readBuffer, 0, _readBuffer.Length); // fill with something nasty instead?
-						DateTime tm = DateTime.Now;
-						if (ReadProgress != null)
+			// One fixed probe region turned a damaged disc START into "failed to autodetect
+			// read command" on a drive that had just read the same disc end to end (observed
+			// live: NO SEEK COMPLETE plus an OS-killed probe at the defective lead-in). The
+			// probe decides drive CAPABILITY, not disc health, so sweep the same command matrix
+			// at up to three disc regions before giving up. Region one keeps the legacy start
+			// position so healthy discs behave exactly as before.
+			int audioLen = _toc != null ? (int)_toc.AudioLength : 0;
+			int[] probeStarts = audioLen > m_max_sectors * 8
+				? new int[] { 3, audioLen / 2, (audioLen / 4) * 3 }
+				: new int[] { 3 };
+
+			for (int region = 0; region < probeStarts.Length && !found; region++)
+			{
+				int sector = probeStarts[region];
+				if (region > 0)
+					_autodetectResult += string.Format(
+						"probe region unreadable - retrying the command matrix at sector {0}\n",
+						sector);
+				for (int c = 0; c <= c2mode.Length - 1 && !found; c++)
+					for (int r = 0; r <= 1 && !found; r++)
+						for (int m = 0; m <= 1 && !found; m++)
 						{
-							progressArgs.Action = Resource1.StatusDetectingDriveFeatures;
-							progressArgs.Pass = -1;
-							progressArgs.Position = pass++;
-							progressArgs.PassStart = 0;
-							progressArgs.PassEnd = 2 * 3 * 2 - 1;
-							progressArgs.ErrorsCount = 0;
-							progressArgs.PassTime = tm;
-							ReadProgress(this, progressArgs);
+							_readCDCommand = readmode[r];
+							_c2ErrorMode = c2mode[c];
+							_mainChannelMode = mainmode[m];
+							if (_forceReadCommand != ReadCDCommand.Unknown && _readCDCommand != _forceReadCommand)
+								continue;
+	                        if (_readCDCommand == ReadCDCommand.ReadCdD8h && (_c2ErrorMode != Device.C2ErrorMode.None || _mainChannelMode != Device.MainChannelSelection.UserData))
+								continue;
+							Array.Clear(_readBuffer, 0, _readBuffer.Length); // fill with something nasty instead?
+							DateTime tm = DateTime.Now;
+							if (ReadProgress != null)
+							{
+								progressArgs.Action = Resource1.StatusDetectingDriveFeatures;
+								progressArgs.Pass = -1;
+								progressArgs.Position = pass++;
+								progressArgs.PassStart = 0;
+								progressArgs.PassEnd = 2 * 3 * 2 - 1;
+								progressArgs.ErrorsCount = 0;
+								progressArgs.PassTime = tm;
+								ReadProgress(this, progressArgs);
+							}
+							System.Diagnostics.Trace.WriteLine("Trying " + CurrentReadCommand);
+							Device.CommandStatus st = FetchSectors(sector, m_max_sectors, false);
+							TimeSpan delay = DateTime.Now - tm;
+							_autodetectResult += string.Format("{0}: {1} ({2}ms)\n", CurrentReadCommand, (st == Device.CommandStatus.DeviceFailed ? Device.LookupSenseError(m_device.GetSenseAsc(), m_device.GetSenseAscq()) : st.ToString()), delay.TotalMilliseconds);
+							found = st == Device.CommandStatus.Success;
 						}
-						System.Diagnostics.Trace.WriteLine("Trying " + CurrentReadCommand);
-						Device.CommandStatus st = FetchSectors(sector, m_max_sectors, false);
-						TimeSpan delay = DateTime.Now - tm;
-						_autodetectResult += string.Format("{0}: {1} ({2}ms)\n", CurrentReadCommand, (st == Device.CommandStatus.DeviceFailed ? Device.LookupSenseError(m_device.GetSenseAsc(), m_device.GetSenseAscq()) : st.ToString()), delay.TotalMilliseconds);
-						found = st == Device.CommandStatus.Success;
-						
-						//sector += m_max_sectors;
-					}
+			}
 			//if (found)
 			//    for (int n = 1; n <= m_max_sectors; n++)
 			//    {
@@ -1453,22 +1510,50 @@ namespace CUETools.Ripper.SCSI
 		private unsafe Device.CommandStatus FetchSectors(int sector, int Sectors2Read, bool abort)
 		{
 			Device.CommandStatus st;
+			// R118: a re-read of known trouble at low speed can exceed the fixed timeout while
+			// the drive's servo hunts a slipping zone; the port driver then resets the device
+			// and the read dies as IoctlFailed / ERROR_SEM_TIMEOUT, killing the whole job.
+			// Extend the timeout for exactly that observed shape; healthy reads keep the tight
+			// baseline so a dead drive still fails fast.
+			int timeoutSeconds = ReadTimeoutPolicy.SecondsFor(
+				_timeout, _appliedSpeedKbps, _currentErrorsCount > 0);
+			if (timeoutSeconds != _timeout)
+				_extendedTimeoutReadCount++;
 			fixed (byte* data = _readBuffer)
 			{
 				if (_debugMessages)
 				{
-					int size = (4 * 588 + (_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0)) 
+					int size = (4 * 588 + (_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0))
 						* (int)Sectors2Read;
 					AudioSamples.MemSet(data, 0xff, size);
 				}
 				if (_readCDCommand == ReadCDCommand.ReadCdBEh)
-					st = m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), _timeout);
+					st = m_device.ReadCDAndSubChannel(_mainChannelMode, Device.SubChannelMode.None, _c2ErrorMode, 1, false, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), timeoutSeconds);
 				else
-					st = m_device.ReadCDDA(Device.SubChannelMode.None, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), _timeout);
+					st = m_device.ReadCDDA(Device.SubChannelMode.None, (uint)sector + _toc[_toc.FirstAudio][0].Start, (uint)Sectors2Read, (IntPtr)((void*)data), timeoutSeconds);
 			}
 
 			if (st == Device.CommandStatus.Success)
 			{
+				// Transport underrun guard (R112): GOOD status with fewer bytes DMA'd than the
+				// exact per-sector layout ReorganiseSectors consumes would fold the reused
+				// buffer's stale tail into the vote as fresh audio. A short transfer is
+				// transport evidence and stays fatal; it is never damaged-media evidence.
+				uint expectedBytes = (uint)((4 * 588 +
+					(_c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 :
+					 _c2ErrorMode == Device.C2ErrorMode.Mode296 ? 296 : 0)) * Sectors2Read);
+				if (m_device.LastDataTransferLength != expectedBytes)
+				{
+					_shortPayloadTransferCount++;
+					throw new ReadCDException(string.Format(
+						"READ CD returned GOOD status but transferred {0} of {1} bytes " +
+						"[relative-sector={2}, sectors={3}, command={4}]",
+						m_device.LastDataTransferLength,
+						expectedBytes,
+						sector,
+						Sectors2Read,
+						_readCDCommand));
+				}
 				ReorganiseSectors(sector, Sectors2Read);
 				return st;
 			}
@@ -1493,6 +1578,13 @@ namespace CUETools.Ripper.SCSI
 			bool legacyTrackMode =
 				sector != 0 && st == Device.CommandStatus.DeviceFailed &&
 				asc == 0x64 && ascq == 0x00;
+			// The drive deliberated for its whole (possibly extended) window and surrendered the
+			// batch with the assigned 3E/02 verdict; decompose it like a medium-error batch (R118).
+			bool driveTimeoutBatch =
+				PayloadReadFailurePolicy.IsDriveReportedTimeoutBatch(
+					Sectors2Read, st, senseKey, asc, ascq);
+			if (driveTimeoutBatch)
+				_driveReportedTimeoutBatchCount++;
 
 			if (Sectors2Read == 1 && mediumError)
 			{
@@ -1501,6 +1593,7 @@ namespace CUETools.Ripper.SCSI
 			}
 
 			if (PayloadReadFailurePolicy.ShouldDecomposeRejectedPayloadBatch(
+				_speedChangeJustApplied || _cacheDefeatJustFlushed,
 				Sectors2Read,
 				st,
 				senseKey,
@@ -1613,12 +1706,12 @@ namespace CUETools.Ripper.SCSI
 			}
 
 			if (Sectors2Read > 1 &&
-				PayloadReadFailurePolicy.ShouldSplitBatch(
+				((PayloadReadFailurePolicy.ShouldSplitBatch(
 					st,
 					senseKey,
 					asc,
 					ascq) &&
-				(mediumError || legacyTrackMode))
+				(mediumError || legacyTrackMode)) || driveTimeoutBatch))
 			{
 				if (_debugMessages)
 					System.Console.WriteLine("\n{0}: retrying one sector at a time", ex.Message);
@@ -1704,14 +1797,37 @@ namespace CUETools.Ripper.SCSI
 							}
 							throw repeatedFailure;
 						}
-						if (mediumError &&
-							!PayloadReadFailurePolicy.IsMediumError(
-								singleStatus,
-								singleFailure.SenseKey))
+						if (PayloadReadFailurePolicy.IsDriveReportedTimeoutPinpoint(
+								mediumError || driveTimeoutBatch,
+								Sectors2Read,
+								1,
+								singleFailure.Status,
+								singleFailure.SenseKey,
+								singleFailure.Asc,
+								singleFailure.Ascq))
 						{
-							// A batch-level media fault may expose a different failure on the
-							// pinpoint read. Do not mislabel device removal, transport, readiness,
-							// command, or hardware failures as damage that CTDB can repair.
+							// The drive itself surrendered on this exact address (3E/02) after
+							// the extended timeout, and the parent batch independently proved
+							// media trouble. That is per-sector media evidence, not a device
+							// death: mark it untrusted and keep the job alive (R118).
+							_driveReportedTimeoutPinpointCount++;
+							iErrors++;
+							MarkSectorUnreadable(singleSector);
+							continue;
+						}
+						if (!PayloadReadFailurePolicy.MayMarkSplitChildUnreadable(
+								mediumError,
+								legacyTrackMode,
+								singleStatus,
+								singleFailure.SenseKey,
+								singleFailure.Asc,
+								singleFailure.Ascq))
+						{
+							// A batch-level fault may expose a different failure on the pinpoint
+							// read. Do not mislabel device removal, transport, readiness, command,
+							// or hardware failures as damage that CTDB can repair - under the
+							// medium-error parent AND the legacy 64/00 parent, whose children may
+							// only repeat the exact 64/00 track fault (mixed-mode discs) (R114).
 							throw singleFailure;
 						}
 						iErrors ++;
@@ -1725,7 +1841,7 @@ namespace CUETools.Ripper.SCSI
 				// StopOnUnrecoverable decides whether the job stops after retries exhaust.
 				// Preserve the legacy 64/00 behavior, which required at least one readable
 				// sector to prove that the command still worked in this region.
-				if (mediumError || iErrors < Sectors2Read)
+				if (mediumError || driveTimeoutBatch || iErrors < Sectors2Read)
 					return Device.CommandStatus.Success;
 			}
 			throw ex;
@@ -1770,7 +1886,8 @@ namespace CUETools.Ripper.SCSI
 					currentData.Bytes,
 					pos,
 					pass + 1,
-					_correctionQuality);
+					_correctionQuality,
+					_unconfidentMap);
                 
                 if (fError) _thisPassErrors++;   // diagnostic (read-only): sector flagged on THIS pass
 
@@ -1916,6 +2033,14 @@ namespace CUETools.Ripper.SCSI
 			int sectorCount,
 			IntPtr scratch)
 		{
+			// A flush only ever runs before a secure re-read, so it is recovery context by
+			// definition: at low speed it gets the same extended timeout as payload reads
+			// (R118). Observed live: a flush read at the salvage floor was OS-killed at the
+			// 10 s baseline (IoctlFailed with honest NoSense) and failed a whole Test & Copy.
+			int timeoutSeconds = ReadTimeoutPolicy.SecondsFor(
+				_timeout, _appliedSpeedKbps, windowInRecovery: true);
+			if (timeoutSeconds != _timeout)
+				_extendedTimeoutReadCount++;
 			return _readCDCommand == ReadCDCommand.ReadCdBEh
 				? m_device.ReadCDAndSubChannel(
 					_mainChannelMode,
@@ -1926,13 +2051,13 @@ namespace CUETools.Ripper.SCSI
 					lba,
 					(uint)sectorCount,
 					scratch,
-					_timeout)
+					timeoutSeconds)
 				: m_device.ReadCDDA(
 					Device.SubChannelMode.None,
 					lba,
 					(uint)sectorCount,
 					scratch,
-					_timeout);
+					timeoutSeconds);
 		}
 
 		private Device.CommandStatus ReadCacheDefeatChunk(
@@ -1958,6 +2083,10 @@ namespace CUETools.Ripper.SCSI
 			while (status != Device.CommandStatus.Success)
 			{
 				ReadFailureIdentity(status, out senseKey, out asc, out ascq);
+				// An IoctlFailed carries no sense; the Win32 error is its identity (R118).
+				string win32 = status == Device.CommandStatus.IoctlFailed
+					? $", win32-error={m_device.LastError}"
+					: "";
 				if (retriesForCommand == 0)
 				{
 					failure =
@@ -1967,7 +2096,7 @@ namespace CUETools.Ripper.SCSI
 						$"speed={_appliedSpeedKbps}kB/s, " +
 						$"current-window={_currentStart}-{_currentEnd}, " +
 						$"status={status}, sense={senseKey}, " +
-						$"ASC={asc:X2}, ASCQ={ascq:X2}";
+						$"ASC={asc:X2}, ASCQ={ascq:X2}{win32}";
 				}
 				else
 				{
@@ -1978,7 +2107,7 @@ namespace CUETools.Ripper.SCSI
 						$"speed={_appliedSpeedKbps}kB/s, " +
 						$"current-window={_currentStart}-{_currentEnd}, " +
 						$"retry-status={status}, retry-sense={senseKey}, " +
-						$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}";
+						$"retry-ASC={asc:X2}, retry-ASCQ={ascq:X2}{win32}";
 				}
 
 				if (!PayloadReadFailurePolicy.ShouldRetryCacheDefeatRead(
@@ -2263,12 +2392,36 @@ namespace CUETools.Ripper.SCSI
 			// Deep recovery: the blind cap becomes progress-aware. RecoveryPolicy keeps us going while
 			// the error count is still improving and stops on a plateau or a time ceiling. When deep
 			// recovery is off, hard_cap stays at max_scans and the policy is never consulted, so this
-			// loop is identical to before.
-			int hard_cap = DeepRecovery ? int.MaxValue : max_scans;
+			// loop is identical to before. MaxPasses bounds the extension because every per-sector
+			// vote accumulator is 8-bit (R107): an unbounded window would carry bit lanes into
+			// their neighbors and wrap C2Count, flipping votes with confident margins.
+			// Decision D9: deep recovery is a Secure/Paranoid capability. Burst (quality 0)
+			// keeps only the historical 16-pass cap so it stays "fast until trouble"; the
+			// progress-aware extension, the slip probe, and the floor-speed grind never run
+			// at quality 0.
+			bool deepRecoveryActive = DeepRecovery && _correctionQuality > 0;
+			int hard_cap = deepRecoveryActive ? RecoveryPolicy.MaxPasses : max_scans;
 			DateTime recoveryStart = DateTime.Now;
-			if (DeepRecovery) _recovery.StartWindow();
+			if (deepRecoveryActive) _recovery.StartWindow();
+			if (ConcealUnconfirmedSamples)
+			{
+				int mapBytes = (_currentEnd - _currentStart) * SecureSectorVote.BytesPerSector;
+				if (_unconfidentMap == null || _unconfidentMap.Length < mapBytes)
+					_unconfidentMap = new byte[mapBytes];
+				else
+					Array.Clear(_unconfidentMap, 0, mapBytes);
+			}
+			int lastExecutedPass = -1;
+			// Wall-clock safety valve (R123). The plateau, ceiling and pass rules are all
+			// evaluated BETWEEN passes, so none of them can stop a window whose single pass
+			// grinds for hours (every batch failing and decomposing into slow single-sector
+			// reads). partialFromSector records how far the cut pass got, so finalization can
+			// tell "re-read and still failing" from "never revisited this pass".
+			bool windowBudgetStopped = false;
+			int partialFromSector = int.MaxValue;
 			for (int pass = 0; pass < hard_cap; pass++)
 			{
+				lastExecutedPass = pass;
 //				dbg_pass = pass;
 				_thisPassErrors = 0;   // diagnostic (read-only): reset the fresh per-pass error count
 				// cache defeat: on pass >= 1 (a re-read), evict the window first so this read hits media,
@@ -2327,6 +2480,48 @@ namespace CUETools.Ripper.SCSI
 						FetchSectors(sector, Sectors2Read, true);
 						_cacheDefeatJustFlushed = false;
 					}
+					catch (SCSIException readFailure) when (
+						PayloadReadFailurePolicy
+							.ShouldRetryObservedReadCommunicationFailure(
+								0,
+								IsObservedReadCommunicationDrive,
+								_readCDCommand == ReadCDCommand.ReadCdBEh,
+								Sectors2Read,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								readFailure.Status,
+								readFailure.SenseKey,
+								readFailure.Asc,
+								readFailure.Ascq))
+					{
+						// This command-local retry is intentionally outside FetchSectors:
+						// pinpoint, decomposition, and cache-eviction reads must not inherit it.
+						// Fetch without abort processing so a failed retry cannot enter the
+						// damaged-sector classifier under a different or overwritten identity.
+						Thread.Sleep(80);
+						_readCommunicationRetryCount++;
+						Device.CommandStatus repeatedStatus =
+							FetchSectors(sector, Sectors2Read, false);
+						if (repeatedStatus != Device.CommandStatus.Success)
+						{
+							string repeatedContext = string.Format(
+								"{0} [relative-sector={1}, sectors={2}, command={3}, speed={4}kB/s, speed-transition={5}, cache-transition={6}, communication-retry=True, initial-sense={7}/ASC={8:X2}/ASCQ={9:X2}]",
+								Resource1.ReadCDError,
+								sector,
+								Sectors2Read,
+								_readCDCommand,
+								_appliedSpeedKbps,
+								_speedChangeJustApplied,
+								_cacheDefeatJustFlushed,
+								readFailure.SenseKey,
+								readFailure.Asc,
+								readFailure.Ascq);
+							throw new SCSIException(
+								repeatedContext,
+								m_device,
+								repeatedStatus);
+						}
+					}
 					_cacheDefeatJustFlushed = false;
 					_speedChangeJustApplied = false;
 					//TimeSpan delay1 = DateTime.Now - LastFetch;
@@ -2351,10 +2546,41 @@ namespace CUETools.Ripper.SCSI
 						ReadProgress(this, progressArgs);
 						_slipVerdictPending = false;   // surfaced once
 					}
+					// Past the minimum vote passes every sector has been written by at least one
+					// COMPLETE pass, so the window can be cut here without leaving unvoted audio.
+					double windowElapsed = (DateTime.Now - recoveryStart).TotalSeconds;
+					if (RecoveryPolicy.WindowBudgetExhausted(windowElapsed))
+					{
+						if (pass > _correctionQuality)
+						{
+							partialFromSector = sector + Sectors2Read;
+							windowBudgetStopped = true;
+							_windowBudgetStopCount++;
+							break;
+						}
+						// Still inside the minimum vote passes: cutting would publish sectors
+						// this window never read. A drive this slow is not recovering, so fail
+						// loudly with the exact position instead of grinding on invisibly - the
+						// live shape was a first pass burning its full read timeout per chunk
+						// for four hours with no output at all (R124).
+						throw new ReadCDException(string.Format(
+							"The drive made no usable progress on this window: {0:F0}s spent " +
+							"before the minimum {1} vote pass(es) completed " +
+							"[relative-sector={2}, window={3}-{4}, pass={5}, speed={6}kB/s]",
+							windowElapsed,
+							_correctionQuality + 1,
+							sector,
+							_currentStart,
+							_currentEnd,
+							pass,
+							_appliedSpeedKbps));
+					}
 				}
+				if (windowBudgetStopped)
+					break;
 				// Deep recovery: classify a persistent slip ONCE per window (read-only probe - repeated
 				// raw reads of the first chunk, correlated; never touches the vote or the audio bytes).
-				if (DeepRecovery && !_slipClassified && pass > _correctionQuality)
+				if (deepRecoveryActive && !_slipClassified && pass > _correctionQuality)
 				{
 					int windowSize = _currentEnd - _currentStart;
 					if (_currentErrorsCount >= (windowSize * 85) / 100)
@@ -2378,11 +2604,51 @@ namespace CUETools.Ripper.SCSI
 				// like today (a window that only resolves at pass 15 still does - the plateau rule must
 				// never cut it off early), and only EXTENDS beyond the old cap while the error count is
 				// still improving. It can never stop earlier than today.
-				if (DeepRecovery && pass >= _correctionQuality)
+				if (deepRecoveryActive && pass >= _correctionQuality)
 				{
 					bool keepGoing = _recovery.ShouldContinue(_currentErrorsCount, (DateTime.Now - recoveryStart).TotalSeconds);
 					if (pass + 1 >= max_scans && !keepGoing)
 						break;
+				}
+			}
+			// Salvage concealment (R119): every byte the final vote could not confirm is a
+			// guess, and a guess published raw is the pulsing garbage a drive hands back when
+			// nobody conceals for it. Interpolate or mute those samples and count them, so the
+			// capture is listenable and its reconstruction is measured rather than hidden.
+			if (ConcealUnconfirmedSamples && _unconfidentMap != null && currentData != null)
+			{
+				_concealedFrameCount += SampleConcealment.Conceal(
+					currentData.Bytes,
+					_unconfidentMap,
+					(_currentEnd - _currentStart) * 588);
+			}
+
+			// Window give-up classification (R106): the pass loop stopped with sectors still
+			// unresolved. Mark exactly the sectors flagged on the final executed pass and surface
+			// one engine verdict event; consumers that stop on unrecoverable damage key on this,
+			// never on running mid-pass counts (a mid-pass count includes sectors a later chunk of
+			// the same pass could still converge).
+			if (_currentErrorsCount > 0 && lastExecutedPass >= _correctionQuality
+				&& m_retryCount.Length > 0 && m_failedSectors != null)
+			{
+				int givenUp = FailedSectorAccounting.FinalizeWindow(
+					m_retryCount, _retrySectorBase, _currentStart, _currentEnd,
+					lastExecutedPass, m_failedSectors, partialFromSector);
+				_givenUpWindowCount++;
+				if (ReadProgress != null)
+				{
+					progressArgs.Action = Resource1.StatusRipping;
+					progressArgs.Position = _currentEnd;
+					progressArgs.Pass = lastExecutedPass;
+					progressArgs.PassStart = _currentStart;
+					progressArgs.PassEnd = _currentEnd;
+					progressArgs.ErrorsCount = _currentErrorsCount;
+					progressArgs.ThisPassErrors = _thisPassErrors;
+					progressArgs.SlipStrengthPct = -1;
+					progressArgs.WindowGivenUpSectors = givenUp;
+					progressArgs.PassTime = DateTime.Now;
+					ReadProgress(this, progressArgs);
+					progressArgs.WindowGivenUpSectors = -1;   // surfaced once
 				}
 			}
 		}
@@ -2567,7 +2833,8 @@ namespace CUETools.Ripper.SCSI
 			m_retryCount = new byte[(int)_toc.AudioLength + leadInSectors + leadOutSectors];
 			for (int i = 0; i < m_retryCount.Length; i++)
 				m_retryCount[i] = (byte)(_correctionQuality + 1);
-			m_failedSectors = null;
+			// A fresh read session starts with no failed sectors; window finalization repopulates.
+			m_failedSectors = new BitArray((int)_toc.AudioLength);
 		}
 
 		public string RipperVersion
@@ -2611,8 +2878,13 @@ namespace CUETools.Ripper.SCSI
 		public byte Asc { get; private set; }
 		public byte Ascq { get; private set; }
 
+		// IoctlFailed carries its Win32 error: without it, a device timeout, a removal, and a
+		// handle failure all collapse into one opaque word and the scrubbed failure context
+		// cannot distinguish them (observed live on H: during a damaged-region pinpoint read).
 		public SCSIException(string args, Device device, Device.CommandStatus st)
-			: base(args + ": " + (st == Device.CommandStatus.DeviceFailed ? device.GetErrorString() : st.ToString()))
+			: base(args + ": " + (st == Device.CommandStatus.DeviceFailed ? device.GetErrorString()
+				: st == Device.CommandStatus.IoctlFailed ? "IoctlFailed (Win32 error " + device.LastError + ")"
+				: st.ToString()))
 		{
 			Status = st;
 			SenseKey = st == Device.CommandStatus.DeviceFailed

@@ -9,6 +9,7 @@ public sealed class QueueItem : ViewModelBase
     public string Source { get; init; } = "";
     public string Action { get; init; } = "Verify";   // "Verify" | "Convert"
     public string Format { get; init; } = "";           // for Convert
+    public string CodecStableId { get; init; } = "";    // exact format face + implementation
 
     private string _status = "Pending";
     public string Status { get => _status; set => Set(ref _status, value); }

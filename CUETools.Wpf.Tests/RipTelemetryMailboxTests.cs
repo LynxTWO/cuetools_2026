@@ -469,6 +469,7 @@ public sealed class RipTelemetryMailboxTests
         public int CorrectionQuality { get; set; }
         public BitArray FailedSectors => _failedSectors;
         public byte[] RetryCount => _retryCount;
+        public int CacheDefeatBytes => 0;
 
         public event EventHandler<ReadProgressArgs> ReadProgress
         {

@@ -111,8 +111,8 @@ namespace CUETools.Processor
                 "\r\n" +
                 "Read mode               : {4}\r\n" +
                 "Utilize accurate stream : Yes\r\n" +
-                "Defeat audio cache      : Yes\r\n" +
-                "Make use of C2 pointers : No\r\n" +
+                "Defeat audio cache      : {8}\r\n" +
+                "Make use of C2 pointers : {9}\r\n" +
                 "\r\n" +
                 "Read offset correction                      : {5}\r\n" +
                 "Overread into Lead-In and Lead-Out          : No\r\n" +
@@ -125,6 +125,9 @@ namespace CUETools.Processor
                 "Used output format : Internal WAV Routines\r\n" +
                 "Sample format      : 44.100 Hz; 16 Bit; Stereo\r\n";
 
+            // The cache-defeat and C2 lines report the reader's real configuration. They were
+            // hardcoded "Yes"/"No" for years, which claimed cache defeat on paths that never
+            // defeat the cache and denied C2 on readers that vote with it (R113).
             logWriter.WriteLine(eacHeader,
                 DateTime.Now,
                 sheet.Metadata.Artist, sheet.Metadata.Title,
@@ -134,7 +137,9 @@ namespace CUETools.Processor
                 (sheet.OutputStyle == CUEStyle.SingleFile || sheet.OutputStyle == CUEStyle.SingleFileWithCUE) ? "" :
                     "Gap handling                                : " +
                     (sheet.CDRipper.GapsDetected ? "Appended to previous track\r\n" : "Not detected, thus appended to previous track\r\n"),
-                sheet.CDRipper.RipperVersion); // "Exact Audio Copy V0.99 prebeta 4 from 23. January 2008"
+                sheet.CDRipper.RipperVersion, // "Exact Audio Copy V0.99 prebeta 4 from 23. January 2008"
+                sheet.CDRipper.CacheDefeatBytes > 0 ? "Yes" : "No",
+                sheet.CDRipper.DriveC2ErrorMode != 0 ? "Yes" : "No");
 
             logWriter.WriteLine();
             logWriter.WriteLine("TOC of the extracted CD");
@@ -165,6 +170,8 @@ namespace CUETools.Processor
                     logWriter.WriteLine();
                     logWriter.WriteLine("     Peak level {0:F1} %", (sheet.ArVerify.PeakLevel(track + 1) * 1000 / 65534) * 0.1);
                     logWriter.WriteLine("     Track quality {0:F1} %", GetRangeQuality(sheet, sheet.TOC[track + sheet.TOC.FirstAudio].Start, sheet.TOC[track + sheet.TOC.FirstAudio].Length));
+                    bool trackMismatch = sheet.ArTestVerify != null &&
+                        sheet.ArTestVerify.CRC32(track + 1) != sheet.ArVerify.CRC32(track + 1);
                     if (sheet.ArTestVerify != null)
                     logWriter.WriteLine("     Test CRC {0:X8}", sheet.ArTestVerify.CRC32(track + 1));
                     logWriter.WriteLine("     Copy CRC {0:X8}", sheet.ArVerify.CRC32(track + 1));
@@ -181,7 +188,12 @@ namespace CUETools.Processor
                             accurateTracks++;
                         }
                     }
-                    logWriter.WriteLine("     Copy OK");
+                    // "Copy OK" is a comparison result, not a formality: for two decades this
+                    // line printed unconditionally while the Test CRC above it disagreed (R113).
+                    logWriter.WriteLine(trackMismatch
+                        ? "     COPY MISMATCH - Test and Copy CRCs differ"
+                        : "     Copy OK");
+                    wereErrors |= trackMismatch;
                     logWriter.WriteLine();
                 }
             }
@@ -197,10 +209,15 @@ namespace CUETools.Processor
                 logWriter.WriteLine();
                 logWriter.WriteLine("     Peak level {0:F1} %", (sheet.ArVerify.PeakLevel() * 1000 / 65535) * 0.1);
                 logWriter.WriteLine("     Range quality {0:F1} %", GetRangeQuality(sheet, sheet.TOC[sheet.TOC.FirstAudio][0].Start, sheet.TOC.AudioLength));
+                bool rangeMismatch = sheet.ArTestVerify != null &&
+                    sheet.ArTestVerify.CRC32(0) != sheet.ArVerify.CRC32(0);
                 if (sheet.ArTestVerify != null)
                 logWriter.WriteLine("     Test CRC {0:X8}", sheet.ArTestVerify.CRC32(0));
                 logWriter.WriteLine("     Copy CRC {0:X8}", sheet.ArVerify.CRC32(0));
-                logWriter.WriteLine("     Copy OK");
+                logWriter.WriteLine(rangeMismatch
+                    ? "     COPY MISMATCH - Test and Copy CRCs differ"
+                    : "     Copy OK");
+                wereErrors |= rangeMismatch;
                 logWriter.WriteLine();
                 if (wereErrors)
                     logWriter.WriteLine("There were errors");
@@ -246,12 +263,27 @@ namespace CUETools.Processor
                 logWriter.WriteLine("Some tracks could not be verified as accurate");
             }
             logWriter.WriteLine();
+            int mismatchTracks = sheet.TestCopyMismatchTracks;
+            if (mismatchTracks > 0)
+            {
+                logWriter.WriteLine("Test and Copy CRCs differ on {0} track(s) - the copy is NOT verified", mismatchTracks);
+                logWriter.WriteLine();
+            }
             if (sheet.OutputStyle != CUEStyle.SingleFile && sheet.OutputStyle != CUEStyle.SingleFileWithCUE)
             {
                 if (wereErrors)
                     logWriter.WriteLine("There were errors");
                 else
                     logWriter.WriteLine("No errors occurred");
+                logWriter.WriteLine();
+            }
+            // Decision D8 (B): when secure re-reads ran without cache defeat (the frozen classic
+            // path), the log says so - on a caching drive those re-reads can be served from the
+            // cached first read, so agreement is weaker evidence than it looks. The WPF path
+            // always rips with calibrated cache defeat and never emits this line.
+            if (sheet.CDRipper.CorrectionQuality > 0 && sheet.CDRipper.CacheDefeatBytes == 0)
+            {
+                logWriter.WriteLine("Note: secure re-reads ran without drive-cache defeat; on a caching drive they can repeat the cached first read. CUETools 2026 performs calibrated cache-defeating rips.");
                 logWriter.WriteLine();
             }
             logWriter.WriteLine("End of status report");

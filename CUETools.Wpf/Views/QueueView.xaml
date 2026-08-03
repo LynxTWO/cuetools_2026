@@ -13,7 +13,14 @@
       <DockPanel LastChildFill="False">
         <TextBlock DockPanel.Dock="Left" Text="Action" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
         <ComboBox DockPanel.Dock="Left" Width="100" VerticalAlignment="Center" ItemsSource="{Binding Actions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}"/>
-        <ComboBox DockPanel.Dock="Left" Width="80" VerticalAlignment="Center" Margin="8,0,0,0" ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"/>
+        <Button DockPanel.Dock="Left" Width="220" MinWidth="140"
+                VerticalAlignment="Center" Margin="8,0,0,0"
+                Click="CodecPicker_Click" IsEnabled="{Binding CodecPickerEnabled}"
+                ToolTip="{Binding SelectedCodecTooltip}"
+                AutomationProperties.Name="Choose output codec">
+          <TextBlock Text="{Binding SelectedCodecLabel}"
+                     TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+        </Button>
         <Button DockPanel.Dock="Left" Content="Add file(s)..." Command="{Binding AddFilesCommand}" Padding="12,6" Margin="14,0,0,0" VerticalAlignment="Center"/>
         <Button DockPanel.Dock="Left" Content="Add folder..." Command="{Binding AddFolderCommand}" Padding="12,6" Margin="8,0,0,0" VerticalAlignment="Center"/>
 

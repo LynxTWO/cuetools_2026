@@ -6,6 +6,7 @@ using System.Windows.Input;
 using CUETools.Wpf.Models;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
+using CUETools.Processor;
 
 namespace CUETools.Wpf.ViewModels;
 
@@ -18,28 +19,71 @@ public sealed class QueueViewModel : PageViewModel
 {
     private readonly IVerifyService _verify;
     private readonly IConvertService _convert;
+    private readonly EncoderCatalog _catalog;
+    private readonly CUEConfig _config;
 
     public ObservableCollection<QueueItem> Items { get; } = new();
     public ObservableCollection<string> Actions { get; } = new() { "Verify", "Convert" };
     public ObservableCollection<string> Formats { get; } = new();
+    public ObservableCollection<CodecChoice> CodecChoices { get; } = new();
 
-    public QueueViewModel(IVerifyService verify, IConvertService convert, EncoderCatalog catalog)
+    private CodecChoice? _selectedCodecChoice;
+    public CodecChoice? SelectedCodecChoice
+    {
+        get => _selectedCodecChoice;
+        private set
+        {
+            if (ReferenceEquals(_selectedCodecChoice, value)) return;
+            _selectedCodecChoice = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedCodecLabel));
+            OnPropertyChanged(nameof(SelectedCodecTooltip));
+        }
+    }
+    public string SelectedCodecLabel => SelectedCodecChoice == null
+        ? SelectedFormat.ToUpperInvariant()
+        : SelectedCodecChoice.CompactLabel + " - " +
+          SelectedCodecChoice.Implementation;
+    public string SelectedCodecTooltip => SelectedCodecChoice == null
+        ? "Choose an output codec."
+        : SelectedCodecChoice.AccessibleLabel + ". " +
+          SelectedCodecChoice.HealthDetail;
+
+    public QueueViewModel(
+        IVerifyService verify,
+        IConvertService convert,
+        EncoderCatalog catalog,
+        CUEConfig config)
     {
         Title = "Queue";
         Group = "Session";
         Subtitle = "Process a stack of discs or jobs in one sitting.";
         _verify = verify;
         _convert = convert;
+        _catalog = catalog;
+        _config = config;
 
         void RebuildFormats()
         {
             Formats.Clear();
             foreach (var f in convert.LosslessFormats()) Formats.Add(f);
             foreach (var f in convert.LossyFormats()) Formats.Add(f);   // lossy last
+            CodecChoices.Clear();
+            foreach (CodecChoice choice in catalog.BuildChoices(config))
+                CodecChoices.Add(choice);
         }
         RebuildFormats();
-        catalog.Changed += (_, _) => { var keep = SelectedFormat; RebuildFormats(); SelectedFormat = Formats.Contains(keep) ? keep : Formats.FirstOrDefault() ?? "flac"; };
+        catalog.Changed += (_, _) =>
+        {
+            var keep = SelectedFormat;
+            RebuildFormats();
+            SelectedFormat = Formats.Contains(keep)
+                ? keep
+                : Formats.FirstOrDefault() ?? "flac";
+            RefreshSelectedCodecChoice();
+        };
         _selectedFormat = Formats.Contains("flac") ? "flac" : Formats.FirstOrDefault() ?? "flac";
+        RefreshSelectedCodecChoice();
 
         AddFilesCommand = new RelayCommand(_ => AddFiles());
         AddFolderCommand = new RelayCommand(_ => AddFolder());
@@ -50,13 +94,40 @@ public sealed class QueueViewModel : PageViewModel
     }
 
     private string _selectedAction = "Verify";
-    public string SelectedAction { get => _selectedAction; set => Set(ref _selectedAction, value); }
+    public string SelectedAction
+    {
+        get => _selectedAction;
+        set
+        {
+            if (Set(ref _selectedAction, value))
+                OnPropertyChanged(nameof(CodecPickerEnabled));
+        }
+    }
 
     private string _selectedFormat;
-    public string SelectedFormat { get => _selectedFormat; set => Set(ref _selectedFormat, value); }
+    public string SelectedFormat
+    {
+        get => _selectedFormat;
+        set
+        {
+            if (Set(ref _selectedFormat, value))
+                RefreshSelectedCodecChoice();
+        }
+    }
 
     private bool _isRunning;
-    public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) CommandManager.InvalidateRequerySuggested(); } }
+    public bool IsRunning
+    {
+        get => _isRunning;
+        private set
+        {
+            if (!Set(ref _isRunning, value)) return;
+            OnPropertyChanged(nameof(CodecPickerEnabled));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public bool CodecPickerEnabled => !IsRunning &&
+        string.Equals(SelectedAction, "Convert", StringComparison.Ordinal);
 
     private double _progress;
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
@@ -69,6 +140,26 @@ public sealed class QueueViewModel : PageViewModel
     public ICommand RemoveCommand { get; }
     public ICommand ClearCommand { get; }
     public ICommand RunAllCommand { get; }
+
+    public void SelectCodec(CodecChoice choice)
+    {
+        _catalog.SelectCodec(_config, choice);
+        _selectedFormat = choice.Extension;
+        OnPropertyChanged(nameof(SelectedFormat));
+        RefreshSelectedCodecChoice(choice.StableId);
+    }
+
+    private void RefreshSelectedCodecChoice(string? preferredStableId = null)
+    {
+        SelectedCodecChoice = CodecChoices.FirstOrDefault(choice =>
+                preferredStableId != null &&
+                string.Equals(
+                    choice.StableId,
+                    preferredStableId,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? _catalog.GetSelectedChoice(_config, _selectedFormat)
+            ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
+    }
 
     private void AddFiles()
     {
@@ -94,7 +185,10 @@ public sealed class QueueViewModel : PageViewModel
         {
             Source = source,
             Action = _selectedAction,
-            Format = _selectedAction == "Convert" ? _selectedFormat : ""
+            Format = _selectedAction == "Convert" ? _selectedFormat : "",
+            CodecStableId = _selectedAction == "Convert"
+                ? SelectedCodecChoice?.StableId ?? ""
+                : ""
         });
         StatusText = $"{Items.Count} item(s) queued.";
     }
@@ -117,9 +211,26 @@ public sealed class QueueViewModel : PageViewModel
 
             if (item.Action == "Convert")
             {
-                var r = await Task.Run(() => _convert.Convert(item.Source, item.Format, "", Report));
-                item.Status = r.Ok ? "Done" : "Failed";
-                item.Result = r.Ok ? $"{r.FileCount} {item.Format} file(s)" : r.Error;
+                CodecChoice? queuedChoice = _catalog.BuildChoices(_config)
+                    .FirstOrDefault(choice => string.Equals(
+                        choice.StableId,
+                        item.CodecStableId,
+                        StringComparison.OrdinalIgnoreCase));
+                if (queuedChoice?.CanSelect != true)
+                {
+                    item.Status = "Failed";
+                    item.Result = "The queued codec is no longer ready.";
+                }
+                else
+                {
+                    _catalog.SelectCodec(_config, queuedChoice);
+                    var r = await Task.Run(() =>
+                        _convert.Convert(item.Source, item.Format, "", Report));
+                    item.Status = r.Ok ? "Done" : "Failed";
+                    item.Result = r.Ok
+                        ? $"{r.FileCount} {item.Format} file(s)"
+                        : r.Error;
+                }
             }
             else
             {

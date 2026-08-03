@@ -263,6 +263,24 @@ namespace CUETools.Processor
             }
         }
 
+        /// <summary>Number of tracks whose Test-pass CRC differs from the Copy-pass CRC; 0 when
+        /// no Test pass ran. A nonzero count means the published Copy does not match what the
+        /// Test pass read, so the log and the completion dialog must both say so instead of
+        /// printing an unconditional success (R113).</summary>
+        public int TestCopyMismatchTracks
+        {
+            get
+            {
+                if (_arTestVerify == null || _arVerify == null || _toc == null)
+                    return 0;
+                int mismatches = 0;
+                for (int track = 1; track <= _toc.AudioTracks; track++)
+                    if (_arTestVerify.CRC32(track) != _arVerify.CRC32(track))
+                        mismatches++;
+                return mismatches;
+            }
+        }
+
         public CUEToolsDB CTDB
         {
             get { return _CUEToolsDB; }

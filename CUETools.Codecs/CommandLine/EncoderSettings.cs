@@ -30,6 +30,7 @@ namespace CUETools.Codecs.CommandLine
         private string _verificationPath;
         private string _verificationParameters;
 
+        [Browsable(false)]
         [JsonProperty]
         public bool Lossless
         {
@@ -249,6 +250,33 @@ namespace CUETools.Codecs.CommandLine
             _verificationContractVersion = 1;
         }
 
+        /// <summary>
+        /// Repairs profiles written by builds that exposed the structural Lossless flag in the
+        /// generic property editor. Lossy encoders have no lossless verification contract; stale
+        /// verifier fields must not make them unavailable or change how their output is classified.
+        /// </summary>
+        public bool NormalizeVerificationContract()
+        {
+            if (_lossless)
+                return false;
+            bool changed = _verificationRequired ||
+                _verificationContractVersion != 0 ||
+                _verificationUsesEncoder ||
+                !String.IsNullOrEmpty(_verificationPath) ||
+                !String.IsNullOrEmpty(_verificationParameters);
+            ClearVerificationContract();
+            return changed;
+        }
+
+        private void ClearVerificationContract()
+        {
+            _verificationRequired = false;
+            _verificationContractVersion = 0;
+            _verificationUsesEncoder = false;
+            _verificationPath = "";
+            _verificationParameters = "";
+        }
+
         [OnDeserializing]
         private void OnDeserializing(StreamingContext context)
         {
@@ -264,7 +292,10 @@ namespace CUETools.Codecs.CommandLine
         {
             _deserializing = false;
             if (!_lossless)
+            {
+                ClearVerificationContract();
                 return;
+            }
 
             if (_verificationContractVersion >= 1 ||
                 HasConfiguredLosslessVerifier)

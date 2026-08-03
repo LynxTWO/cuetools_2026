@@ -49,13 +49,12 @@ namespace CUETools.Codecs.HDCD
 
         static HDCDDLL()
         {
-            var myPath = new Uri(typeof(HDCDDLL).Assembly.CodeBase).LocalPath;
-            var myFolder = System.IO.Path.GetDirectoryName(myPath);
-            var is64 = IntPtr.Size == 8;
-            var subfolder = is64 ? "x64" : "win32";
-            IntPtr Dll = LoadLibrary(System.IO.Path.Combine(System.IO.Path.Combine(myFolder, subfolder), DllName + ".dll"));
+            string nativePath = NativeDependencyPathRegistry.ResolvePath(
+                typeof(HDCDDLL).Assembly,
+                DllName + ".dll");
+            IntPtr Dll = LoadLibrary(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException();
+                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
         }
     }
 

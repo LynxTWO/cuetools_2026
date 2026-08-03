@@ -32,7 +32,7 @@ public sealed class AppSettings
     // page falls back to its default (MyMusic\CUETools, flac, Secure).
     public string OutputBaseDir { get; set; } = "";
     public string SelectedFormat { get; set; } = "";
-    public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid
+    public int CorrectionQuality { get; set; } = 1;   // 0=Burst, 1=Secure, 2=Paranoid, 3=Salvage picker selection (engine runs Burst)
 
     /// <summary>Adaptive read speed: start at the drive's max, request a step down when the drive
     /// gets stuck on a window, ease back up over clean stretches. The reader applies requests only
@@ -42,9 +42,10 @@ public sealed class AppSettings
     /// <summary>Deep recovery: recovers more audio from damaged discs by re-reading a stuck window
     /// while it is still improving (a strict superset of the old blind cap - never worse), slowing the
     /// drive to its floor on stuck spots, and attempting slip recovery. ON by default now (proven
-    /// bit-exact); it only engages on stuck windows, so a clean disc or Burst mode pays nothing.
-    /// Secure and Paranoid cache defeat is a separate correctness rule and remains active if this
-    /// expert setting is disabled.</summary>
+    /// bit-exact); it only engages on stuck windows at Secure/Paranoid. Burst keeps the classic
+    /// 16-pass re-read cap and never enters deep recovery (decision D9), so it stays "fast until
+    /// trouble". Secure and Paranoid cache defeat is a separate correctness rule and remains
+    /// active if this expert setting is disabled.</summary>
     public bool DeepRecovery { get; set; } = true;
 
     /// <summary>The one-time archival encoder defaults (max compression lossless, sweet-spot lossy)

@@ -2731,10 +2731,748 @@ does not relax evidence, rollback, or verification requirements.
   retained 24/25 and 37/38 component/dependency-node graphs, final sidecars
   matched, and the check run has zero annotations.
 
+### R103. Production WPF native wrappers ignored the manifest-approved path - bucket A, risk high
+
+- **Area or slice:** packaged plugin trust bootstrap, five native codec wrappers,
+  WPF production layout, artifact probes, and Monkey's Audio failure cleanup.
+- **Why it matters:** the app preloaded and hash-approved native DLLs from
+  `plugins/x64`, but root-loaded managed wrapper duplicates independently searched
+  a nonexistent root `x64` folder. A selected codec therefore failed only after a
+  CD read began. Monkey's Audio then let its finalizer re-enter the failed type
+  initializer, risking a fatal process termination.
+- **Evidence found:** the installed build reproduced libFLAC, WavPack, and
+  Monkey's Audio `TypeInitializationException` failures. Process module paths show
+  native modules under `plugins/x64` and managed wrappers at the app root. The
+  artifact validator passed because it loaded the managed wrappers from the plugin
+  directory, not through the WPF apphost layout.
+- **Confidence:** high for the production-layout root cause and validator gap.
+- **Approval needed:** no; the user approved autonomous remediation. The exact
+  manifest trust boundary must remain intact.
+- **Recommended next pass:** pass 11 bounded remediation and verification.
+- **Smallest safe next step:** hand the exact approved full path from the trust
+  loader to the wrapper through a conflict-rejecting registry, then probe the
+  published apphost in a child process.
+- **Verification plan:** resolver conflict tests; five-wrapper guard; native
+  version and round-trip tests; self-contained publish; WPF child-process probe;
+  artifact validation; no root native duplicates.
+- **Owner:** codec runtime and release maintainers.
+- **Status:** closed 2026-07-31. A conflict-rejecting registry now joins the
+  manifest-approved native path to root-loaded managed wrappers without adding a
+  search path or duplicate DLL. The published apphost ran real FLAC, WavPack,
+  Monkey's Audio, and LAME encodes plus HDCD initialization from the production
+  layout. The artifact contract passed all five process probes, and Monkey's Audio
+  finalizer cleanup contains partial-initialization failure.
+
+### R104. Codec selection could retain invalid profiles and fail after disc reads began - bucket A, risk high
+
+- **Area or slice:** command encoder settings migration, codec availability,
+  Rip/Test & Copy startup, settings editor, and format picker.
+- **Why it matters:** a lossy Ogg profile retained a lossless verification
+  requirement and the generic editor exposed `Lossless` as a mutable setting.
+  Raw extension-only dropdowns hid unavailable codecs and gave no implementation,
+  origin, or readiness explanation. Native failures were discovered only after
+  optical work had started.
+- **Evidence found:** the installed settings file carries Ogg as lossy with
+  `VerificationRequired=true`; `EncoderCatalog.IsUsable` applies that stale flag to
+  every command encoder; `EncoderSettingsViewModel` exposes all browsable structural
+  properties; Rip and Test & Copy do not validate a selected codec before entering
+  their read lifecycle.
+- **Confidence:** high for the invalid-state and late-failure paths.
+- **Approval needed:** no; the user explicitly requested the full repair and rich
+  grouped picker.
+- **Recommended next pass:** pass 11 bounded remediation and verification.
+- **Smallest safe next step:** normalize the invariant at settings load and catalog
+  registration, centralize codec health, then use that result for both picker state
+  and the pre-read gate.
+- **Verification plan:** stale-profile JSON tests; property visibility guard;
+  descriptor/group/sort tests; unavailable-selection refusal; pre-read gate tests;
+  responsive XAML check; full WPF suite.
+- **Owner:** WPF and codec-profile maintainers.
+- **Status:** closed 2026-07-31. Controlled normalization removes stale lossy
+  verifier state while retaining the live lossless-verification invariant. Rip,
+  Convert, and Queue now use one grouped implementation-aware picker. Unavailable
+  rows remain explained but unselectable; queue records carry the exact stable
+  implementation id. Rip and Test & Copy refuse an unhealthy codec before claiming
+  a drive and freeze one checked implementation for the complete operation.
+
+### R105. Recurrent H: 08/0A communication failures aborted otherwise valid payload reads - bucket A, risk high
+
+- **Area or slice:** `Bwg.Scsi` sense formatting and the top-level
+  `SCSIDrive` normal payload loop.
+- **Why it matters:** H: has repeatedly aborted Test & Copy at unrelated disc
+  addresses with the same 16-sector BEh `HardwareError / ASC 08 / ASCQ 0A`.
+  The UI reports `NO SENSE STRING`, losing the known communication-family identity,
+  and makes no bounded recovery attempt even though an isolated rerun crossed an
+  earlier occurrence.
+- **Evidence found:** scrubbed diagnostic logs retain relative sectors 36,000,
+  36,576, 192,224, and 241,968 with identical command shape and transition flags
+  false. A later isolated run crossed the first failure point. The
+  [T10 ASC/ASCQ table](https://www.t10.org/lists/asc-num.htm) assigns ASC 08 to
+  logical-unit communication failures but does not assign qualifier 0A, so the raw
+  qualifier must remain explicit and no official name may be invented.
+- **Confidence:** high for the repeated drive/communication signature and missing
+  diagnostic; medium for recovery because only a later independent rerun, not an
+  in-command retry, has crossed the condition.
+- **Approval needed:** no; the user supplied repeated evidence and requested the
+  bounded fix.
+- **Recommended next pass:** pass 11 bounded remediation and hardware proof.
+- **Smallest safe next step:** one retry for only the first normal 16-sector BEh
+  `DeviceFailed / HardwareError / 08/0A` on the observed H: model and firmware,
+  outside a control/cache transition; keep any repeat or different retry failure
+  fatal.
+- **Verification plan:** positive/negative classifier tests, ASC-family formatter
+  tests, route guard, SCSI multi-target builds, full managed gates, then an H:
+  Test & Copy that records the retry counter if the transient recurs.
+- **Owner:** optical/SCSI maintainer.
+- **Status:** closed 2026-07-31. The classifier and route guards pass 32/32,
+  net8/net47/net20 builds pass, the canonical 641/647 suite and empty warning gate
+  pass, release safety passes, and the separate self-contained R105 artifact passes
+  the production contract. Four source-bound address probes passed, followed by a
+  full 846-second H: Test & Copy with 11 verified FLAC files, matching AR/CTDB
+  evidence, zero reread/failed windows, and final decoded-output verification. Its
+  retry counters remained zero; the open adversarial record keeps branch activation
+  distinct from the passed user outcome.
+
+## 2026-08-01 recovery adversarial-pass remediation wave
+
+Source: the damaged-disc recovery addendum in `adversarial-pass.md` (2026-08-01).
+The user approved the full wave ("do it all"). Findings labeled verified there
+were re-opened line by line by the orchestrator; inferred items get a verify
+step before any fix.
+
+### R106. DeepRecovery breaks failed-sector accounting - bucket A, risk high
+
+- **Area or slice:** `CUETools.Ripper.SCSI/SCSIDrive.cs` sentinel and retry
+  bookkeeping; `CUETools.Wpf/Services/RipService.cs` failedWindows counter.
+- **Why it matters:** never-converged sectors under DeepRecovery (default on)
+  are reported clean in `FailedSectors`, so rip logs show no suspicious
+  positions for low-confidence audio; the converse mislabels late-converged
+  sectors as failed; `failedWindows` counts windows deep recovery later
+  converged.
+- **Evidence found:** `SCSIDrive.cs:213` exact-sentinel equality vs `:1798`
+  `pass + 2` store vs `:2439-2443` extension break; `RipService.cs:695-698`.
+  Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** mark give-up as a state, not an exact pass
+  count; fix the byte-cast wrap; correct the gave-up counter.
+- **Verification plan:** deterministic ripper-suite cases for converged-late,
+  never-converged, and baseline-cap sectors; canonical modern suites.
+- **Status:** fixed 2026-08-01. `FailedSectorAccounting.FinalizeWindow` marks
+  give-up as engine state at window end (legacy-sentinel equivalence proven by
+  test), `FailedSectors` is engine-maintained, the one-shot
+  `WindowGivenUpSectors` verdict rides `ReadProgressArgs` like the slip
+  verdict, and `RipService` counts engine verdicts instead of the mid-pass
+  heuristic. Ripper 40/40, WPF 453/453, legacy lane 22/113/10/17 all pass.
+
+### R107. Deep-recovery pass counts can wrap 8-bit vote accumulators - bucket A, risk medium
+
+- **Area or slice:** `SCSIDrive.cs` accumulators, `RecoveryPolicy.cs`.
+- **Why it matters:** past 255 contributing passes the UserData bit lanes carry
+  into neighbors and `C2Count` wraps, which can flip votes with confident
+  margins across the whole stuck window.
+- **Evidence found:** `SCSIDrive.cs:1438-1447`, `SecureSectorVote.cs:33-46`,
+  no pass cap in `RecoveryPolicy.cs:9-23`. Inferred (wrap is arithmetic fact;
+  reachability inside the 120 s ceiling unproven).
+- **Confidence:** verified (arithmetic), inferred (reachability).
+  **Approval needed:** no.
+- **Smallest safe next step:** cap deep-recovery passes at 255 in the loop
+  bound; add a deterministic wrap regression test.
+- **Verification plan:** ripper suite; unknowns entry stays open for the
+  telemetry ceiling question.
+- **Status:** fixed 2026-08-01. `RecoveryPolicy.MaxPasses = 252` bounds the
+  deep-recovery loop; the accumulator-capacity guard test pins pass + 2 within
+  a byte and passes below the 256-observation lane carry. The reachability
+  unknown stays open; the wrap is now unreachable by construction.
+
+### R108. Held Copy deleted on Stop-during-confirm and on tray events - bucket A, risk high
+
+- **Area or slice:** `RipService.cs` confirming-read failure routing and
+  `RipViewModel.cs` `ClearDiscView`/eject.
+- **Why it matters:** the only completed encoded result is destroyed: a
+  `"Stopped."` confirm result takes the Fail path (workspace deleted) while
+  every other confirm failure holds, StopOnUnrecoverable automates that Stop
+  on damaged discs, and user eject or a multi-poll phantom tray event discards
+  a held Copy with no confirmation.
+- **Evidence found:** `RipService.cs:1342-1343` vs `:1344-1349`;
+  `RipViewModel.cs:1270-1274`, `:1982-1990`, phantom-tray note `:688-696`.
+  Verified 2026-08-01 (refuter and trigger-tracer concurred).
+- **Confidence:** verified. **Approval needed:** no (CLAUDE.md already states
+  the held-state contract; this enforces it).
+- **Smallest safe next step:** route Stop-during-confirm to Held; require an
+  explicit confirmation before a tray/eject path discards a held Copy (disc
+  change semantics stay: a genuinely different disc still invalidates).
+- **Verification plan:** WPF suite cases for stop-during-confirm hold,
+  eject-with-held confirmation, and disc-change invalidation.
+- **Status:** fixed 2026-08-01, stronger than the planned confirmation: a stop
+  before or during the confirming read now holds the completed Copy
+  (`BuildHeld` gained `honorStop`), and no tray-driven path deletes held
+  staging at all - `ClearDiscView` parks the result keyed to its disc; the
+  same disc returning restores the offer, while a different disc, a new job,
+  or an explicit Discard frees it. Contract tests pin both; WPF 457/457.
+  Remaining (tracked in R116): a held result still does not survive app exit,
+  so the 24-hour startup sweep can free a crash-stranded stage.
+
+### R109. Damage and evidence truth in report, history, and rip.verify - bucket A, risk high
+
+- **Area or slice:** `RipReport.cs`, `ReportViewModel.cs`, `HistoryStore.cs`,
+  `RipService.cs` committed-record assembly.
+- **Why it matters:** damaged-consistent Test & Copy renders as "Verified"
+  (headline, badge, history) while the log says CONSISTENT; committed AR/CTDB
+  confidences come from the newest read, not the committed read, so a
+  certificate can claim database verification for bytes it does not cover.
+- **Evidence found:** `RipReport.cs:56-59` (no damage field);
+  `RipService.cs:1737-1748` (`newest` under a committed-read comment), Held
+  path `:1379`, `:1397-1408`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** carry a damage field through report, history,
+  and `rip.verify`; bind AR/CTDB numbers to the committed (or held Copy) read.
+- **Verification plan:** WPF suite report/history/labeling cases.
+- **Status:** fixed 2026-08-01. `RipReport` carries `FailedWindows` and
+  `DamageRepairRequired`; `Verified` demotes damaged agreement everywhere
+  (headline, badge, history rows, log body damage line), matching the Test &
+  Copy log's CONSISTENT policy including a database match over damaged media.
+  Committed and held evidence now binds to the committed (or Copy) read's own
+  AR/CTDB checks in the result, the `rip.verify` record (which also gains
+  `FailedWindows`), and the Test & Copy log. Old persisted rows and records
+  deserialize to zero damage and keep their original wording. WPF 461/461.
+
+### R110. StopOnUnrecoverable fires before classification and blocks deep recovery - bucket A, risk medium
+
+- **Area or slice:** `RipViewModel.cs` reread handler, `RipService.cs` reread
+  math.
+- **Why it matters:** the stop latches mid-final-pass on the running error
+  count, aborting jobs whose final pass would converge, branding media
+  Unreadable without classification, and making the DeepRecovery extension
+  unreachable whenever both settings are on. CLAUDE.md requires the stop only
+  after the evidence policy classifies a sector unrecoverable.
+- **Evidence found:** `RipViewModel.cs:1266-1274` (and the duplicate block),
+  `RipService.cs:636-637`, `:700-703`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no.
+- **Smallest safe next step:** latch the stop only on a window the engine has
+  classified given-up (post-window, not mid-pass), preserving the extension.
+- **Verification plan:** WPF suite reread-handler cases.
+- **Status:** fixed 2026-08-01. `RereadReport` carries the engine's one-shot
+  verdict through `onReread`; the two duplicated VM closures collapsed into one
+  `MakeRereadHandler` that latches Unreadable and Stop only on
+  `WindowGivenUpSectors > 0`. Source-contract tests pin both the VM latch and
+  the RipService forwarding; WPF 455/455.
+
+### R111. CTDB repair applies the first server-ordered variant - bucket A, risk medium
+
+- **Area or slice:** `RepairTransaction.cs`, `CUESheet.cs` choice assembly.
+- **Why it matters:** with several recoverable variants the repair converges on
+  whichever the server listed first, so a conf=1 pressing can outrank conf=40
+  and the receipt records that variant as success.
+- **Evidence found:** `RepairTransaction.cs:68` (`selection = 0`),
+  `CUESheet.cs:4764-4783` (server-order list, no confidence sort). Verified
+  2026-08-01.
+- **Confidence:** verified. **Approval needed:** user approved the wave; the
+  change is deterministic ranking inside the existing repair transaction.
+- **Smallest safe next step:** select the highest-confidence recoverable
+  entry (stable tie-break), leaving single-entry behavior unchanged.
+- **Verification plan:** deterministic selection test; existing repair
+  preservation suites unchanged.
+- **Status:** fixed 2026-08-01. `CueRepairEngine.SelectBestVariant` ranks the
+  engine's recoverable variants by `DBEntry.conf` with a stable earliest-entry
+  tie-break; five deterministic selection tests pass and the repair
+  preservation suites are unchanged. WPF 466/466.
+
+### R112. SCSI transport evidence hardening - bucket A, risk high (latent)
+
+- **Area or slice:** `Bwg.Scsi/Device.cs` pass-through and sense lifetime.
+- **Why it matters:** GOOD-status underruns would fold stale buffer bytes into
+  the vote (residual never checked); `SCSIException` NREs when autosense is
+  absent, destroying failure identity; `IoctlFailed` leaves the previous
+  command's sense readable as current.
+- **Evidence found:** `Device.cs:836-852`/`887-903` (verified 2026-08-01);
+  `Device.cs:1077`, `:828` (inferred, verify before fix).
+- **Confidence:** verified (residual), inferred (NRE, stale sense).
+  **Approval needed:** no.
+- **Smallest safe next step:** fail reads whose transferred length differs
+  from the request with a named counter; verify then fix the NRE and
+  stale-sense paths without changing classifier identities.
+- **Verification plan:** ripper suite; classifier route tests unchanged;
+  unknowns entry for live underrun occurrence stays open.
+- **Status:** fixed 2026-08-01 (software). Both pass-through twins now clear
+  stale sense/status on IoctlFailed and capture the written-back transfer
+  length; `FetchSectors` rejects GOOD-status payload underruns fatally with
+  the `ShortPayloadTransferCount` counter; absent autosense reads as
+  NoSense/0/0 (never matches a retry classifier) instead of a
+  NullReferenceException. Ripper 43/43, legacy lanes green. Pending: one live
+  H:/K: session to confirm the underrun guard passes on real hardware (its
+  failure direction is loud and safe, not silent).
+
+### R113. Classic path honesty - bucket A, risk high
+
+- **Area or slice:** `CUESheet.cs` Test & Copy, `CUESheetLogWriter.cs`,
+  `frmCUERipper.cs` persistence.
+- **Why it matters:** classic Test & Copy never compares Test CRC to Copy CRC
+  and prints "Copy OK" unconditionally; the EAC-style log hardcodes "Make use
+  of C2 pointers : No" and "Defeat audio cache : Yes" regardless of reality;
+  persisted Paranoid silently downgrades to Secure on restart.
+- **Evidence found:** `CUESheetLogWriter.cs:184`, `:200-203`, `:115`;
+  `CUESheet.cs:2823-2838` (`_arTestVerify` never compared);
+  `frmCUERipper.cs:192`. Verified 2026-08-01.
+- **Confidence:** verified. **Approval needed:** no for honesty fixes; the
+  full calibration/cache-defeat port is R117 (decision).
+- **Smallest safe next step:** compare Test vs Copy CRCs and report mismatch
+  per track/range; make the two hardcoded log lines truthful; honor persisted
+  Paranoid.
+- **Verification plan:** processor-suite log cases; classic suites green.
+- **Status:** fixed 2026-08-01. `CUESheet.TestCopyMismatchTracks` compares the
+  Test and Copy CRCs; the EAC-style log prints "COPY MISMATCH" per
+  track/range, a summary line, and counts mismatches as errors; the classic
+  completion dialog escalates to the error form on mismatch. The cache-defeat
+  and C2 header lines now report `ICDRipper.CacheDefeatBytes` and
+  `DriveC2ErrorMode` truthfully (new interface member; all three implementors
+  updated). Persisted Paranoid survives restart (`Maximum - 1` off-by-one).
+  Legacy 18/112/9/17 and modern 43/466 lanes green; classic CUERipper GUI
+  builds clean. No in-repo automated test drives `GetExactAudioCopyLog`
+  (unchanged gap, noted); behavior verified by code read and suite compile.
+
+### R114. Read-loop inferred defects: 24/00 transition ordering and 64/00 child guard - bucket A, risk medium
+
+- **Area or slice:** `SCSIDrive.cs` FetchSectors decomposition and legacy
+  batch split.
+- **Why it matters:** if confirmed, a transition-state multi-sector 24/00 is
+  decomposed as media evidence before the R57 transition retry can see it (and
+  the documented one-shot retry is unreachable for multi-sector shapes); the
+  legacy 64/00 split can mark transport/hardware/not-ready child failures as
+  unreadable sectors.
+- **Evidence found:** `SCSIDrive.cs:1519-1529` vs catch filters `:2313-2345`;
+  `:1631-1637`, `:1723`. Inferred; not personally re-opened.
+- **Confidence:** inferred. **Approval needed:** no, but verify first.
+- **Smallest safe next step:** re-open the routes; if confirmed, check
+  transition flags before decomposition and gate the child keep-fatal guard on
+  failure class, with deterministic route tests for both orderings.
+- **Verification plan:** new orchestration-seam tests (see R116 note); full
+  ripper suite.
+- **Status:** fixed 2026-08-01, both claims verified at source first.
+  `ShouldDecomposeRejectedPayloadBatch` now refuses while a speed or
+  cache-defeat transition is pending, so the multi-sector 24/00 reaches the
+  one-shot transition retry (whose in-catch repeat already propagates
+  fatally); `MayMarkSplitChildUnreadable` gates split children by failure
+  class - media always, the exact 64/00 track fault only under the legacy
+  parent (mixed-mode discs preserved), transport/hardware/readiness/
+  unit-attention fatal under either parent. Policy tests cover both
+  orderings; ripper 48/48, legacy lanes green. The orchestration-seam
+  activation tests remain R116 work.
+
+### R115. Recovery improvements, small and medium - bucket D, risk low
+
+- **Area or slice:** repair headroom surfacing, C2ErrorMode.None downgrade
+  warning, adaptive vote quorum in flapping regions, speed drops at pass
+  boundaries inside stuck windows.
+- **Why it matters:** each recovers more correct audio or surfaces evidence
+  the user needs to choose re-rip vs repair; all reality-checked feasible
+  2026-08-01.
+- **Evidence found:** adversarial addendum improvement list; existing
+  `AdaptiveSpeedController.cs` applies drops only at fresh windows.
+- **Confidence:** verified (current behavior). **Approval needed:** no.
+- **Smallest safe next step:** implement in that order, each with its own
+  deterministic test.
+- **Verification plan:** ripper and WPF suites per item.
+- **Status:** partially fixed 2026-08-01 (2 of 4). Repair headroom:
+  `CDRepairFix.WorstStripeErrors`/`StripeCapacity` populated in `VerifyParity`
+  (parity decode test asserts it), threaded through the verify/rip results
+  into the repair prompts and the `repair.verify` receipt with an at-capacity
+  re-rip recommendation. C2 surfacing: a Secure rip on a no-C2 drive logs a
+  named warning and the rip.drive telemetry line carries `c2_mode` and
+  `cache_defeat_bytes` (the human-facing log line became truthful in R113).
+  Re-scoped to R116 with named prerequisites: speed drops at pass boundaries
+  are blocked by the recorded ASUS BW-16D1HT mid-window SET CD SPEED crash
+  evidence (`SCSIDrive.cs` fresh-window comment) and need a live drive matrix
+  session; the adaptive vote quorum changes which rips are declared secure
+  and needs deterministic TestRipper corpus evidence before landing.
+
+### R116. Recovery improvements, large - bucket D, risk medium
+
+- **Area or slice:** targeted rereads of still-disagreeing sectors,
+  CTDB-guided second-chance rereads, per-sector evidence persistence for
+  resumable damaged-disc sessions, plus the injectable device seam for
+  orchestration-route activation tests (unknowns entry 2026-08-01).
+- **Why it matters:** multiplies useful passes on damaged regions, uses parity
+  knowledge before surrendering, and turns a second session into a resume;
+  the seam turns R55/R57/R58/R59 wiring into testable routes.
+- **Evidence found:** adversarial addendum; reality-checked feasible.
+- **Confidence:** inferred (designs). **Approval needed:** no, but each lands
+  as its own reviewed slice.
+- **Smallest safe next step:** the device seam first (it also verifies R114),
+  then targeted rereads.
+- **Verification plan:** deterministic seam tests; ripper suite; live
+  hardware session for the reread strategies.
+- **Status:** open.
+
+### R118. Floor-speed damaged-region states starve the flush and payload paths - bucket B, risk high, hardware-gated
+
+- **Area or slice:** `SCSIDrive.cs` cache-defeat flush and pinpoint reads;
+  deep-recovery floor speed interaction.
+- **Why it matters:** live 2026-08-01 evidence from two discs and both drives.
+  After deep recovery drops to the 44 kB/s floor inside a damaged region:
+  (a) the ASUS BW-16D1HT rejected cache-defeat flush reads with 24/00 until
+  the full policy exhausted (30 regions, 30 transient retries, 8 chunk
+  fallbacks, wake attempted) and the Test & Copy failed closed mid-Test at a
+  deep position; (b) H: died with a bare IoctlFailed on a single-sector
+  pinpoint (Win32 error now captured); (c) separately, the ASUS rejected the
+  BEh read outright with ASC 20/00 at 40x on a scratched CD-R (fail-fast,
+  correct, but a bounded read-command re-probe might recover the state).
+  Each failure was policy-correct and cost the user a 25-minute Test phase.
+- **Evidence found:** diagnostic logs `...-p41020-...` and `...-p52100-...`
+  (2026-08-01 16:09/17:02 sessions); three user screenshots; scrubbed
+  contexts carry exact sector/shape/speed/transition identity.
+- **Confidence:** verified (logs). **Approval needed:** no, but every
+  mitigation needs live drive-matrix evidence before landing.
+- **Candidate mitigations (design, not yet decided):** restore a moderate
+  eviction speed before flush reads and return to the floor afterward (speed
+  transitions are already serialized and retry-covered); one bounded
+  read-command re-probe after an exact 20/00 rejection; bound consecutive
+  floor-speed given-up windows before easing speed back up; persist the Test
+  phase so a late transport death does not discard 25 minutes of evidence
+  (overlaps R116 persistence).
+- **Evidence update (2026-08-01 evening):** the IoctlFailed is now identified
+  as Win32 error 121 (ERROR_SEM_TIMEOUT) and it recurred with the same shape:
+  the first 16-sector read of a window immediately after a cache flush at the
+  44 kB/s floor, in a zone where the slip classifier reports slip=1
+  (consistent-offset jitter, not random noise; observed on windows 72000 and
+  321600 across both apps). New mitigation candidate with the strongest
+  evidence so far: scale the READ CD timeout with the requested speed - at
+  the floor, a slipping-zone read plus the drive's internal retries can
+  exceed the fixed timeout, and the OS kills the ioctl before the drive
+  answers. The slip=1 zones also strengthen the parked slip-realignment
+  question (R116): entire regions slip consistently, so offset-aware reads
+  may be the only non-salvage recovery for this disc class.
+- **Status:** first mitigation implemented 2026-08-01 (software).
+  `ReadTimeoutPolicy` extends the per-command READ CD timeout to a bounded
+  45 s for exactly the observed shape - a window still in recovery at
+  <= 1500 kB/s (both live deaths: 1408 and 44 kB/s) - while every healthy
+  read keeps the 10 s baseline so a dead drive fails fast. The
+  `ExtendedTimeoutReadCount` counter plus the enriched rip.drive telemetry
+  line carry activation evidence; ripper 51/51 and all lanes green. Still
+  open: per-drive read-latency high-water calibration (fits the existing
+  `DriveCalibration` pattern - measure the drive's worst honest read time
+  and set timeouts just above it), the deferred-window retry ledger (bank a
+  near-timeout window, continue the rip, return to it later at a different
+  speed instead of dying mid-job; overlaps R116 persistence), the flush-speed
+  restoration, and the 20/00 read-command re-probe. All need live sessions.
+- **Live confirmation (2026-08-01 late):** with the extended timeout the
+  ERROR_SEM_TIMEOUT class is gone. H: ran an 86-minute Paranoid Test read to
+  99.96% of the scratched CD-R (deep recovery converged 53- and 30-pass
+  windows through the 76-84% zone) and the terminal failure is now the
+  DRIVE's own sense verdict: a single-sector pinpoint after a MediumError
+  parent returned HardwareError "TIMEOUT ON LOGICAL UNIT" (ASC 3E family) at
+  sector 356562, about 140 sectors from the disc edge. Next classifier
+  candidate, per the R105/R58 pattern (exact drive gate, parent
+  corroboration, bounded): let that exact drive-reported timeout verdict
+  mark the pinpoint sector untrusted instead of failing the job at 99.96%.
+  Observability gap found: the counter telemetry line is emitted only on
+  completed jobs; failure paths should carry it too.
+- **Second mitigation implemented 2026-08-01 (software):**
+  `IsDriveReportedTimeoutPinpoint` sends the exact corroborated 3E/02
+  surrender into the untrusted-sector path with the
+  `DriveReportedTimeoutPinpointCount` counter; the gate is the corroboration
+  set (MediumError parent batch, single-sector child, no transitions, exact
+  assigned code) rather than a drive identity, because 3E/02 has standard
+  semantics unlike the unassigned 08/0A - and the user's swapped-drive retry
+  is the cross-drive evidence run. CLAUDE.md records the carve-out. The
+  failure path now logs the full counter line (`counters at failure:`), so a
+  dead job carries the same activation evidence as a completed one.
+- **Third mitigation implemented 2026-08-02, from the swapped-drive runs:**
+  the counter line proved the timeout extension carried the ASUS through the
+  71-74% scratch zone with `extended_timeout_reads=8405`, and both remaining
+  deaths were new shapes now closed. (a) The ASUS surrendered a whole
+  16-sector batch with 3E/02 at sector 266400: `IsDriveReportedTimeoutBatch`
+  now decomposes a surrendered batch to independent single-sector reads like
+  a medium-error batch, the surrendered parent corroborates its own
+  surrendered children, and both forms are transition-agnostic (the batch
+  arrived with a cache transition pending; a deliberated verdict is not a
+  blip). Counter: `drive_reported_timeout_batches`. (b) H: completed the
+  whole defective disc's Test read cleanly at Burst, then the Copy read's
+  command autodetect died probing the damaged disc START (NO SEEK COMPLETE
+  plus an OS-killed probe) - the audit's one-fixed-probe-region finding gone
+  live. `TestReadCommand` now sweeps the command matrix at up to three disc
+  regions before giving up, with the legacy start position first so healthy
+  discs behave identically. Ripper 55/55, WPF 472/472, legacy lanes green.
+
+### R123. A single recovery pass can run unbounded and invisibly - bucket A, risk high
+
+- **Area or slice:** `SCSIDrive.PrefetchSector` window loop, `RecoveryPolicy`,
+  `FailedSectorAccounting`, `RipService` recovery logging.
+- **Why it matters (live 2026-08-02):** a Paranoid Test read sat at 64% for
+  six hours and eighteen minutes with no log output and no UI change. It was
+  not hung - a stack capture showed `FetchSectors` nested inside itself, so
+  every 16-sector batch of window 230400 was failing and decomposing into 16
+  slow single-sector reads, and one pass had been running for hours (~32% of
+  a core, 2h39m CPU). Two defects: (a) every stop rule - plateau, time
+  ceiling, pass cap - is evaluated BETWEEN passes, so none can bound a window
+  whose single pass never ends; the deep-recovery ceiling additionally only
+  acts once `pass + 1 >= max_scans` (pass 64 at Paranoid), which that window
+  would have needed another six hours to reach. (b) `rip.recovery` logs once
+  per pass and the UI fraction barely moves inside one window, so a grind and
+  a hang are indistinguishable to the user.
+- **Evidence found:** log `...p46768...` last line `window=230400 pass=49` at
+  02:11:27 against an 08:29 stack capture; identical screenshots six hours
+  apart; disk space and process responsiveness ruled out the alternatives.
+- **Confidence:** verified. **Approval needed:** no.
+- **Status:** fixed 2026-08-02. `RecoveryPolicy.WindowHardBudgetSeconds`
+  (1200 s) is checked inside the chunk loop, and only past the minimum vote
+  passes so every sector has been written by a complete pass. A cut window
+  ends through the normal give-up path: `FinalizeWindow` gained
+  `partialFromSector` so sectors below the cut are judged by the cut pass's
+  own flag while sectors above it keep the previous pass's verdict, with
+  `WindowBudgetStopCount` in the telemetry. A 30-second `rip.recovery`
+  heartbeat now reports window, pass, position, running and fresh error
+  counts, and speed, so a slow grind is always visible. Ripper 59/59, WPF
+  472/472, legacy lanes green. Remaining: a pathological FIRST pass (before
+  the minimum vote passes) is still unbounded by design - cutting it would
+  leave unvoted audio - and needs the read-level fatal path instead.
+
+### R124. Invisible first-pass stalls and wedged-drive capability - bucket A, risk high
+
+- **Area or slice:** `SCSIDrive` window loop, `RipService` progress handling
+  and drive capability check.
+- **Why it matters (live 2026-08-02):** two distinct follow-ons to R123.
+  (a) The H: salvage Copy read logged its start at 09:33:55 and then
+  produced nothing at all for four hours: no completion, no failure, no
+  heartbeat. The R123 heartbeat only speaks while a window is re-reading, and
+  the R123 budget only cuts past the minimum vote passes, so a FIRST pass
+  crawling at its full read timeout per chunk (about 150 chunks per window,
+  up to 45 s each after the R118 extension) stayed both invisible and
+  unbounded. (b) The K: ASUS reported `readx=4` at startup - a 4x maximum
+  against the 40-48x it reports healthy - then rejected READ CD with
+  IllegalRequest 20/00 (INVALID COMMAND OPERATION CODE) at all three
+  cache-defeat regions, 94 s into the job. That is the drive left wedged by
+  the previous aborted grind, and nothing told the user that; the remedy is a
+  tray cycle, not a code change.
+- **Evidence found:** logs `...p63780...` (silent Copy read) and
+  `...p42764...` (`readx=4`, `adaptive speed: drive reports no speed list`,
+  20/00 at three regions, `speed=0kB/s` because no speed was ever accepted).
+- **Confidence:** verified. **Approval needed:** no.
+- **Status:** fixed 2026-08-02. A stall detector in the progress handler
+  watches raw position advance, blind to pass structure, and warns every
+  60 s with position, window, pass, error count and speed - nothing can grind
+  invisibly now. Inside the minimum vote passes the window budget can no
+  longer cut safely, so it instead fails loudly with the exact position and
+  elapsed time rather than continuing. A drive whose reported maximum speed
+  falls below a quarter of its calibrated maximum is named as probably
+  wedged, with the tray-cycle remedy, before the read begins. Ripper 59/59,
+  WPF 472/472, legacy lanes green.
+
+### R119. Salvage read mode for defective-by-design discs - bucket D, design
+
+- **Area or slice:** RipService Test & Copy variant, SCSIDrive read
+  configuration, report/history labeling.
+- **User proposal (2026-08-01):** ignore C2, rip twice at low speed, compare
+  CRCs. Refined design, reusing the existing machinery:
+  - Reuse Test & Copy's per-track CRC agreement and held-track handling as
+    the comparator; do not build a parallel one.
+  - Run the reads at quality 0 with `C2ErrorMode.None` so the drive's own
+    concealment output is accepted (post-D9 Burst: 16-pass cap, no deep
+    recovery, no floor grind), at a pinned low speed (the calibrated
+    minimum, not literal 1x, which many drives emulate poorly).
+  - Cache defeat stays ON. Without it the second read can be the first
+    read's cached bytes and agreement is fake. What salvage agreement
+    proves is that the DRIVE's output is stable - deterministic concealment -
+    which is the strongest claim available for an unstable master.
+  - Output labels as salvaged, never verified: certificate, history, and
+    `rip.verify` carry the salvage grade plus FailedSectors; AR/CTDB still
+    checked and recorded (they will not match).
+  - Requires an explicit expert mode: normal Test & Copy keeps its
+    forced-Secure contract untouched.
+- **Why it matters:** the 2026-08-01 Reggae Roots evidence shows a class of
+  disc whose pits are unstable (wholesale fresh disagreement every pass);
+  re-reading cannot verify them, but a stable-concealment capture with honest
+  labeling is a real preservation outcome.
+- **Confidence:** design. **Approval needed:** user approved exploring;
+  implementation lands as its own reviewed slice with live evidence from the
+  problem discs.
+- **CORRECTION 2026-08-02 - the first build's premise was wrong.** The user
+  listened to the accepted capture: "all pulsing and clearly a terrible rip,
+  unlistenable". Measured against a known-good rip of Disc 1 from the same
+  set, the salvage track carried about fourteen times the sample-glitch rate
+  (44,464 vs 6,145 jumps over 12,000 LSB), spread across 211 of its 222
+  seconds. It was not a layout bug: only 0.2 percent of the glitches sat on a
+  sector boundary, FLAC sizes matched the good discs (so the audio compresses
+  like music, not noise), and an amplitude-envelope spectrum showed no
+  periodicity at the sector (75 Hz), chunk (4.69 Hz) or window rates - the
+  strongest modulation was the music's own beat, in both discs. The design
+  error was the premise: a CD PLAYER conceals uncorrectable samples, which is
+  why a damaged disc still sounds like music, but a CD-ROM drive reading in
+  data mode does not - it returns what came off the disc and uses C2 pointers
+  to say which samples it could not correct. Turning C2 off did not buy the
+  drive's concealment; it removed the only report of which samples were bad,
+  and the raw guesses were published as audio. Corroborating detail: the same
+  disc read almost cleanly at Paranoid with C2 on, and AccurateRip holds one
+  submission for this pressing, so the disc is rippable.
+- **Status:** implemented 2026-08-01, corrected 2026-08-02. The quality picker
+  gains an explicit Salvage entry: Test & Copy at Burst quality (post-D9:
+  16-pass cap, no deep recovery), read speed pinned to the drive minimum,
+  cache defeat and the independent-reads calibration gate intact, and C2
+  pointers ON so the drive keeps reporting what it could not correct.
+  `SecureSectorVote` now returns a per-byte confidence map and
+  `SampleConcealment` interpolates short runs the vote never confirmed, fades
+  wide ones to silence, mutes when there is nothing to anchor on, and counts
+  every concealed frame into `ConcealedFrameCount` and the telemetry line -
+  the job a player does for a damaged disc, measured rather than hidden.
+  Log, certificate, history, and status all label the result salvaged; the
+  reads leg of verification never applies, while an exact database match
+  still verifies the bytes. Four salvage tests plus source contracts pass;
+  WPF 472/472, ripper 48/48, legacy lanes green. Live session 2026-08-01:
+  three complete 17-minute minimum-speed reads of the defective disc on the
+  ASUS with zero read failures, zero rereads, and zero timeouts - and the
+  honest verdict Held on all 20 tracks: no two reads agree anywhere, so even
+  the drive's concealment is unstable on this disc. That is the designed
+  outcome: the user can accept one complete, internally coherent capture
+  (labeled not verified), and all-tracks disagreement plus the slip=1 zones
+  make stream-wide misalignment the likely mechanism (R116 slip-realignment
+  evidence).
+
+### R120. Live per-track evidence during reads - bucket D, design (user request 2026-08-01)
+
+- **Area or slice:** RipService read plumbing, RipViewModel track grid.
+- **User request:** Test CRC should appear as each track completes instead of
+  waiting for the whole album; same for Copy CRC, and AR/CTDB verdicts should
+  surface after the Test phase rather than only at Test & Copy completion.
+  This is believed to be the previously discussed per-track progress plan,
+  which was never captured in a doc.
+- **Feasibility (verified from code):** all of it is surfacing, not new
+  computation. `AccurateRipVerify` accumulates CRCs incrementally as PCM
+  streams, so a track's CRCs are final at (shortly after) its boundary - poll
+  one offset window past the track end from the existing progress handler.
+  Each Test & Copy read already performs its own AR/CTDB check (the per-read
+  log lines prove it); the read-1 verdict exists at Test-read end and only
+  needs a callback into the VM. The grid already has the four columns; they
+  would fill live instead of at completion.
+- **Caveats:** AR offset-sweep values lag the track boundary by up to the
+  offset window - surface after the lag, never provisional values; a live
+  cell is presentation only and must not become job evidence (the immutable
+  records keep their existing assembly points).
+- **Status:** open, next UI slice.
+
+### R121. Album metadata editing and richer MusicBrainz columns - bucket D, design (user request 2026-08-01)
+
+- **Area or slice:** Rip page album header/track grid, metadata plumbing.
+- **User request:** no way to edit album info before ripping, and MusicBrainz
+  data with no display surface (per-track artists, composer, label, catalog
+  number, country, barcode, release descriptor; disc ISRCs are already read
+  but not shown).
+- **Sketch:** an edit affordance on the album header (artist/album/year plus
+  per-track title edit in the grid) feeding the frozen job metadata snapshot;
+  optional columns or a details flyout for the extra MB fields; ties into the
+  naming tokens that already exist (per-track artist parity is a recorded
+  naming-system todo).
+- **Status:** open.
+
+### R122. Slip-aware realignment for defective discs - bucket B, research (user-approved 2026-08-01)
+
+- **Area or slice:** `SlipCorrelator`, the secure read loop, and a
+  realignment stage that must never contaminate the untrusted-evidence
+  design.
+- **Why it matters:** the Reggae Roots evidence chain points one way: slip=1
+  zones (consistent-offset raw reads), salvage's all-20-tracks disagreement
+  across three complete minimum-speed captures, and AR/CTDB presence without
+  match (0/1 each) all fit stream-wide per-read misalignment. If reads can be
+  offset-corrected before voting, this disc class may verify - and a
+  CTDB-repairable alignment would turn presence into database-verified audio.
+- **Cross-drive confirmation (2026-08-02):** the same disc now has three
+  complete salvage reads on the LG WH16NS40 as well, again holding all 20
+  tracks with no agreement, after three earlier complete reads on the ASUS.
+  Six full reads, two drives, zero repeatable tracks: the non-determinism is
+  the pressing, not one drive's servo, which is exactly the shape realignment
+  would have to address.
+- **Design constraints (from the reality-check that originally rejected a
+  naive version):** realignment must be an explicit, evidence-carrying stage,
+  not a silent vote input: correlate per window, record the applied offset in
+  the log and telemetry, keep unaligned evidence distinguishable, and treat
+  an alignment that fails verification as no alignment. The earlier
+  wave's adversarial rule stands: the slip correlator's verdict alone is
+  diagnostic; only a verified realigned result may claim recovery.
+- **Confidence:** research. **Approval needed:** granted 2026-08-01
+  ("slip-aware realignment would be awesome"); lands as its own designed and
+  live-verified slice.
+- **Recon verdict (2026-08-02, read-only fan-out plus an adversarial pass):**
+  two findings argue for measuring before building. Every offset finder in the
+  repo is range-bounded - AccurateRip sweeps +/-2939 samples, the offset-safe
+  fingerprint +/-4096, CTDB's Reed-Solomon +/-5879 - so a whole-read slip can
+  sit outside all of them and be invisible. And aligning candidate reads onto
+  a reference that is itself shifted yields unanimous agreement on
+  wrong-position audio, which the clean-agreement vote accepts: realignment
+  can manufacture confident agreement, which is the one failure this codebase
+  must never allow. A stable anchor also may not exist for the disc that
+  motivated the item.
+- **Status:** measurement increment implemented 2026-08-03; realignment
+  deliberately NOT built. Each completed read records its offset-safe
+  whole-disc fingerprint in `VerifyRecord.OffsetSafeCrcBase64` (no audio
+  retained), and `ReadOffsetProbe` measures every ordered pair of reads in a
+  transaction, logging `rip.slip read-vs-read offsets:` with the size and
+  direction of any constant shift. It reports "no constant offset within the
+  +/-4096 sample search" rather than "aligned", because those are different
+  claims. Six tests including a functional one that shifts a real stream by
+  640 samples and measures it exactly; WPF 483/483, ripper 65/65. The
+  realignment decision is now evidence-gated: build it only if real discs
+  show constant nonzero shifts between reads.
+- **Live note (2026-08-03):** the motivating disc is now confirmed
+  unsalvageable by its owner (the freezer trick included). Corrected salvage
+  measured roughly 1,400 unresolvable sectors per 2,400-sector window
+  sustained across 42-48 percent of the disc, so there is no stable reference
+  for realignment to anchor on there. The measurement stands on its own for
+  future discs.
+
+### R117. Classic calibration/cache-defeat gate port - decision needed
+
+- **Area or slice:** classic CUERipper and `CUETools.Ripper.Console` secure
+  paths.
+- **Why it matters:** classic Secure/Paranoid can vote against the drive
+  cache; porting the WPF gates is a behavior change to a legacy product
+  surface (rips that started silently may now refuse until calibration).
+- **Evidence found:** R113 evidence; `ICDRipper` lacks the gate members.
+- **Confidence:** verified. **Approval needed:** yes - product decision
+  (port vs freeze-and-label); parked in `decisions-needed.md` as D8.
+- **Status:** closed 2026-08-01 by decision D8 (B): classic is a frozen
+  legacy surface. The secure-mode tooltip and a behavior-conditioned log
+  note now state that classic re-reads do not defeat the drive cache and
+  point at CUETools 2026; no classic behavior changed. CLAUDE.md scopes the
+  calibration/held-state invariants to the modern path.
+
 ## Ordering
 
-The locally actionable and hosted correctness queue is closed through R102.
-Remaining work is ordered by the authority or evidence it requires:
+The locally actionable and hosted correctness queue is closed through R105.
+
+The 2026-08-01/02 recovery wave is complete for everything software evidence
+can settle. Fixed: R106-R114, R115 (2 of 4), R118 (five mitigations across
+two nights of live evidence), R119 salvage mode, R123 and R124. Closed by
+decision: R117 (D8-B, classic frozen as a legacy surface) and D9 (Burst keeps
+the classic 16-pass cap). The live matrix now shows the intended behaviour:
+19,500 extended-timeout reads carried three complete salvage reads of a
+defective disc that no previous build could finish, heartbeats made a slow
+grind legible, and a cache-defeat exhaustion failed closed at 82 percent
+instead of publishing unproven audio.
+
+Open, in the order they should run:
+
+1. R120 live per-track evidence - the highest user-visible payoff and pure
+   surfacing of values the engine already computes.
+2. R122 slip-aware realignment - now backed by six complete reads across two
+   drives with zero repeatable tracks; the measurement increment comes before
+   anything touches the vote.
+3. R116 - the injectable device seam (which also gives the R114 and R118
+   routes real activation tests), held-result persistence across app exit,
+   the targeted-reread vote design (needs per-sector pass counts; the current
+   margin math assumes uniform passes), CTDB-guided second-chance rereads,
+   and per-sector session persistence.
+4. R118 leftovers - the deferred-window retry ledger, per-drive read-latency
+   high-water calibration, flush-speed restoration, and the 20/00
+   read-command re-probe.
+5. R121 album metadata editing and the unshown MusicBrainz fields.
+6. The two hardware-gated R115 items (pass-boundary speed on the drive
+   matrix; adaptive quorum with TestRipper corpus evidence).
+
+One live session should still retain the `ShortPayloadTransferCount`,
+`GivenUpWindowCount`, `WindowBudgetStopCount` and drive-reported-timeout
+counters, and the scratched CD-R deserves a run on the LG, which reached
+99.96 percent of it before the 3E/02 and timeout work landed.
+
+Remaining work beyond the recovery domain is ordered by the authority or
+evidence it requires:
 
 1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
    captures. The automatic and local-override embedded-output paths are already
@@ -2773,6 +3511,22 @@ Remaining work is ordered by the authority or evidence it requires:
 - 2026-07-02 - backlog created from the first full anti-dark-code rollout (comment loop S1-S13, logging audit, adversarial, scenario passes) and the user's decisions D1-D7.
 - 2026-07-26 - added R19-R43 from the modern WPF, codec, security, CI, release, and
   scenario-stress audit. User approved autonomous remediation, including protected areas.
+- 2026-08-01 - added R106-R117 from the damaged-disc recovery adversarial pass.
+  User approved the full wave; R117 parked as decision D8.
+- 2026-08-01 - wave executed: R106-R114 fixed, R115 fixed 2-of-4 (rest
+  re-scoped to R116 with named evidence prerequisites), 12 commits, every
+  batch gated on both test lanes. Plan fields lived in the R-entries
+  themselves rather than a separate safe-fix-plan update. Scenario
+  stress-test gained the SR1-SR8 recovery scenarios; the accumulator-wrap
+  unknown resolved by construction, the underrun unknown moved to in
+  progress behind its named counter.
+- 2026-08-01/02 - live hardware evidence drove a second wave on two damaged
+  discs and both matrix drives: decisions D8-B and D9, R119 salvage mode
+  (proven end to end - three complete reads and a user-accepted capture of a
+  disc no build had finished before), five R118 mitigations, and R123/R124
+  after a six-hour invisible grind and a four-hour silent stall were
+  diagnosed from logs and a live stack capture. R120, R121, R122 filed from
+  user requests and the cross-drive evidence. 27 commits, every batch gated.
 - 2026-07-26 - closed the locally actionable R19-R31 work, partially closed R32,
   refreshed earlier R2/R3/R9/R15 statuses, and replaced implementation ordering with
   the remaining hosted/hardware/external evidence queue.
@@ -2864,3 +3618,14 @@ Remaining work is ordered by the authority or evidence it requires:
   proving Core/full/IDE lock parity, replacing the unsafe pre-clean plus
   parallel `/Rebuild` sequence with a receipted fresh `/Build`, and completing
   the exact three-configuration release transaction.
+- 2026-07-31 - closed R103/R104 by binding root-loaded WPF codec wrappers to
+  their exact manifest-approved native modules, launching the production apphost
+  for real native encode/finalize probes, normalizing stale command profiles, and
+  replacing raw extension selectors with one health-aware grouped codec picker.
+  The canonical local gate passed 637/643 with six declared skips, zero failures,
+  and zero managed warning fingerprints.
+- 2026-07-31 - implemented R105's one-shot normal BEh 08/0A communication retry,
+  retained the unassigned qualifier and raw identity, and passed 32/32 ripper,
+  641/647 canonical, empty-warning, release-safety, and production artifact gates.
+  Four address probes and a full concurrent H: Test & Copy passed; both phases
+  recorded zero retries, so live branch activation remains in the unknowns ledger.
