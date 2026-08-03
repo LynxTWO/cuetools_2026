@@ -414,6 +414,24 @@ public sealed class RipService : IRipService
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
         $"given_up_windows={reader.GivenUpWindowCount}";
 
+    // R122: AccurateRipVerify can only build the fingerprint from a complete stream, so this
+    // never throws outward - an unavailable measurement is an empty string, never a guess.
+    private string CaptureOffsetFingerprint(CUESheet cue)
+    {
+        try
+        {
+            var ar = cue?.ArVerify;
+            if (ar == null) return "";
+            return ar.OffsetSafeCRC?.Base64 ?? "";
+        }
+        catch (Exception ex)
+        {
+            try { _log.Info("rip.slip", "offset fingerprint unavailable: " + ex.GetType().Name); }
+            catch { }
+            return "";
+        }
+    }
+
     private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
@@ -1080,6 +1098,11 @@ public sealed class RipService : IRipService
                     Utc = DateTime.UtcNow,
                     RipperVersion = "2026.1.0",
                     ReadKind = encode ? "Copy" : "Test",
+                    // R122 measurement: an offset-safe whole-disc fingerprint for THIS read, so
+                    // two reads can later be compared for a constant sample shift without
+                    // keeping either audio stream. Requires a complete stream, so a partial read
+                    // simply leaves it empty and is reported as not-comparable.
+                    OffsetSafeCrcBase64 = CaptureOffsetFingerprint(cue),
                     Format = encode ? format : "",
                     OutputVerificationKnown =
                         encode && outputAssurance.Known,
@@ -1617,6 +1640,29 @@ public sealed class RipService : IRipService
                 failedWindows = Math.Max(failedWindows, thirdResult.FailedWindows);
 
                 resolve = TestAndCopyResolver.Resolve(reads, staged);
+            }
+
+            // R122 measurement (diagnostic only, nothing here changes a byte or a verdict):
+            // are these reads constant sample shifts of one another? On a disc whose reads
+            // disagree everywhere, that answer decides whether realignment is even the right
+            // idea - and a "no constant offset" result means exactly that and NOT "aligned",
+            // because the fingerprint search is bounded to +/-4096 samples.
+            try
+            {
+                var fingerprints = new List<string?>();
+                foreach (var record in reads) fingerprints.Add(record?.OffsetSafeCrcBase64);
+                var offsets = ReadOffsetProbe.Compare(fingerprints);
+                if (offsets.Count > 0)
+                    _log.Info("rip.slip",
+                        "read-vs-read offsets: " + ReadOffsetProbe.Describe(offsets) +
+                        (ReadOffsetProbe.AnyConstantShift(offsets)
+                            ? " (constant shift present - realignment would have something to work with)"
+                            : " (no constant shift found within the +/-4096 sample search)"));
+            }
+            catch (Exception ex)
+            {
+                try { _log.Info("rip.slip", "offset measurement skipped: " + ex.GetType().Name); }
+                catch { }
             }
 
             string discId = copyRecord.DiscId ?? testRecord.DiscId ?? "";

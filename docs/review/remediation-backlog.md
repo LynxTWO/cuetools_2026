@@ -3389,7 +3389,33 @@ step before any fix.
 - **Confidence:** research. **Approval needed:** granted 2026-08-01
   ("slip-aware realignment would be awesome"); lands as its own designed and
   live-verified slice.
-- **Status:** open, after R120.
+- **Recon verdict (2026-08-02, read-only fan-out plus an adversarial pass):**
+  two findings argue for measuring before building. Every offset finder in the
+  repo is range-bounded - AccurateRip sweeps +/-2939 samples, the offset-safe
+  fingerprint +/-4096, CTDB's Reed-Solomon +/-5879 - so a whole-read slip can
+  sit outside all of them and be invisible. And aligning candidate reads onto
+  a reference that is itself shifted yields unanimous agreement on
+  wrong-position audio, which the clean-agreement vote accepts: realignment
+  can manufacture confident agreement, which is the one failure this codebase
+  must never allow. A stable anchor also may not exist for the disc that
+  motivated the item.
+- **Status:** measurement increment implemented 2026-08-03; realignment
+  deliberately NOT built. Each completed read records its offset-safe
+  whole-disc fingerprint in `VerifyRecord.OffsetSafeCrcBase64` (no audio
+  retained), and `ReadOffsetProbe` measures every ordered pair of reads in a
+  transaction, logging `rip.slip read-vs-read offsets:` with the size and
+  direction of any constant shift. It reports "no constant offset within the
+  +/-4096 sample search" rather than "aligned", because those are different
+  claims. Six tests including a functional one that shifts a real stream by
+  640 samples and measures it exactly; WPF 483/483, ripper 65/65. The
+  realignment decision is now evidence-gated: build it only if real discs
+  show constant nonzero shifts between reads.
+- **Live note (2026-08-03):** the motivating disc is now confirmed
+  unsalvageable by its owner (the freezer trick included). Corrected salvage
+  measured roughly 1,400 unresolvable sectors per 2,400-sector window
+  sustained across 42-48 percent of the disc, so there is no stable reference
+  for realignment to anchor on there. The measurement stands on its own for
+  future discs.
 
 ### R117. Classic calibration/cache-defeat gate port - decision needed
 
