@@ -441,7 +441,7 @@ public sealed class RipService : IRipService
         // Live per-track evidence subscription (R120); declared out here so the finally can
         // always detach it, even when the read throws.
         AccurateRipVerify? liveAr = null;
-        EventHandler<int>? onArTrackCompleted = null;
+        TrackCompletedEventHandler? onArTrackCompleted = null;
         int expectedAudioFiles = 0;
         // Snapshot the toggles this job runs under, BEFORE the try - the finally releases
         // keep-awake and the tray lock on these locals. Re-reading the live settings there
