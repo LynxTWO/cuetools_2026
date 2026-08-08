@@ -55,10 +55,13 @@ CRC/database evidence, and explicit stop-after-current-disc status. Diagnostics 
 structural counts and exception classes only; source paths and album metadata remain
 redacted.
 
-**Status:** closed 2026-08-08. The 24 focused discovery/workspace/layout/theme/report
-checks pass; the complete WPF suite passes 505/505. The canonical six-suite gate passes
-726/732 with six declared skips, zero failures; WPF/fuzz builds emit zero warning
-fingerprints. Release-safety, deterministic fuzz, and vendor-clean gates pass.
+**Status:** closed 2026-08-08. The responsive follow-up removes the child-width feedback
+loop that produced false horizontal overflow and adds one light/dark-aware fader-style
+scrollbar system without replacing the stock input commands. The 25 focused
+discovery/workspace/layout/theme/report checks pass; the complete WPF suite passes
+506/506. The canonical six-suite gate passes 727/733 with six declared skips, zero
+failures; WPF/fuzz builds emit zero warning fingerprints. Release-safety (137 checks),
+deterministic fuzz, and vendor-clean gates pass.
 
 ## Batch 1: test modernization and CI gating (2026-07-02)
 

@@ -3274,11 +3274,14 @@ step before any fix.
   AccurateRip/CTDB evidence, track CRC/confidence rows, TOC ID, and CTDB parity scope.
   Repair remains an explicit per-disc source-preserving transaction. A failed repair
   keeps the earlier Verify evidence and retry capability. Report observers are isolated
-  so a presentation failure cannot revoke a published result.
-- **Verified:** 24 focused discovery/workspace/layout/theme/observer checks and the
-  complete WPF suite pass (505/505, zero skipped). The canonical six-suite gate passes
-  726/732 with six declared skips and zero failures; WPF/fuzz builds emit zero warning
-  fingerprints. Release-safety, deterministic fuzz, and vendor-clean gates pass.
+  so a presentation failure cannot revoke a published result. A follow-up removed the
+  viewport-width-plus-margin feedback loop that caused the source and album workspace
+  to bleed underneath their scrollbars. All WPF scroll surfaces now share slim,
+  theme-aware fader rails while retaining page-click, wheel, keyboard, and drag behavior.
+- **Verified:** 25 focused discovery/workspace/layout/theme/observer checks and the
+  complete WPF suite pass (506/506, zero skipped). The canonical six-suite gate passes
+  727/733 with six declared skips and zero failures; WPF/fuzz builds emit zero warning
+  fingerprints. Release-safety (137 checks), deterministic fuzz, and vendor-clean gates pass.
 - **Approval needed:** no; additive UI/read-only discovery, with protected repair
   semantics preserved.
 

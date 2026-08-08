@@ -22,6 +22,8 @@ public sealed class ThemePaletteTests
         {
             "Ground", "Panel", "Ink", "InkDim", "Muted",
             "StatusAccent", "StatusGood", "StatusWarning", "StatusDanger",
+            "ScrollTrack", "ScrollTrackBorder", "ScrollThumb",
+            "ScrollThumbHover", "ScrollThumbPressed",
             "ControlBorder", "ButtonEdge", "SwitchHousingBorder",
             "DiscData", "DiscHub", "DiscEdge", "DiscBack", "DiscTrack",
         };
