@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "execution_policy": {
+    "owner_confirmed_safe_to_execute": true,
+    "notes": "Reviewed 2026-08-08. These gates invoke existing repository-owned validation scripts or the checked CI fuzz command. They do not sign, publish, contact optical hardware, install dependencies, or mutate vendor submodules. The user explicitly authorized the needed tests."
+  },
+  "machine": {
+    "notes": [
+      "Windows workstation with .NET 8 and Visual Studio 2022 toolchains.",
+      "Use pwsh for Python-launched local gates. A nested Windows PowerShell 5.1 process inherits PowerShell 7's PSModulePath and can resolve the incompatible Microsoft.PowerShell.Utility module; hosted cmd lanes retain the real Windows PowerShell 5.1 coverage.",
+      "Optical-drive, signing, and publication checks remain manual or hosted boundaries and are not default local gates."
+    ],
+    "avoid_locally": [
+      "credentialed signing or publication",
+      "unattended optical-drive recovery tests",
+      "full classic release orchestration unless explicitly requested"
+    ],
+    "preferred_remote_runner": "windows-2022 for classic multi-architecture and release evidence"
+  },
+  "gates": [
+    {
+      "id": "01-release-safety-contracts",
+      "level": 0,
+      "argv": [
+        "pwsh",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "eng/release/Test-ReleaseSafety.ps1"
+      ],
+      "enabled": true,
+      "source": "eng/release/Test-ReleaseSafety.ps1",
+      "source_definition_sha256": "e874225ba0f1cec079610881d2a66d6c7498d654ba2aca98fc8f3a08e90ccfdc",
+      "confidence": "verified",
+      "timeout_seconds": 600,
+      "resource_class": "medium",
+      "cwd": ".",
+      "include_globs": [
+        "eng/ci/**",
+        "eng/release/**",
+        ".github/workflows/**",
+        "Directory.*",
+        "**/*.csproj",
+        "**/packages.lock.json"
+      ],
+      "exclude_globs": [
+        ".agents/skills/**",
+        ".claude/skills/**",
+        ".anti-dark-code/**"
+      ],
+      "review_status": "approved",
+      "owner_notes": "Repository-owned contract suite. It validates release policy and helper behavior without creating or publishing a release."
+    },
+    {
+      "id": "02-vendor-submodules-clean",
+      "level": 0,
+      "argv": [
+        "pwsh",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "eng/ci/Test-VendorSubmodulesClean.ps1"
+      ],
+      "enabled": true,
+      "source": "eng/ci/Test-VendorSubmodulesClean.ps1",
+      "source_definition_sha256": "8c6d4d201070718b717ff0e8bedb8ad8848387ab047000fdbe808bc612c738ce",
+      "confidence": "verified",
+      "timeout_seconds": 120,
+      "resource_class": "light",
+      "cwd": ".",
+      "include_globs": [
+        ".gitmodules",
+        "ThirdParty/**",
+        "eng/ci/**",
+        "eng/release/**"
+      ],
+      "exclude_globs": [
+        ".agents/skills/**",
+        ".claude/skills/**",
+        ".anti-dark-code/**"
+      ],
+      "review_status": "approved",
+      "owner_notes": "Read-only assertion that all five pinned vendor submodules remain clean."
+    },
+    {
+      "id": "03-modern-warning-gated-build",
+      "level": 1,
+      "argv": [
+        "pwsh",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "eng/ci/Invoke-BuildWithWarningGate.ps1",
+        "-Configuration",
+        "Release"
+      ],
+      "enabled": true,
+      "source": "eng/ci/Invoke-BuildWithWarningGate.ps1",
+      "source_definition_sha256": "1d2c81e46828abebbb01bded3e6713df1c1e216d6ad7e1f7415d51603261562c",
+      "confidence": "verified",
+      "timeout_seconds": 1200,
+      "resource_class": "heavy",
+      "cwd": ".",
+      "include_globs": [
+        "**/*.cs",
+        "**/*.csproj",
+        "**/*.props",
+        "**/*.targets",
+        "**/*.resx",
+        "**/*.xaml",
+        "ThirdParty/**",
+        "eng/ci/**"
+      ],
+      "exclude_globs": [
+        ".agents/skills/**",
+        ".claude/skills/**",
+        ".anti-dark-code/**"
+      ],
+      "review_status": "approved",
+      "owner_notes": "Exact modern build used by CI; stages pinned vendor sources and rejects warning fingerprints above the checked baseline."
+    },
+    {
+      "id": "04-all-test-discovery",
+      "level": 1,
+      "argv": [
+        "pwsh",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "eng/ci/Invoke-TestSuites.ps1",
+        "-Lane",
+        "all",
+        "-Configuration",
+        "Release"
+      ],
+      "enabled": true,
+      "source": "eng/ci/Invoke-TestSuites.ps1",
+      "source_definition_sha256": "04b6b61874d5a66265843267797bb18cd3150c546e3234b248403585414e5dbd",
+      "confidence": "verified",
+      "timeout_seconds": 1800,
+      "resource_class": "heavy",
+      "cwd": ".",
+      "include_globs": [
+        "**/*.cs",
+        "**/*.csproj",
+        "**/*.props",
+        "**/*.targets",
+        "**/*.resx",
+        "**/*.json",
+        "ThirdParty/**",
+        "eng/ci/**"
+      ],
+      "exclude_globs": [
+        ".agents/skills/**",
+        ".claude/skills/**",
+        ".anti-dark-code/**"
+      ],
+      "review_status": "approved",
+      "owner_notes": "Exact manifest-driven modern and legacy test gate. It rejects zero discovery and excessive skips."
+    },
+    {
+      "id": "05-fuzz-smoke-20k",
+      "level": 2,
+      "argv": [
+        "dotnet",
+        "run",
+        "--project",
+        "CUETools.Fuzz/CUETools.Fuzz.csproj",
+        "--configuration",
+        "Release",
+        "--no-build",
+        "--",
+        "20260712",
+        "20000"
+      ],
+      "enabled": true,
+      "source": ".github/workflows/CI-wpf.yml#Fuzz smoke - properties and parser/decoder corpora (20k iters)",
+      "source_definition_sha256": "beef7e814c99fb97a02f6a1d908dbdd8ddd33e11e56e2b8ff9ff0bfe206ecf24",
+      "confidence": "verified",
+      "timeout_seconds": 900,
+      "resource_class": "medium",
+      "cwd": ".",
+      "include_globs": [
+        "CUETools.Fuzz/**",
+        "CUETools.Codecs/**",
+        "CUETools.CDImage/**",
+        "CUETools.CTDB/**",
+        "CUETools.Ripper/**",
+        "CUETools.Ripper.SCSI/**"
+      ],
+      "exclude_globs": [
+        ".agents/skills/**",
+        ".claude/skills/**",
+        ".anti-dark-code/**"
+      ],
+      "review_status": "approved",
+      "owner_notes": "Deterministic checked-in seed and bounded 20,000-iteration CI smoke. The Level 1 build gate supplies the no-build prerequisite."
+    }
+  ]
+}

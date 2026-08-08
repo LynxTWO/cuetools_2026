@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "binding_status": "bound",
+  "repository_id": "adc-repo-4c7ab6173749df73db4e7cdc8d5ff6ce",
+  "identity_method": "git-origin-sha256",
+  "identity_components": {
+    "origin_present": true,
+    "origin_sha256": "22c521b9f01cf08a764e64d90a18bbf4f4f218e8c9f08acf0d8ac4b6b70f0dc4",
+    "root_commits_present": true,
+    "root_commits_sha256": "8009e946b9a502925589418a044b7788c2f76920df7aaf11ea16091dd86de508",
+    "path_sha256": null
+  },
+  "bound_at_utc": "2026-08-08T12:37:17Z",
+  "last_verified_at_utc": "2026-08-08T12:37:17Z",
+  "previous_repository_ids": [],
+  "notes": [
+    "This calibration belongs to one repository identity.",
+    "Do not transplant this calibration directory into another repository."
+  ]
+}

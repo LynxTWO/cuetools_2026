@@ -1,0 +1,587 @@
+{
+  "schema_version": 1,
+  "generated_by": "anti-dark-code 2026.08.06-unified.4 adc.py plan",
+  "generated_at_utc": "2026-08-08T12:39:47Z",
+  "catalog_version": "2026.08.06-unified.4",
+  "repo_profile_sha256": "bdb9b18ee21e0aa803649e826a2681d08701fbb294879c10fc9790243915698a",
+  "repo_types": [
+    "mixed"
+  ],
+  "primary_repo_type": "mixed",
+  "summary": {
+    "selected": 20,
+    "candidate": 0,
+    "deferred": 0,
+    "not_applicable": 0
+  },
+  "confidence_levels": {
+    "0": "Every meaningful edit: static, schema, architecture, and cheap changed-slice checks.",
+    "1": "Completed task or slice: affected unit, contract, integration, and replay checks.",
+    "2": "Before merge or elevated risk: property, fuzz, monkey, mutation, performance, and focused faults.",
+    "3": "Scheduled, release, or high-risk: full suite, soak, full mutation, migration, platform, and broad fault matrices."
+  },
+  "capabilities": [
+    {
+      "id": "V01",
+      "slug": "mutation-testing",
+      "name": "Mutation testing",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: has_tests, security_sensitive, financial_or_entitlement, persistence, deterministic_or_replay.",
+      "default_level": 2,
+      "cost": "high",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "497 test-like files",
+        "CLAUDE.md",
+        "GPL.txt",
+        "License.txt",
+        "PRIVACY.md",
+        ".github/pull_request_template.md",
+        "Bwg.Scsi/Device.cs",
+        "Bwg.Scsi/DiskInformation.cs",
+        "Bwg.Scsi/WriteParameterModePage.cs",
+        "CUEControls/PeakMeterCtrl.cs",
+        "CUEControls/ShellIconMgr.cs",
+        "CUEPlayer/IcecastCredentialStore.cs"
+      ],
+      "deterministic_work": [
+        "Mutate changed or high-risk modules",
+        "Run affected tests",
+        "Report killed and surviving mutants"
+      ],
+      "agent_judgment": [
+        "Choose mutation scope",
+        "Review equivalent mutants",
+        "Strengthen behavior-focused tests"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V02",
+      "slug": "model-based-stateful-testing",
+      "name": "Model-based stateful testing",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: stateful, workflow_or_ui, emergent_or_simulation.",
+      "default_level": 2,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "CODE_SIGNING_POLICY.md",
+        "PRIVACY.md",
+        "README.md",
+        ".github/pull_request_template.md",
+        ".github/workflows/CI-wpf.yml",
+        ".github/workflows/release-windows.yml",
+        "Bwg.Scsi/Device.cs",
+        "Bwg.Scsi/DiskInformation.cs",
+        "Bwg.Scsi/EventStatusNotification.cs",
+        "Bwg.Scsi/Feature.cs",
+        "Bwg.Scsi/WriteParameterModePage.cs"
+      ],
+      "deterministic_work": [
+        "Run random, stateful, and adversarial action generators",
+        "Capture seeds and action traces",
+        "Shrink failures"
+      ],
+      "agent_judgment": [
+        "Define state model, preconditions, actions, and invariants",
+        "Choose adversarial boundaries"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V03",
+      "slug": "executable-invariants",
+      "name": "Executable invariants",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 1,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Evaluate assertions and invariant checks",
+        "Capture first violation with state hashes"
+      ],
+      "agent_judgment": [
+        "Identify load-bearing truths",
+        "Choose fail, quarantine, or recovery policy"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V04",
+      "slug": "differential-testing",
+      "name": "Differential testing",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: multiple_implementations, migration_or_rewrite.",
+      "default_level": 2,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "CODE_SIGNING_POLICY.md",
+        "CUETools.sln",
+        "License.txt",
+        "PRIVACY.md",
+        "README.md",
+        ".github/workflows/CI-windows.yml",
+        ".github/workflows/CI-wpf.yml",
+        ".github/workflows/build_ffmpeg_dlls.yml",
+        "Bwg.Scsi/Bwg.Scsi.csproj",
+        "CUEControls/CUEControls.csproj",
+        "CUEControls/MediaSlider.cs"
+      ],
+      "deterministic_work": [
+        "Run both implementations on identical fixtures",
+        "Normalize irrelevant differences",
+        "Diff semantic outputs"
+      ],
+      "agent_judgment": [
+        "Define equivalence",
+        "Keep a simple reference oracle",
+        "Explain intentional differences"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V05",
+      "slug": "metamorphic-testing",
+      "name": "Metamorphic testing",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: generated_or_serialized_output, emergent_or_simulation, batch_or_chunk_processing, search_or_numerical, deterministic_or_replay.",
+      "default_level": 2,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "Directory.Build.targets",
+        "GPL.txt",
+        ".github/workflows/CI-wpf.yml",
+        "Bwg.Scsi/WriteBufferPool.cs",
+        "CUEControls/Properties/Resources.Designer.cs",
+        "CUEPlayer/CUEPlayer.csproj",
+        "CUEPlayer/CUEPlayerDataSet.Designer.cs",
+        "CUEPlayer/Properties/Resources.Designer.cs",
+        "CUEPlayer/Properties/Settings.Designer.cs",
+        "CUERipper/CUERipper.csproj",
+        "CUERipper/CUERipperConfig.cs"
+      ],
+      "deterministic_work": [
+        "Generate valid input transformations",
+        "Evaluate output relations",
+        "Shrink counterexamples"
+      ],
+      "agent_judgment": [
+        "Define valid transformations",
+        "State the expected relation and limits"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V06",
+      "slug": "deterministic-execution-mode",
+      "name": "Deterministic execution mode",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: randomness_or_time, concurrency_or_async, emergent_or_simulation, deterministic_or_replay.",
+      "default_level": 1,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "Bwg.Logging/UserMessage.cs",
+        "CUEPlayer/Output.cs",
+        "CUERipper/frmCUERipper.cs",
+        "CUETools/frmBatch.cs",
+        "CUETools/frmCUETools.cs",
+        "CUETools/CUETools.TestCodecs/BitWriterTest.cs",
+        "CUETools/CUETools.TestCodecs/WmaLosslessVerificationTest.cs",
+        "CUETools/CUETools.TestParity/CDRepairDecodeTest.cs",
+        "CUETools/CUETools.TestParity/CDRepairEncodeTest.cs",
+        "CUETools/Properties/Resources.Designer.cs",
+        "CUETools/TreeNodes/FileSystemTreeNodeLocalDB.cs",
+        "CUETools.ALACEnc/Program.cs"
+      ],
+      "deterministic_work": [
+        "Inject clock and seeded RNG",
+        "Capture replay identity",
+        "Fix locale and timezone where appropriate"
+      ],
+      "agent_judgment": [
+        "Define intentional nondeterminism",
+        "Choose replay identity fields"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V07",
+      "slug": "record-replay-corpus",
+      "name": "Record and replay regression corpus",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: stateful, workflow_or_ui, emergent_or_simulation, parser_or_protocol, deterministic_or_replay.",
+      "default_level": 1,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "CODE_SIGNING_POLICY.md",
+        "PRIVACY.md",
+        "README.md",
+        ".github/pull_request_template.md",
+        ".github/workflows/CI-wpf.yml",
+        ".github/workflows/release-windows.yml",
+        "Bwg.Scsi/Device.cs",
+        "Bwg.Scsi/DiskInformation.cs",
+        "Bwg.Scsi/EventStatusNotification.cs",
+        "Bwg.Scsi/Feature.cs",
+        "Bwg.Scsi/WriteParameterModePage.cs"
+      ],
+      "deterministic_work": [
+        "Save seed, initial-state hash, action trace, and version",
+        "Minimize reproducer",
+        "Replay corpus in gates"
+      ],
+      "agent_judgment": [
+        "Choose permanent regressions",
+        "Redact sensitive state",
+        "Classify corpus ownership"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V08",
+      "slug": "schema-contract-validation",
+      "name": "Schema and contract validation",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Validate payloads, configs, events, saves, messages, and environment",
+        "Report exact field paths"
+      ],
+      "agent_judgment": [
+        "Define ownership, compatibility, defaults, migrations, and failure policy"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V09",
+      "slug": "static-architecture-enforcement",
+      "name": "Static architecture enforcement",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Build dependency graph",
+        "Apply import or AST rules",
+        "Track named exceptions"
+      ],
+      "agent_judgment": [
+        "Define intended layers",
+        "Review whether exceptions are debt or wrong rules"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V10",
+      "slug": "deterministic-quality-gate",
+      "name": "Deterministic quality gate",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Run command arrays without shell interpolation",
+        "Capture logs and exit codes",
+        "Emit compact verdict"
+      ],
+      "agent_judgment": [
+        "Choose gate set",
+        "Interpret failures that require judgment"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V11",
+      "slug": "change-impact-analysis",
+      "name": "Change-impact analysis",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Map changed files through imports, ownership, coverage, schemas, events, and globs"
+      ],
+      "agent_judgment": [
+        "Add semantic edges such as shared config, content, deploy paths, and control planes"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V12",
+      "slug": "hermetic-builds-tests",
+      "name": "Hermetic builds and tests",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: has_ci, cross_platform, generated_or_serialized_output, release_sensitive.",
+      "default_level": 3,
+      "cost": "high",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        ".github/workflows/CI-windows.yml",
+        "CLAUDE.md",
+        "CODE_SIGNING_POLICY.md",
+        "CUETools.sln",
+        "License.txt",
+        "PRIVACY.md",
+        "README.md",
+        ".github/workflows/CI-wpf.yml",
+        ".github/workflows/build_ffmpeg_dlls.yml",
+        ".github/workflows/release-windows.yml",
+        "Bwg.Hardware/Bwg.Hardware.csproj",
+        "Bwg.Logging/Bwg.Logging.csproj"
+      ],
+      "deterministic_work": [
+        "Pin toolchains and dependencies",
+        "Use clean temp state",
+        "Fix locale and timezone",
+        "Block unintended network"
+      ],
+      "agent_judgment": [
+        "Identify intentional external dependencies",
+        "Design local substitutes"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V13",
+      "slug": "golden-semantic-snapshots",
+      "name": "Golden and semantic snapshot testing",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: generated_or_serialized_output, migration_or_rewrite, rendered_output, emergent_or_simulation, deterministic_or_replay.",
+      "default_level": 1,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "Directory.Build.targets",
+        "GPL.txt",
+        ".github/workflows/CI-wpf.yml",
+        "Bwg.Scsi/WriteBufferPool.cs",
+        "CUEControls/Properties/Resources.Designer.cs",
+        "CUEPlayer/CUEPlayer.csproj",
+        "CUEPlayer/CUEPlayerDataSet.Designer.cs",
+        "CUEPlayer/Properties/Resources.Designer.cs",
+        "CUEPlayer/Properties/Settings.Designer.cs",
+        "CUERipper/CUERipper.csproj",
+        "CUERipper/CUERipperConfig.cs"
+      ],
+      "deterministic_work": [
+        "Normalize artifacts",
+        "Diff against reviewed baselines",
+        "Reject unreviewed baseline drift"
+      ],
+      "agent_judgment": [
+        "Choose semantic fields",
+        "Review diffs",
+        "Approve intentional baseline changes"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V14",
+      "slug": "performance-leak-budgets",
+      "name": "Performance and leak budgets",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: performance_sensitive, long_running_or_background, workflow_or_ui, emergent_or_simulation.",
+      "default_level": 2,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CLAUDE.md",
+        "GPL.txt",
+        "PRIVACY.md",
+        "Bwg.Scsi/Device.cs",
+        "Bwg.Scsi/DiskInformation.cs",
+        "Bwg.Scsi/EventStatusNotification.cs",
+        "Bwg.Scsi/FeatureList.cs",
+        "Bwg.Scsi/FormatParameterList.cs",
+        "Bwg.Scsi/Performance.cs",
+        "Bwg.Scsi/PerformanceList.cs",
+        "Bwg.Scsi/Result.cs",
+        "Bwg.Scsi/TocEntry.cs"
+      ],
+      "deterministic_work": [
+        "Run fixed workloads",
+        "Compare to baseline and budget",
+        "Track resource growth"
+      ],
+      "agent_judgment": [
+        "Choose user-relevant budgets",
+        "Separate noise from regression"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V15",
+      "slug": "fault-injection",
+      "name": "Fault injection",
+      "status": "selected",
+      "reason": "Selected because the deterministic profile observed: external_dependencies, persistence, concurrency_or_async, long_running_or_background, release_sensitive.",
+      "default_level": 2,
+      "cost": "medium",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [
+        "CODE_SIGNING_POLICY.md",
+        "License.txt",
+        "PRIVACY.md",
+        "README.md",
+        ".github/workflows/CI-windows.yml",
+        ".github/workflows/build_ffmpeg_dlls.yml",
+        ".github/workflows/release-windows.yml",
+        "Bwg.Hardware/Bwg.Hardware.csproj",
+        "Bwg.Logging/Bwg.Logging.csproj",
+        "Bwg.Scsi/Bwg.Scsi.csproj",
+        "CUEControls/CUEControls.csproj",
+        "CUEPlayer/CUEPlayerDataSet.Designer.cs"
+      ],
+      "deterministic_work": [
+        "Inject reviewed faults in isolated environments",
+        "Check recovery invariants",
+        "Capture replayable fault scenario"
+      ],
+      "agent_judgment": [
+        "Choose realistic faults",
+        "Define acceptable recovery and isolation"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V16",
+      "slug": "authoritative-project-map",
+      "name": "Authoritative project map",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Enumerate manifests, languages, entrypoint candidates, tests, CI, ownership, and freshness"
+      ],
+      "agent_judgment": [
+        "Explain runtime purpose, trust, ownership, rule authority, and external boundaries"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V17",
+      "slug": "separated-agent-roles",
+      "name": "Separated builder, challenger, and verifier roles",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 1,
+      "cost": "variable",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Enforce stage order and deterministic verifier result"
+      ],
+      "agent_judgment": [
+        "Builder implements",
+        "Challenger attacks assumptions",
+        "Verifier reviews evidence without editing"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V18",
+      "slug": "test-change-policing",
+      "name": "Test-change policing",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Diff tests and config",
+        "Flag skips, assertion loss, broad mocks, timeout growth, and baseline updates"
+      ],
+      "agent_judgment": [
+        "Decide whether the behavior contract legitimately changed"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V19",
+      "slug": "minimal-failure-packets",
+      "name": "Minimal failure packets",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Capture first failing gate, exit code, bounded output, seed, version, replay, and log path"
+      ],
+      "agent_judgment": [
+        "Request only missing context",
+        "Choose the next experiment"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    },
+    {
+      "id": "V20",
+      "slug": "confidence-ladder",
+      "name": "Confidence ladder",
+      "status": "selected",
+      "reason": "Core capability for a maintained repo. Use the light repo-fit form.",
+      "default_level": 0,
+      "cost": "low",
+      "repo_type": "mixed",
+      "adaptation": "Select and run by runtime unit. Combine only after each unit has an honest result.",
+      "evidence": [],
+      "deterministic_work": [
+        "Route Level 0 through Level 3 gates by risk and change impact"
+      ],
+      "agent_judgment": [
+        "Calibrate levels from measured runtime, failure history, and blast radius"
+      ],
+      "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review."
+    }
+  ],
+  "notes": [
+    "All 20 capabilities were evaluated. Status does not authorize dependency installation or repo-code execution.",
+    "Re-run after architecture, risk, test, CI, or runtime boundaries change."
+  ]
+}
