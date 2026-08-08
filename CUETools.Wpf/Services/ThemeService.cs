@@ -23,8 +23,9 @@ public enum AppTheme { Dark, Light }
 ///
 /// The themeable structural and custom-control palette is intentionally NOT in Theme.xaml - if it were, Theme.xaml
 /// would be an always-present competing source for the same keys and the swapped-in dictionary
-/// could not win. Semantic accents (Teal/Amber/Good) stay stable; switch housing, channel, thumb,
-/// border, and shadow colors come from this palette so the control remains legible in both modes.
+/// could not win. Decorative accents (Teal/Amber/Good) stay stable; semantic status text and the
+/// switch housing, channel, thumb, border, and shadow colors come from this palette so controls
+/// remain legible in both modes.
 /// </summary>
 public sealed class ThemeService
 {
@@ -102,6 +103,8 @@ public sealed class ThemeService
     {
         ["Ground"] = "#0C0F0D", ["Bar"] = "#0E1310", ["Face"] = "#161C16", ["Panel"] = "#141A16",
         ["Line"] = "#28312A", ["Ink"] = "#EDF1E9", ["InkDim"] = "#B1BCAE", ["Muted"] = "#7D887C",
+        ["StatusAccent"] = "#34CFC0", ["StatusGood"] = "#5CCB8B",
+        ["StatusWarning"] = "#E9A63F", ["StatusDanger"] = "#E06C75",
         ["Glass"] = "#0E1311", ["GlassLine"] = "#243029", ["ButtonPressed"] = "#0C110E",
         ["ButtonFaceTop"] = "#1B221C", ["ButtonFaceBot"] = "#121813",
         ["ControlBorder"] = "#42FFFFFF", ["ButtonEdge"] = "#0A0E0B",
@@ -120,6 +123,8 @@ public sealed class ThemeService
     {
         ["Ground"] = "#E7ECE2", ["Bar"] = "#DEE4D8", ["Face"] = "#F4F7EF", ["Panel"] = "#F1F5EB",
         ["Line"] = "#CAD2C2", ["Ink"] = "#1A211B", ["InkDim"] = "#414A40", ["Muted"] = "#6C766A",
+        ["StatusAccent"] = "#087067", ["StatusGood"] = "#246D3C",
+        ["StatusWarning"] = "#835600", ["StatusDanger"] = "#A83442",
         ["Glass"] = "#E4E9DD", ["GlassLine"] = "#CAD2C2", ["ButtonPressed"] = "#D6DDCC",
         ["ButtonFaceTop"] = "#FBFDF7", ["ButtonFaceBot"] = "#E9EEE1",
         ["ControlBorder"] = "#6676816F", ["ButtonEdge"] = "#B8C2B2",

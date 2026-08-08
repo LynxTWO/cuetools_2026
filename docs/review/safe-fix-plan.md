@@ -17,6 +17,49 @@ no intermediate "ready" label should be read as the current state.
 
 Bounded remediation batches under pass 11 Step 2. One section per batch. Update statuses as batches land.
 
+## Batch 2026-08-08: album-level Verify & Repair workspace
+
+**Backlog source:** R125.
+
+**Goal:** let a user drop an album folder or select one or more manifests, resolve a
+single- or multi-disc set without guessing, verify every disc in stable order, and keep
+the resulting database, release, layout, checksum, track, and repair evidence visible.
+
+**Exact files:** `CUETools.Wpf/Services/VerificationSourceDiscovery.cs`,
+`VerifyService.cs`, `ReportStore.cs`, `ViewModels/VerifyViewModel.cs`,
+`Views/VerifyView.xaml*`, `Controls/RepairScope.cs`, theme/DI registration, and the
+focused WPF discovery/workspace/layout/report tests.
+
+**Why safe now:** discovery is additive and read-only. CUE sheets take precedence over
+playlists, overlapping manifests fail closed, loose multi-file folders require an
+explicit manifest, child reparse points are not traversed, and the scan has depth and
+candidate caps. Verification remains serial because the shared engine config has one
+owner. The existing source-preserving CTDB repair transaction is called only for the
+explicit disc selected by the user and is not otherwise changed.
+
+**Behavior that must remain unchanged:** direct CUE/M3U/audio verification; AccurateRip
+and CTDB claims; repair staging, independent verification, publication, and rollback;
+source files; privacy-safe diagnostics. A later repair failure must retain the already
+completed verification evidence and retry capability.
+
+**Checks:** focused source-discovery, batch, repair-failure, observer-isolation, XAML,
+theme, and responsive-layout tests; full WPF suite; empty managed warning gate; full
+canonical test lane; release-safety and vendor-clean gates; diff/privacy review.
+
+**Rollback:** revert the workspace, discovery service, result-presentation fields, and
+tests together. The underlying single-file Verify/Repair service contract remains a
+usable fallback.
+
+**Observability:** visible per-disc progress and outcome, album aggregate, per-track
+CRC/database evidence, and explicit stop-after-current-disc status. Diagnostics retain
+structural counts and exception classes only; source paths and album metadata remain
+redacted.
+
+**Status:** closed 2026-08-08. The 24 focused discovery/workspace/layout/theme/report
+checks pass; the complete WPF suite passes 505/505. The canonical six-suite gate passes
+726/732 with six declared skips, zero failures; WPF/fuzz builds emit zero warning
+fingerprints. Release-safety, deterministic fuzz, and vendor-clean gates pass.
+
 ## Batch 1: test modernization and CI gating (2026-07-02)
 
 **Backlog source:** coverage ledger S13/S14 next-pass entries; closed unknown "Do the MSTest suites pass on current code?" in `docs/unknowns/coverage-pass.md`.
