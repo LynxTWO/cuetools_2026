@@ -15,8 +15,9 @@
 
     <!-- Source selection remains reachable at compact widths. -->
     <Border Grid.Row="0" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
-      <ScrollViewer x:Name="VerifySourceScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-        <Grid x:Name="VerifySourceGrid" MinWidth="720" Width="{Binding ActualWidth, ElementName=VerifySourceScroller}" Margin="16,10">
+      <ScrollViewer x:Name="VerifySourceScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                    HorizontalContentAlignment="Stretch">
+        <Grid x:Name="VerifySourceGrid" MinWidth="720" Margin="16,10">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
@@ -76,8 +77,9 @@
 
       <!-- Album workspace. Horizontal fallback prevents clipping below the supported width. -->
       <ScrollViewer x:Name="VerifyWorkScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                    HorizontalContentAlignment="Stretch"
                     Visibility="{Binding HasSource, Converter={StaticResource BoolVis}}">
-        <StackPanel MinWidth="720" Width="{Binding ActualWidth, ElementName=VerifyWorkScroller}" Margin="24,20,24,28">
+        <StackPanel MinWidth="720" Margin="24,20,24,28">
           <TextBlock Text="{Binding AlbumHeading}" ToolTip="{Binding AlbumHeading}" FontFamily="{StaticResource Serif}" FontSize="27"
                      Foreground="{DynamicResource Ink}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
 

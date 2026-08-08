@@ -39,11 +39,15 @@ public sealed class VerifyAlbumWorkspaceLayoutTests
         XDocument view = Load("Views", "VerifyView.xaml");
         XElement work = Named(view, "VerifyWorkScroller");
         Assert.AreEqual("Auto", work.Attribute("HorizontalScrollBarVisibility")?.Value);
+        Assert.AreEqual("Stretch", work.Attribute("HorizontalContentAlignment")?.Value);
         XElement stack = work.Elements(Presentation + "StackPanel").Single();
         Assert.AreEqual("720", stack.Attribute("MinWidth")?.Value);
-        Assert.AreEqual(
-            "{Binding ActualWidth, ElementName=VerifyWorkScroller}",
-            stack.Attribute("Width")?.Value);
+        Assert.IsNull(stack.Attribute("Width"),
+            "A viewport-width child plus margins guarantees scrollbar bleed.");
+
+        XElement source = Named(view, "VerifySourceScroller");
+        Assert.AreEqual("Stretch", source.Attribute("HorizontalContentAlignment")?.Value);
+        Assert.IsNull(Named(view, "VerifySourceGrid").Attribute("Width"));
 
         string[] headers = view.Descendants(Presentation + "GridViewColumn")
             .Select(column => column.Attribute("Header")?.Value)
@@ -73,6 +77,37 @@ public sealed class VerifyAlbumWorkspaceLayoutTests
         StringAssert.Contains(xaml, "DynamicResource StatusAccent");
         StringAssert.Contains(xaml, "DynamicResource Ink");
         StringAssert.Contains(xaml, "DynamicResource Muted");
+    }
+
+    [TestMethod]
+    public void AppUsesThemeAwareFaderScrollbarsInsteadOfNativeChrome()
+    {
+        XDocument theme = Load("Theme", "Theme.xaml");
+        XElement implicitStyle = theme.Descendants(Presentation + "Style").Single(style =>
+            style.Attribute("TargetType")?.Value == "ScrollBar" &&
+            style.Attribute(Xaml + "Key") == null);
+        Assert.IsNotNull(implicitStyle);
+        CollectionAssert.DoesNotContain(
+            implicitStyle.Elements(Presentation + "Setter")
+                .Select(setter => setter.Attribute("Property")?.Value)
+                .Where(property => property is not null)
+                .ToList(),
+            "Height",
+            "A fixed height would collapse vertical scrollbars instead of only sizing their rail.");
+        CollectionAssert.DoesNotContain(
+            implicitStyle.Elements(Presentation + "Setter")
+                .Select(setter => setter.Attribute("Property")?.Value)
+                .Where(property => property is not null)
+                .ToList(),
+            "Width",
+            "A fixed width would collapse horizontal scrollbars instead of only sizing their rail.");
+
+        string xaml = theme.ToString(SaveOptions.DisableFormatting);
+        StringAssert.Contains(xaml, "VerticalScrollBarTemplate");
+        StringAssert.Contains(xaml, "HorizontalScrollBarTemplate");
+        StringAssert.Contains(xaml, "ScrollThumbHover");
+        StringAssert.Contains(xaml, "ScrollBar.PageUpCommand");
+        StringAssert.Contains(xaml, "ScrollBar.PageRightCommand");
     }
 
     private static XDocument Load(string directory, string file)
