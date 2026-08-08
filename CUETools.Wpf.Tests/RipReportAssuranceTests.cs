@@ -61,6 +61,21 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void BrokenReportObserverDoesNotBlockPublicationOrOtherObservers()
+        {
+            var store = new ReportStore();
+            bool healthyObserverCalled = false;
+            store.Changed += (_, _) => throw new InvalidOperationException("test observer failure");
+            store.Changed += (_, _) => healthyObserverCalled = true;
+            RipReport report = IndependentReadReport();
+
+            store.Publish(report);
+
+            Assert.AreSame(report, store.Current);
+            Assert.IsTrue(healthyObserverCalled);
+        }
+
+        [TestMethod]
         public void HistoryDoesNotCallIndependentReadAgreementUnconfirmed()
         {
             string dir = Path.Combine(Path.GetTempPath(), "history-assurance-" + Guid.NewGuid().ToString("N"));

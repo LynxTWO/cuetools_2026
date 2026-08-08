@@ -40,6 +40,11 @@ public sealed class RepairScope : FrameworkElement
         nameof(Npar), typeof(int), typeof(RepairScope), new PropertyMetadata(0));
     public static readonly DependencyProperty MapProperty = DependencyProperty.Register(
         nameof(Map), typeof(double[]), typeof(RepairScope), new PropertyMetadata(null));
+    // WPF's compiled-template writer cannot assign an array-typed dependency property from a
+    // DataTemplate binding (MC4102). MapSource is the template-safe object seam; direct page
+    // bindings keep using the strongly typed Map property.
+    public static readonly DependencyProperty MapSourceProperty = DependencyProperty.Register(
+        nameof(MapSource), typeof(object), typeof(RepairScope), new PropertyMetadata(null));
 
     public bool Active { get => (bool)GetValue(ActiveProperty); set => SetValue(ActiveProperty, value); }
     public bool Applied { get => (bool)GetValue(AppliedProperty); set => SetValue(AppliedProperty, value); }
@@ -49,11 +54,7 @@ public sealed class RepairScope : FrameworkElement
     public int Sectors { get => (int)GetValue(SectorsProperty); set => SetValue(SectorsProperty, value); }
     public int Npar { get => (int)GetValue(NparProperty); set => SetValue(NparProperty, value); }
     public double[]? Map { get => (double[]?)GetValue(MapProperty); set => SetValue(MapProperty, value); }
-
-    private static readonly Color Teal = Color.FromRgb(0x34, 0xCF, 0xC0);
-    private static readonly Color Amber = Color.FromRgb(0xE9, 0xA6, 0x3F);
-    private static readonly Color Crit = Color.FromRgb(0xEF, 0x6D, 0x6D);
-    private static readonly Color Good = Color.FromRgb(0x5C, 0xCB, 0x8B);
+    public object? MapSource { get => GetValue(MapSourceProperty); set => SetValue(MapSourceProperty, value); }
 
     private static readonly string[] Stages = { "syndrome", "locate", "Chien", "Forney", "apply" };
 
@@ -91,6 +92,18 @@ public sealed class RepairScope : FrameworkElement
         Color trackColor = ThemeColor.Get(
             "Glass",
             Color.FromRgb(0x10, 0x16, 0x14));
+        Color teal = ThemeColor.Get(
+            "StatusAccent",
+            Color.FromRgb(0x34, 0xCF, 0xC0));
+        Color amber = ThemeColor.Get(
+            "StatusWarning",
+            Color.FromRgb(0xE9, 0xA6, 0x3F));
+        Color critical = ThemeColor.Get(
+            "StatusDanger",
+            Color.FromRgb(0xEF, 0x6D, 0x6D));
+        Color good = ThemeColor.Get(
+            "StatusGood",
+            Color.FromRgb(0x5C, 0xCB, 0x8B));
 
         // ---- headline ----
         string headline = Applied
@@ -98,12 +111,12 @@ public sealed class RepairScope : FrameworkElement
             : Active
                 ? "Reconstructing damaged sectors from parity..."
                 : $"{Fmt(Samples)} samples across {Sectors} sector" + (Sectors == 1 ? "" : "s") + " - recoverable from parity";
-        Color hColor = Applied ? Good : Amber;
+        Color hColor = Applied ? good : amber;
         Text(dc, headline, 1, 0, 14, hColor, bold: true);
 
         // state pill (right)
         string pill = Applied ? "REPAIRED" : Active ? "REPAIRING" : "REPAIRABLE";
-        Color pc = Applied ? Good : Amber;
+        Color pc = Applied ? good : amber;
         var pillFt = MakeText(pill, 9.5, pc, bold: true);
         double pillW = pillFt.Width + 16, pillH = 17, pillX = w - pillW - 1;
         var pillRect = new Rect(pillX, 1, pillW, pillH);
@@ -123,7 +136,7 @@ public sealed class RepairScope : FrameworkElement
         track.Freeze();
         dc.DrawGeometry(new SolidColorBrush(trackColor), null, track);
 
-        var map = Map;
+        var map = MapSource as double[] ?? Map;
         dc.PushClip(track);
         if (map != null && map.Length > 0)
         {
@@ -135,7 +148,7 @@ public sealed class RepairScope : FrameworkElement
                 if (d <= 0) continue;
                 double cx = (b + 0.5) / B;
                 bool recovered = Applied || (Active && cx <= _sweep);
-                Color c = recovered ? Good : Lerp(Amber, Crit, d);
+                Color c = recovered ? good : Lerp(amber, critical, d);
                 byte al = (byte)(90 + 150 * Math.Min(1, 0.4 + 0.6 * d));   // single-sector damage still visible
                 double x = bandL + b * bw;
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(al, c.R, c.G, c.B)), null,
@@ -145,9 +158,9 @@ public sealed class RepairScope : FrameworkElement
             if (Active && _sweep > 0.001 && _sweep < 0.999)
             {
                 double hx = bandL + _sweep * bandW;
-                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(60, Good.R, Good.G, Good.B)), null,
+                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(60, good.R, good.G, good.B)), null,
                     new Rect(hx - 5, bandY, 10, bandH));
-                var head = new Pen(new SolidColorBrush(Good), 1.8);
+                var head = new Pen(new SolidColorBrush(good), 1.8);
                 head.Freeze();
                 dc.DrawLine(head, new Point(hx, bandY - 1), new Point(hx, bandY + bandH + 1));
             }
@@ -171,7 +184,7 @@ public sealed class RepairScope : FrameworkElement
             // stages 0..3 are done once errors are located (verify pass); apply is done only on repair
             bool done = isApply ? Applied : (Recoverable || Active || Applied);
             bool running = isApply && Active;
-            Color c = done ? (isApply ? Good : Teal) : mut;
+            Color c = done ? (isApply ? good : teal) : mut;
             double pulse = running ? 0.5 + 0.5 * Math.Sin(_phase * 2) : 1.0;
             byte fill = (byte)((done ? 34 : 16) * pulse + 6);
             var chip = new Rect(x, py, chipW, 18);

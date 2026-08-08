@@ -3257,6 +3257,31 @@ step before any fix.
   wedged, with the tray-cycle remedy, before the read begins. Ripper 59/59,
   WPF 472/472, legacy lanes green.
 
+### R125. Album-level Verify & Repair workspace - DONE 2026-08-08, risk medium
+
+- **Area or slice:** WPF Verify source discovery, album/disc orchestration, result
+  presentation, report publication, and focused verification UI tests.
+- **Why it matters:** Verify accepted only one file and reduced the final report to two
+  confidence cards, leaving folder import, multi-disc identity, per-track checksums,
+  release facts, repair scope, and partial batch failures invisible. Users had to find
+  the right CUE themselves and could not audit a whole album set as one job.
+- **Fix:** album folders, selected manifests, and shell drops resolve through one bounded
+  discovery service. CUE sheets outrank playlists; manifests that reference the same
+  audio fail closed; multiple loose tracks require an explicit CUE/M3U; child reparse
+  points and oversized/deep scans are bounded. Discs verify serially in natural disc
+  order and preserve successful results when another disc fails or the user stops after
+  the current disc. The workspace shows aggregate verdict/duration, release identity,
+  AccurateRip/CTDB evidence, track CRC/confidence rows, TOC ID, and CTDB parity scope.
+  Repair remains an explicit per-disc source-preserving transaction. A failed repair
+  keeps the earlier Verify evidence and retry capability. Report observers are isolated
+  so a presentation failure cannot revoke a published result.
+- **Verified:** 24 focused discovery/workspace/layout/theme/observer checks and the
+  complete WPF suite pass (505/505, zero skipped). The canonical six-suite gate passes
+  726/732 with six declared skips and zero failures; WPF/fuzz builds emit zero warning
+  fingerprints. Release-safety, deterministic fuzz, and vendor-clean gates pass.
+- **Approval needed:** no; additive UI/read-only discovery, with protected repair
+  semantics preserved.
+
 ### R119. Salvage read mode for defective-by-design discs - bucket D, design
 
 - **Area or slice:** RipService Test & Copy variant, SCSIDrive read
@@ -3435,7 +3460,8 @@ step before any fix.
 
 ## Ordering
 
-The locally actionable and hosted correctness queue is closed through R105.
+The locally actionable and hosted correctness queue is closed through R105, and the
+album-level Verify workspace is closed as R125.
 
 The 2026-08-01/02 recovery wave is complete for everything software evidence
 can settle. Fixed: R106-R114, R115 (2 of 4), R118 (five mitigations across
