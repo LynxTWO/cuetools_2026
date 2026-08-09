@@ -39,11 +39,11 @@ fail if either profile loses its minimum coverage, selects a hash-pinned
 upstream file, weakens a digest, omits plugin-manifest regeneration, or moves
 signing after provenance/SBOM generation.
 
-## Current hosted evidence
+## Current hosted unsigned evidence
 
-[Manual release run 30518479906](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518479906)
+[Manual release run 30849431011](https://github.com/LynxTWO/cuetools_2026/actions/runs/30849431011)
 completed successfully at commit
-`a7f26bf457b736fcd61f186d5f34b6d139d94147` with zero check-run annotations.
+`b0d0864b6512e72d196ee373e37325fa77461318` with zero check-run annotations.
 The downloaded status document reports:
 
 ```json
@@ -77,10 +77,11 @@ in the repository. Rotate the certificate before expiration and immediately
 after suspected disclosure. Revoke the affected certificate before issuing a
 replacement after confirmed private-key compromise.
 
-The remaining owner action is acquiring or selecting the public-trust signing
-identity and configuring those protected values. The repository no longer
-allows that external choice to degrade silently into an unsigned tagged
-release.
+The 2026 SignPath Foundation application was not accepted at the fork's current
+reputation level, so no approved public-trust signing identity is available.
+Acquiring a future provider and configuring those protected values remains an
+external prerequisite for a stable release. The repository does not allow that
+missing prerequisite to degrade silently into an unsigned stable tag.
 
 ## Local and hosted checks
 
