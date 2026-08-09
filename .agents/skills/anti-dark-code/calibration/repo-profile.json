@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "generated_by": "anti-dark-code 2026.08.09-unified.5 adc.py probe",
-  "generated_at_utc": "2026-08-09T12:22:19Z",
+  "generated_at_utc": "2026-08-09T21:47:11Z",
   "repo_root": ".",
   "source_identity": {
-    "git_commit": "2a8df3e3cc2039110f851bf9a1dda336d4882e64",
+    "git_commit": "17e806f6862b1ffc7cd6773bbb579fb094808e6e",
     "git_branch": "agent/mutation-harness",
     "worktree_clean": true,
     "worktree_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
