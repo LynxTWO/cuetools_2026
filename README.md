@@ -21,9 +21,11 @@ signature cannot be validated and timestamped.
 
 Read the [code-signing policy](CODE_SIGNING_POLICY.md), [privacy policy](PRIVACY.md),
 and the detailed [release-signing implementation](docs/security/release-signing.md)
-before redistributing a build. The project is applying to the SignPath Foundation
-program; no SignPath signature is claimed until approval and a signed stable
-release are both verifiable.
+before redistributing a build. SignPath Foundation did not accept the project's
+2026 application because this new fork did not yet meet its project-reputation
+threshold. No SignPath signature is claimed. Until an approved public-trust
+signing provider is configured and independently verified, this fork publishes
+only clearly labeled unsigned previews; stable tags continue to fail closed.
 
 ## Capabilities
 
