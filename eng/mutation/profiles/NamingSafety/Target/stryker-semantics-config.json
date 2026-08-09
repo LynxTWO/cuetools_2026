@@ -11,8 +11,7 @@
     "disable-mix-mutants": true,
     "thresholds": { "high": 80, "low": 60, "break": 0 },
     "mutate": [
-      "**/AlbumArtifactNames.cs",
-      "**/NamingPaths.cs"
+      "**/NamingEngine.cs"
     ]
   }
 }

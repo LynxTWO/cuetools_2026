@@ -36,6 +36,12 @@ namespace CUETools.Ripper.Tests
                 ReadTimeoutPolicy.SecondsFor(10, 44, windowInRecovery: false));
             Assert.IsTrue(1408 <= ReadTimeoutPolicy.SlowSpeedKbps,
                 "the threshold must cover every observed death speed");
+            Assert.AreEqual(ReadTimeoutPolicy.RecoverySeconds,
+                ReadTimeoutPolicy.SecondsFor(
+                    10,
+                    ReadTimeoutPolicy.SlowSpeedKbps,
+                    windowInRecovery: false),
+                "the published slow-speed threshold is inclusive");
         }
 
         [TestMethod]

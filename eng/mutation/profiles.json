@@ -8,10 +8,10 @@
       "sourceProject": "profiles/RipperPolicies/Target/Target.csproj",
       "testProject": "profiles/RipperPolicies/Tests/Tests.csproj",
       "config": "profiles/RipperPolicies/Target/stryker-config.json",
-      "minimumQuickScore": 76.0,
-      "minimumFullScore": 74.5,
+      "minimumQuickScore": 95.0,
+      "minimumFullScore": 93.0,
       "maximumQuickNoCoverage": 0,
-      "maximumFullNoCoverage": 2,
+      "maximumFullNoCoverage": 1,
       "expectedTests": [
         "CUETools.Ripper.Tests/DriveReportedTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/FailedSectorAccountingTests.cs",
@@ -19,6 +19,7 @@
         "CUETools.Ripper.Tests/ReadTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/RecoveryPolicyTests.cs",
         "CUETools.Ripper.Tests/SampleConcealmentTests.cs",
+        "CUETools.Ripper.Tests/SecureSectorVoteTests.cs",
         "CUETools.Ripper.Tests/SlipCorrelatorTests.cs",
         "CUETools.Ripper.Tests/SplitChildAndTransitionPolicyTests.cs",
         "CUETools.Ripper.Tests/WindowBudgetTests.cs"
@@ -39,10 +40,10 @@
       "sourceProject": "profiles/VerificationDiscovery/Target/Target.csproj",
       "testProject": "profiles/VerificationDiscovery/Tests/Tests.csproj",
       "config": "profiles/VerificationDiscovery/Target/stryker-config.json",
-      "minimumQuickScore": 76.0,
-      "minimumFullScore": 68.5,
+      "minimumQuickScore": 89.0,
+      "minimumFullScore": 84.0,
       "maximumQuickNoCoverage": 2,
-      "maximumFullNoCoverage": 9,
+      "maximumFullNoCoverage": 8,
       "expectedTests": [
         "CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs",
         "eng/mutation/profiles/VerificationDiscovery/Tests/ConfiguredFormatTests.cs"
@@ -57,10 +58,10 @@
       "sourceProject": "profiles/TestCopyHistory/Target/Target.csproj",
       "testProject": "profiles/TestCopyHistory/Tests/Tests.csproj",
       "config": "profiles/TestCopyHistory/Target/stryker-config.json",
-      "minimumQuickScore": 83.5,
-      "minimumFullScore": 68.5,
-      "maximumQuickNoCoverage": 7,
-      "maximumFullNoCoverage": 51,
+      "minimumQuickScore": 92.5,
+      "minimumFullScore": 84.0,
+      "maximumQuickNoCoverage": 4,
+      "maximumFullNoCoverage": 29,
       "expectedTests": [
         "CUETools.Wpf.Tests/GzJsonTests.cs",
         "CUETools.Wpf.Tests/TestAndCopyResolverTests.cs",
@@ -73,27 +74,54 @@
       ]
     },
     {
-      "id": "naming-safety",
+      "id": "naming-path-safety",
       "risk": "high",
       "sourceProject": "profiles/NamingSafety/Target/Target.csproj",
       "testProject": "profiles/NamingSafety/Tests/Tests.csproj",
       "config": "profiles/NamingSafety/Target/stryker-config.json",
-      "minimumQuickScore": 74.0,
-      "minimumFullScore": 52.5,
+      "minimumQuickScore": 89.0,
+      "minimumFullScore": 89.0,
       "maximumQuickNoCoverage": 0,
-      "maximumFullNoCoverage": 53,
+      "maximumFullNoCoverage": 3,
       "expectedTests": [
         "CUETools.Wpf.Tests/AlbumArtifactNamesTests.cs",
         "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
+        "CUETools.Wpf.Tests/DiscPaddingTests.cs",
         "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
+        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
         "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
         "CUETools.Wpf.Tests/NamingPathsTests.cs",
+        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
         "CUETools.Wpf/Services/AlbumArtifactNames.cs",
-        "CUETools.Wpf/Services/NamingEngine.cs",
         "CUETools.Wpf/Services/NamingPaths.cs"
+      ]
+    },
+    {
+      "id": "naming-semantics",
+      "risk": "high",
+      "sourceProject": "profiles/NamingSafety/Target/Target.csproj",
+      "testProject": "profiles/NamingSafety/Tests/Tests.csproj",
+      "config": "profiles/NamingSafety/Target/stryker-semantics-config.json",
+      "minimumQuickScore": 92.0,
+      "minimumFullScore": 91.0,
+      "maximumQuickNoCoverage": 0,
+      "maximumFullNoCoverage": 7,
+      "expectedTests": [
+        "CUETools.Wpf.Tests/AlbumArtifactNamesTests.cs",
+        "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
+        "CUETools.Wpf.Tests/DiscPaddingTests.cs",
+        "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
+        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
+        "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
+        "CUETools.Wpf.Tests/NamingPathsTests.cs",
+        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
+        "CUETools.Wpf.Tests/NamingTokenTests.cs"
+      ],
+      "expectedSources": [
+        "CUETools.Wpf/Services/NamingEngine.cs"
       ]
     },
     {
@@ -102,10 +130,10 @@
       "sourceProject": "profiles/OutputGuard/Target/Target.csproj",
       "testProject": "profiles/OutputGuard/Tests/Tests.csproj",
       "config": "profiles/OutputGuard/Target/stryker-config.json",
-      "minimumQuickScore": 69.0,
-      "minimumFullScore": 67.0,
-      "maximumQuickNoCoverage": 4,
-      "maximumFullNoCoverage": 15,
+      "minimumQuickScore": 75.0,
+      "minimumFullScore": 90.0,
+      "maximumQuickNoCoverage": 0,
+      "maximumFullNoCoverage": 2,
       "expectedTests": [
         "CUETools.Wpf.Tests/OutputGuardTests.cs"
       ],
@@ -119,8 +147,8 @@
       "sourceProject": "profiles/ArtworkRanking/Target/Target.csproj",
       "testProject": "profiles/ArtworkRanking/Tests/Tests.csproj",
       "config": "profiles/ArtworkRanking/Target/stryker-config.json",
-      "minimumQuickScore": 76.5,
-      "minimumFullScore": 75.5,
+      "minimumQuickScore": 89.0,
+      "minimumFullScore": 90.0,
       "maximumQuickNoCoverage": 0,
       "maximumFullNoCoverage": 0,
       "expectedTests": [

@@ -21,9 +21,7 @@ namespace CUETools.Ripper.Tests
             SlipCorrelationResult result =
                 SlipCorrelator.FindOffset(a, (short[])a.Clone(), 64);
             Assert.AreEqual(0, result.Offset);
-            Assert.IsTrue(
-                result.Strength >= SlipCorrelator.MinStrength,
-                $"identical should be strong, was {result.Strength}");
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
         }
 
         [TestMethod]
@@ -37,9 +35,73 @@ namespace CUETools.Ripper.Tests
             SlipCorrelationResult result =
                 SlipCorrelator.FindOffset(reference, candidate, 64);
             Assert.AreEqual(5, result.Offset);
-            Assert.IsTrue(
-                result.Strength >= SlipCorrelator.MinStrength,
-                $"a clean shift should be strong, was {result.Strength}");
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
+        }
+
+        [TestMethod]
+        public void DetectsNegativeShiftAtTheConfiguredBoundary()
+        {
+            var reference = Ramp(2000, 0);
+            var candidate = new short[2000];
+            for (int i = 0; i < candidate.Length - 5; i++)
+                candidate[i] = reference[i + 5];
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 5);
+
+            Assert.AreEqual(-5, result.Offset);
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
+        }
+
+        [TestMethod]
+        public void ExactlyHalfOverlapRemainsEligible()
+        {
+            var reference = Ramp(8, 100);
+            var candidate = new short[8];
+            for (int i = 4; i < candidate.Length; i++)
+                candidate[i] = reference[i - 4];
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 4);
+
+            Assert.AreEqual(4, result.Offset);
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
+        }
+
+        [TestMethod]
+        public void UnequalInputsUseOnlyTheirSharedLength()
+        {
+            short[] reference = Ramp(128, 0);
+            short[] candidate = new short[64];
+            System.Array.Copy(reference, candidate, candidate.Length);
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 0);
+
+            Assert.AreEqual(0, result.Offset);
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
+        }
+
+        [TestMethod]
+        public void TheFirstOverlappingSampleParticipatesInCorrelation()
+        {
+            short[] samples = { 1234, 0 };
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(samples, (short[])samples.Clone(), 0);
+
+            Assert.AreEqual(0, result.Offset);
+            Assert.AreEqual(1.0, result.Strength, 1e-12);
+        }
+
+        [TestMethod]
+        public void EmptySharedInputHasNoAlignmentEvidence()
+        {
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(System.Array.Empty<short>(), new short[8], 4);
+
+            Assert.AreEqual(0, result.Offset);
+            Assert.AreEqual(0.0, result.Strength);
         }
 
         [TestMethod]

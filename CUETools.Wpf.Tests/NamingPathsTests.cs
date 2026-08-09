@@ -86,6 +86,14 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void Unique_RootStyleEntryWithNoFilenameGetsATrackNumber()
+        {
+            CollectionAssert.AreEqual(
+                new[] { "/01" },
+                NamingPaths.EnsureUniqueTrackNames(new[] { "/" }));
+        }
+
+        [TestMethod]
         public void Unique_CaseInsensitiveDuplicatesAreCaught()
         {
             // Windows paths are case-insensitive, so these would collide on disk

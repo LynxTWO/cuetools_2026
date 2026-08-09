@@ -89,8 +89,51 @@ namespace CUETools.Wpf.Tests
             var reads = new[] { Read(10, 20, 30), Read(10, 20, 30) };
             var r = TestAndCopyResolver.Resolve(reads, Staged(2));
             Assert.AreEqual(TestCopyOutcome.Passed, r.Outcome);
+            Assert.AreEqual(2, r.ReadsUsed);
             Assert.AreEqual(0, r.HeldTracks.Length);
-            foreach (var v in r.Tracks) { Assert.IsTrue(v.Agreed); Assert.AreEqual(1, v.SourceReadIndex); }
+            for (int i = 0; i < r.Tracks.Length; i++)
+            {
+                TrackVerdict v = r.Tracks[i];
+                Assert.AreEqual(i, v.TrackIndex);
+                Assert.IsTrue(v.Agreed);
+                Assert.AreEqual(1, v.SourceReadIndex);
+                CollectionAssert.AreEqual(new[] { 0, 1 }, v.AgreeingReads);
+            }
+        }
+
+        [TestMethod]
+        public void ResolveRejectsInvalidArgumentsWithStableParameterNames()
+        {
+            var nullReads = Assert.ThrowsException<ArgumentNullException>(() =>
+                TestAndCopyResolver.Resolve(null, Array.Empty<bool>()));
+            Assert.AreEqual("reads", nullReads.ParamName);
+
+            var nullStaged = Assert.ThrowsException<ArgumentNullException>(() =>
+                TestAndCopyResolver.Resolve(Array.Empty<VerifyRecord>(), null));
+            Assert.AreEqual("staged", nullStaged.ParamName);
+
+            var mismatched = Assert.ThrowsException<ArgumentException>(() =>
+                TestAndCopyResolver.Resolve(new[] { Read(1) }, Array.Empty<bool>()));
+            Assert.AreEqual("staged", mismatched.ParamName);
+            StringAssert.Contains(mismatched.Message, "one staged flag per read is required");
+        }
+
+        [TestMethod]
+        public void ResolveTreatsNullAndRaggedReadsAsMissingTracks()
+        {
+            var reads = new VerifyRecord[]
+            {
+                null,
+                new VerifyRecord { Tracks = null },
+                Read(10, 20),
+            };
+
+            TestCopyResult result = TestAndCopyResolver.Resolve(
+                reads,
+                new[] { true, true, true });
+
+            Assert.AreEqual(TestCopyOutcome.Held, result.Outcome);
+            CollectionAssert.AreEqual(new[] { 0, 1 }, result.HeldTracks);
         }
 
         [TestMethod]
@@ -154,6 +197,7 @@ namespace CUETools.Wpf.Tests
             var r = TestAndCopyResolver.Resolve(reads, Staged(3));
             Assert.AreEqual(TestCopyOutcome.Passed, r.Outcome);
             Assert.AreEqual(1, r.Tracks[0].SourceReadIndex);   // all three agree -> Copy (1) preferred
+            CollectionAssert.AreEqual(new[] { 0, 1 }, r.Tracks[0].AgreeingReads);
             Assert.AreEqual(2, r.Tracks[1].SourceReadIndex);   // only Test+third agree -> third (2)
             CollectionAssert.AreEqual(new[] { 0, 2 }, r.Tracks[1].AgreeingReads);
         }
@@ -217,6 +261,9 @@ namespace CUETools.Wpf.Tests
             Assert.AreEqual(-1,
                 TestAndCopyResolver.FullyVerifiedReadIndex(
                     Array.Empty<VerifyRecord>(), Array.Empty<bool>()));
+            Assert.AreEqual(-1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(
+                    new[] { Read(), Read() }, Staged(2)));
         }
 
         [TestMethod]
@@ -279,8 +326,44 @@ namespace CUETools.Wpf.Tests
             TrackCrc[] evidence =
                 TestAndCopyResolver.BuildCrcEvidence(reads, sourceReadIndex: 0);
 
+            Assert.AreEqual(0xAAAAAAAAu, evidence[0].Crc32);
             Assert.AreEqual(0xAAAAAAAAu, evidence[0].TestCrc32);
             Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidenceHandlesASelectedReadLongerThanNamedReads()
+        {
+            var reads = new[]
+            {
+                Record(new TrackCrc { Crc32 = 0x10 }),
+                Record(new TrackCrc { Crc32 = 0x20 }),
+                Record(
+                    new TrackCrc { Crc32 = 0x30 },
+                    new TrackCrc { Crc32 = 0x40 }),
+            };
+
+            TrackCrc[] evidence = TestAndCopyResolver.BuildCrcEvidence(reads, 2);
+
+            Assert.AreEqual(2, evidence.Length);
+            Assert.AreEqual(0x40u, evidence[1].Crc32);
+            Assert.AreEqual(0u, evidence[1].TestCrc32);
+            Assert.AreEqual(0u, evidence[1].CopyCrc32);
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidencePrefersSelectedCopyEvidenceBeforeTestFallback()
+        {
+            var reads = new[]
+            {
+                Record(new TrackCrc { CopyCrc32 = 0x10 }),
+                Record(),
+                Record(new TrackCrc { CopyCrc32 = 0x30 }),
+            };
+
+            TrackCrc[] evidence = TestAndCopyResolver.BuildCrcEvidence(reads, 2);
+
+            Assert.AreEqual(0x30u, evidence[0].CopyCrc32);
         }
 
         [TestMethod]

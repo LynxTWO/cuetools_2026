@@ -181,6 +181,34 @@ namespace CUETools.Ripper.Tests
                         0x01));
         }
 
+        [DataTestMethod]
+        [DataRow(Device.CommandStatus.IoctlFailed, Device.SenseKeyType.IllegalRequest, 0x24, 0x00)]
+        [DataRow(Device.CommandStatus.DeviceFailed, Device.SenseKeyType.HardwareError, 0x24, 0x00)]
+        [DataRow(Device.CommandStatus.DeviceFailed, Device.SenseKeyType.IllegalRequest, 0x25, 0x00)]
+        [DataRow(Device.CommandStatus.DeviceFailed, Device.SenseKeyType.IllegalRequest, 0x24, 0x01)]
+        public void RejectedBatchCorroborationRequiresEveryRepeatedFailureField(
+            Device.CommandStatus repeatedStatus,
+            Device.SenseKeyType repeatedSense,
+            int repeatedAsc,
+            int repeatedAscq)
+        {
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.IsCorroboratedRejectedBatchPinpoint(
+                    16,
+                    Device.CommandStatus.DeviceFailed,
+                    Device.SenseKeyType.IllegalRequest,
+                    0x24,
+                    0x00,
+                    Device.CommandStatus.DeviceFailed,
+                    Device.SenseKeyType.IllegalRequest,
+                    0x24,
+                    0x00,
+                    repeatedStatus,
+                    repeatedSense,
+                    (byte)repeatedAsc,
+                    (byte)repeatedAscq));
+        }
+
         [TestMethod]
         public void PinpointInvalidFieldRetriesOnlyAfterParentMediumError()
         {
@@ -573,6 +601,9 @@ namespace CUETools.Ripper.Tests
             Assert.AreEqual(
                 0,
                 PayloadReadFailurePolicy.RequiredCacheDefeatSectors(0));
+            Assert.AreEqual(
+                0,
+                PayloadReadFailurePolicy.RequiredCacheDefeatSectors(-1));
         }
 
         [TestMethod]

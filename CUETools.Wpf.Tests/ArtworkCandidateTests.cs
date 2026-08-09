@@ -81,8 +81,37 @@ public sealed class ArtworkCandidateTests
             "same", ArtworkMatchTier.ExactRelease, 100, 100, 100);
 
         Assert.AreEqual(0, ArtworkCandidateComparer.Recommended.Compare(candidate, candidate));
-        Assert.IsTrue(ArtworkCandidateComparer.Recommended.Compare(null, candidate) > 0);
-        Assert.IsTrue(ArtworkCandidateComparer.Recommended.Compare(candidate, null) < 0);
+        Assert.AreEqual(1, ArtworkCandidateComparer.Recommended.Compare(null, candidate));
+        Assert.AreEqual(-1, ArtworkCandidateComparer.Recommended.Compare(candidate, null));
+    }
+
+    [TestMethod]
+    public void OptionalArtworkMetadataHasStableDefaults()
+    {
+        var candidate = new ArtworkCandidate
+        {
+            CandidateId = "defaults",
+            Provider = "provider",
+            ProviderItemId = "item",
+            ThumbnailUri = new Uri("https://example.invalid/thumb.jpg"),
+            OriginalUri = new Uri("https://example.invalid/original.jpg"),
+            MatchTier = ArtworkMatchTier.ExactRelease,
+            ProviderConfidence = ArtworkProviderConfidence.CtdbPrimary,
+            MatchReason = "exact",
+        };
+
+        Assert.IsNull(candidate.Width);
+        Assert.IsNull(candidate.Height);
+        Assert.IsNull(candidate.ByteLength);
+        Assert.AreEqual("", candidate.MimeType);
+        Assert.IsFalse(candidate.IsFront);
+        Assert.IsFalse(candidate.IsApproved);
+        Assert.IsFalse(candidate.IsPrimary);
+        Assert.IsFalse(candidate.IsWatermarked);
+        Assert.IsTrue(candidate.AutomaticEligible);
+        Assert.AreEqual(0, candidate.ProviderOrder);
+        Assert.IsNull(candidate.InfoUri);
+        Assert.AreEqual("Front", candidate.ArtworkType);
     }
 
     [TestMethod]
@@ -132,9 +161,66 @@ public sealed class ArtworkCandidateTests
             "known", ArtworkMatchTier.ExactRelease, 1, 1, 100);
         ArtworkCandidate missingWidth = known with { CandidateId = "missing-width", Width = null };
         ArtworkCandidate missingHeight = known with { CandidateId = "missing-height", Height = null };
+        ArtworkCandidate zeroWidth = known with { CandidateId = "zero-width", Width = 0 };
+        ArtworkCandidate zeroHeight = known with { CandidateId = "zero-height", Height = 0 };
 
         AssertComesFirst(known, missingWidth);
         AssertComesFirst(known, missingHeight);
+        AssertComesFirst(known, zeroWidth);
+        AssertComesFirst(known, zeroHeight);
+    }
+
+    [TestMethod]
+    public void ZeroAndUnknownByteLengthsHaveTheSameUnknownQualityRank()
+    {
+        ArtworkCandidate knownZero = Candidate(
+            "known-zero", ArtworkMatchTier.ExactRelease, 100, 100, 0);
+        ArtworkCandidate unknown = knownZero with
+        {
+            ByteLength = null,
+        };
+
+        Assert.AreEqual(0, ArtworkCandidateComparer.Recommended.Compare(knownZero, unknown));
+        Assert.AreEqual(0, ArtworkCandidateComparer.Recommended.Compare(unknown, knownZero));
+    }
+
+    [TestMethod]
+    public void PositiveByteLengthOutranksUnknownWithNoLaterTieBreaker()
+    {
+        ArtworkCandidate positive = Candidate(
+            "same-id", ArtworkMatchTier.ExactRelease, 100, 100, 100);
+        ArtworkCandidate unknown = positive with { ByteLength = null };
+
+        AssertComesFirst(positive, unknown);
+    }
+
+    [TestMethod]
+    public void ShapePenaltyBreaksEqualAreaTiesWithoutHelpFromCandidateIdentity()
+    {
+        ArtworkCandidate square = Candidate(
+            "same-id", ArtworkMatchTier.ExactRelease, 100, 100, 100);
+        ArtworkCandidate wide = square with { Width = 200, Height = 50 };
+
+        AssertComesFirst(square, wide);
+    }
+
+    [TestMethod]
+    public void DifferentlyMissingDimensionsReachTheStableUnknownShapeTieBreaker()
+    {
+        ArtworkCandidate baseline = Candidate(
+            "baseline", ArtworkMatchTier.ExactRelease, 100, 100, 100);
+        ArtworkCandidate missingWidth = baseline with
+        {
+            CandidateId = "a",
+            Width = null,
+        };
+        ArtworkCandidate missingHeight = baseline with
+        {
+            CandidateId = "b",
+            Height = null,
+        };
+
+        AssertComesFirst(missingWidth, missingHeight);
     }
 
     private static void AssertComesFirst(ArtworkCandidate first, ArtworkCandidate second)

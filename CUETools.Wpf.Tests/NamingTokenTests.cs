@@ -1,4 +1,3 @@
-using System.Linq;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -85,7 +84,7 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
-        public void NullSecondaryEntriesAreIgnoredAndExamplesRemainAvailable()
+        public void NullSecondaryEntriesAreIgnored()
         {
             var context = new NamingContext
             {
@@ -99,16 +98,6 @@ namespace CUETools.Wpf.Tests
                 NamingEngine.Render(
                     context,
                     new NamingScheme { Template = "%releasedescriptor%" }));
-            Assert.AreEqual(4, NamingEngine.Examples().Count);
-            CollectionAssert.AreEqual(
-                new[]
-                {
-                    "Single artist",
-                    "Leading article + guest",
-                    "Multi-disc live set",
-                    "Various-artists soundtrack"
-                },
-                NamingEngine.Examples().Select(example => example.Label).ToArray());
         }
 
         [TestMethod]

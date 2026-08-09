@@ -16,18 +16,38 @@ The floors are regression gates, not claims that every survivor is a defect. The
 measured 2026-08-08 baseline so small timing or compiler differences do not create a false failure.
 The no-coverage ceiling separately prevents a stable score from hiding newly untested code.
 
-| Profile | Risk | Production surface | Quick measured / floor | Full measured / floor |
-| --- | --- | --- | --- | --- |
-| `ripper-policies` | critical | secure-read recovery, voting, timeout, concealment, slip correlation | 77.49 / 76.0 | 75.97 / 74.5 |
-| `verification-discovery` | high | album, CUE, playlist, and lossless-source discovery | 77.45 / 76.0 | 70.18 / 68.5 |
-| `test-copy-history` | critical | Test & Copy resolution, CRC history, bounded persistence | 85.00 / 83.5 | 70.28 / 68.5 |
-| `naming-safety` | high | portable album/track names and path collision handling | 77.30 / 74.0 | 54.10 / 52.5 |
-| `output-guard` | critical | non-clobbering publication directory selection | 70.59 / 69.0 | 68.57 / 67.0 |
-| `artwork-ranking` | medium | release-identity and image-quality ordering | 78.00 / 76.5 | 77.22 / 75.5 |
+| Profile | Risk | Production surface | Quick measured / floor | Full measured / floor | No coverage quick / full |
+| --- | --- | --- | --- | --- | --- |
+| `ripper-policies` | critical | secure-read recovery, voting, timeout, concealment, slip correlation | 96.14 / 95.0 | 94.42 / 93.0 | 0 / 1 |
+| `verification-discovery` | high | album, CUE, playlist, and lossless-source discovery | 90.72 / 89.0 | 85.78 / 84.0 | 2 / 8 |
+| `test-copy-history` | critical | Test & Copy resolution, CRC history, bounded persistence | 94.09 / 92.5 | 85.85 / 84.0 | 4 / 29 |
+| `naming-path-safety` | high | artifact names, portable paths, and collision handling | 90.20 / 89.0 | 90.13 / 89.0 | 0 / 3 |
+| `naming-semantics` | high | token expansion, metadata normalization, and fallbacks | 93.10 / 92.0 | 92.35 / 91.0 | 0 / 7 |
+| `output-guard` | critical | non-clobbering publication directory selection | 76.47 / 75.0 | 91.43 / 90.0 | 0 / 2 |
+| `artwork-ranking` | medium | release-identity and image-quality ordering | 90.20 / 89.0 | 91.36 / 90.0 | 0 / 0 |
 
 Quick uses Stryker's Basic mutation level and is the pull-request lane. Full uses Standard and is the
 scheduled/manual deep lane. Exact source inventories, score floors, and no-coverage ceilings live in
 `profiles.json`; changing them is a reviewable quality-policy change.
+
+The 2026-08-08 survivor review split naming into two profiles. Path safety and token semantics now
+have independent scores. `NamingPresentation.cs` contains preset names, palette entries, and sample
+previews. Those catalogs are covered by exact-value tests but are not mutation-scored because string
+replacement mutants measure catalog text, not naming correctness.
+
+The same review added missing behavior contracts for secure-sector voting, C2 weighting, sample
+concealment, slip alignment, failed-sector accounting, Test & Copy evidence, CRC history roles,
+gzip store boundaries, discovery limits, output collision fallback, and artwork ranking. Remaining
+survivors fall into four reviewed groups:
+
+- Equivalent boundaries, such as `<= 0` versus `< 0` when the zero path already produces zero, and
+  signed versus unsigned shifts on nonnegative indices.
+- Defensive fallbacks that cannot change a valid result, such as secondary ordering after unique
+  disc numbers and an extra loop iteration with no body work.
+- Error text and default-value mutations where status, exception type, and preservation behavior are
+  the asserted contract.
+- OS, timeout, and durability branches that need integration or fault-injection tests. These remain
+  visible through the no-coverage ceilings instead of being excluded from mutation.
 
 ## Run it
 
