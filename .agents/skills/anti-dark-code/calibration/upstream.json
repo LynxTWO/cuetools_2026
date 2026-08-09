@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source_skill": "anti-dark-code",
+  "installed_version": "2026.08.09-unified.5",
+  "installed_core_sha256": "230a06709d767e09487aac090807d532f14296b851ce1a611817033d6bcbf27a",
+  "promotion_mode": "proposal-only",
+  "parent_path": null,
+  "notes": [
+    "Pass the parent path explicitly or use ADC_PARENT_SKILL when staging a proposal.",
+    "Do not commit personal absolute paths.",
+    "Flow-back requires repo-binding.json to match the current repository."
+  ],
+  "binding_required": true
+}
