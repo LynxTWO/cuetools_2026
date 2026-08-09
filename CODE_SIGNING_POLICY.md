@@ -1,6 +1,6 @@
 # Code-signing policy
 
-Effective: 2026-07-30
+Effective: 2026-07-30. Status updated: 2026-08-08.
 
 This policy applies to Windows releases published from
 `LynxTWO/cuetools_2026`. It complements the machine-enforced policy in
@@ -9,13 +9,15 @@ This policy applies to Windows releases published from
 
 ## Current status
 
-The project is applying to the SignPath Foundation program. No artifact is
-claimed to be SignPath-signed until the application is accepted and the
-signature can be independently verified. While onboarding is pending, public
-evaluation builds are GitHub prereleases whose title, notes, and filenames say
-**unsigned preview**.
+SignPath Foundation did not accept the project's 2026 application. Its feedback
+cited the new fork's current project reputation and star count. This is an
+eligibility outcome, not evidence of a signed publisher identity. No artifact is
+claimed to be SignPath-signed. Until an approved public-trust signing provider is
+configured and independently verified, public evaluation builds are GitHub
+prereleases whose title, notes, and filenames say **unsigned preview**.
 
-Once approved, production release pages will include this attribution:
+If a future SignPath application is accepted, production release pages will
+include the required attribution:
 
 > Free code signing provided by [SignPath.io](https://about.signpath.io/),
 > certificate by [SignPath Foundation](https://signpath.org/)
@@ -45,13 +47,14 @@ source revision.
 committer. A production signing request is a separate manual approval after
 source review and successful hosted gates. Additional maintainers and signing
 approvers must be documented here before receiving those roles. The project
-will not invent an independent reviewer where none exists; SignPath may require
-an additional person or upstream participation before approving the project.
+will not invent an independent reviewer where none exists. A future signing
+provider may require another approver or upstream participation before accepting
+the project.
 
 Signing keys are not committed to the repository, placed in release archives,
-or made available to ordinary build steps. Under the intended Foundation
-configuration, SignPath controls the certificate and private-key operation and
-applies the approved policy to a reproducible build.
+or made available to ordinary build steps. Under any future managed-signing
+configuration, the provider controls the certificate and private-key operation
+and applies the approved policy to a reproducible build.
 
 ## Signing scope
 

@@ -4,6 +4,17 @@ using CUETools.Processor;
 
 namespace CUETools.Wpf.Services;
 
+public sealed class VerifyTrackResult
+{
+    public int Number { get; init; }
+    public string Title { get; init; } = "";
+    public string Artist { get; init; } = "";
+    public string Crc32 { get; init; } = "";
+    public int ArConfidence { get; init; }
+    public int ArTotal { get; init; }
+    public int CtdbConfidence { get; init; }
+}
+
 public sealed class VerifyFilesResult
 {
     public bool Ok { get; init; }
@@ -11,7 +22,20 @@ public sealed class VerifyFilesResult
     public string Status { get; init; } = "";
     public string Artist { get; init; } = "";
     public string Album { get; init; } = "";
+    public string Year { get; init; } = "";
+    public string Genre { get; init; } = "";
+    public string Label { get; init; } = "";
+    public string CatalogNumber { get; init; } = "";
+    public string Barcode { get; init; } = "";
+    public string Country { get; init; } = "";
+    public string ReleaseDate { get; init; } = "";
+    public string DiscNumber { get; init; } = "";
+    public string TotalDiscs { get; init; } = "";
+    public string DiscName { get; init; } = "";
+    public string TocId { get; init; } = "";
+    public long DurationSeconds { get; init; }
     public int TrackCount { get; init; }
+    public VerifyTrackResult[] Tracks { get; init; } = Array.Empty<VerifyTrackResult>();
     public int ArConfidence { get; init; }
     public int ArTotal { get; init; }
     public int CtdbConfidence { get; init; }
@@ -310,7 +334,30 @@ public sealed class VerifyService : IVerifyService
             Status = status,
             Artist = verified.Artist.Length == 0 ? repaired.Artist : verified.Artist,
             Album = verified.Album.Length == 0 ? repaired.Album : verified.Album,
+            Year = verified.Year.Length == 0 ? repaired.Year : verified.Year,
+            Genre = verified.Genre.Length == 0 ? repaired.Genre : verified.Genre,
+            Label = verified.Label.Length == 0 ? repaired.Label : verified.Label,
+            CatalogNumber = verified.CatalogNumber.Length == 0
+                ? repaired.CatalogNumber
+                : verified.CatalogNumber,
+            Barcode = verified.Barcode.Length == 0 ? repaired.Barcode : verified.Barcode,
+            Country = verified.Country.Length == 0 ? repaired.Country : verified.Country,
+            ReleaseDate = verified.ReleaseDate.Length == 0
+                ? repaired.ReleaseDate
+                : verified.ReleaseDate,
+            DiscNumber = verified.DiscNumber.Length == 0
+                ? repaired.DiscNumber
+                : verified.DiscNumber,
+            TotalDiscs = verified.TotalDiscs.Length == 0
+                ? repaired.TotalDiscs
+                : verified.TotalDiscs,
+            DiscName = verified.DiscName.Length == 0 ? repaired.DiscName : verified.DiscName,
+            TocId = verified.TocId.Length == 0 ? repaired.TocId : verified.TocId,
+            DurationSeconds = verified.DurationSeconds == 0
+                ? repaired.DurationSeconds
+                : verified.DurationSeconds,
             TrackCount = verified.TrackCount == 0 ? repaired.TrackCount : verified.TrackCount,
+            Tracks = verified.Tracks.Length == 0 ? repaired.Tracks : verified.Tracks,
             ArConfidence = verified.ArConfidence,
             ArTotal = verified.ArTotal,
             CtdbConfidence = verified.CtdbConfidence,
@@ -324,6 +371,8 @@ public sealed class VerifyService : IVerifyService
             RepairSectors = repaired.RepairSectors,
             RepairTotalSectors = repaired.RepairTotalSectors,
             RepairNpar = repaired.RepairNpar,
+            RepairWorstStripeErrors = repaired.RepairWorstStripeErrors,
+            RepairStripeCapacity = repaired.RepairStripeCapacity,
             RepairSectorMap = repaired.RepairSectorMap,
             RepairRanges = repaired.RepairRanges,
             RepairApplied = true
@@ -403,14 +452,70 @@ public sealed class VerifyService : IVerifyService
             catch (Exception ex) { log.Warn("verify", "repair detail extraction failed: " + ex.GetType().Name); }
         }
 
+        VerifyTrackResult[] tracks = new VerifyTrackResult[cue.TrackCount];
+        bool trackEvidenceIncomplete = false;
+        for (int track = 0; track < tracks.Length; track++)
+        {
+            int trackArConfidence = 0;
+            int trackArTotal = 0;
+            int trackCtdbConfidence = 0;
+            string crc32 = "";
+            try
+            {
+                trackArConfidence = (int)cue.ArVerify.Confidence(track);
+                trackArTotal = (int)cue.ArVerify.Total(track);
+                trackCtdbConfidence = cue.CTDB.GetConfidence(track);
+                crc32 = cue.ArVerify.CRC32(track + 1).ToString("X8");
+            }
+            catch
+            {
+                trackEvidenceIncomplete = true;
+            }
+
+            string title = "";
+            string artist = "";
+            if (cue.Metadata?.Tracks != null && track < cue.Metadata.Tracks.Count)
+            {
+                title = cue.Metadata.Tracks[track].Title ?? "";
+                artist = cue.Metadata.Tracks[track].Artist ?? "";
+            }
+            tracks[track] = new VerifyTrackResult
+            {
+                Number = track + 1,
+                Title = title,
+                Artist = artist,
+                Crc32 = crc32,
+                ArConfidence = trackArConfidence,
+                ArTotal = trackArTotal,
+                CtdbConfidence = trackCtdbConfidence
+            };
+        }
+        if (trackEvidenceIncomplete)
+            log.Warn("verify", "one or more per-track evidence fields could not be read");
+
+        var metadata = cue.Metadata;
+
         return new VerifyFilesResult
         {
             Ok = ok,
             Error = error,
             Status = status,
-            Artist = cue.Metadata?.Artist ?? "",
-            Album = cue.Metadata?.Title ?? "",
+            Artist = metadata?.Artist ?? "",
+            Album = metadata?.Title ?? "",
+            Year = metadata?.Year ?? "",
+            Genre = metadata?.Genre ?? "",
+            Label = metadata?.Label ?? "",
+            CatalogNumber = metadata?.LabelNo ?? "",
+            Barcode = metadata?.Barcode ?? "",
+            Country = metadata?.Country ?? "",
+            ReleaseDate = metadata?.ReleaseDate ?? "",
+            DiscNumber = metadata?.DiscNumber ?? "",
+            TotalDiscs = metadata?.TotalDiscs ?? "",
+            DiscName = metadata?.DiscName ?? "",
+            TocId = cue.TOC.AudioTracks > 0 ? cue.TOC.TOCID : "",
+            DurationSeconds = cue.TOC.AudioLength / 75,
             TrackCount = cue.TrackCount,
+            Tracks = tracks,
             ArConfidence = arConf,
             ArTotal = arTotal,
             CtdbConfidence = ctConf,
