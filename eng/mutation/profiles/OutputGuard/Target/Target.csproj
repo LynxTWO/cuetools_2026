@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.OutputGuard</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ArtifactContract.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\OutputGuard.cs" Link="Production\OutputGuard.cs" />
+  </ItemGroup>
+</Project>

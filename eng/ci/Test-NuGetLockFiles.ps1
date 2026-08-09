@@ -26,6 +26,7 @@ $projects = @(
     Get-ChildItem -LiteralPath $repoRoot -Filter *.csproj -File -Recurse |
         Where-Object {
             $_.FullName -notlike (Join-Path $repoRoot "ThirdParty\*") -and
+            $_.FullName -notlike (Join-Path $repoRoot ".anti-dark-code\*") -and
             $_.FullName -notlike (Join-Path $repoRoot "obj\*") -and
             $_.FullName -notlike (Join-Path $repoRoot "bin\*")
         } |
@@ -55,6 +56,28 @@ foreach ($project in $projects) {
     if ([int]$lock.version -lt 1 -or $null -eq $lock.dependencies) {
         throw "Invalid NuGet lock file: $lockPath"
     }
+}
+
+# Mutation test projects inherit their PackageReferences from eng/mutation/Directory.Build.props,
+# so they are not visible to the direct project-XML scan above. Keep their exact profile inventory
+# and locks under the mutation harness contract instead of adding the generic project name "Tests"
+# to the first-party top-level policy.
+$mutationManifestPath = Join-Path $repoRoot "eng\mutation\profiles.json"
+$mutationManifest = Get-Content -LiteralPath $mutationManifestPath -Raw |
+    ConvertFrom-Json
+$mutationLocks = 0
+foreach ($profile in $mutationManifest.profiles) {
+    $testProject = Join-Path (Join-Path $repoRoot "eng\mutation") `
+        ([string]$profile.testProject).Replace("/", "\")
+    $lockPath = Join-Path (Split-Path -Parent $testProject) "packages.lock.json"
+    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        throw "Missing NuGet lock file for mutation profile $($profile.id)."
+    }
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    if ([int]$lock.version -lt 1 -or $null -eq $lock.dependencies) {
+        throw "Invalid mutation NuGet lock file: $lockPath"
+    }
+    $mutationLocks++
 }
 
 $vendorLocks = @(
@@ -149,4 +172,4 @@ if (-not $net20ProbeSource.Contains('"--locked-mode"') -or
         "restore and a no-restore build.")
 }
 
-Write-Host "NuGet lock-file checks passed: $($projects.Count)"
+Write-Host "NuGet lock-file checks passed: first-party=$($projects.Count), mutation=$mutationLocks"

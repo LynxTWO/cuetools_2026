@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.NamingSafety.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Target\Target.csproj" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\AlbumArtifactNamesTests.cs" Link="ProductionTests\AlbumArtifactNamesTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\BoxSetNamingTests.cs" Link="ProductionTests\BoxSetNamingTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingAuditRegressionTests.cs" Link="ProductionTests\NamingAuditRegressionTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingPathSafetyTests.cs" Link="ProductionTests\NamingPathSafetyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingPathsTests.cs" Link="ProductionTests\NamingPathsTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingTokenTests.cs" Link="ProductionTests\NamingTokenTests.cs" />
+  </ItemGroup>
+</Project>

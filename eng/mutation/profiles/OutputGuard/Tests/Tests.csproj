@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.OutputGuard.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Target\Target.csproj" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\OutputGuardTests.cs" Link="ProductionTests\OutputGuardTests.cs" />
+  </ItemGroup>
+</Project>

@@ -1,3 +1,4 @@
+using System;
 using CUETools.Wpf.Accuracy;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -42,6 +43,34 @@ namespace CUETools.Wpf.Tests
         public void HistoryComparator_PreservesCrossDriveArSemantics()
         {
             Assert.IsTrue(VerifyHistoryStore.SameAudioForHistory(T(10, c32: 101), T(10, c32: 202)));
+        }
+
+        [TestMethod]
+        public void HistoryComparator_FallsBackWhenOnlyOneReadHasV2()
+        {
+            Assert.IsTrue(
+                VerifyHistoryStore.SameAudioForHistory(
+                    T(10, v1: 5),
+                    T(0, v1: 5)));
+            Assert.IsFalse(
+                VerifyHistoryStore.SameAudioForHistory(
+                    T(10, v1: 5),
+                    T(0, v1: 6)));
+        }
+
+        [TestMethod]
+        public void TestAndCopyComparatorRequiresBothRecordsAndBothChecksums()
+        {
+            TrackCrc complete = T(10, c32: 100);
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForTestAndCopy(null, null));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForTestAndCopy(complete, null));
+            Assert.IsFalse(VerifyHistoryStore.SameAudioForTestAndCopy(null, complete));
+            Assert.IsFalse(
+                VerifyHistoryStore.SameAudioForTestAndCopy(
+                    T(10, c32: 0), complete));
+            Assert.IsFalse(
+                VerifyHistoryStore.SameAudioForTestAndCopy(
+                    complete, T(10, c32: 0)));
         }
 
         private static VerifyRecord Read(params uint[] v2)
@@ -176,6 +205,31 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void FullyVerified_InvalidOrEmptyInputsReturnMinusOne()
+        {
+            Assert.AreEqual(-1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(null, Array.Empty<bool>()));
+            Assert.AreEqual(-1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(Array.Empty<VerifyRecord>(), null));
+            Assert.AreEqual(-1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(
+                    new[] { Read(1) }, Array.Empty<bool>()));
+            Assert.AreEqual(-1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(
+                    Array.Empty<VerifyRecord>(), Array.Empty<bool>()));
+        }
+
+        [TestMethod]
+        public void FullyVerified_RaggedReadsCannotClaimMissingTracks()
+        {
+            var reads = new[] { Read(10), Read(10, 20) };
+
+            Assert.AreEqual(
+                -1,
+                TestAndCopyResolver.FullyVerifiedReadIndex(reads, Staged(2)));
+        }
+
+        [TestMethod]
         public void NamedCrcEvidenceKeepsTestAndCopyWhenThirdReadIsCommitted()
         {
             var reads = new[]
@@ -186,7 +240,7 @@ namespace CUETools.Wpf.Tests
             };
 
             TrackCrc[] evidence =
-                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 2);
+                TestAndCopyResolver.BuildCrcEvidence(reads, sourceReadIndex: 2);
 
             Assert.AreEqual(0x33333333u, evidence[0].Crc32);
             Assert.AreEqual(0x11111111u, evidence[0].TestCrc32);
@@ -203,7 +257,7 @@ namespace CUETools.Wpf.Tests
             };
 
             TrackCrc[] evidence =
-                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 1);
+                TestAndCopyResolver.BuildCrcEvidence(reads, sourceReadIndex: 1);
 
             Assert.AreEqual(0x11111111u, evidence[0].TestCrc32);
             Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
@@ -223,10 +277,68 @@ namespace CUETools.Wpf.Tests
             };
 
             TrackCrc[] evidence =
-                RipService.BuildTestCopyCrcEvidence(reads, sourceReadIndex: 0);
+                TestAndCopyResolver.BuildCrcEvidence(reads, sourceReadIndex: 0);
 
             Assert.AreEqual(0xAAAAAAAAu, evidence[0].TestCrc32);
             Assert.AreEqual(0x22222222u, evidence[0].CopyCrc32);
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidence_InvalidSourceKeepsNamedReadsWithoutInventingCurrentCrc()
+        {
+            var reads = new[]
+            {
+                Record(T(10, c32: 0x11111111)),
+                Record(T(20, c32: 0x22222222)),
+            };
+
+            TrackCrc[] negative = TestAndCopyResolver.BuildCrcEvidence(reads, -1);
+            TrackCrc[] pastEnd = TestAndCopyResolver.BuildCrcEvidence(reads, reads.Length);
+
+            foreach (TrackCrc evidence in new[] { negative[0], pastEnd[0] })
+            {
+                Assert.AreEqual(0u, evidence.Crc32);
+                Assert.AreEqual(0x11111111u, evidence.TestCrc32);
+                Assert.AreEqual(0x22222222u, evidence.CopyCrc32);
+            }
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidence_UsesLongestReadAndPreservesSelectedArChecksums()
+        {
+            var reads = new[]
+            {
+                Record(
+                    new TrackCrc { TestCrc32 = 0x10, CopyCrc32 = 0x11 },
+                    new TrackCrc { TestCrc32 = 0x20, CopyCrc32 = 0x21 }),
+                Record(new TrackCrc { CopyCrc32 = 0x30 }),
+                Record(new TrackCrc { ArV1 = 7, ArV2 = 8, Crc32 = 0x40 }),
+            };
+
+            TrackCrc[] evidence = TestAndCopyResolver.BuildCrcEvidence(reads, 2);
+
+            Assert.AreEqual(2, evidence.Length);
+            Assert.AreEqual(7u, evidence[0].ArV1);
+            Assert.AreEqual(8u, evidence[0].ArV2);
+            Assert.AreEqual(0x40u, evidence[0].Crc32);
+            Assert.AreEqual(0x10u, evidence[0].TestCrc32);
+            Assert.AreEqual(0x30u, evidence[0].CopyCrc32);
+            Assert.AreEqual(0u, evidence[1].Crc32);
+            Assert.AreEqual(0x20u, evidence[1].TestCrc32);
+            Assert.AreEqual(0x21u, evidence[1].CopyCrc32);
+        }
+
+        [TestMethod]
+        public void NamedCrcEvidence_EmptyAndNullRecordsProduceNoTracks()
+        {
+            Assert.AreEqual(
+                0,
+                TestAndCopyResolver.BuildCrcEvidence(
+                    Array.Empty<VerifyRecord>(), 0).Length);
+            Assert.AreEqual(
+                0,
+                TestAndCopyResolver.BuildCrcEvidence(
+                    new VerifyRecord[] { null, null }, 0).Length);
         }
     }
 }

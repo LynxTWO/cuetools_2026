@@ -10,6 +10,47 @@ namespace CUETools.Wpf.Tests;
 public sealed class VerificationSourceDiscoveryTests
 {
     [TestMethod]
+    public void NullEmptyInvalidAndMissingSelectionsFailClearly()
+    {
+        var discovery = new VerificationSourceDiscovery();
+
+        Assert.ThrowsException<ArgumentNullException>(() => discovery.Discover(null));
+        StringAssert.Contains(discovery.Discover(Array.Empty<string>()).Error, "Drop one album folder");
+        StringAssert.Contains(discovery.Discover(new[] { "invalid\0path" }).Error, "invalid path");
+        StringAssert.Contains(
+            discovery.Discover(new[] { Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".cue") }).Error,
+            "no longer exist");
+    }
+
+    [TestMethod]
+    public void OversizedExplicitSelectionIsRejectedBeforeFilesystemWork()
+    {
+        using var folder = new TestFolder();
+        string[] paths = Enumerable.Range(0, 2049)
+            .Select(index => Path.Combine(folder.Path, index + ".flac"))
+            .ToArray();
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(paths);
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(result.Error, "more than 2048 files");
+    }
+
+    [TestMethod]
+    public void SeveralFoldersAreRejectedWithoutGuessingScope()
+    {
+        using var first = new TestFolder();
+        using var second = new TestFolder();
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { first.Path, second.Path });
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(result.Error, "one album folder at a time");
+    }
+
+    [TestMethod]
     public void AlbumFolderFindsAndOrdersNestedDiscCueSheets()
     {
         using var folder = new TestFolder();
@@ -47,6 +88,76 @@ public sealed class VerificationSourceDiscoveryTests
         Assert.AreEqual(
             VerificationSourceKind.CueSheet,
             result.SourceSet.Discs[0].Kind);
+    }
+
+    [TestMethod]
+    public void PlaylistsIgnoreCommentsAndRemoteUrisWhenCheckingOverlap()
+    {
+        using var folder = new TestFolder();
+        File.WriteAllText(
+            Path.Combine(folder.Path, "Disc 1.m3u8"),
+            "#EXTM3U\nhttps://example.invalid/cover\nfirst.flac\n");
+        File.WriteAllText(
+            Path.Combine(folder.Path, "Disc 2.m3u8"),
+            "#EXTM3U\nhttps://example.invalid/cover\nsecond.flac\n");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        Assert.AreEqual(2, result.SourceSet!.Discs.Count);
+        Assert.IsTrue(result.SourceSet.Discs.All(
+            source => source.Kind == VerificationSourceKind.Playlist));
+    }
+
+    [TestMethod]
+    public void FileUrisStillParticipateInPlaylistOverlapDetection()
+    {
+        using var folder = new TestFolder();
+        string audio = Path.Combine(folder.Path, "shared.flac");
+        string reference = new Uri(audio).AbsoluteUri;
+        File.WriteAllText(Path.Combine(folder.Path, "Disc 1.m3u"), reference + "\n");
+        File.WriteAllText(Path.Combine(folder.Path, "Disc 2.m3u"), reference + "\n");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(result.Error, "same audio");
+    }
+
+    [TestMethod]
+    public void CueDirectivesAreCaseInsensitive()
+    {
+        using var folder = new TestFolder();
+        File.WriteAllText(
+            Path.Combine(folder.Path, "alpha.cue"),
+            "rem discnumber 1\nrem disctotal 2\nfile \"first.flac\" WAVE\n");
+        File.WriteAllText(
+            Path.Combine(folder.Path, "beta.cue"),
+            "rem disc 2\nrem totaldiscs 2\nfile \"second.flac\" WAVE\n");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        CollectionAssert.AreEqual(
+            new[] { 1, 2 },
+            result.SourceSet!.Discs.Select(source => source.DiscNumber).ToArray());
+    }
+
+    [TestMethod]
+    public void LowercaseCueFileDirectivesStillDetectOverlap()
+    {
+        using var folder = new TestFolder();
+        File.WriteAllText(Path.Combine(folder.Path, "Disc 1.cue"), "file \"same.flac\" WAVE\n");
+        File.WriteAllText(Path.Combine(folder.Path, "Disc 2.cue"), "file \"same.flac\" WAVE\n");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsFalse(result.Ok);
+        StringAssert.Contains(result.Error, "same audio");
     }
 
     [TestMethod]
@@ -107,6 +218,90 @@ public sealed class VerificationSourceDiscoveryTests
 
         Assert.IsFalse(result.Ok);
         StringAssert.Contains(result.Error, "more than 100 disc manifests");
+    }
+
+    [TestMethod]
+    public void DiscNumbersCanBeInferredFromNestedFolderNames()
+    {
+        using var folder = new TestFolder();
+        string disc1 = folder.Directory("CD1");
+        string disc2 = folder.Directory("Disc 02 - Bonus");
+        WriteCue(disc1, "album.cue", 0, 0, "first.flac");
+        WriteCue(disc2, "album.cue", 0, 0, "second.flac");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        CollectionAssert.AreEqual(
+            new[] { 1, 2 },
+            result.SourceSet!.Discs.Select(source => source.DiscNumber).ToArray());
+        StringAssert.StartsWith(result.SourceSet.Discs[0].DisplayName, "Disc 1:");
+    }
+
+    [TestMethod]
+    public void HiddenCandidatesAndCandidatesBeyondMaximumDepthAreIgnored()
+    {
+        using var folder = new TestFolder();
+        string hiddenCue = Path.Combine(folder.Path, "hidden.cue");
+        WriteCue(folder.Path, "hidden.cue", 1, 1, "hidden.flac");
+        File.SetAttributes(hiddenCue, File.GetAttributes(hiddenCue) | FileAttributes.Hidden);
+        string audio = Path.Combine(folder.Path, "album.flac");
+        File.WriteAllBytes(audio, new byte[] { 1 });
+
+        string current = folder.Path;
+        for (int depth = 1; depth <= 9; depth++)
+        {
+            current = Path.Combine(current, "level" + depth);
+            Directory.CreateDirectory(current);
+        }
+        WriteCue(current, "too-deep.cue", 1, 1, "deep.flac");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        Assert.AreEqual(VerificationSourceKind.AudioFile, result.SourceSet!.Discs[0].Kind);
+        Assert.AreEqual(audio, result.SourceSet.Discs[0].Path);
+    }
+
+    [TestMethod]
+    public void MaximumDepthDirectoryIsStillScanned()
+    {
+        using var folder = new TestFolder();
+        string current = folder.Path;
+        for (int depth = 1; depth <= 8; depth++)
+        {
+            current = Path.Combine(current, "level" + depth);
+            Directory.CreateDirectory(current);
+        }
+        string cue = Path.Combine(current, "album.cue");
+        WriteCue(current, "album.cue", 1, 1, "album.flac");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { folder.Path });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        Assert.AreEqual(cue, result.SourceSet!.Discs[0].Path);
+    }
+
+    [TestMethod]
+    public void ExplicitNestedManifestsUseTheirCommonAlbumDirectory()
+    {
+        using var folder = new TestFolder();
+        string disc1 = folder.Directory("Disc 1");
+        string disc2 = folder.Directory("Disc 2");
+        WriteCue(disc1, "one.cue", 1, 2, "one.flac");
+        WriteCue(disc2, "two.cue", 2, 2, "two.flac");
+        string cue1 = Path.Combine(disc1, "one.cue");
+        string cue2 = Path.Combine(disc2, "two.cue");
+
+        VerificationSourceDiscoveryResult result =
+            new VerificationSourceDiscovery().Discover(new[] { cue1, cue2, cue1 });
+
+        Assert.IsTrue(result.Ok, result.Error);
+        Assert.AreEqual(folder.Path, result.SourceSet!.RootPath);
+        Assert.AreEqual(2, result.SourceSet.Discs.Count);
     }
 
     [TestMethod]

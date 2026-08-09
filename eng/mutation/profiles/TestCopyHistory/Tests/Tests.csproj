@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.TestCopyHistory.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Target\Target.csproj" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\GzJsonTests.cs" Link="ProductionTests\GzJsonTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\TestAndCopyResolverTests.cs" Link="ProductionTests\TestAndCopyResolverTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\VerifyHistoryStoreTests.cs" Link="ProductionTests\VerifyHistoryStoreTests.cs" />
+  </ItemGroup>
+</Project>

@@ -69,6 +69,29 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void PublishFailureCleansItsOwnedTemporaryFile()
+        {
+            string path = Temp();
+            Directory.CreateDirectory(path);
+            string parent = Path.GetDirectoryName(path)!;
+            try
+            {
+                Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                    GzJson.Save(path, new List<int> { 1 }));
+                Assert.AreEqual(
+                    0,
+                    Directory.GetFiles(parent, Path.GetFileName(path) + ".*.tmp").Length);
+            }
+            finally
+            {
+                Directory.Delete(path, recursive: true);
+                string lockPath = GzJson.GetStoreLockPath(path);
+                if (File.Exists(lockPath))
+                    File.Delete(lockPath);
+            }
+        }
+
+        [TestMethod]
         public async Task ParallelSavesUseOwnedStagesAndPublishOneCoherentFile()
         {
             string path = Temp();
@@ -204,6 +227,29 @@ namespace CUETools.Wpf.Tests
                 Assert.AreEqual(GzJsonLoadStatus.Failed, decodedFailure.Status);
                 Assert.IsInstanceOfType<InvalidDataException>(
                     decodedFailure.Error);
+
+                GzJsonLoadResult<string> exactStoredBoundary =
+                    GzJson.TryLoadWithLimits<string>(
+                        path,
+                        storedLength,
+                        16 * 1024);
+                Assert.AreEqual(GzJsonLoadStatus.Loaded, exactStoredBoundary.Status);
+                Assert.AreEqual(new string('x', 4096), exactStoredBoundary.Value);
+
+                foreach ((long stored, long decoded) in new[]
+                {
+                    (0L, 16L),
+                    (-1L, 16L),
+                    (16L, 0L),
+                    (16L, -1L),
+                })
+                {
+                    GzJsonLoadResult<string> invalidLimits =
+                        GzJson.TryLoadWithLimits<string>(path, stored, decoded);
+                    Assert.AreEqual(GzJsonLoadStatus.Failed, invalidLimits.Status);
+                    Assert.IsInstanceOfType<ArgumentOutOfRangeException>(
+                        invalidLimits.Error);
+                }
             }
             finally
             {

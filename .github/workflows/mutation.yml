@@ -1,0 +1,74 @@
+---
+name: Mutation testing
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Mutation depth
+        required: true
+        default: Quick
+        type: choice
+        options:
+          - Quick
+          - Full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  mutation:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Select mutation depth
+        id: depth
+        shell: powershell
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          $mode = if ($env:EVENT_NAME -eq 'schedule') {
+            'Full'
+          } elseif ([string]::IsNullOrWhiteSpace($env:REQUESTED_MODE)) {
+            'Quick'
+          } else {
+            $env:REQUESTED_MODE
+          }
+          "mode=$mode" >> $env:GITHUB_OUTPUT
+
+      - name: Run mutation gate
+        shell: powershell
+        run: >-
+          .\eng\mutation\Invoke-MutationTests.ps1
+          -Mode '${{ steps.depth.outputs.mode }}'
+          -ResultsDirectory "$env:RUNNER_TEMP\cuetools-mutation"
+
+      - name: Upload mutation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-${{ steps.depth.outputs.mode }}
+          path: ${{ runner.temp }}/cuetools-mutation
+          if-no-files-found: warn
+          retention-days: 14

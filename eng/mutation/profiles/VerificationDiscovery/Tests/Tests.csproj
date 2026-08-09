@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.VerificationDiscovery.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Target\Target.csproj" />
+    <Compile Include="ConfiguredFormatTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\VerificationSourceDiscoveryTests.cs" Link="ProductionTests\VerificationSourceDiscoveryTests.cs" />
+  </ItemGroup>
+</Project>

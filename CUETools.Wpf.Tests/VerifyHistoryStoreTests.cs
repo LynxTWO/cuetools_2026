@@ -63,7 +63,69 @@ namespace CUETools.Wpf.Tests
             for (int i = 0; i < 8; i++) s.CompareAndUpsert(Rec("D1", (uint)i, 20, 30));
             // 8 reads in; still known and PriorReads never exceeds the 5-record bound
             var o = s.CompareAndUpsert(Rec("D1", 7, 20, 30));
-            Assert.IsTrue(o.PriorReads <= 5);
+            Assert.AreEqual(5, o.PriorReads);
+        }
+
+        [TestMethod]
+        public void PreviewAgreementHandlesMissingKnownAndCorruptStores()
+        {
+            string path = Path.Combine(
+                Path.GetTempPath(),
+                "vh-" + System.Guid.NewGuid().ToString("N") + ".json.gz");
+            var store = new VerifyHistoryStore(path);
+            try
+            {
+                Assert.ThrowsException<System.ArgumentNullException>(() =>
+                    store.PreviewAgreement(null));
+
+                VerifyRecord missing = Rec("missing", 10);
+                missing.ReadKind = "Test";
+                missing.Tracks[0].TestCrc32 = 100;
+                store.PreviewAgreement(missing);
+                Assert.AreEqual(1, missing.Tracks[0].TestMatchCount);
+
+                VerifyRecord prior = Rec("known", 10);
+                prior.Drive = "Drive A";
+                prior.ReadKind = "Test";
+                prior.Tracks[0].TestCrc32 = 100;
+                store.CompareAndUpsert(prior);
+
+                VerifyRecord known = Rec(" known ", 10);
+                known.Drive = "Drive B";
+                known.ReadKind = "Test";
+                known.Tracks[0].TestCrc32 = 100;
+                store.PreviewAgreement(known);
+                Assert.AreEqual(2, known.Tracks[0].TestMatchCount);
+                Assert.AreEqual(2, known.Tracks[0].TestDriveCount);
+
+                File.WriteAllText(path, "not json");
+                Assert.ThrowsException<InvalidDataException>(() =>
+                    store.PreviewAgreement(Rec("known", 10)));
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path + ".lock")) File.Delete(path + ".lock");
+            }
+        }
+
+        [TestMethod]
+        public void LegacyNamedCrcsInferReadRolesAndPreserveBlankDriveEvidence()
+        {
+            var store = NewStore();
+            VerifyRecord legacy = Rec("D1", 10);
+            legacy.Drive = "";
+            legacy.ReadKind = "";
+            legacy.Tracks[0].TestCrc32 = 100;
+            legacy.Tracks[0].CopyCrc32 = 100;
+
+            store.CompareAndUpsert(legacy);
+            TrackCrc evidence = store.GetLatestCrcEvidence("D1")[0];
+
+            Assert.AreEqual(1, evidence.TestMatchCount);
+            Assert.AreEqual(1, evidence.CopyMatchCount);
+            Assert.AreEqual(0, evidence.TestDriveCount);
+            Assert.AreEqual(0, evidence.CopyDriveCount);
         }
 
         [TestMethod]

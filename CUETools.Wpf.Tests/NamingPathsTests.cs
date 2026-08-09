@@ -46,6 +46,14 @@ namespace CUETools.Wpf.Tests
             Assert.AreEqual(0, rem.Length);
         }
 
+        [TestMethod]
+        public void NullCollectionsReturnEmptyResults()
+        {
+            Assert.AreEqual(0, NamingPaths.Split(null).remainders.Length);
+            Assert.AreEqual(0, NamingPaths.EnsureUniqueTrackNames(null).Length);
+            Assert.AreEqual(0, NamingPaths.CapPathLength(null, 10).Length);
+        }
+
         // ---- EnsureUniqueTrackNames: no track may be lost to an empty or duplicate name ----
 
         [TestMethod]
@@ -65,6 +73,16 @@ namespace CUETools.Wpf.Tests
             Assert.AreNotEqual(r[0], r[1]);
             Assert.AreNotEqual(r[0], r[2]);
             Assert.AreNotEqual(r[1], r[2]);
+            Assert.AreEqual("Untitled (02)", r[1]);
+            Assert.AreEqual("Untitled (03)", r[2]);
+        }
+
+        [TestMethod]
+        public void Unique_PreservesARootStyleLeadingSeparator()
+        {
+            CollectionAssert.AreEqual(
+                new[] { "/name" },
+                NamingPaths.EnsureUniqueTrackNames(new[] { "/name" }));
         }
 
         [TestMethod]

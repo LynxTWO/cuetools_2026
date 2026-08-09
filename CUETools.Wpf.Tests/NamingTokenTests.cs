@@ -1,3 +1,4 @@
+using System.Linq;
 using CUETools.Wpf.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -41,6 +42,81 @@ namespace CUETools.Wpf.Tests
             var c = new NamingContext { Album = "Alb", Title = "T", TrackNumber = 1,
                 PrimaryType = "album", SecondaryTypes = new[] { "live" } };
             Assert.AreEqual("Live Album", NamingEngine.Render(c, Tpl("%releasetype%")));
+        }
+
+        [DataTestMethod]
+        [DataRow("compilation", "Compilation Album")]
+        [DataRow("soundtrack", "Soundtrack")]
+        [DataRow("remix", "Remix Album")]
+        [DataRow("demo", "Demo Album")]
+        public void ReleaseTypeCoversEveryNamedSecondaryPrecedence(
+            string secondary,
+            string expected)
+        {
+            var context = new NamingContext
+            {
+                PrimaryType = "album",
+                SecondaryTypes = new[] { secondary }
+            };
+
+            Assert.AreEqual(expected, NamingEngine.Render(context, Tpl("%releasetype%")));
+        }
+
+        [DataTestMethod]
+        [DataRow("single", " [Single]")]
+        [DataRow("ep", " [EP]")]
+        [DataRow("broadcast", " [FM]")]
+        [DataRow("other", " [Other]")]
+        [DataRow("album", "")]
+        [DataRow("", "")]
+        public void ReleaseDescriptorDistinguishesEveryPrimaryType(
+            string primary,
+            string expected)
+        {
+            var context = new NamingContext
+            {
+                PrimaryType = primary,
+                Year = "",
+                ReleaseStatus = "official"
+            };
+            var scheme = new NamingScheme { Template = "%releasedescriptor%" };
+
+            Assert.AreEqual(expected.Trim(), NamingEngine.Render(context, scheme));
+        }
+
+        [TestMethod]
+        public void NullSecondaryEntriesAreIgnoredAndExamplesRemainAvailable()
+        {
+            var context = new NamingContext
+            {
+                PrimaryType = "album",
+                SecondaryTypes = new string[] { null, "live" }
+            };
+
+            Assert.AreEqual("Live Album", NamingEngine.Render(context, Tpl("%releasetype%")));
+            Assert.AreEqual(
+                "[Live]",
+                NamingEngine.Render(
+                    context,
+                    new NamingScheme { Template = "%releasedescriptor%" }));
+            Assert.AreEqual(4, NamingEngine.Examples().Count);
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    "Single artist",
+                    "Leading article + guest",
+                    "Multi-disc live set",
+                    "Various-artists soundtrack"
+                },
+                NamingEngine.Examples().Select(example => example.Label).ToArray());
+        }
+
+        [TestMethod]
+        public void BareArticleIsNotSwappedIntoAnEmptyArtistName()
+        {
+            var context = new NamingContext { AlbumArtist = "The ", Artist = "The " };
+
+            Assert.AreEqual("The", NamingEngine.Render(context, Tpl("%albumartist%")));
         }
     }
 }

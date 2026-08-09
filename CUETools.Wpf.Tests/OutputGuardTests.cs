@@ -54,11 +54,32 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void UnrelatedFilesDoNotMakeAnAlbumDirectoryOccupied()
+        {
+            MakeAlbum("Artist - Album", "notes.txt", "scan.png");
+
+            Assert.AreEqual("Artist - Album",
+                OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+            Assert.IsFalse(OutputGuard.HoldsARip(
+                Path.Combine(_root, "Artist - Album"), ""));
+        }
+
+        [TestMethod]
         public void ExistingAudio_ForcesANewFolder()
         {
             MakeAlbum("Artist - Album", "01 - One.flac");
             Assert.AreEqual("Artist - Album (2)",
                 OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+        }
+
+        [TestMethod]
+        public void AudioAndSidecarMatchingIsCaseInsensitive()
+        {
+            string audio = MakeAlbum("Audio", "01 - One.FLAC");
+            string sidecar = MakeAlbum("Sidecar", "ALBUM.CUE");
+
+            Assert.IsTrue(OutputGuard.HoldsARip(audio, "flac"));
+            Assert.IsTrue(OutputGuard.HoldsARip(sidecar, "flac"));
         }
 
         [DataTestMethod]
@@ -99,6 +120,19 @@ namespace CUETools.Wpf.Tests
             MakeAlbum("Artist - Album (3)", "album.cue");
             Assert.AreEqual("Artist - Album (4)",
                 OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+        }
+
+        [TestMethod]
+        public void LastSequentialCandidateRemainsAvailable()
+        {
+            const string album = "Boundary Album";
+            MakeAlbum(album, "album.cue");
+            for (int number = 2; number < 999; number++)
+                MakeAlbum(album + " (" + number + ")", "album.cue");
+
+            Assert.AreEqual(
+                album + " (999)",
+                OutputGuard.NonClobberingAlbumDir(_root, album, "flac"));
         }
 
         [TestMethod]
@@ -151,6 +185,9 @@ namespace CUETools.Wpf.Tests
         [TestMethod]
         public void TraversalAndProbeFailuresFailClosed()
         {
+            Assert.ThrowsException<ArgumentException>(() =>
+                OutputGuard.NonClobberingAlbumDir(
+                    "", "Artist - Album", "flac"));
             Assert.ThrowsException<ArgumentException>(() =>
                 OutputGuard.NonClobberingAlbumDir(
                     _root, "", "flac"));

@@ -44,6 +44,12 @@ jobs:
         shell: powershell
         run: .\eng\ci\Invoke-TestSuites.ps1 -Lane modern -Configuration Release -ResultsDirectory "$env:RUNNER_TEMP\cuetools-modern-tests"
 
+      # Compiles the isolated mutation profiles against linked production sources and proves the
+      # contract, threshold, and failure-policy checks. Mutants run in mutation.yml.
+      - name: Validate mutation harness and profile baselines
+        shell: powershell
+        run: .\eng\mutation\Test-MutationHarness.ps1 -Build
+
       # Bounded, deterministic, headless property and checked-in corpus lanes.
       - name: Fuzz smoke - properties and parser/decoder corpora (20k iters)
         run: dotnet run --project CUETools.Fuzz/CUETools.Fuzz.csproj -c Release --no-build -- 20260712 20000

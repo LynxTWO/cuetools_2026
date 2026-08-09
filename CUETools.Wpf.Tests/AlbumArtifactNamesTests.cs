@@ -53,4 +53,30 @@ public sealed class AlbumArtifactNamesTests
             "Unknown Album",
             AlbumArtifactNames.CreateStem(new CUEMetadata(), _ => ""));
     }
+
+    [TestMethod]
+    public void PartialMetadataAndSingleDiscIdentityDoNotCreateDanglingSyntax()
+    {
+        Assert.AreEqual(
+            "Artist",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata { Artist = "Artist" },
+                value => value));
+        Assert.AreEqual(
+            "Album",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata { Title = "Album" },
+                value => value));
+        Assert.AreEqual(
+            "Artist - Album",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata
+                {
+                    Artist = "Artist",
+                    Title = "Album",
+                    DiscNumber = "1",
+                    TotalDiscs = "1"
+                },
+                value => value));
+    }
 }
