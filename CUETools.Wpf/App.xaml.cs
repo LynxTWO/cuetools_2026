@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Input;
 using CUETools.Processor;
+using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
 using CUETools.Wpf.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,9 +68,21 @@ public partial class App : Application
         base.OnExit(e);
     }
 
+    // CommandManager.RequerySuggested is a weak event: this strong handler
+    // reference keeps the bridge alive for the process lifetime.
+    private static readonly EventHandler RequeryBridge =
+        (_, _) => RequeryHub.RequestRequery();
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // The shared app core's RelayCommand no longer couples to WPF's
+        // CommandManager. Bridging RequerySuggested into the portable
+        // RequeryHub preserves WPF's automatic command re-evaluation on UI
+        // activity exactly as before the extraction; the Avalonia head has
+        // no equivalent global source and relies on explicit requeries.
+        CommandManager.RequerySuggested += RequeryBridge;
 
         _launchOptions = AppLaunchOptions.Parse(e.Args);
         if (_launchOptions.IsCodecProbe)
@@ -110,6 +124,13 @@ public partial class App : Application
         services.AddSingleton<IAlbumArtService, AlbumArtService>();
         services.AddSingleton<IDiagnosticLog, DiagnosticLog>();
         services.AddSingleton<ThemeService>();
+
+        // Platform seams for the shared app core: the core's view models
+        // receive these instead of touching WPF dialogs, MessageBox, or the
+        // Dispatcher directly.
+        services.AddSingleton<IFileDialogService, WpfFileDialogService>();
+        services.AddSingleton<IUserPrompt, WpfUserPrompt>();
+        services.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.

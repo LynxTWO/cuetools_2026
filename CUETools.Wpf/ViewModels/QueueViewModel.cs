@@ -90,7 +90,7 @@ public sealed class QueueViewModel : PageViewModel
         RemoveCommand = new RelayCommand(o => { if (o is QueueItem i) Items.Remove(i); }, _ => !IsRunning);
         ClearCommand = new RelayCommand(_ => Items.Clear(), _ => Items.Count > 0 && !IsRunning);
         RunAllCommand = new RelayCommand(_ => { _ = RunAllAsync(); }, _ => Items.Count > 0 && !IsRunning);
-        Items.CollectionChanged += (_, __) => CommandManager.InvalidateRequerySuggested();
+        Items.CollectionChanged += (_, __) => RequeryHub.RequestRequery();
     }
 
     private string _selectedAction = "Verify";
@@ -123,7 +123,7 @@ public sealed class QueueViewModel : PageViewModel
         {
             if (!Set(ref _isRunning, value)) return;
             OnPropertyChanged(nameof(CodecPickerEnabled));
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
         }
     }
     public bool CodecPickerEnabled => !IsRunning &&

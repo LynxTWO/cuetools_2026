@@ -155,6 +155,13 @@
           "CUETools.Parity": "[2.2.6, )"
         }
       },
+      "cuetools.app.core": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CTDB": "[2.2.6, )",
+          "CUETools.Processor": "[2.2.6, )"
+        }
+      },
       "cuetools.cdimage": {
         "type": "Project"
       },
@@ -281,6 +288,7 @@
         "type": "Project",
         "dependencies": {
           "CUETools.AccurateRip": "[2.2.6, )",
+          "CUETools.App.Core": "[2026.1.0, )",
           "CUETools.CDImage": "[2.2.6, )",
           "CUETools.CTDB": "[2.2.6, )",
           "CUETools.CTDB.Types": "[2.2.6, )",
@@ -307,7 +315,7 @@
       "freedb": {
         "type": "Project"
       },
-      "taglibsharp": {
+      "TagLibSharp": {
         "type": "Project"
       }
     }
