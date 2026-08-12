@@ -109,12 +109,12 @@ namespace CUETools.CTDB
                     this.QueryExceptionMessage = resp.StatusDescription;
 					if (this.QueryResponseStatus == HttpStatusCode.OK)
 					{
-                        //var serializer = new XmlSerializer(typeof(CTDBResponse));
-                        var serializer = new Microsoft.Xml.Serialization.GeneratedAssembly.CTDBResponseSerializer();
+                        // Explicit parser instead of XmlSerializer: the sgen-era pre-generated
+                        // serializer breaks under AOT-mode feature switches (see CTDBResponseParser).
                         this.total = 0;
 						using (Stream responseStream = resp.GetResponseStream())
 						{
-							CTDBResponse ctdbResp = serializer.Deserialize(responseStream) as CTDBResponse;
+							CTDBResponse ctdbResp = CTDBResponseParser.Parse(responseStream);
 							if (ctdbResp.entry != null)
 								foreach (var ctdbRespEntry in ctdbResp.entry)
 								{
@@ -426,9 +426,8 @@ namespace CUETools.CTDB
                     {
                         using (Stream s = resp.GetResponseStream())
                         {
-                            //var serializer = new XmlSerializer(typeof(CTDBResponse));
-                            var serializer = new Microsoft.Xml.Serialization.GeneratedAssembly.CTDBResponseSerializer();
-                            return serializer.Deserialize(s) as CTDBResponse;
+                            // Explicit parser instead of XmlSerializer (see CTDBResponseParser).
+                            return CTDBResponseParser.Parse(s);
                         }
                     }
                     else

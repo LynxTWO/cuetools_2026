@@ -26,6 +26,7 @@
     <ProjectReference
       Include="..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj"
       SetTargetFramework="TargetFramework=netstandard2.0" />
+    <ProjectReference Include="..\CUETools.CTDB\CUETools.CTDB.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.Icecast\CUETools.Codecs.Icecast.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.HDCD\CUETools.Codecs.HDCD.csproj" />
     <ProjectReference Include="..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />
