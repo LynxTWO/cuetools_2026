@@ -3,10 +3,12 @@ using System.Windows.Threading;
 
 namespace CUETools.Wpf.Services;
 
-/// <summary>WPF implementation of the app core's file/folder pickers.</summary>
+/// <summary>WPF implementation of the app core's file/folder pickers. The
+/// dialogs are modal and synchronous; completed tasks preserve that behavior
+/// under the async seam exactly.</summary>
 public sealed class WpfFileDialogService : IFileDialogService
 {
-    public string[]? PickFiles(string title, bool multiselect, IReadOnlyList<FilePickerGroup> groups)
+    public Task<string[]?> PickFilesAsync(string title, bool multiselect, IReadOnlyList<FilePickerGroup> groups)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
@@ -14,17 +16,17 @@ public sealed class WpfFileDialogService : IFileDialogService
             Multiselect = multiselect,
             Filter = BuildFilter(groups)
         };
-        return dialog.ShowDialog() == true ? dialog.FileNames : null;
+        return Task.FromResult(dialog.ShowDialog() == true ? dialog.FileNames : null);
     }
 
-    public string? PickFolder(string title)
+    public Task<string?> PickFolderAsync(string title)
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
             Title = title,
             Multiselect = false
         };
-        return dialog.ShowDialog() == true ? dialog.FolderName : null;
+        return Task.FromResult(dialog.ShowDialog() == true ? dialog.FolderName : null);
     }
 
     private static string BuildFilter(IReadOnlyList<FilePickerGroup> groups)
@@ -36,15 +38,15 @@ public sealed class WpfFileDialogService : IFileDialogService
         }));
 }
 
-/// <summary>WPF implementation of the app core's blocking confirmations.</summary>
+/// <summary>WPF implementation of the app core's confirmations.</summary>
 public sealed class WpfUserPrompt : IUserPrompt
 {
-    public bool ConfirmOkCancel(string message, string title)
-        => MessageBox.Show(
+    public Task<bool> ConfirmOkCancelAsync(string message, string title)
+        => Task.FromResult(MessageBox.Show(
             message,
             title,
             MessageBoxButton.OKCancel,
-            MessageBoxImage.Question) == MessageBoxResult.OK;
+            MessageBoxImage.Question) == MessageBoxResult.OK);
 }
 
 /// <summary>
