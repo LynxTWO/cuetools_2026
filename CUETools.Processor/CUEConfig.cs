@@ -620,11 +620,23 @@ namespace CUETools.Processor
         {
             foreach (IAudioEncoderSettings encoder in settings.encoders)
             {
+                bool viaPluginReflection;
                 switch (encoder.GetType().FullName)
                 {
                     case "CUETools.Codecs.ALAC.EncoderSettings":
-                    case "CUETools.Codecs.FLACCL.EncoderSettings":
                     case "CUETools.Codecs.libFLAC.EncoderSettings":
+                        viaPluginReflection = false;
+                        break;
+
+                    // FLACCL is loaded through the plugin trust manifest in its
+                    // own load context, where an interface from this assembly's
+                    // CUETools.Codecs has a different identity and an "is" check
+                    // fails even though the class implements it. Reflection is
+                    // the load-context-honest mechanism for plugins; FLACCL does
+                    // not ship in trimmed or AOT heads, so the reflection-under-
+                    // trimming hazard the typed seam exists for does not apply.
+                    case "CUETools.Codecs.FLACCL.EncoderSettings":
+                        viaPluginReflection = true;
                         break;
 
                     // Flake, WMA Lossless, MACLib, and WavPack use a true serialization
@@ -637,12 +649,27 @@ namespace CUETools.Processor
                         continue;
                 }
 
+                if (viaPluginReflection)
+                {
+                    var verifyProperty = encoder.GetType().GetProperty("DoVerify");
+                    if (verifyProperty == null ||
+                        verifyProperty.PropertyType != typeof(bool) ||
+                        !verifyProperty.CanWrite)
+                    {
+                        throw new InvalidOperationException(
+                            "The lossless verification migration does not recognize " +
+                            encoder.GetType().FullName + ".DoVerify.");
+                    }
+                    verifyProperty.SetValue(encoder, true, null);
+                    continue;
+                }
+
                 // The typed seam replaced per-codec property reflection
-                // (DoVerify/Verify), which broke under trimmed and AOT hosts
-                // where unreferenced property members are removed. Selection
-                // above stays an explicit type allowlist on purpose: a new
-                // codec implementing the interface does not silently join
-                // this one-time migration.
+                // (DoVerify/Verify) for project-referenced codecs, which broke
+                // under trimmed and AOT hosts where unreferenced property
+                // members are removed. Selection above stays an explicit type
+                // allowlist on purpose: a new codec implementing the interface
+                // does not silently join this one-time migration.
                 if (!(encoder is IVerifyOnEncodeSettings verifiable))
                 {
                     throw new InvalidOperationException(
