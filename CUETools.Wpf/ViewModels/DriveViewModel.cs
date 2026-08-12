@@ -144,7 +144,7 @@ public sealed class DriveViewModel : PageViewModel
         void Apply()
         {
             OnPropertyChanged(nameof(IsDriveSelectionEnabled));
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
             if (!_drives.RipInProgress && _selectionRefreshPending)
             {
                 _selectionRefreshPending = false;
@@ -193,7 +193,7 @@ public sealed class DriveViewModel : PageViewModel
         if (d.Count == 0) { Status = "No optical drive found."; return; }
         _busy = true;
         OnPropertyChanged(nameof(IsDriveSelectionEnabled));
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
         Status = "Reading the drive over SCSI...";
         char drive = TargetDrive(d);
         DriveLetter = drive + ":";
@@ -246,7 +246,7 @@ public sealed class DriveViewModel : PageViewModel
         {
             _busy = false;
             OnPropertyChanged(nameof(IsDriveSelectionEnabled));
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
             if (_selectionRefreshPending && !_drives.RipInProgress)
             {
                 _selectionRefreshPending = false;
@@ -273,7 +273,7 @@ public sealed class DriveViewModel : PageViewModel
         char drive = TargetDrive(d);
         _busy = true;
         OnPropertyChanged(nameof(IsDriveSelectionEnabled));
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
         Status = "Calibrating " + drive + ": (probing cache, overread, and speed - needs a disc)...";
         try
         {
@@ -302,7 +302,7 @@ public sealed class DriveViewModel : PageViewModel
         {
             _busy = false;
             OnPropertyChanged(nameof(IsDriveSelectionEnabled));
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
         }
     }
 }

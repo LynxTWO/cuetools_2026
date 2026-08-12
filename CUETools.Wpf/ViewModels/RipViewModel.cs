@@ -191,7 +191,7 @@ public sealed class RipViewModel : PageViewModel
         private set
         {
             if (Set(ref _canRepairLastRip, value))
-                CommandManager.InvalidateRequerySuggested();
+                RequeryHub.RequestRequery();
         }
     }
 
@@ -238,7 +238,7 @@ public sealed class RipViewModel : PageViewModel
         set
         {
             if (Set(ref _parallelDrive, value))
-                CommandManager.InvalidateRequerySuggested();
+                RequeryHub.RequestRequery();
         }
     }
 
@@ -330,7 +330,7 @@ public sealed class RipViewModel : PageViewModel
             {
                 OnPropertyChanged(nameof(ControlsUnlocked));
                 OnPropertyChanged(nameof(ShowParallelDriveLauncher));
-                CommandManager.InvalidateRequerySuggested();
+                RequeryHub.RequestRequery();
             }
         }
     }
@@ -486,7 +486,7 @@ public sealed class RipViewModel : PageViewModel
         private set
         {
             if (Set(ref _artLoading, value))
-                CommandManager.InvalidateRequerySuggested();
+                RequeryHub.RequestRequery();
         }
     }
     private byte[]? _coverBytes;
@@ -675,7 +675,7 @@ public sealed class RipViewModel : PageViewModel
             : ParallelDrives.Count > 0 ? ParallelDrives[0] : '\0';
         OnPropertyChanged(nameof(ParallelDrive));
         OnPropertyChanged(nameof(ShowParallelDriveLauncher));
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
     }
 
     // Poll the drive for tray/media changes so the UI reacts to the physical eject button and to a
@@ -1837,7 +1837,7 @@ public sealed class RipViewModel : PageViewModel
 
         string source = _lastRepairSource;
         IsBusy = true;
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
         StatusText = "Repairing completed rip from CTDB parity...";
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
@@ -1881,7 +1881,7 @@ public sealed class RipViewModel : PageViewModel
         finally
         {
             IsBusy = false;
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
         }
     }
 

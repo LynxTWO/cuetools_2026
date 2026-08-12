@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Windows;
 using System.Windows.Input;
 using CUETools.Wpf.Models;
 using CUETools.Wpf.Mvvm;
@@ -18,13 +17,19 @@ public sealed class VerifyViewModel : PageViewModel
     private readonly IVerifyService _verify;
     private readonly IReportStore _reports;
     private readonly IVerificationSourceDiscovery _discovery;
+    private readonly IFileDialogService? _dialogs;
+    private readonly IUserPrompt? _prompts;
+    private readonly IUiDispatcher? _dispatcher;
     private VerificationSourceSet? _sourceSet;
     private bool _stopRequested;
 
     public VerifyViewModel(
         IVerifyService verify,
         IReportStore reports,
-        IVerificationSourceDiscovery discovery)
+        IVerificationSourceDiscovery discovery,
+        IFileDialogService? dialogs = null,
+        IUserPrompt? prompts = null,
+        IUiDispatcher? dispatcher = null)
     {
         Title = "Verify & Repair";
         Group = "Work";
@@ -32,6 +37,9 @@ public sealed class VerifyViewModel : PageViewModel
         _verify = verify;
         _reports = reports;
         _discovery = discovery;
+        _dialogs = dialogs;
+        _prompts = prompts;
+        _dispatcher = dispatcher;
 
         BrowseFileCommand = new RelayCommand(_ => BrowseFile(), _ => !IsBusy);
         BrowseFolderCommand = new RelayCommand(_ => BrowseFolder(), _ => !IsBusy);
@@ -65,7 +73,7 @@ public sealed class VerifyViewModel : PageViewModel
         {
             if (!Set(ref _isBusy, value)) return;
             OnPropertyChanged(nameof(IsIdle));
-            CommandManager.InvalidateRequerySuggested();
+            RequeryHub.RequestRequery();
         }
     }
     public bool IsIdle => !IsBusy;
@@ -104,30 +112,27 @@ public sealed class VerifyViewModel : PageViewModel
     public ICommand StopCommand { get; }
     public ICommand RepairDiscCommand { get; }
 
+    private static readonly FilePickerGroup[] BrowseFileGroups =
+    {
+        new("Rip sets (*.cue, *.m3u, *.m3u8)", new[] { "cue", "m3u", "m3u8" }),
+        new("Supported lossless audio",
+            new[] { "flac", "wv", "ape", "tak", "m4a", "tta", "wav", "ofr", "wma", "aiff" }),
+        new("All files", new[] { "*" })
+    };
+
     private void BrowseFile()
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Choose a rip to verify",
-            Multiselect = true,
-            Filter =
-                "Rip sets (*.cue, *.m3u, *.m3u8)|*.cue;*.m3u;*.m3u8|" +
-                "Supported lossless audio|*.flac;*.wv;*.ape;*.tak;*.m4a;*.tta;*.wav;*.ofr;*.wma;*.aiff|" +
-                "All files|*.*"
-        };
-        if (dialog.ShowDialog() == true)
-            LoadSources(dialog.FileNames);
+        string[]? files = _dialogs?.PickFiles(
+            "Choose a rip to verify", multiselect: true, BrowseFileGroups);
+        if (files is { Length: > 0 })
+            LoadSources(files);
     }
 
     private void BrowseFolder()
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog
-        {
-            Title = "Choose an album folder to verify",
-            Multiselect = false
-        };
-        if (dialog.ShowDialog() == true)
-            LoadSources(new[] { dialog.FolderName });
+        string? folder = _dialogs?.PickFolder("Choose an album folder to verify");
+        if (folder != null)
+            LoadSources(new[] { folder });
     }
 
     /// <summary>Entry point shared by dialogs and WPF file-drop handling.</summary>
@@ -166,7 +171,7 @@ public sealed class VerifyViewModel : PageViewModel
             : $"Ready to verify {Discs.Count} discs in order.";
         UpdateOverview();
         OnPropertyChanged(nameof(HasSource));
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
         return true;
     }
 
@@ -254,7 +259,7 @@ public sealed class VerifyViewModel : PageViewModel
         int index,
         int count)
     {
-        var dispatcher = Application.Current?.Dispatcher;
+        IUiDispatcher? dispatcher = _dispatcher;
         void Report(double fraction, string status)
         {
             void ApplyProgress()
@@ -268,7 +273,7 @@ public sealed class VerifyViewModel : PageViewModel
             if (dispatcher == null || dispatcher.CheckAccess())
                 ApplyProgress();
             else
-                dispatcher.BeginInvoke((Action)ApplyProgress);
+                dispatcher.Post(ApplyProgress);
         }
 
         try
@@ -292,18 +297,18 @@ public sealed class VerifyViewModel : PageViewModel
     {
         _stopRequested = true;
         StatusText = "Stopping after the current disc. Its completed evidence will be kept.";
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
     }
 
     private bool ConfirmRepair(VerifyDiscViewModel disc)
     {
-        return MessageBox.Show(
+        // No prompt service (headless) means no confirmation is possible, so
+        // repair stays fail-closed rather than silently proceeding.
+        return _prompts?.ConfirmOkCancel(
             "Repair will build a new sibling folder for " + disc.DisplayName +
             ", independently verify the repaired audio, and publish it only if verification " +
             "succeeds. The selected source files will not be changed.\n\nProceed with repair?",
-            "Create repaired copy from CTDB parity",
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Question) == MessageBoxResult.OK;
+            "Create repaired copy from CTDB parity") ?? false;
     }
 
     private void UpdateOverview()
@@ -553,7 +558,7 @@ public sealed class VerifyDiscViewModel : ViewModelBase
         HasResult = true;
         StatusText = result.Ok ? result.Status : result.Error;
         OnPropertyChanged(string.Empty);
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
     }
 
     internal void ApplyRepairFailure(VerifyFilesResult failure)
@@ -562,7 +567,7 @@ public sealed class VerifyDiscViewModel : ViewModelBase
         StatusText = "Repair failed: " + failure.Error +
             " The completed verification evidence was kept.";
         OnPropertyChanged(nameof(OutcomeText));
-        CommandManager.InvalidateRequerySuggested();
+        RequeryHub.RequestRequery();
     }
 
     private static string JoinNonempty(params string?[] values)

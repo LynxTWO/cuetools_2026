@@ -49,6 +49,13 @@
           "CUETools.Parity": "[2.2.6, )"
         }
       },
+      "cuetools.app.core": {
+        "type": "Project",
+        "dependencies": {
+          "CUETools.CTDB": "[2.2.6, )",
+          "CUETools.Processor": "[2.2.6, )"
+        }
+      },
       "cuetools.cdimage": {
         "type": "Project"
       },
@@ -167,7 +174,7 @@
       "freedb": {
         "type": "Project"
       },
-      "taglibsharp": {
+      "TagLibSharp": {
         "type": "Project"
       }
     }
