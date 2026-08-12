@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Platform-neutral application core extracted from CUETools.Wpf (verify slice).
+       ViewModels and services shared by the WPF head and the CUETools Linux head.
+       Namespaces intentionally keep their original CUETools.Wpf.* names so both
+       heads and the existing test suite consume moved types without source
+       changes; renaming is deferred until both heads are stable. No WPF, no
+       Windows-only APIs: platform behavior enters through the interfaces in
+       Services/Platform. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CUETools.Wpf</RootNamespace>
+    <Version>2026.1.0</Version>
+    <FileVersion>2026.1.0.0</FileVersion>
+    <Product>CUETools 2026</Product>
+    <Company>CUETools contributors</Company>
+    <Description>Platform-neutral application core for CUETools 2026 front ends</Description>
+    <Copyright>(C) 2008-2026 Grigory Chudov and CUETools contributors. GPL v3.</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CUETools.Processor\CUETools.Processor.csproj" />
+    <ProjectReference Include="..\CUETools.CTDB\CUETools.CTDB.csproj" />
+  </ItemGroup>
+
+</Project>
