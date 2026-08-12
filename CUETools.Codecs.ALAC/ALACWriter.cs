@@ -35,7 +35,7 @@ using Newtonsoft.Json;
 namespace CUETools.Codecs.ALAC
 {
     [JsonObject(MemberSerialization.OptIn)]
-    public class EncoderSettings: IAudioEncoderSettings
+    public class EncoderSettings: IAudioEncoderSettings, IVerifyOnEncodeSettings
 	{
         #region IAudioEncoderSettings implementation
         [Browsable(false)]
@@ -109,6 +109,15 @@ namespace CUETools.Codecs.ALAC
 		[Description("Decode each frame and compare with original")]
         [JsonProperty]
         public bool DoVerify { get; set; }
+
+        // Typed seam for CUEConfig's lossless-verification migration
+        // (IVerifyOnEncodeSettings); maps onto the serialized property so the
+        // settings surface is unchanged.
+        bool IVerifyOnEncodeSettings.VerifyOnEncode
+        {
+            get => DoVerify;
+            set => DoVerify = value;
+        }
 	}
 
 	public class AudioEncoder : IAudioDest

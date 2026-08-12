@@ -620,16 +620,11 @@ namespace CUETools.Processor
         {
             foreach (IAudioEncoderSettings encoder in settings.encoders)
             {
-                string verifyPropertyName;
                 switch (encoder.GetType().FullName)
                 {
                     case "CUETools.Codecs.ALAC.EncoderSettings":
                     case "CUETools.Codecs.FLACCL.EncoderSettings":
-                        verifyPropertyName = "DoVerify";
-                        break;
-
                     case "CUETools.Codecs.libFLAC.EncoderSettings":
-                        verifyPropertyName = "Verify";
                         break;
 
                     // Flake, WMA Lossless, MACLib, and WavPack use a true serialization
@@ -642,18 +637,20 @@ namespace CUETools.Processor
                         continue;
                 }
 
-                var verifyProperty = encoder.GetType().GetProperty(
-                    verifyPropertyName);
-                if (verifyProperty == null ||
-                    verifyProperty.PropertyType != typeof(bool) ||
-                    !verifyProperty.CanWrite)
+                // The typed seam replaced per-codec property reflection
+                // (DoVerify/Verify), which broke under trimmed and AOT hosts
+                // where unreferenced property members are removed. Selection
+                // above stays an explicit type allowlist on purpose: a new
+                // codec implementing the interface does not silently join
+                // this one-time migration.
+                if (!(encoder is IVerifyOnEncodeSettings verifiable))
                 {
                     throw new InvalidOperationException(
                         "The lossless verification migration does not recognize " +
-                        encoder.GetType().FullName + "." + verifyPropertyName + ".");
+                        encoder.GetType().FullName + " as verify-on-encode capable.");
                 }
 
-                verifyProperty.SetValue(encoder, true, null);
+                verifiable.VerifyOnEncode = true;
             }
         }
 

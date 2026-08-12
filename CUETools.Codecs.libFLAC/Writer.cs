@@ -10,7 +10,7 @@ using Newtonsoft.Json;
 namespace CUETools.Codecs.libFLAC
 {
     [JsonObject(MemberSerialization.OptIn)]
-    public class EncoderSettings : IAudioEncoderSettings
+    public class EncoderSettings : IAudioEncoderSettings, IVerifyOnEncodeSettings
     {
         #region IAudioEncoderSettings implementation
         [Browsable(false)]
@@ -69,6 +69,15 @@ namespace CUETools.Codecs.libFLAC
         [Description("Decode each frame and compare with original")]
         [JsonProperty]
         public bool Verify { get; set; }
+
+        // Typed seam for CUEConfig's lossless-verification migration
+        // (IVerifyOnEncodeSettings); maps onto the serialized property so the
+        // settings surface is unchanged.
+        bool IVerifyOnEncodeSettings.VerifyOnEncode
+        {
+            get => Verify;
+            set => Verify = value;
+        }
 
         [DefaultValue(true)]
         [DisplayName("MD5")]
