@@ -35,7 +35,19 @@ namespace CUETools.Processor
             //string arch = asi.ApplicationId.ProcessorArchitecture;
             //ActivationContext is null most of the time :(
 
-            string plugins_path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "plugins");
+            // Assembly.Location is empty under single-file and NativeAOT hosts, where
+            // GetDirectoryName returns null and Path.Combine throws in this static
+            // ctor, killing every consumer. Fall back to the app base directory; when
+            // Location resolves (folder-based publishes, the packaged WPF app), the
+            // behavior is unchanged.
+            string assembly_dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+#if !NET20
+            if (string.IsNullOrEmpty(assembly_dir))
+                assembly_dir = AppContext.BaseDirectory;
+#endif
+            string plugins_path = string.IsNullOrEmpty(assembly_dir)
+                ? "plugins"
+                : Path.Combine(assembly_dir, "plugins");
             if (Directory.Exists(plugins_path))
             {
                 string manifestPath = Path.Combine(
