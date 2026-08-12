@@ -120,17 +120,19 @@ public sealed class VerifyViewModel : PageViewModel
         new("All files", new[] { "*" })
     };
 
-    private void BrowseFile()
+    private async void BrowseFile()
     {
-        string[]? files = _dialogs?.PickFiles(
+        if (_dialogs == null) return;
+        string[]? files = await _dialogs.PickFilesAsync(
             "Choose a rip to verify", multiselect: true, BrowseFileGroups);
         if (files is { Length: > 0 })
             LoadSources(files);
     }
 
-    private void BrowseFolder()
+    private async void BrowseFolder()
     {
-        string? folder = _dialogs?.PickFolder("Choose an album folder to verify");
+        if (_dialogs == null) return;
+        string? folder = await _dialogs.PickFolderAsync("Choose an album folder to verify");
         if (folder != null)
             LoadSources(new[] { folder });
     }
@@ -227,7 +229,7 @@ public sealed class VerifyViewModel : PageViewModel
     internal async Task RepairDiscAsync(VerifyDiscViewModel? disc, bool confirm)
     {
         if (disc == null || !disc.CanRepair || IsBusy) return;
-        if (confirm && !ConfirmRepair(disc)) return;
+        if (confirm && !await ConfirmRepairAsync(disc)) return;
 
         _stopRequested = false;
         IsBusy = true;
@@ -300,15 +302,16 @@ public sealed class VerifyViewModel : PageViewModel
         RequeryHub.RequestRequery();
     }
 
-    private bool ConfirmRepair(VerifyDiscViewModel disc)
+    private async Task<bool> ConfirmRepairAsync(VerifyDiscViewModel disc)
     {
         // No prompt service (headless) means no confirmation is possible, so
         // repair stays fail-closed rather than silently proceeding.
-        return _prompts?.ConfirmOkCancel(
+        if (_prompts == null) return false;
+        return await _prompts.ConfirmOkCancelAsync(
             "Repair will build a new sibling folder for " + disc.DisplayName +
             ", independently verify the repaired audio, and publish it only if verification " +
             "succeeds. The selected source files will not be changed.\n\nProceed with repair?",
-            "Create repaired copy from CTDB parity") ?? false;
+            "Create repaired copy from CTDB parity");
     }
 
     private void UpdateOverview()
