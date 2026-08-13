@@ -8,8 +8,6 @@ namespace CUETools.Codecs.libwavpack
         internal const string DllName = "wavpackdll";
         internal const CallingConvention DllCallingConvention = CallingConvention.Cdecl;
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
 
         [DllImport(DllName, CallingConvention = DllCallingConvention)]
         internal static extern WavpackContext* WavpackOpenFileInputEx64 (WavpackStreamReader64 *reader, void *wv_id, void *wvc_id,
@@ -67,12 +65,13 @@ namespace CUETools.Codecs.libwavpack
 
         static wavpackdll()
         {
+            string fileName = DllName + NativePreload.SharedLibrarySuffix;
             string nativePath = NativeDependencyPathRegistry.ResolvePath(
                 typeof(wavpackdll).Assembly,
-                DllName + ".dll");
-            IntPtr Dll = LoadLibrary(nativePath);
+                fileName);
+            IntPtr Dll = NativePreload.Load(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
+                throw new DllNotFoundException(fileName + " could not be loaded.");
         }
     };
 }
