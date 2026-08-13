@@ -297,7 +297,9 @@ namespace CUETools.Wpf.Tests
 
             try
             {
-                var store = new SettingsStore(new FakeLog(), fakeExe);
+                var store = new SettingsStore(new FakeLog(), fakeExe,
+                    new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+                new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose));
                 string realPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CUETools2026", "settings.txt");
                 Assert.AreNotEqual(realPath, store.SettingsFilePath,

@@ -108,7 +108,11 @@ public partial class App : Application
         // preferred defaults (until settings persistence lands).
         services.AddSingleton<CUEConfig>(_ => CreateWpfDefaultConfig());
         services.AddSingleton<AppSettings>();
-        services.AddSingleton<SettingsStore>();
+        services.AddSingleton<SettingsStore>(provider => new SettingsStore(
+            provider.GetRequiredService<IDiagnosticLog>(),
+            null,
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose)));
         services.AddSingleton<EncoderCatalog>();
         services.AddSingleton<AppStatusService>();
         services.AddSingleton<CUETools.Wpf.Accuracy.DriveCalibrationStore>();

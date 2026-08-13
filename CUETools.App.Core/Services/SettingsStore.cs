@@ -23,29 +23,16 @@ public sealed class SettingsStore
     private readonly ISecretProtector _proxySecretProtector;
     private readonly ISecretProtector _theAudioDbSecretProtector;
 
-    public SettingsStore(IDiagnosticLog log)
-        : this(
-            log,
-            null,
-            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
-            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose)) { }
-
-    /// <summary>Test seam. <paramref name="appPath"/> follows the engine's own portable-mode convention
+    /// <summary><paramref name="appPath"/> follows the engine's own portable-mode convention
     /// (see SettingsShared.GetProfileDir): it is a FILE path, and the profile is redirected to
     /// &lt;that file's directory&gt;\CUETools2026 unless a "user_profiles_enabled" marker sits beside it.
-    /// Null (the DI path) means the real %AppData%\CUETools2026\settings.txt. A round-trip test needs
-    /// this so it never reads or writes the user's own settings file.</summary>
-    public SettingsStore(IDiagnosticLog log, string? appPath)
-        : this(
-            log,
-            appPath,
-            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
-            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose)) { }
-
-    internal SettingsStore(IDiagnosticLog log, string? appPath, ISecretProtector secretProtector)
+    /// Null means the real ApplicationData CUETools2026 settings.txt. Each head supplies its
+    /// platform's secret protectors (WPF: DPAPI; heads without protected storage: a declining
+    /// protector, keeping secrets out of the profile).</summary>
+    public SettingsStore(IDiagnosticLog log, string? appPath, ISecretProtector secretProtector)
         : this(log, appPath, secretProtector, secretProtector) { }
 
-    internal SettingsStore(
+    public SettingsStore(
         IDiagnosticLog log,
         string? appPath,
         ISecretProtector proxySecretProtector,
