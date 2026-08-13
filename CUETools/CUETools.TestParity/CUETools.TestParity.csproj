@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
+    <TargetFrameworks>net47;net8.0</TargetFrameworks>
     <RootNamespace>CUETools.TestParity</RootNamespace>
     <AssemblyName>CUETools.TestParity</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
