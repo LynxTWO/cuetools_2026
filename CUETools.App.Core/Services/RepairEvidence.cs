@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CUETools.Wpf.Services;
 
@@ -114,6 +115,12 @@ internal sealed class RepairFileProof
     }
 }
 
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(RepairReceipt))]
+internal sealed partial class RepairReceiptJsonContext : JsonSerializerContext
+{
+}
+
 internal static class RepairEvidence
 {
     internal const string ReceiptFileName = "repair.verify";
@@ -154,10 +161,12 @@ internal static class RepairEvidence
         };
     }
 
+    // Source-generated serialization: reflection-based System.Text.Json is disabled when a host
+    // publishes with AOT (IsDynamicCodeSupported=false), and the receipt must seal there too.
     public static string ToJson(RepairReceipt receipt) =>
         JsonSerializer.Serialize(
             receipt,
-            new JsonSerializerOptions { WriteIndented = true });
+            RepairReceiptJsonContext.Default.RepairReceipt);
 
     public static void WriteDurableText(string path, string contents)
     {
