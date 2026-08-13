@@ -7,3 +7,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CUETools.Codecs.libFLAC")]
 [assembly: InternalsVisibleTo("CUETools.Codecs.libwavpack")]
 [assembly: InternalsVisibleTo("CUETools.Codecs.MACLib")]
+[assembly: InternalsVisibleTo("CUETools.Codecs.libmp3lame")]

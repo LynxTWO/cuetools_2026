@@ -3,6 +3,10 @@
   "scope": "Native and mixed-mode DLLs produced or copied by the Windows release workflows.",
   "pinnedFiles": [
     {
+      "path": "ThirdParty/lame/lame-3.100.tar.gz",
+      "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
+    },
+    {
       "path": "ThirdParty/MAC_SDK/MAC_1320_SDK.zip",
       "sha256": "9cdf4f5afff700b859d417d3996b70ed91d59c3bf7b2fb275f5faeeaf9e4e31e"
     },
