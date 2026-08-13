@@ -10,8 +10,6 @@ namespace CUETools.Codecs.libmp3lame
         private const string DllName = "libmp3lame";
         private const CallingConvention LameCallingConvention = CallingConvention.Cdecl;
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
 
         [DllImport(DllName, CallingConvention = LameCallingConvention)]
         internal static extern IntPtr lame_init();
@@ -52,12 +50,13 @@ namespace CUETools.Codecs.libmp3lame
 
         static libmp3lamedll()
         {
+            string fileName = DllName + NativePreload.SharedLibrarySuffix;
             string nativePath = NativeDependencyPathRegistry.ResolvePath(
                 typeof(libmp3lamedll).Assembly,
-                DllName + ".dll");
-            IntPtr Dll = LoadLibrary(nativePath);
+                fileName);
+            IntPtr Dll = NativePreload.Load(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
+                throw new DllNotFoundException(fileName + " could not be loaded.");
         }
     }
 }
