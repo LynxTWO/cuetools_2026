@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net47;net20;net8.0-windows</TargetFrameworks>
+    <TargetFrameworks>net47;net20;net8.0-windows;net8.0</TargetFrameworks>
     <Version>2.2.6.0</Version>
     <!-- Legacy al.exe accepts numeric product versions only. -->
     <IncludeSourceRevisionInInformationalVersion Condition="'$(TargetFramework)' == 'net20'">false</IncludeSourceRevisionInInformationalVersion>

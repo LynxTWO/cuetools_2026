@@ -799,7 +799,84 @@ namespace Bwg.Scsi
 
         private CommandStatus SendCommand(Command cmd)
         {
+            if (LinuxSg.IsLinux)
+                return SendCommandLinux(cmd);
             return (m_ossize == 32) ? SendCommand32(cmd) : SendCommand64(cmd);
+        }
+
+        private CommandStatus SendCommandLinux(Command cmd)
+        {
+            LinuxSg.SgIoHdr h = new LinuxSg.SgIoHdr();
+            byte[] cdb = new byte[cmd.GetCDBLength()];
+            for (byte i = 0; i < cdb.Length; i++)
+                cdb[i] = cmd.GetCDB(i);
+            // Same fixed sense window as the Windows pass-through structs; the
+            // unwritten tail stays zero so no-sense reads a zeroed buffer.
+            byte[] sense = new byte[24];
+
+            int rc;
+            fixed (byte* pcdb = cdb)
+            fixed (byte* psense = sense)
+            {
+                h.interface_id = 'S';
+                if (cmd.BufferSize == 0)
+                    h.dxfer_direction = LinuxSg.SG_DXFER_NONE;
+                else if (cmd.Direction == Command.CmdDirection.In)
+                    h.dxfer_direction = LinuxSg.SG_DXFER_FROM_DEV;
+                else
+                    h.dxfer_direction = LinuxSg.SG_DXFER_TO_DEV;
+                h.cmd_len = (byte)cdb.Length;
+                h.mx_sb_len = (byte)sense.Length;
+                h.dxfer_len = (uint)cmd.BufferSize;
+                h.dxferp = cmd.GetBuffer();
+                h.cmdp = (IntPtr)pcdb;
+                h.sbp = (IntPtr)psense;
+                // Command timeouts are in seconds (the SPTD contract); SG_IO
+                // wants milliseconds.
+                h.timeout = (uint)cmd.TimeOut * 1000u;
+
+                rc = LinuxSg.SendSgIo(DeviceHandle.ToInt32(), ref h);
+            }
+
+            if (rc < 0)
+            {
+                string str = "SG_IO ioctl failed - errno " + Marshal.GetLastWin32Error().ToString();
+                m_logger.LogMessage(new UserMessage(UserMessage.Category.Error, 0, str));
+                // The command never completed, so the previous command's sense and status must
+                // not be readable as if they were this command's identity (R112).
+                m_scsi_status = 0;
+                m_sense_info = null;
+                m_last_transfer_length = 0;
+                return CommandStatus.IoctlFailed;
+            }
+
+            if (h.status == 0 && (h.host_status != 0 || (h.driver_status & ~LinuxSg.SG_DRIVER_SENSE) != 0))
+            {
+                // Transport-level failure with no SCSI verdict. On Windows the
+                // port driver fails the ioctl for these, so classify the same
+                // way; there is no device sense to report (R112).
+                string str = "SG_IO transport failure - host_status 0x" + h.host_status.ToString("X2") +
+                    ", driver_status 0x" + h.driver_status.ToString("X2");
+                m_logger.LogMessage(new UserMessage(UserMessage.Category.Error, 0, str));
+                m_scsi_status = 0;
+                m_sense_info = null;
+                m_last_transfer_length = 0;
+                return CommandStatus.IoctlFailed;
+            }
+
+            m_scsi_status = h.status;
+            // The sg driver reports the residual; mirror the Windows write-back of
+            // the actual number of bytes transferred (R112).
+            m_last_transfer_length = (uint)Math.Max(0, cmd.BufferSize - h.resid);
+            m_sense_info = sense;
+
+            if (m_scsi_status != 0)
+            {
+                LogSenseInformation(cmd);
+                return CommandStatus.DeviceFailed;
+            }
+
+            return CommandStatus.Success;
         }
 
         private CommandStatus SendCommand64(Command cmd)
@@ -922,6 +999,23 @@ namespace Bwg.Scsi
 
         void QueryBufferSize()
         {
+            if (LinuxSg.IsLinux)
+            {
+                // The block layer publishes the enforced per-command limit in
+                // sysfs; apply the same 56 * 2048 cap and query-failure
+                // fallback as the Windows path below.
+                int max = LinuxSg.QueryMaxTransferLength(Name);
+                if (max > 0)
+                {
+                    m_MaximumTransferLength = max;
+                    if (m_MaximumTransferLength > 56 * 2048)
+                        m_MaximumTransferLength = 56 * 2048;
+                }
+                else
+                    m_MaximumTransferLength = 26 * 2048;
+                return;
+            }
+
             IO_SCSI_CAPABILITIES f = new IO_SCSI_CAPABILITIES();
             f.Length = 23;
 
@@ -3747,6 +3841,19 @@ namespace Bwg.Scsi
         /// <returns></returns>
         public bool DisableEjectDisc(bool bDisable)
         {
+            if (LinuxSg.IsLinux)
+            {
+                // No storage ioctl on Linux; issue the MMC PREVENT ALLOW MEDIUM
+                // REMOVAL command through the same SG_IO path as all other
+                // traffic.
+                using (Command cmd = new Command(ScsiCommandCode.PreventAllowMediumRemoval,
+                    6, 0, Command.CmdDirection.None, 10))
+                {
+                    cmd.SetCDB8(4, (byte)(bDisable ? 1 : 0));
+                    return SendCommand(cmd) == CommandStatus.Success;
+                }
+            }
+
             PREVENT_MEDIA_REMOVAL pmr = new PREVENT_MEDIA_REMOVAL();
             pmr.PreventMediaRemoval = bDisable ? 1u : 0u;
             uint uiPmrSize = (uint)Marshal.SizeOf(pmr);
