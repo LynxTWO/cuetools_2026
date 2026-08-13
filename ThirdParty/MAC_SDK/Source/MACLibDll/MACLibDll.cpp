@@ -1,5 +1,6 @@
 #include "MACLibDll.h"
 #include "IAPEIO.h"
+#include <climits> // INT_MAX; MSVC project headers pull it transitively, gcc/clang do not
 
 using namespace APE;
 

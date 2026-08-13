@@ -8,8 +8,6 @@ namespace CUETools.Codecs.MACLib
         internal const string DllName = "MACLibDll";
         internal const CallingConvention DllCallingConvention = CallingConvention.StdCall;
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
 
         [DllImport(DllName, CallingConvention = DllCallingConvention)]
         internal static extern int GetVersionNumber();
@@ -72,12 +70,13 @@ namespace CUETools.Codecs.MACLib
 
         static MACLibDll()
         {
+            string fileName = DllName + NativePreload.SharedLibrarySuffix;
             string nativePath = NativeDependencyPathRegistry.ResolvePath(
                 typeof(MACLibDll).Assembly,
-                DllName + ".dll");
-            IntPtr Dll = LoadLibrary(nativePath);
+                fileName);
+            IntPtr Dll = NativePreload.Load(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
+                throw new DllNotFoundException(fileName + " could not be loaded.");
         }
     };
 }

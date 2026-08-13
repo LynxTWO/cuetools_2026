@@ -12,11 +12,6 @@ namespace CUETools.Codecs.libFLAC
 
         internal static string GetVersion => version;
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
-
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate FLAC__StreamDecoderReadStatus FLAC__StreamDecoderReadCallback(IntPtr decoder, byte* buffer, ref UIntPtr bytes, void* client_data);
@@ -162,13 +157,14 @@ namespace CUETools.Codecs.libFLAC
 
         static FLACDLL()
         {
+            string fileName = DllName + NativePreload.SharedLibrarySuffix;
             string nativePath = NativeDependencyPathRegistry.ResolvePath(
                 typeof(FLACDLL).Assembly,
-                DllName + ".dll");
-            IntPtr Dll = LoadLibrary(nativePath);
+                fileName);
+            IntPtr Dll = NativePreload.Load(nativePath);
             if (Dll == IntPtr.Zero)
-                throw new DllNotFoundException(DllName + ".dll could not be loaded.");
-            IntPtr addr = GetProcAddress(Dll, "FLAC__VERSION_STRING");
+                throw new DllNotFoundException(fileName + " could not be loaded.");
+            IntPtr addr = NativePreload.GetSymbol(Dll, "FLAC__VERSION_STRING");
             if (addr == IntPtr.Zero)
                 throw new EntryPointNotFoundException("FLAC__VERSION_STRING");
             IntPtr ptr = Marshal.ReadIntPtr(addr);

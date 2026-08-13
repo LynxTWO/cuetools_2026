@@ -8,7 +8,7 @@
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp",
-      "sha256": "f54ba4e70d4650b347fd895bd39416a17ff443d7289d19ef8233f922455a989c"
+      "sha256": "bd1573bd6fa1534f19bbf4e1b158053bf378d05e7a60f0b755b9f774a375d78c"
     },
     {
       "path": "ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def",
