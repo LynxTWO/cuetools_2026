@@ -100,12 +100,18 @@ namespace CUETools.Wpf.Tests
         public static Dictionary<string, ResolvedProperty> ResolveViewModelProperties(string repoRoot, IEnumerable<string> propertyNames)
         {
             var result = new Dictionary<string, ResolvedProperty>();
-            string vmDir = Path.Combine(repoRoot, "CUETools.Wpf", "ViewModels");
-            if (!Directory.Exists(vmDir)) return result;
-
-            var files = Directory.GetFiles(vmDir, "*ViewModel.cs", SearchOption.TopDirectoryOnly)
+            // View models live in CUETools.Wpf and, since the shared app-core
+            // extraction, in CUETools.App.Core; both hold WPF-bound pages.
+            string[] vmDirs =
+            {
+                Path.Combine(repoRoot, "CUETools.Wpf", "ViewModels"),
+                Path.Combine(repoRoot, "CUETools.App.Core", "ViewModels"),
+            };
+            var files = vmDirs.Where(Directory.Exists)
+                .SelectMany(dir => Directory.GetFiles(dir, "*ViewModel.cs", SearchOption.TopDirectoryOnly))
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            if (files.Length == 0) return result;
             var fileText = files.ToDictionary(f => f, File.ReadAllText);
 
             foreach (var name in propertyNames.Distinct())
@@ -220,8 +226,10 @@ namespace CUETools.Wpf.Tests
             public List<string> SampleLines = new();
         }
 
-        /// <summary>Search CUETools.Wpf, CUETools.Processor and CUETools.Ripper.SCSI (excluding
-        /// bin/obj) for real, non-plumbing references to <paramref name="member"/>. The
+        /// <summary>Search CUETools.Wpf, CUETools.App.Core (the shared app core the
+        /// view models and portable services moved into), CUETools.Processor and
+        /// CUETools.Ripper.SCSI (excluding bin/obj) for real, non-plumbing references
+        /// to <paramref name="member"/>. The
         /// <paramref name="excludedSpans"/> are the (file, first line, last line) of every
         /// ViewModel property whose body resolved to this exact member - i.e. the pass-through
         /// itself, excluded per rule 5 of the brief.</summary>
@@ -229,7 +237,7 @@ namespace CUETools.Wpf.Tests
         {
             var scan = new ConsumerScan();
             var wordRegex = new Regex(@"\b" + Regex.Escape(member) + @"\b");
-            string[] dirs = { "CUETools.Wpf", "CUETools.Processor", "CUETools.Ripper.SCSI" };
+            string[] dirs = { "CUETools.Wpf", "CUETools.App.Core", "CUETools.Processor", "CUETools.Ripper.SCSI" };
 
             foreach (var d in dirs)
             {
