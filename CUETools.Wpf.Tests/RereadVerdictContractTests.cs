@@ -34,7 +34,7 @@ public sealed class RereadVerdictContractTests
         string root = DeadSwitchAnalyzer.FindRepoRoot(System.AppContext.BaseDirectory);
         Assert.IsNotNull(root);
         string source = File.ReadAllText(
-            Path.Combine(root, "CUETools.Wpf", "Services", "RipService.cs"));
+            Path.Combine(root, "CUETools.App.Core", "Services", "RipService.cs"));
 
         StringAssert.Contains(source, "if (e.WindowGivenUpSectors > 0)",
             "failedWindows must count engine verdicts, not a mid-pass reread heuristic");

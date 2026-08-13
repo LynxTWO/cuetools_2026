@@ -53,7 +53,14 @@
         "type": "Project",
         "dependencies": {
           "CUETools.CTDB": "[2.2.6, )",
-          "CUETools.Processor": "[2.2.6, )"
+          "CUETools.Codecs.ALAC": "[2.2.6, )",
+          "CUETools.Codecs.Flake": "[2.2.6, )",
+          "CUETools.Codecs.MACLib": "[2.2.6, )",
+          "CUETools.Codecs.libFLAC": "[2.2.6, )",
+          "CUETools.Codecs.libwavpack": "[2.2.6, )",
+          "CUETools.Processor": "[2.2.6, )",
+          "CUETools.Ripper": "[2.2.6, )",
+          "CUETools.Ripper.SCSI": "[2.2.6, )"
         }
       },
       "cuetools.cdimage": {
@@ -174,7 +181,7 @@
       "freedb": {
         "type": "Project"
       },
-      "TagLibSharp": {
+      "taglibsharp": {
         "type": "Project"
       }
     }

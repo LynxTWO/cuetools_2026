@@ -70,9 +70,18 @@ public static class OutputVerificationAssuranceEvaluator
         if (type == typeof(CUETools.Codecs.ALAC.EncoderSettings))
             return FromSwitch(
                 ((CUETools.Codecs.ALAC.EncoderSettings)settings).DoVerify);
-        if (type == typeof(CUETools.Codecs.WMA.LosslessEncoderSettings))
-            return FromSwitch(
-                ((CUETools.Codecs.WMA.LosslessEncoderSettings)settings).DoVerify);
+        // WMA Lossless is a Windows-only project and deliberately not an
+        // App.Core reference. Gate on the exact name identities - the FLACCL
+        // precedent: FullName plus assembly name, then a typed contract - and
+        // read through the verify-on-encode seam instead of a compile-time
+        // type.
+        if (string.Equals(type.FullName,
+                "CUETools.Codecs.WMA.LosslessEncoderSettings",
+                StringComparison.Ordinal) &&
+            string.Equals(type.Assembly.GetName().Name,
+                "CUETools.Codecs.WMA", StringComparison.Ordinal) &&
+            settings is IVerifyOnEncodeSettings wmaVerifiable)
+            return FromSwitch(wmaVerifiable.VerifyOnEncode);
         if (type == typeof(CUETools.Codecs.libFLAC.EncoderSettings))
             return FromSwitch(
                 ((CUETools.Codecs.libFLAC.EncoderSettings)settings).Verify);

@@ -187,7 +187,7 @@ public sealed class CodecPickerAndHealthTests
         Assert.IsNotNull(root);
         string source = File.ReadAllText(Path.Combine(
             root,
-            "CUETools.Wpf",
+            "CUETools.App.Core",
             "Services",
             "RipService.cs"));
 

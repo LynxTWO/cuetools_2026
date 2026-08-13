@@ -44,7 +44,27 @@ namespace CUETools.Wpf.Services
     {
         private const long MaximumStoredBytes = 64L * 1024 * 1024;
         private const long MaximumDecodedBytes = 128L * 1024 * 1024;
-        private static readonly JsonSerializerOptions Opts = new JsonSerializerOptions { WriteIndented = true };
+        // Serialization resolves through the source-generated StoreJsonContext
+        // first (required under trimmed/AOT heads, where reflection-based
+        // System.Text.Json is disabled - including JIT builds of a PublishAot
+        // project). Hosts with dynamic code keep a reflection fallback for any
+        // type outside the context's closed set.
+        private static readonly JsonSerializerOptions Opts = CreateOptions();
+
+        private static JsonSerializerOptions CreateOptions()
+        {
+            System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver resolver =
+                System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported
+                    ? System.Text.Json.Serialization.Metadata.JsonTypeInfoResolver.Combine(
+                        StoreJsonContext.Default,
+                        new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver())
+                    : StoreJsonContext.Default;
+            return new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                TypeInfoResolver = resolver,
+            };
+        }
 
         public static T? Load<T>(string path)
         {
@@ -146,7 +166,7 @@ namespace CUETools.Wpf.Services
                     using var bounded = new BoundedReadStream(
                         payload,
                         maximumDecodedBytes);
-                    T? value = JsonSerializer.Deserialize<T>(bounded);
+                    T? value = JsonSerializer.Deserialize<T>(bounded, Opts);
                     if (value == null)
                         throw new InvalidDataException(
                             "The persistence file contains a null root value.");
