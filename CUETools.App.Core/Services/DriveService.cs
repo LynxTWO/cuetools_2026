@@ -488,6 +488,34 @@ public sealed class DriveService : IDriveService
       if (lease == null) return;
       lock (_scsiGate)
       {
+        if (!OperatingSystem.IsWindows())
+        {
+            // Same funnel, platform transport: the CDROM block-device ioctls
+            // (linux/cdrom.h) on /dev/srN. The storage IOCTL codes the
+            // callers pass are Windows-only, so map by intent.
+            uint linuxCode = what == "open"
+                ? 0x5309u  /* CDROMEJECT */
+                : 0x5319u; /* CDROMCLOSETRAY */
+            string? srPath = Bwg.Scsi.LinuxSg.SrPathForLetter(drive);
+            if (srPath == null)
+            {
+                _log.Warn("drive", $"tray {what} {drive}: no sr device node");
+                return;
+            }
+            int fd = Bwg.Scsi.LinuxSg.OpenDevice(srPath);
+            if (fd < 0)
+            {
+                _log.Warn("drive", $"tray {what} {drive}: cannot open device");
+                return;
+            }
+            try
+            {
+                bool okLinux = Bwg.Scsi.LinuxSg.SendBareIoctl(fd, linuxCode) == 0;
+                _log.Info("drive", $"tray {what} {drive} ok={okLinux}");
+            }
+            finally { Bwg.Scsi.LinuxSg.CloseDevice(fd); }
+            return;
+        }
         var h = CreateFileW($@"\\.\{char.ToUpperInvariant(drive)}:", 0x80000000 /*GENERIC_READ*/,
             0x1 | 0x2 /*share read+write*/, IntPtr.Zero, 3 /*OPEN_EXISTING*/, 0, IntPtr.Zero);
         if (h == new IntPtr(-1)) { _log.Warn("drive", $"tray {what} {drive}: cannot open device"); return; }
