@@ -23,6 +23,21 @@
   <ItemGroup>
     <ProjectReference Include="..\CUETools.Processor\CUETools.Processor.csproj" />
     <ProjectReference Include="..\CUETools.CTDB\CUETools.CTDB.csproj" />
+    <!-- Rip slice: the calibration and rip services moved here consume the
+         ripper stack directly. Both ripper projects gained a neutral net8.0
+         TargetFramework for exactly this consumer. -->
+    <ProjectReference Include="..\CUETools.Ripper\CUETools.Ripper.csproj" />
+    <ProjectReference Include="..\CUETools.Ripper.SCSI\CUETools.Ripper.SCSI.csproj" />
+    <!-- The output-verification evaluator keeps exact compile-time type
+         identity for every codec with a platform-neutral flavor. WMA is
+         Windows-only and joins through the typed verify-on-encode seam
+         behind a name-identity gate instead (see
+         OutputVerificationAssurance.cs). -->
+    <ProjectReference Include="..\CUETools.Codecs.Flake\CUETools.Codecs.Flake.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.ALAC\CUETools.Codecs.ALAC.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libFLAC\CUETools.Codecs.libFLAC.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.libwavpack\CUETools.Codecs.libwavpack.csproj" />
+    <ProjectReference Include="..\CUETools.Codecs.MACLib\CUETools.Codecs.MACLib.csproj" />
   </ItemGroup>
 
 </Project>
