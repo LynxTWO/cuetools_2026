@@ -82,6 +82,9 @@ namespace Bwg.Scsi
         [DllImport("libc", EntryPoint = "ioctl", SetLastError = true)]
         private static extern int sys_ioctl(int fd, UIntPtr request, ref SgIoHdr hdr);
 
+        [DllImport("libc", EntryPoint = "ioctl", SetLastError = true)]
+        private static extern int sys_ioctl_bare(int fd, UIntPtr request, IntPtr arg);
+
         /// <summary>
         /// Open a device node for SG_IO. The sg driver requires O_RDWR to issue
         /// commands; fall back to read-only (valid for SG_IO on sr nodes) when
@@ -111,6 +114,28 @@ namespace Bwg.Scsi
         internal static int SendSgIo(int fd, ref SgIoHdr hdr)
         {
             return sys_ioctl(fd, (UIntPtr)SG_IO, ref hdr);
+        }
+
+        /// <summary>
+        /// Issue an argument-less ioctl (e.g. the CDROM tray requests) on an
+        /// open fd. Returns the raw ioctl result.
+        /// </summary>
+        public static int SendBareIoctl(int fd, uint request)
+        {
+            return sys_ioctl_bare(fd, (UIntPtr)request, IntPtr.Zero);
+        }
+
+        /// <summary>
+        /// The block-device node for a drive letter (/dev/srN), or null when
+        /// the sr device does not exist. The CDROM ioctls (tray control) talk
+        /// to this node, not the sg alias.
+        /// </summary>
+        public static string SrPathForLetter(char letter)
+        {
+            int n = char.ToUpperInvariant(letter) - 'A';
+            if (n < 0 || n > 25 || !Directory.Exists("/sys/block/sr" + n))
+                return null;
+            return "/dev/sr" + n;
         }
 
         /// <summary>

@@ -309,6 +309,16 @@ public sealed class RipService : IRipService
     private const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
     private void KeepAwake(bool on)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // No power API is wired on this platform yet (a systemd sleep
+            // inhibitor is the eventual equivalent). Leave the same honest
+            // trace a rejected Windows request leaves, so a mid-rip sleep is
+            // explainable from the log.
+            if (on)
+                _log.Warn("rip", "keep-awake not implemented on this platform - the system may sleep during this rip");
+            return;
+        }
         // returns 0 on failure - the machine could then sleep mid-rip, so leave a trace
         if (SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS) == 0 && on)
             _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");

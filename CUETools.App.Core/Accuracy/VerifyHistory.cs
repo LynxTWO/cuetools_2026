@@ -375,7 +375,10 @@ namespace CUETools.Wpf.Accuracy
         private static bool SameTrackForHistory(TrackCrc? a, TrackCrc? b) =>
             SameAudioForHistory(a, b);
 
+        // Through the source-generated context: reflection STJ is disabled
+        // under the AOT heads (including JIT builds of a PublishAot project),
+        // and this serialization runs inside the Test & Copy commit path.
         public static string ToJson(VerifyRecord r) =>
-            JsonSerializer.Serialize(r, new JsonSerializerOptions { WriteIndented = true });
+            JsonSerializer.Serialize(r, StoreJsonContext.Default.VerifyRecord);
     }
 }
