@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using System.Windows.Threading;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
 using CUETools.Processor;
@@ -22,6 +21,8 @@ public sealed class ConvertViewModel : PageViewModel
     private readonly IConvertService _convert;
     private readonly EncoderCatalog _catalog;
     private readonly CUEConfig _config;
+    private readonly IFileDialogService? _dialogs;
+    private readonly IUiDispatcher? _dispatcher;
 
     public ObservableCollection<string> Formats { get; } = new();
     public ObservableCollection<CodecChoice> CodecChoices { get; } = new();
@@ -51,7 +52,9 @@ public sealed class ConvertViewModel : PageViewModel
     public ConvertViewModel(
         IConvertService convert,
         EncoderCatalog catalog,
-        CUEConfig config)
+        CUEConfig config,
+        IFileDialogService? dialogs = null,
+        IUiDispatcher? dispatcher = null)
     {
         Title = "Convert";
         Group = "Work";
@@ -59,6 +62,8 @@ public sealed class ConvertViewModel : PageViewModel
         _convert = convert;
         _catalog = catalog;
         _config = config;
+        _dialogs = dialogs;
+        _dispatcher = dispatcher;
 
         void RebuildFormats()
         {
@@ -165,6 +170,22 @@ public sealed class ConvertViewModel : PageViewModel
     public ICommand BrowseOutputCommand { get; }
     public ICommand ConvertCommand { get; }
 
+    /// <summary>Programmatic source selection (startup path arguments, tests):
+    /// the same path rules as the browse dialogs, with an optional explicit
+    /// output directory. Returns false for a path that does not exist.</summary>
+    public bool LoadSource(string path, string? outputDirectory = null)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            (!File.Exists(path) && !Directory.Exists(path)))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(outputDirectory)) OutputDir = outputDirectory;
+        SetSource(path);
+        return true;
+    }
+
     public void SelectCodec(CodecChoice choice)
     {
         _catalog.SelectCodec(_config, choice);
@@ -186,26 +207,33 @@ public sealed class ConvertViewModel : PageViewModel
             ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
     }
 
-    private void BrowseFile()
+    private static readonly FilePickerGroup[] BrowseFileGroups =
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Choose a rip to convert",
-            Filter = "Rip sets (*.cue, *.m3u)|*.cue;*.m3u|Audio with embedded cue|*.flac;*.wv;*.ape;*.tak;*.m4a|All files|*.*"
-        };
-        if (dlg.ShowDialog() == true) SetSource(dlg.FileName);
+        new("Rip sets", new[] { "cue", "m3u" }),
+        new("Audio with embedded cue", new[] { "flac", "wv", "ape", "tak", "m4a" }),
+        new("All files", new[] { "*" }),
+    };
+
+    private async void BrowseFile()
+    {
+        if (_dialogs == null) return;
+        string[]? files = await _dialogs.PickFilesAsync(
+            "Choose a rip to convert", multiselect: false, BrowseFileGroups);
+        if (files is { Length: > 0 }) SetSource(files[0]);
     }
 
-    private void BrowseFolder()
+    private async void BrowseFolder()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose an album folder to convert" };
-        if (dlg.ShowDialog() == true) SetSource(dlg.FolderName);
+        if (_dialogs == null) return;
+        string? folder = await _dialogs.PickFolderAsync("Choose an album folder to convert");
+        if (folder != null) SetSource(folder);
     }
 
-    private void BrowseOutput()
+    private async void BrowseOutput()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose an output folder" };
-        if (dlg.ShowDialog() == true) OutputDir = dlg.FolderName;
+        if (_dialogs == null) return;
+        string? folder = await _dialogs.PickFolderAsync("Choose an output folder");
+        if (folder != null) OutputDir = folder;
     }
 
     private void SetSource(string path)
@@ -237,27 +265,34 @@ public sealed class ConvertViewModel : PageViewModel
         Progress = 0;
         HasResult = false;
         StatusText = $"Converting to {fmt}...";
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
 
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() => { Progress = frac; StatusText = status; }));
+        {
+            void Apply() { Progress = frac; StatusText = status; }
+            if (_dispatcher == null || _dispatcher.CheckAccess()) Apply();
+            else _dispatcher.Post(Apply);
+        }
 
         // decode a real snippet of the source up front, then loop it through the round-trip scope
-        // while the convert runs (no contention with the encoder, and it is the real source audio)
+        // while the convert runs (no contention with the encoder, and it is the real source audio).
+        // The feed is an async loop on the calling (UI) context rather than a toolkit timer, so
+        // the same code drives WPF and Avalonia and stops itself when the convert ends.
         var preview = await Task.Run(() => _convert.PreloadSource(path));
         if (!string.IsNullOrEmpty(preview.SourceFormat)) SourceCodec = preview.SourceFormat;
         var windows = preview.Windows;
-        DispatcherTimer? feed = null;
-        if (windows.Count > 0)
+        bool feeding = windows.Count > 0;
+        async void FeedScope()
         {
-            int wi = 0;
-            feed = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(28) };
-            feed.Tick += (_, _) => { SampleWindow = windows[wi % windows.Count]; wi++; };
-            feed.Start();
+            for (int wi = 0; feeding; wi++)
+            {
+                SampleWindow = windows[wi % windows.Count];
+                await Task.Delay(28);
+            }
         }
+        if (feeding) FeedScope();
 
         ConvertResult result = await Task.Run(() => _convert.Convert(path, fmt, outDir, Report));
-        feed?.Stop();
+        feeding = false;
 
         Progress = result.Ok ? 1 : Progress;
         if (result.Ok)

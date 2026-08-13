@@ -155,7 +155,7 @@ public sealed class ConvertService : IConvertService
 
             // Finalization has returned, so every path the engine declared must now exist and carry
             // bytes. This catches a codec that returned success after omitting or truncating a track.
-            RipService.ValidateEncodedOutputs(cue.DestPaths, stagingDir);
+            EncodedOutputValidation.ValidateEncodedOutputs(cue.DestPaths, stagingDir);
             int files = cue.DestPaths.Length;
             string outDir = publication.Publish();
 

@@ -1327,9 +1327,11 @@ public sealed class EncoderCatalog
                 var modes = (e.Settings.SupportedModes ?? "").Split(' ');
                 if (Array.IndexOf(modes, mode) < 0) continue;                  // not offered for this PCM/build
                 e.Settings.EncoderMode = mode;
-                if (e.Settings is
-                    CUETools.Codecs.libwavpack.EncoderSettings wavPack)
-                    wavPack.ExtraMode = 6;
+                // Archival default: raise extra-processing effort to the codec's
+                // maximum through the typed seam (WavPack -x6 historically); the
+                // shared core carries no per-codec assembly references.
+                if (e.Settings is IExtraModeSettings extra)
+                    extra.ExtraMode = extra.MaxExtraMode;
                 _log.Info("encoders", $"archival default applied: {e.Name} -> {mode}");
             }
         }
