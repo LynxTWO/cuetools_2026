@@ -81,27 +81,27 @@ namespace CUETools.TestProcessor
 		{
 			// test playstation-type CD-Extra
 			CUESheet target = new CUESheet(new CUEConfig());
-			target.Open("Circuitry\\1.cue");
+			target.Open(Path.Combine("Circuitry", "1.cue"));
 			Assert.AreEqual<string>("-0:37001:70001:99814:126819:160976", target.TOC.ToString(), "Wrong TOC");
 
 			// test playstation-type CD-Extra with nonstandard pregap
 			target = new CUESheet(new CUEConfig());
-			target.Open("Headcandy\\Headcandy.cue");
+			target.Open(Path.Combine("Headcandy", "Headcandy.cue"));
 			Assert.AreEqual<string>("-0:141942:168581:223645:248699:279575:312824", target.TOC.ToString(), "Wrong TOC");
 
 			// test playstation-type CD-Extra with no info in cuesheet
 			target = new CUESheet(new CUEConfig());
-			target.Open("Anatomy\\Anatomy.cue");
+			target.Open(Path.Combine("Anatomy", "Anatomy.cue"));
 			Assert.AreEqual<string>("-0:19687:33144:50680:69872:89822:108084:132098:150625:166271:194882:200172:215884:236046:242815:269518:282018:293416", target.TOC.ToString(), "Wrong TOC");
 
 			// test playstation-type CD-Extra with two data tracks
 			target = new CUESheet(new CUEConfig());
-			target.Open("Les Mysterieuses Cites d'Or\\Les Mysterieuses Cites d'Or.cue");
+			target.Open(Path.Combine("Les Mysterieuses Cites d'Or", "Les Mysterieuses Cites d'Or.cue"));
 			Assert.AreEqual<string>("-0:-31952:127883:137816:149173:160223:171479:180777:186738:196134:205613:214526:221674:227031:232824:239376:249495:259604:266115:267080:275100:281599:284452:291422:295511:297642:302114:309263:312269:320051:326235:333841", target.TOC.ToString(), "Wrong TOC");
 
 			// test playstation-type CD-Extra with two data tracks and no info in cuesheet
 			target = new CUESheet(new CUEConfig());
-			target.Open("Les Mysterieuses Cites d'Or\\2.cue");
+			target.Open(Path.Combine("Les Mysterieuses Cites d'Or", "2.cue"));
 			Assert.AreEqual<string>("-0:-31952:127883:137816:149173:160223:171479:180777:186738:196134:205613:214526:221674:227031:232824:239376:249495:259604:266115:267080:275100:281599:284452:291422:295511:297642:302114:309263:312269:320051:326235:333841", target.TOC.ToString(), "Wrong TOC");
 		}
 
@@ -113,7 +113,7 @@ namespace CUETools.TestProcessor
 		{
 			// test Enhanced-CD
 			CUESheet target = new CUESheet(new CUEConfig());
-			target.Open("No Man's Land\\1.cue");
+			target.Open(Path.Combine("No Man's Land", "1.cue"));
 			Assert.AreEqual<string>("0015c42c-00d1e13f-ba0fe50d", AccurateRipVerify.CalculateAccurateRipId(target.TOC), "Wrong TOC");
 		}
 
@@ -125,7 +125,7 @@ namespace CUETools.TestProcessor
 		{
 			// test one-track CD
 			CUESheet target = new CUESheet(new CUEConfig());
-			target.Open("Amarok\\Amarok.cue");
+			target.Open(Path.Combine("Amarok", "Amarok.cue"));
 			Assert.AreEqual<string>("00041f6d-00083ece-020e1201", AccurateRipVerify.CalculateAccurateRipId(target.TOC), "Wrong TOC");
 		}
 
