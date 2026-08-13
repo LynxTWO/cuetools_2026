@@ -40,6 +40,16 @@ namespace CUETools.Ripper
 		public static char[] DrivesAvailable()
 		{
 			List<char> result = new List<char>();
+			if (Environment.OSVersion.Platform == PlatformID.Unix)
+			{
+				// Letters map 1:1 to kernel sr numbers (A = /dev/sr0, B =
+				// /dev/sr1, ...). Bwg.Scsi.LinuxSg applies the same pure
+				// function when opening by letter; keep the two in agreement.
+				for (int n = 0; n < 26; n++)
+					if (Directory.Exists("/sys/block/sr" + n))
+						result.Add((char)('A' + n));
+				return result.ToArray();
+			}
 			foreach (DriveInfo info in DriveInfo.GetDrives())
 				if (info.DriveType == DriveType.CDRom)
 					result.Add(info.Name[0]);

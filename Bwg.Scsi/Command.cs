@@ -31,8 +31,16 @@ namespace Bwg.Scsi
 {
 	class Command : IDisposable
     {
-        [DllImport("ntdll.dll")]
-        internal static extern void RtlZeroMemory(IntPtr dest, int size);
+        /// <summary>
+        /// Portable replacement for ntdll!RtlZeroMemory so command buffers can
+        /// be allocated on Linux as well as Windows.
+        /// </summary>
+        internal static unsafe void ZeroMemory(IntPtr dest, int size)
+        {
+            byte* p = (byte*)dest;
+            for (int i = 0; i < size; i++)
+                p[i] = 0;
+        }
 
         public enum CmdDirection
         {
@@ -78,7 +86,7 @@ namespace Bwg.Scsi
             {
                 m_delete_buffer = true;
                 m_buffer = Marshal.AllocHGlobal(bufsize);
-                RtlZeroMemory(m_buffer, bufsize);
+                ZeroMemory(m_buffer, bufsize);
             }
 
             m_dir = dir;
