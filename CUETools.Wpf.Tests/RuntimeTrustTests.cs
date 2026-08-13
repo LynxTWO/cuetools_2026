@@ -1255,7 +1255,9 @@ public sealed class ExternalEncoderTrustTests
         string destination = Path.Combine(tree.ManagedDirectory, tree.Info.ExeName);
         string fakeApp = Path.Combine(tree.Root, "profile-host", "CUETools.Wpf.exe");
         Directory.CreateDirectory(Path.GetDirectoryName(fakeApp));
-        var settingsStore = new SettingsStore(tree.Log, fakeApp);
+        var settingsStore = new SettingsStore(tree.Log, fakeApp,
+            new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+                new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose));
 
         settingsStore.Save(new CUEConfig(), tree.App);
         var loadedApp = new AppSettings();

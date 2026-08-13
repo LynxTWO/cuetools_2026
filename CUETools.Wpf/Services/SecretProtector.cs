@@ -4,12 +4,6 @@ using System.Text;
 
 namespace CUETools.Wpf.Services;
 
-internal interface ISecretProtector
-{
-    string Protect(string secret);
-    string Unprotect(string protectedValue);
-}
-
 /// <summary>Protects credentials for the current Windows user. The protected value is safe to
 /// keep beside ordinary settings, but it cannot be decrypted by another Windows account.</summary>
 internal sealed class WindowsDpapiSecretProtector : ISecretProtector
