@@ -42,6 +42,22 @@
       "maximumSkipped": 4
     },
     {
+      "id": "codecs-net8",
+      "lane": "modern",
+      "project": "CUETools/CUETools.TestCodecs/CUETools.TestCodecs.csproj",
+      "framework": "net8.0-windows",
+      "minimumDiscovered": 109,
+      "maximumSkipped": 2
+    },
+    {
+      "id": "processor-net8",
+      "lane": "modern",
+      "project": "CUETools/CUETools.TestProcessor/CUETools.TestProcessor.csproj",
+      "framework": "net8.0",
+      "minimumDiscovered": 8,
+      "maximumSkipped": 1
+    },
+    {
       "id": "ripper",
       "lane": "modern",
       "project": "CUETools.Ripper.Tests/CUETools.Ripper.Tests.csproj",

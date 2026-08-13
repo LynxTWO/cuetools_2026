@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
+    <!-- net8.0-windows, not net8.0: CUETools.Codecs.WMA offers no netstandard2.0
+         flavor, and the suite loads native x64 Windows DLLs either way. -->
+    <TargetFrameworks>net47;net8.0-windows</TargetFrameworks>
     <RootNamespace>CUETools.TestCodecs</RootNamespace>
     <AssemblyName>CUETools.TestCodecs</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
