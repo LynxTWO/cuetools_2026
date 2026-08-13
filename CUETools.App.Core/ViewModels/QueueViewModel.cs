@@ -49,12 +49,19 @@ public sealed class QueueViewModel : PageViewModel
         : SelectedCodecChoice.AccessibleLabel + ". " +
           SelectedCodecChoice.HealthDetail;
 
+    private readonly IFileDialogService? _dialogs;
+    private readonly IUiDispatcher? _dispatcher;
+
     public QueueViewModel(
         IVerifyService verify,
         IConvertService convert,
         EncoderCatalog catalog,
-        CUEConfig config)
+        CUEConfig config,
+        IFileDialogService? dialogs = null,
+        IUiDispatcher? dispatcher = null)
     {
+        _dialogs = dialogs;
+        _dispatcher = dispatcher;
         Title = "Queue";
         Group = "Session";
         Subtitle = "Process a stack of discs or jobs in one sitting.";
@@ -161,22 +168,42 @@ public sealed class QueueViewModel : PageViewModel
             ?? CodecChoices.FirstOrDefault(choice => choice.CanSelect);
     }
 
-    private void AddFiles()
+    private static readonly FilePickerGroup[] AddFileGroups =
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Add rips to the queue",
-            Multiselect = true,
-            Filter = "Rip sets (*.cue, *.m3u)|*.cue;*.m3u|Audio with embedded cue|*.flac;*.wv;*.ape;*.tak;*.m4a|All files|*.*"
-        };
-        if (dlg.ShowDialog() == true)
-            foreach (var f in dlg.FileNames) Enqueue(f);
+        new("Rip sets", new[] { "cue", "m3u" }),
+        new("Audio with embedded cue", new[] { "flac", "wv", "ape", "tak", "m4a" }),
+        new("All files", new[] { "*" }),
+    };
+
+    private async void AddFiles()
+    {
+        if (_dialogs == null) return;
+        string[]? files = await _dialogs.PickFilesAsync(
+            "Add rips to the queue", multiselect: true, AddFileGroups);
+        if (files == null) return;
+        foreach (var f in files) Enqueue(f);
     }
 
-    private void AddFolder()
+    private async void AddFolder()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Add an album folder to the queue" };
-        if (dlg.ShowDialog() == true) Enqueue(dlg.FolderName);
+        if (_dialogs == null) return;
+        string? folder = await _dialogs.PickFolderAsync("Add an album folder to the queue");
+        if (folder != null) Enqueue(folder);
+    }
+
+    /// <summary>Programmatic enqueue (startup arguments, tests): the same
+    /// rules as the add dialogs. Returns false for a path that does not
+    /// exist.</summary>
+    public bool EnqueuePath(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source) ||
+            (!System.IO.File.Exists(source) && !System.IO.Directory.Exists(source)))
+        {
+            return false;
+        }
+
+        Enqueue(source);
+        return true;
     }
 
     private void Enqueue(string source)
@@ -197,7 +224,6 @@ public sealed class QueueViewModel : PageViewModel
     {
         if (Items.Count == 0 || IsRunning) return;
         IsRunning = true;
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
         int done = 0, total = Items.Count;
 
         foreach (var item in Items.ToList())
@@ -207,7 +233,11 @@ public sealed class QueueViewModel : PageViewModel
             StatusText = $"[{done + 1}/{total}] {item.Action}: {item.Display}";
 
             void Report(double frac, string status)
-                => dispatcher?.BeginInvoke(new Action(() => { Progress = (done + frac) / total; }));
+            {
+                void Apply() => Progress = (done + frac) / total;
+                if (_dispatcher == null || _dispatcher.CheckAccess()) Apply();
+                else _dispatcher.Post(Apply);
+            }
 
             if (item.Action == "Convert")
             {
