@@ -1,15 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
+    <TargetFrameworks>net47;netstandard2.0</TargetFrameworks>
     <ProjectGuid>{84EBB7CB-02C9-40A9-9D32-C641B822DAA2}</ProjectGuid>
     <RootNamespace>CUETools.TestHelpers</RootNamespace>
     <AssemblyName>CUETools.TestHelpers</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <IsPackable>false</IsPackable>
     <Platforms>AnyCPU</Platforms>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <OutputPath>..\bin\$(Configuration)\net47\</OutputPath>
+    <!-- The net47 output location is consumed as-is by the legacy test tree;
+         only the added netstandard2.0 flavor uses the default layout. -->
+    <AppendTargetFrameworkToOutputPath Condition="'$(TargetFramework)' == 'net47'">false</AppendTargetFrameworkToOutputPath>
+    <OutputPath Condition="'$(TargetFramework)' == 'net47'">..\bin\$(Configuration)\net47\</OutputPath>
     <!-- This helper has no .resx resources. Keep it out of the
          Core-only preserialized-resource package graph under every restore host. -->
     <CUEToolsDisableCoreResxExtension>true</CUEToolsDisableCoreResxExtension>

@@ -80,6 +80,10 @@ foreach ($suite in $suites) {
     )
     if ($NoRestore) { $arguments += "--no-restore" }
     if ($NoBuild) { $arguments += "--no-build" }
+    # Always select the manifest's framework explicitly. A multi-targeted test
+    # project would otherwise run every TFM into one TRX path, and the gate
+    # would read whichever run wrote last.
+    $arguments += @("--framework", [string]$suite.framework)
     if ($suite.framework -eq "net47" -and -not [string]::IsNullOrWhiteSpace($FrameworkPathOverride)) {
         $arguments += "-p:FrameworkPathOverride=$FrameworkPathOverride"
     }
