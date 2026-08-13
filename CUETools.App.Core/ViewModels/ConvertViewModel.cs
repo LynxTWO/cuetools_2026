@@ -170,6 +170,22 @@ public sealed class ConvertViewModel : PageViewModel
     public ICommand BrowseOutputCommand { get; }
     public ICommand ConvertCommand { get; }
 
+    /// <summary>Programmatic source selection (startup path arguments, tests):
+    /// the same path rules as the browse dialogs, with an optional explicit
+    /// output directory. Returns false for a path that does not exist.</summary>
+    public bool LoadSource(string path, string? outputDirectory = null)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            (!File.Exists(path) && !Directory.Exists(path)))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(outputDirectory)) OutputDir = outputDirectory;
+        SetSource(path);
+        return true;
+    }
+
     public void SelectCodec(CodecChoice choice)
     {
         _catalog.SelectCodec(_config, choice);
