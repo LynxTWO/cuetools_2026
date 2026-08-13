@@ -22,7 +22,7 @@ public sealed class HeldCopyLifecycleContractTests
     [TestMethod]
     public void RipService_HoldsTheCompletedCopyWhenTheConfirmingReadStops()
     {
-        string source = Source("CUETools.Wpf", "Services", "RipService.cs");
+        string source = Source("CUETools.App.Core", "Services", "RipService.cs");
 
         Assert.IsFalse(source.Contains("return Fail(thirdResult.Error)"),
             "a Stopped confirming read must never take the Fail path that deletes the staged Copy");
