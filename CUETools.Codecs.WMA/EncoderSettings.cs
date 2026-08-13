@@ -258,11 +258,21 @@ namespace CUETools.Codecs.WMA
         public AudioPCMConfig pcm;
     }
 
-    public class LosslessEncoderSettings : EncoderSettings
+    public class LosslessEncoderSettings : EncoderSettings, IVerifyOnEncodeSettings
     {
         public override string Name => "wma lossless";
 
         public override bool Lossless => true;
+
+        // Typed verify-on-encode seam (IVerifyOnEncodeSettings); maps onto the
+        // serialized property so the settings surface is unchanged. Lets the
+        // platform-neutral output-verification evaluator read this Windows-only
+        // codec through the interface instead of a compile-time type.
+        bool IVerifyOnEncodeSettings.VerifyOnEncode
+        {
+            get => DoVerify;
+            set => DoVerify = value;
+        }
 
         public LosslessEncoderSettings()
             : base()
