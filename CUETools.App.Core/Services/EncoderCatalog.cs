@@ -78,6 +78,18 @@ public sealed class EncoderCatalog
     public EncoderCatalog(IDiagnosticLog log, AppSettings app)
         : this(log, app, EncodersDir, BundledEncodersDir, PackagedEncoderHashes) { }
 
+    /// <summary>Packaged-host constructor: the head supplies its platform's
+    /// bundled-encoder directory and packaged hash table (Windows uses the
+    /// built-in table above; the Linux head passes the manifest its
+    /// pinned-source encoder build generated). All resolution and validation
+    /// semantics are identical - only the trusted byte set differs.</summary>
+    public EncoderCatalog(
+        IDiagnosticLog log,
+        AppSettings app,
+        string bundledEncodersDir,
+        IReadOnlyDictionary<string, string> packagedEncoderHashes)
+        : this(log, app, EncodersDir, bundledEncodersDir, packagedEncoderHashes) { }
+
     internal EncoderCatalog(IDiagnosticLog log, AppSettings app, string encodersDir)
         : this(log, app, encodersDir, BundledEncodersDir, PackagedEncoderHashes) { }
 
