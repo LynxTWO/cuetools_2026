@@ -32,7 +32,9 @@ public sealed class CopyAlbumArtMigrationTests
             Directory.CreateDirectory(DirectoryPath);
             Store = new SettingsStore(
                 new FakeLog(),
-                Path.Combine(DirectoryPath, "CUETools.Wpf.exe"));
+                Path.Combine(DirectoryPath, "CUETools.Wpf.exe"),
+                new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.ProxyPurpose),
+                new WindowsDpapiSecretProtector(WindowsDpapiSecretProtector.TheAudioDbPurpose));
         }
 
         public void WriteSettings(string contents)
