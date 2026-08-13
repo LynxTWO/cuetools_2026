@@ -61,6 +61,12 @@ namespace Bwg.Scsi
         /// </summary>
         public bool IsOpen { get { return m_handle.ToInt32() != -1; } }
 
+        /// <summary>
+        /// The raw OS handle: a Win32 file handle on Windows, an open(2) fd on
+        /// Linux. Exposed for the platform-specific transport in Device.
+        /// </summary>
+        protected IntPtr DeviceHandle { get { return m_handle; } }
+
         private string m_name;
         private IntPtr m_handle;
         private uint m_last_error;
@@ -97,6 +103,14 @@ namespace Bwg.Scsi
         /// </summary>
         public void Close()
         {
+            if (LinuxSg.IsLinux)
+            {
+                // Reset the handle so a later Dispose cannot close a recycled fd.
+                if (IsOpen)
+                    LinuxSg.CloseDevice(m_handle.ToInt32());
+                m_handle = new IntPtr(-1);
+                return;
+            }
             CloseHandle(m_handle);
         }
 
@@ -108,6 +122,20 @@ namespace Bwg.Scsi
         virtual public bool Open(string name)
         {
             string dname = name;
+
+            if (LinuxSg.IsLinux)
+            {
+                int fd = LinuxSg.OpenDevice(dname);
+                if (fd < 0)
+                {
+                    m_last_error = (uint)Marshal.GetLastWin32Error();
+                    m_handle = new IntPtr(-1);
+                    return false;
+                }
+                m_handle = new IntPtr(fd);
+                m_name = name;
+                return true;
+            }
 
             //
             // CreateFile
@@ -132,6 +160,16 @@ namespace Bwg.Scsi
         /// <returns></returns>
         virtual public bool Open(char letter)
         {
+            if (LinuxSg.IsLinux)
+            {
+                string path = LinuxSg.DevicePathForLetter(letter);
+                if (path == null)
+                {
+                    m_last_error = 2; // ENOENT: no /dev/srN for this letter
+                    return false;
+                }
+                return Open(path);
+            }
             string dname = "\\\\.\\" + letter + ":";
             return Open(dname);
         }
@@ -161,6 +199,14 @@ namespace Bwg.Scsi
             bool b;
 
             CheckOpen() ;
+            if (LinuxSg.IsLinux)
+            {
+                // DeviceIoControl has no Linux equivalent here. SCSI traffic
+                // goes through the SG_IO path in Device.SendCommand and buffer
+                // sizing is platform-split, so nothing should reach this.
+                m_last_error = 38; // ENOSYS
+                return false;
+            }
             b = DeviceIoControl(m_handle, code, inbuf, insize, outbuf, outsize, ref ret, overlapped);
             if (!b)
                 m_last_error = (uint)Marshal.GetLastWin32Error();
