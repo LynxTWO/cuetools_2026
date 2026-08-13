@@ -264,9 +264,16 @@ namespace CUETools.Codecs.ALAC
 			}
 
 #if INTEROP
-			long fake, KernelStart, UserStart;
-			GetThreadTimes(GetCurrentThread(), out fake, out fake, out KernelStart, out UserStart);
-			_userProcessorTime = new TimeSpan(UserStart);
+			// kernel32 exists only on Windows; a guarded call never binds the
+			// P/Invoke, so the encoder runs on Linux (observed live: the first
+			// ALAC encode on the Linux head died here). The statistic simply
+			// stays zero off Windows.
+			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+			{
+				long fake, KernelStart, UserStart;
+				GetThreadTimes(GetCurrentThread(), out fake, out fake, out KernelStart, out UserStart);
+				_userProcessorTime = new TimeSpan(UserStart);
+			}
 #endif
 		}
 

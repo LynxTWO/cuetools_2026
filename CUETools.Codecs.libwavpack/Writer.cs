@@ -11,8 +11,11 @@ using Newtonsoft.Json;
 namespace CUETools.Codecs.libwavpack
 {
     [JsonObject(MemberSerialization.OptIn)]
-    public class EncoderSettings : IAudioEncoderSettings
+    public class EncoderSettings : IAudioEncoderSettings, IExtraModeSettings
     {
+        [Browsable(false)]
+        public int MaxExtraMode => 6;
+
         #region IAudioEncoderSettings implementation
         [Browsable(false)]
         public string Extension => "wv";
