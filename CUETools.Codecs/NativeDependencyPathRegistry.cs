@@ -17,6 +17,20 @@ namespace CUETools.Codecs
         private static readonly Dictionary<string, string> ApprovedPaths =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Registration entry for packaged non-plugin hosts (the Linux head).
+        /// The host owns the same obligations PluginTrustManifest fulfills on
+        /// Windows: hash-validate the file against its packaged manifest
+        /// BEFORE registering, and never register an app-root, PATH, or
+        /// bare-name guess. Same single-binding rule as the manifest path.
+        /// </summary>
+        public static void RegisterHostValidatedPath(
+            string nativeFileName,
+            string approvedFullPath)
+        {
+            RegisterManifestApprovedPath(nativeFileName, approvedFullPath);
+        }
+
         internal static void RegisterManifestApprovedPath(
             string nativeFileName,
             string approvedFullPath)
@@ -104,9 +118,10 @@ namespace CUETools.Codecs
                     nativeFileName,
                     Path.GetFileName(nativeFileName),
                     StringComparison.Ordinal) ||
-                !nativeFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                (!nativeFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                 !nativeFileName.EndsWith(".so", StringComparison.OrdinalIgnoreCase)))
                 throw new ArgumentException(
-                    "The native dependency name must be one DLL file name.",
+                    "The native dependency name must be one .dll or .so file name.",
                     "nativeFileName");
         }
     }
