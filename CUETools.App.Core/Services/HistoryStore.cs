@@ -220,7 +220,9 @@ public sealed class HistoryStore : IHistoryStore
         return when.ToString("yyyy-MM-dd");
     }
 
-    private sealed class Row
+    // Internal (not private) so the source-generated StoreJsonContext can
+    // register List<Row> for AOT-safe persistence.
+    internal sealed class Row
     {
         public DateTime When { get; set; }
         public string Album { get; set; } = "";
