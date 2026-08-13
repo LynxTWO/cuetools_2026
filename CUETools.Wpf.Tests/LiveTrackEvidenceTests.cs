@@ -113,7 +113,7 @@ public sealed class LiveTrackEvidenceTests
         string root = DeadSwitchAnalyzer.FindRepoRoot(System.AppContext.BaseDirectory);
         Assert.IsNotNull(root);
         string source = File.ReadAllText(
-            Path.Combine(root, "CUETools.Wpf", "Services", "RipService.cs"));
+            Path.Combine(root, "CUETools.App.Core", "Services", "RipService.cs"));
 
         StringAssert.Contains(source, "liveAr.TrackCompleted += onArTrackCompleted;",
             "per-track evidence must come from the engine's own completion signal");
