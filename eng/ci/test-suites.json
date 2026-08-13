@@ -34,6 +34,14 @@
       "maximumSkipped": 0
     },
     {
+      "id": "parity-net8",
+      "lane": "modern",
+      "project": "CUETools/CUETools.TestParity/CUETools.TestParity.csproj",
+      "framework": "net8.0",
+      "minimumDiscovered": 22,
+      "maximumSkipped": 4
+    },
+    {
       "id": "ripper",
       "lane": "modern",
       "project": "CUETools.Ripper.Tests/CUETools.Ripper.Tests.csproj",
