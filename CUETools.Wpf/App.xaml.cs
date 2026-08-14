@@ -138,6 +138,7 @@ public partial class App : Application
         services.AddSingleton<IUiTimerFactory, WpfUiTimerFactory>();
         services.AddSingleton<IArtworkPreviewFactory, WpfArtworkPreviewFactory>();
         services.AddSingleton<IPlatformCapabilities, WpfPlatformCapabilities>();
+        services.AddSingleton<IImageTranscoder, WpfImageTranscoder>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.

@@ -74,6 +74,24 @@ public interface IArtworkPreviewFactory
 }
 
 /// <summary>
+/// Platform image transcoding for artwork bytes. The service keeps its own
+/// byte-level dimension and size safety checks; the transcoder does only the
+/// pixel work.
+/// </summary>
+public interface IImageTranscoder
+{
+    /// <summary>True when the bytes decode as a displayable image.</summary>
+    bool CanDecode(byte[] bytes);
+
+    /// <summary>
+    /// Decode, cap the long edge to maxSize, and JPEG-encode at the given
+    /// quality. A JPEG already within the cap returns the source bytes
+    /// untranscoded. Null when the bytes cannot be decoded.
+    /// </summary>
+    byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality);
+}
+
+/// <summary>
 /// Static platform/display capabilities the shared core cannot probe itself.
 /// </summary>
 public interface IPlatformCapabilities
