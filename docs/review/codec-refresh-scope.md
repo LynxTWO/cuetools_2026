@@ -18,11 +18,11 @@ User request 2026-07-02: upgrade all codecs to latest versions/builds, add any m
 | ALAC | `CUETools.Codecs.ALAC` (managed) + Apple ref | Apple ALAC reference | unchanged | Stable; no action. |
 | WMA | `CUETools.Codecs.WMA` + `WindowsMediaLib` submodule | WM Format SDK wrapper | unchanged | Windows-only wrapper; stable. |
 | OpenCLNet (FLACCL) | `ThirdParty/openclnet` submodule | pin `4a10612b` | dormant upstream | Used by FLACCL GPU encoder. The corrected exact-length verifier passed on an RTX 3060 across OpenCL modes 0-8, CPU workers, 24-bit input, and an exact frame boundary; additional vendors/drivers remain a compatibility matrix, not a prerequisite for calling this host observed. |
-| CUDA.NET (FlaCuda) | Historical `ThirdParty/CUDA.NET.dll` 2.3.7 | abandoned (2010) | abandoned | Retired. FlaCuda projects and CUDA.NET were deleted in commit `4e1b02d`; FLACCL is the remaining GPU FLAC path. |
+| CUDA.NET (FlaCuda) | Historical `ThirdParty/CUDA.NET.dll` 2.3.7 | abandoned (2010) | abandoned | Retired. FlaCuda projects and CUDA.NET were deleted in commit `dc0a70b`; FLACCL is the remaining GPU FLAC path. |
 
 ## FlaCuda -> FLACCL retirement (confirmed direction)
 
-FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`) and its CUDA.NET dependency were deleted in commit `4e1b02d` after reachability checks confirmed that they were outside the solution and release paths. FLACCL (OpenCL, `CUETools.Codecs.FLACCL`) is the remaining GPU FLAC encoder. It now has real RTX 3060/OpenCL coverage, including modes 0-8, CPU-worker and 24-bit cases, and the exact-length boundary. One device does not prove every OpenCL implementation, so cross-vendor coverage remains desirable.
+FlaCuda (`CUETools.Codecs.FlaCuda`, `CUETools.FlaCudaExe`) and its CUDA.NET dependency were deleted in commit `dc0a70b` after reachability checks confirmed that they were outside the solution and release paths. FLACCL (OpenCL, `CUETools.Codecs.FLACCL`) is the remaining GPU FLAC encoder. It now has real RTX 3060/OpenCL coverage, including modes 0-8, CPU-worker and 24-bit cases, and the exact-length boundary. One device does not prove every OpenCL implementation, so cross-vendor coverage remains desirable.
 
 ## Requested codec additions
 

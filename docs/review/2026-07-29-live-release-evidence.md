@@ -37,7 +37,7 @@ recovery ease-out, and unreadable hold.
 
 ## Damaged-disc frame-time benchmark
 
-The self-contained tier-2 artifact from commit `31d839b` ran a real Paranoid
+The self-contained tier-2 artifact from commit `039129b` ran a real Paranoid
 Test & Copy against the damaged 68:22 disc in K:. The host used an RTX 3060 at
 2560x1440 and 69 Hz. The opt-in sampler observed the existing
 `CompositionTarget.Rendering` seam with fixed histograms. Its hot loop allocates
@@ -121,7 +121,7 @@ repair evidence recorded under R71.
 
 ## Final damaged-disc completion and repair
 
-The source-bound build at commit `5fa2c65` completed an uninterrupted Paranoid
+The source-bound build at commit `17d984e` completed an uninterrupted Paranoid
 Test & Copy on K: in 2,275 seconds. Both reads were consistent, the Copy crossed
 the former 92-percent failure boundary, and the final encoded PCM check passed.
 The reader retained three exhausted windows and six suspicious sectors, so the
@@ -171,7 +171,7 @@ than inferred from the branch name.
 
 - [FFmpeg 8 matrix run 30516040154](https://github.com/LynxTWO/cuetools_2026/actions/runs/30516040154)
   completed successfully at commit
-  `9e2a119113ab3b9e11fcc0ccc1d5315d4b7eebb4`. Both `x86-windows` and
+  `15e4cc39ae6deb4f2fedf6cf54d9624a6a0a35c7`. Both `x86-windows` and
   `x64-windows` jobs built the pinned FFmpeg 8.1.2 runtime and exercised it
   through FFmpeg.AutoGen 8.1.0 in a matching process. Each passed 16- and
   24-bit, 5,003-frame path and managed-stream decode, nonzero seek replay, EOF
@@ -181,7 +181,7 @@ than inferred from the branch name.
   artifact collectors.
 - [Classic CI run 30518472651](https://github.com/LynxTWO/cuetools_2026/actions/runs/30518472651)
   completed successfully at commit
-  `a7f26bf457b736fcd61f186d5f34b6d139d94147`. Hosted Windows Server 2022
+  `33c8eea3b8d085d5bb2473a7f6451dce2ba4e294`. Hosted Windows Server 2022
   discovered 22 parity tests (18 passed, four intentional skips), 113 codec
   tests (111 passed, two intentional skips), ten processor tests (nine passed,
   one intentional skip), and 17 ripper tests (all passed). The converted

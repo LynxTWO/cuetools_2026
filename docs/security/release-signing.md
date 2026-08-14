@@ -43,7 +43,7 @@ signing after provenance/SBOM generation.
 
 [Manual release run 30849431011](https://github.com/LynxTWO/cuetools_2026/actions/runs/30849431011)
 completed successfully at commit
-`b0d0864b6512e72d196ee373e37325fa77461318` with zero check-run annotations.
+`59e31d6ba9790b88c1dcda195b544a5cfcde0a32` with zero check-run annotations.
 The downloaded status document reports:
 
 ```json
