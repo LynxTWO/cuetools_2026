@@ -292,7 +292,7 @@ try {
         Join-Path $PSScriptRoot "external-command-encoders.json") -Raw |
         ConvertFrom-Json
     $encoderCatalogSource = Get-Content -LiteralPath (
-        Join-Path $PSScriptRoot "..\..\CUETools.Wpf\Services\EncoderCatalog.cs") -Raw
+        Join-Path $PSScriptRoot "..\..\CUETools.App.Core\Services\EncoderCatalog.cs") -Raw
     $wpfProjectSource = Get-Content -LiteralPath (
         Join-Path $PSScriptRoot "..\..\CUETools.Wpf\CUETools.Wpf.csproj") -Raw
     $gitAttributeLines = @(
