@@ -231,6 +231,9 @@ Original decision record:
   evidence and carve-out discipline; (c) investigate the bridge hypothesis
   first (clean-disc long-grind repro on a USB drive) before any code
   change. Options compose; (a) is UI-only and low risk.
+- **Direction (owner, 2026-08-14 18:10): (c) first.** A clean-disc
+  Paranoid Test & Copy on the WH16NS40 is running as the discriminating
+  repro; (a)'s user-facing reset message stays open pending its outcome.
 
 ### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 
