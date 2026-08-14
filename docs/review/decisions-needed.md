@@ -234,6 +234,13 @@ Original decision record:
 - **Direction (owner, 2026-08-14 18:10): (c) first.** A clean-disc
   Paranoid Test & Copy on the WH16NS40 is running as the discriminating
   repro; (a)'s user-facing reset message stays open pending its outcome.
+- **Repro result (2026-08-14 18:17): no wedge on clean media.** The run
+  aborted at 833 s on an unrelated software defect (the colon-cleansing
+  bug fixed alongside this note) after ~14 minutes of Paranoid-grade
+  eviction cycling; the drive's TOC reads fine afterward. Partial but
+  informative: damage-grinding stays in the wedge's causal chain and
+  the bridge-only hypothesis weakens. A complete clean-disc run after
+  the cleansing fix finishes the experiment.
 
 ### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 

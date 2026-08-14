@@ -722,10 +722,27 @@ namespace CUETools.Processor
         // cannot traverse with '..' (the separators are gone). Windows reserved device names
         // (CON, PRN, NUL, COM1..9, LPT1..9) and trailing dots/spaces are normalized below so
         // the resulting component retains the same identity when Windows creates it.
+        // Filename cleansing is contract-stable across heads: the invalid set is
+        // Windows' everywhere, because outputs and profiles move between the
+        // Windows and Linux heads and the lossless output proof rejects ':' in
+        // any segment on every platform. Path.GetInvalidFileNameChars() on
+        // Linux bans only '/' and NUL, which let a colon-bearing track title
+        // reach the proof and fail a completed Copy (observed live 2026-08-14).
+        private static readonly char[] CrossPlatformInvalidFileNameChars =
+            BuildCrossPlatformInvalidFileNameChars();
+
+        private static char[] BuildCrossPlatformInvalidFileNameChars()
+        {
+            var chars = new List<char> { '\"', '<', '>', '|', ':', '*', '?', '\\', '/' };
+            for (char c = '\0'; c < ' '; c++)
+                chars.Add(c);
+            return chars.ToArray();
+        }
+
         public string CleanseString(string s)
         {
             StringBuilder sb = new StringBuilder();
-            char[] invalid = Path.GetInvalidFileNameChars();
+            char[] invalid = CrossPlatformInvalidFileNameChars;
 
             if (filenamesANSISafe)
                 s = Encoding.Default.GetString(Encoding.Default.GetBytes(s));
