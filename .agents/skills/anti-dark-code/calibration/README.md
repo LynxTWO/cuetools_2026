@@ -24,3 +24,15 @@ A matching binding proves that the calibration stayed with the repository identi
 Do not store secrets, raw personal data, raw Git remotes, or machine-specific absolute paths here.
 
 Migrated gates begin disabled and proposed. Gate execution and flow-back are refused when calibration is unbound or belongs to another repository identity.
+
+## Freshness note (2026-08-14)
+
+This calibration was migrated 2026-08-09 and then sat on an unmerged
+branch while the App.Core extraction wave and the Linux head landed.
+The binding (origin-hash) remains valid; the system map, coverage
+ledger, and gates predate those changes and need a pass-02 diff
+refresh before being trusted for navigation. Upstream candidates
+ADC-CUETOOLS-003 through 008 were added 2026-08-14 from the rip
+sprint. The old pre-overlay copy at .claude/skills/anti-dark-code is
+now a duplicate; removing it in favor of this canonical install is an
+open housekeeping decision.
