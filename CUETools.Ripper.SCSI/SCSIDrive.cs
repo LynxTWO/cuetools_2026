@@ -2196,6 +2196,23 @@ namespace CUETools.Ripper.SCSI
 							int cacheChunk = preferredChunk;
 							while (cacheChunk > 0)
 							{
+								// Every eviction read uses the full chunk shape: the plan is
+								// padded UP to a whole number of chunks, which evicts at least
+								// the required bytes and never issues a partial-count tail.
+								// Observed live (2026-08-13, PLDS DU8A5SH BU51): the drive
+								// deterministically aborts BEh+C2 reads of exactly 15 or 2
+								// sectors (ABORTED COMMAND 0B/00/00) at any disc location,
+								// while 16/14/10/8/4/1 succeed; padding removes the failing
+								// shape without classifying any sense code.
+								int evictSectors =
+									(sectorsNeeded + cacheChunk - 1) / cacheChunk * cacheChunk;
+								if (evictSectors > programSectors)
+								{
+									failure =
+										$"padded-sectors={evictSectors}, " +
+										$"audio-program-sectors={programSectors}";
+									break;
+								}
 								bool sawFailure = false;
 								bool everyFailureWasInvalidShape = true;
 								for (int candidateIndex = 0; candidateIndex < 3; candidateIndex++)
@@ -2203,18 +2220,18 @@ namespace CUETools.Ripper.SCSI
 									int candidate = candidates[candidateIndex];
 									int relBase = Math.Max(
 										0,
-										Math.Min(programSectors - sectorsNeeded, candidate));
-									int relEnd = relBase + sectorsNeeded;
+										Math.Min(programSectors - evictSectors, candidate));
+									int relEnd = relBase + evictSectors;
 									bool overlapsCurrent =
 										relBase < _currentEnd && relEnd > _currentStart;
 									if (overlapsCurrent) continue;
 									attemptedRegions++;
 									bool complete = true;
-									for (int offset = 0; offset < sectorsNeeded; offset += cacheChunk)
+									for (int offset = 0; offset < evictSectors; offset += cacheChunk)
 									{
 										int readCount = Math.Min(
 											cacheChunk,
-											sectorsNeeded - offset);
+											evictSectors - offset);
 										uint lba =
 											firstStart + (uint)(relBase + offset);
 										if (lba + (uint)readCount > firstStart + len)
