@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -172,7 +172,7 @@ public sealed class CodecPickerAndHealthTests
         Assert.IsNotNull(root);
         string source = File.ReadAllText(Path.Combine(
             root,
-            "CUETools.Wpf",
+            "CUETools.App.Core",
             "ViewModels",
             "RipViewModel.cs"));
 

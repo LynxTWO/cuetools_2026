@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -50,7 +50,7 @@ public sealed class AlbumArtServiceTests
             """;
         using var service = new AlbumArtService(
             new DelegateHandler((_, _) => Json(manifest)),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
         ArtworkQuery query = Query("musicbrainz", ReleaseId.ToString("D"));
 
         var candidates = await service.FindCandidatesAsync(query);
@@ -82,7 +82,7 @@ public sealed class AlbumArtServiceTests
             """;
         using var service = new AlbumArtService(
             new DelegateHandler((_, _) => Json(manifest)),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
         ArtworkQuery query = Query(
             "musicbrainz",
             ReleaseId.ToString("D")) with
@@ -107,7 +107,7 @@ public sealed class AlbumArtServiceTests
                 requests++;
                 return Json("{}");
             }),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
         ArtworkQuery query = Query(
             "musicbrainz",
             ReleaseId.ToString("D")) with
@@ -257,7 +257,7 @@ public sealed class AlbumArtServiceTests
                     """);
             }),
             settings,
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
 
         IReadOnlyList<ArtworkCandidate> candidates =
             await service.FindCandidatesAsync(Query("", ""));
@@ -284,7 +284,7 @@ public sealed class AlbumArtServiceTests
                     AlbumArtService.MaxManifestBytes + 1;
                 return response;
             }),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
 
         var candidates = await service.FindCandidatesAsync(
             Query("musicbrainz", "99b09d02-9cc9-3fed-8431-f162165a9371"));
@@ -301,7 +301,7 @@ public sealed class AlbumArtServiceTests
             {
                 Headers = { Location = new Uri("https://example.com/cover.jpg") }
             }),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
         ArtworkCandidate candidate = Candidate(
             new Uri("https://coverartarchive.org/release/x/41.jpg"));
 
@@ -337,7 +337,7 @@ public sealed class AlbumArtServiceTests
                         """);
                 return new HttpResponseMessage(HttpStatusCode.NotFound);
             }),
-            new NullLog());
+            new NullLog(), new WpfImageTranscoder());
 
         var candidates = await service.FindCandidatesAsync(
             Query("musicbrainz", release.ToString("D")));
@@ -381,7 +381,7 @@ public sealed class AlbumArtServiceTests
             File.WriteAllBytes(bmp, MakeImage(new BmpBitmapEncoder(), 140, 70));
             using var service = new AlbumArtService(
                 new DelegateHandler((_, _) => Json("{}")),
-                new NullLog());
+                new NullLog(), new WpfImageTranscoder());
 
             AlbumArt pngArt = service.ImportLocalFile(png, 100);
             AlbumArt bmpArt = service.ImportLocalFile(bmp, 100);
@@ -418,7 +418,7 @@ public sealed class AlbumArtServiceTests
             File.WriteAllBytes(path, jpeg);
             using var service = new AlbumArtService(
                 new DelegateHandler((_, _) => Json("{}")),
-                new NullLog());
+                new NullLog(), new WpfImageTranscoder());
 
             AlbumArt art = service.ImportLocalFile(path, 100);
 
@@ -442,7 +442,7 @@ public sealed class AlbumArtServiceTests
         {
             using var service = new AlbumArtService(
                 new DelegateHandler((_, _) => Json("{}")),
-                new NullLog());
+                new NullLog(), new WpfImageTranscoder());
             Assert.ThrowsException<InvalidDataException>(
                 () => service.ImportLocalFile(root, 1000));
 

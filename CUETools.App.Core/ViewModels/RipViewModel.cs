@@ -62,6 +62,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly IUiDispatcher _ui;
     private readonly IUserPrompt _prompt;
     private readonly IArtworkPreviewFactory _artFactory;
+    private readonly IFileDialogService _dialogs;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
@@ -542,9 +543,11 @@ public sealed class RipViewModel : PageViewModel
         IUiDispatcher uiDispatcher,
         IUserPrompt prompt,
         IArtworkPreviewFactory artPreviewFactory,
-        IPlatformCapabilities capabilities)
+        IPlatformCapabilities capabilities,
+        IFileDialogService fileDialogs)
     {
         _timers = timers;
+        _dialogs = fileDialogs;
         _ui = uiDispatcher;
         _prompt = prompt;
         _artFactory = artPreviewFactory;
@@ -621,7 +624,7 @@ public sealed class RipViewModel : PageViewModel
             _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
-        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
+        BrowseOutputCommand = new RelayCommand(async _ => await BrowseOutputAsync());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
         DismissDoneCommand = new RelayCommand(_ =>
         {
@@ -2083,10 +2086,10 @@ public sealed class RipViewModel : PageViewModel
         OnPropertyChanged(nameof(SelectedRelease));
     }
 
-    private void BrowseOutput()
+    private async Task BrowseOutputAsync()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose where ripped albums go" };
-        if (dlg.ShowDialog() == true) OutputBaseDir = dlg.FolderName;
+        string? folder = await _dialogs.PickFolderAsync("Choose where ripped albums go");
+        if (folder != null) OutputBaseDir = folder;
     }
 
     private void PersistPrimarySettingsSnapshot()

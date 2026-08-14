@@ -115,6 +115,71 @@ public sealed class WpfArtworkPreviewFactory : IArtworkPreviewFactory
 }
 
 /// <summary>
+/// WPF artwork transcoding: the exact decode (PreservePixelFormat, OnLoad,
+/// Bgra32), JPEG passthrough-within-cap, RIOT-resampled resize, and Bgr24
+/// JPEG encode the album-art service has always used.
+/// </summary>
+public sealed class WpfImageTranscoder : IImageTranscoder
+{
+    public bool CanDecode(byte[] bytes) => Decode(bytes) != null;
+
+    public byte[]? ResizeToJpeg(byte[] source, int maxSize, int quality)
+    {
+        System.Windows.Media.Imaging.BitmapSource? src = Decode(source);
+        if (src == null) return null;
+        int w = src.PixelWidth;
+        int h = src.PixelHeight;
+
+        if (Math.Max(w, h) <= maxSize)
+        {
+            if (source.Length >= 2 && source[0] == 0xFF && source[1] == 0xD8)
+                return source;
+            return EncodeJpeg(src, quality);
+        }
+
+        double factor = (double)maxSize / Math.Max(w, h);
+        int destinationWidth = Math.Max(1, (int)Math.Round(w * factor));
+        int destinationHeight = Math.Max(1, (int)Math.Round(h * factor));
+        return EncodeJpeg(
+            CUETools.Wpf.Imaging.RiotResampler.Resize(src, destinationWidth, destinationHeight),
+            quality);
+    }
+
+    private static System.Windows.Media.Imaging.BitmapSource? Decode(byte[] bytes)
+    {
+        try
+        {
+            using var stream = new System.IO.MemoryStream(bytes);
+            System.Windows.Media.Imaging.BitmapFrame frame =
+                System.Windows.Media.Imaging.BitmapFrame.Create(
+                    stream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+            var converted = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+                frame, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            converted.Freeze();
+            return converted;
+        }
+        catch { return null; }
+    }
+
+    private static byte[] EncodeJpeg(
+        System.Windows.Media.Imaging.BitmapSource source, int quality)
+    {
+        var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder
+        {
+            QualityLevel = Math.Clamp(quality, 1, 100)
+        };
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(
+            new System.Windows.Media.Imaging.FormatConvertedBitmap(
+                source, System.Windows.Media.PixelFormats.Bgr24, null, 0)));
+        using var stream = new System.IO.MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
+}
+
+/// <summary>
 /// WPF display capabilities: the 3D disc uses WPF's GPU-rasterized
 /// Viewport3D, so hardware acceleration means render tier 1 or above.
 /// </summary>
