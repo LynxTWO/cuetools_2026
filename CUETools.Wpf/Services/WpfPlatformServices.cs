@@ -50,6 +50,81 @@ public sealed class WpfUserPrompt : IUserPrompt
 }
 
 /// <summary>
+/// WPF UI-thread timers (DispatcherTimer) behind the app core's timer seam.
+/// renderPriority maps to DispatcherPriority.Render, matching the telemetry
+/// animation's historical priority.
+/// </summary>
+public sealed class WpfUiTimerFactory : IUiTimerFactory
+{
+    public IUiTimer Create(TimeSpan interval, bool renderPriority = false)
+        => new WpfUiTimer(interval, renderPriority);
+
+    private sealed class WpfUiTimer : IUiTimer
+    {
+        private readonly DispatcherTimer _timer;
+
+        public WpfUiTimer(TimeSpan interval, bool renderPriority)
+        {
+            _timer = renderPriority
+                ? new DispatcherTimer(DispatcherPriority.Render)
+                : new DispatcherTimer();
+            _timer.Interval = interval;
+            _timer.Tick += (_, _) => Tick?.Invoke(this, EventArgs.Empty);
+        }
+
+        public TimeSpan Interval
+        {
+            get => _timer.Interval;
+            set => _timer.Interval = value;
+        }
+
+        public bool IsEnabled => _timer.IsEnabled;
+
+        public void Start() => _timer.Start();
+
+        public void Stop() => _timer.Stop();
+
+        public event EventHandler? Tick;
+
+        public void Dispose() => _timer.Stop();
+    }
+}
+
+/// <summary>
+/// WPF artwork previews: the exact frozen-BitmapImage decode the rip page has
+/// always used (OnLoad caching, bounded DecodePixelWidth), now behind the app
+/// core's preview seam.
+/// </summary>
+public sealed class WpfArtworkPreviewFactory : IArtworkPreviewFactory
+{
+    public object? CreatePreview(byte[] bytes, int decodeWidth)
+    {
+        try
+        {
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = decodeWidth;
+            bmp.StreamSource = new System.IO.MemoryStream(bytes);
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch { return null; }
+    }
+}
+
+/// <summary>
+/// WPF display capabilities: the 3D disc uses WPF's GPU-rasterized
+/// Viewport3D, so hardware acceleration means render tier 1 or above.
+/// </summary>
+public sealed class WpfPlatformCapabilities : IPlatformCapabilities
+{
+    public bool HardwareAccelerated3D { get; } =
+        (System.Windows.Media.RenderCapability.Tier >> 16) >= 1;
+}
+
+/// <summary>
 /// WPF implementation of the app core's UI-thread marshaling seam. Reads
 /// Application.Current lazily so behavior matches the historical
 /// Application.Current?.Dispatcher pattern, including headless runs where no

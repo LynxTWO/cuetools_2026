@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Media;
 using CUETools.Wpf.Mvvm;
 using CUETools.Wpf.Services;
 using CUETools.Wpf.Services.Artwork;
@@ -11,7 +10,7 @@ namespace CUETools.Wpf.ViewModels;
 public sealed class ArtworkCandidateViewModel : ViewModelBase
 {
     private readonly IAlbumArtService _service;
-    private ImageSource? _thumbnail;
+    private object? _thumbnail;
     private string _loadStatus = "";
 
     public ArtworkCandidate Candidate { get; }
@@ -32,7 +31,7 @@ public sealed class ArtworkCandidateViewModel : ViewModelBase
     public string Approval => Candidate.IsApproved
         ? "Approved"
         : Candidate.IsPrimary ? "Primary" : "";
-    public ImageSource? Thumbnail
+    public object? Thumbnail
     {
         get => _thumbnail;
         private set => Set(ref _thumbnail, value);
@@ -43,14 +42,18 @@ public sealed class ArtworkCandidateViewModel : ViewModelBase
         private set => Set(ref _loadStatus, value);
     }
 
+    private readonly IArtworkPreviewFactory _previews;
+
     public ArtworkCandidateViewModel(
         ArtworkCandidate candidate,
         int recommendedOrder,
-        IAlbumArtService service)
+        IAlbumArtService service,
+        IArtworkPreviewFactory previews)
     {
         Candidate = candidate;
         RecommendedOrder = recommendedOrder;
         _service = service;
+        _previews = previews;
     }
 
     public async Task LoadThumbnailAsync(CancellationToken ct)
@@ -61,7 +64,7 @@ public sealed class ArtworkCandidateViewModel : ViewModelBase
         {
             AlbumArt? art = await _service.DownloadAsync(Candidate, thumbnail: true, ct);
             if (art == null) { LoadStatus = "unavailable"; return; }
-            Thumbnail = RipViewModel.MakeArtworkImage(art.Bytes, 220);
+            Thumbnail = _previews.CreatePreview(art.Bytes, 220);
             LoadStatus = Thumbnail == null ? "unavailable" : "";
         }
         catch (OperationCanceledException) { }
