@@ -210,7 +210,8 @@ public sealed class AlbumArtServiceTests
                     """);
             }),
             settings,
-            log);
+            log,
+            new WpfImageTranscoder());
 
         IReadOnlyList<ArtworkCandidate> candidates =
             await service.FindCandidatesAsync(Query("", ""));
