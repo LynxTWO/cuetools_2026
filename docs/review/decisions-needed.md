@@ -214,7 +214,7 @@ Original decision record:
 
 Original decision record:
 
-### D10. PLDS partial-tail payload batches - OPEN 2026-08-13
+### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 
 - **Observation (live, Linux head):** the internal PLDS DVD-RW DU8A5SH
   (BU51) deterministically aborts BEh+C2 reads of exactly 15 or 2 sectors
@@ -232,6 +232,13 @@ Original decision record:
   08/0A carve-out, or (c) leave fatal and document. Option (a) changes read
   batching for every drive and needs its own evidence pass; (b) extends the
   quirk table; (c) risks a mid-rip failure on this laptop's internal drive.
+- **Resolution (owner, 2026-08-14): option (b).**
+  `PayloadReadFailurePolicy.SafeBatchSectors` splits a 15-sector batch into
+  8+7 and a 2-sector batch into 1+1 for only the exact
+  PLDS / DVD-RW DU8A5SH / BU51 identity; each sub-read validates its own
+  transfer and reorganises its own sectors, so the vote still sees every
+  sector once per pass. The slip probe shrinks to the safe count on the
+  same identity. Every other drive keeps every shape.
 
 ### D9 (original). Burst-mode re-read semantics - OPEN 2026-08-01
 

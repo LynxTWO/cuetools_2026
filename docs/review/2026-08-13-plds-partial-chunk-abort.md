@@ -48,3 +48,8 @@ batch into counts the drive has proven (e.g. 8+7 or 1+1); (b) drive-scoped
 - avoid only counts 15 and 2 on the exact PLDS DU8A5SH BU51 identity, in
 the spirit of the existing WH16NS40 08/0A carve-out. Recorded in
 decisions-needed.
+
+Resolution 2026-08-14: the owner chose (b). SafeBatchSectors in
+PayloadReadFailurePolicy splits the two failing shapes into proven-safe
+sub-reads (15 -> 8+7, 2 -> 1+1) for only the exact drive identity; the
+slip probe shrinks to the safe count on the same identity.

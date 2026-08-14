@@ -309,6 +309,28 @@ namespace CUETools.Ripper.SCSI
         }
 
         /// <summary>
+        /// The PLDS DVD-RW DU8A5SH firmware BU51 deterministically aborts BEh+C2
+        /// payload reads of exactly 15 or 2 sectors at any disc location
+        /// (ABORTED COMMAND 0B/00/00), while 16/14/10/8/4/1 succeed; both USB
+        /// matrix drives accept every count. Receipt:
+        /// docs/review/2026-08-13-plds-partial-chunk-abort.md. For only that
+        /// observed drive, a batch that would take a failing shape reads a
+        /// proven-safe first sub-count instead and the caller issues the
+        /// remainder (15 -> 8+7, 2 -> 1+1); both remainders are proven counts.
+        /// Never changes the shape for any other drive (D10, 2026-08-14).
+        /// </summary>
+        public static int SafeBatchSectors(bool isObservedDrive, int requested)
+        {
+            if (!isObservedDrive)
+                return requested;
+            if (requested == 15)
+                return 8;
+            if (requested == 2)
+                return 1;
+            return requested;
+        }
+
+        /// <summary>
         /// The ASUS BW-16D1HT has intermittently rejected valid in-range READ CD
         /// commands with 24/00 during long reads. Cache eviction uses the same
         /// payload command. Each exact LBA/transfer-shape command may settle and
