@@ -28,7 +28,7 @@ No open entry remains in this ledger.
 ### BitReader buffer over-read
 
 - **Area or file:** `CUETools.Codecs/BitReader.cs`
-- **Resolution:** fixed in commit `624879c`. Speculative cache top-up now reads
+- **Resolution:** fixed in commit `9e4fbd4`. Speculative cache top-up now reads
   zero beyond the logical end instead of dereferencing beyond the supplied
   buffer, while unbounded unary/Rice scans detect the end and throw.
 - **Evidence:** implementation and focused boundary tests inspected 2026-07-26;
@@ -42,7 +42,7 @@ No open entry remains in this ledger.
 
 - **Area or file:** `CUETools.Processor/CUEConfig.cs`,
   `CUETools/CUETools.TestProcessor/CleanseStringTest.cs`
-- **Resolution:** fixed in commit `e93532e`. `CleanseString` maps trailing
+- **Resolution:** fixed in commit `c142ea0`. `CleanseString` maps trailing
   dot/space runs to underscores and prefixes reserved DOS device-name
   components, including names with extensions.
 - **Evidence:** implementation and focused tests inspected 2026-07-26; aggregate
@@ -54,7 +54,7 @@ No open entry remains in this ledger.
 ### Legacy MusicBrainz client provenance and reachability
 
 - **Area or file:** historical `MusicBrainz/` project
-- **Resolution:** the client source/project was deleted in commit `63d7de6`
+- **Resolution:** the client source/project was deleted in commit `4e662a7`
   after direct lookup was retired. Current metadata paths use the CTDB proxy and
   freedb/gnudb fallback. Browser links and MusicBrainz tag field names remain,
   but they do not load an in-repo client library.

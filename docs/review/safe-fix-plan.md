@@ -954,7 +954,7 @@ readiness retries, cache-command retries, and chunk fallbacks. A terminal
 failure retains all five local counts.
 
 **Status:** implemented and end-to-end hardware-verified 2026-07-29 at commit
-`5fa2c65`. The uninterrupted K: Test & Copy finished in 2,275 seconds, produced
+`17d984e`. The uninterrupted K: Test & Copy finished in 2,275 seconds, produced
 two consistent reads, verified the final encoded PCM, and crossed the former
 92-percent Copy failure boundary. CTDB then repaired six sectors in a
 source-preserving sibling. Independent decode comparison found 86 changed
@@ -1214,7 +1214,7 @@ replace the original result.
 
 **Status:** fixed and hardware-measured 2026-07-29. WPR and PresentMon both
 require elevation on this host, so the source-bound fixed-histogram sampler
-provided the non-administrative lane. Commit `31d839b` measured 49,984 re-read
+provided the non-administrative lane. Commit `039129b` measured 49,984 re-read
 frames over 714.9 seconds during 385 real recovery passes. Normal and re-read
 p99 were both 15.0 ms; re-read callback time averaged 0.0227 ms and peaked at
 1.1332 ms. K:'s Copy phase later failed at 92 percent on the separately tracked

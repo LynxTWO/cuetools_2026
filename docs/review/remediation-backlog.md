@@ -141,7 +141,7 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 ### R11. CleanseString: reserved names + trailing dots (SC4) - bucket A, risk low - DONE (2026-07-10)
 
-- **Fix (merged e5f2026):** `CUEConfig.CleanseString` now maps trailing dots/spaces to
+- **Fix (merged f2d86b0):** `CUEConfig.CleanseString` now maps trailing dots/spaces to
   underscores (Windows silently trims them, which collides distinct names) and prefixes
   reserved DOS device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) with `_`. Added
   `CleanseStringTest` (3 tests, green) covering both hardenings and confirming ordinary
@@ -1284,7 +1284,7 @@ does not relax evidence, rollback, or verification requirements.
   damage would invent evidence; aborting every corroborated transient loses an
   otherwise recoverable long-running job.
 - **Evidence found:** the first post-R57 run completed Test, then failed Copy near
-  relative sector 283328. The `e2c3ba6` rerun failed Test at the same displayed
+  relative sector 283328. The `6d29528` rerun failed Test at the same displayed
   16-sector context after 752 seconds. Its exact stack stopped at the non-medium
   child guard inside the medium-error split, proving that the outer 16-sector
   command reported `MediumError` and a subsequent single-sector command reported
@@ -1681,7 +1681,7 @@ does not relax evidence, rollback, or verification requirements.
   once after the two exact indeterminate readiness results. All other readiness
   failures and any repeated eviction exhaustion remain fatal. Ripper tests pass
   28/28, WPF tests pass 430/430, net47/net20 full-MSBuild lanes pass, the warning
-  gate is empty, and the production artifact contract passes. Commit `5fa2c65`
+  gate is empty, and the production artifact contract passes. Commit `17d984e`
   then completed an uninterrupted 2,275-second K: Test & Copy, crossed the
   former 92-percent Copy boundary, verified the final encoded PCM, and
   published a verified six-sector CTDB repair. The successful run recorded zero
@@ -2024,7 +2024,7 @@ does not relax evidence, rollback, or verification requirements.
   run containing at least one independently logged optical re-read; and separate
   normal-read versus re-read frame percentiles.
 - **Owner:** CUETools WPF maintainers.
-- **Status:** fixed and hardware-measured 2026-07-29. Commit `31d839b`
+- **Status:** fixed and hardware-measured 2026-07-29. Commit `039129b`
   recorded 87,832 normal-read frames over 1,249.4 seconds and 49,984 re-read
   frames over 714.9 seconds at tier 2. Both states held 14.3/14.7/15.0 ms
   p50/p95/p99. Re-reading had three frames above 33.33 ms and a 40.1 ms
@@ -2639,7 +2639,7 @@ does not relax evidence, rollback, or verification requirements.
   publications, unsigned signing-policy evaluation, tests, fuzzing, and
   artifact validation, then correctly refused provenance because the inventory
   still described the libFLAC patch before 31 reviewed lines were added in
-  `f17a83e`. A stale source digest would make a successful receipt false.
+  `37a4c11`. A stale source digest would make a successful receipt false.
 - **Evidence found:** the inventory expected SHA-256 `81a305c6...`; the current
   committed 47,573-byte mixed-EOL patch is `e57a0c47...`. History proves the
   content change, and every other pinned input matches its declared digest.

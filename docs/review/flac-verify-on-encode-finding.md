@@ -8,7 +8,7 @@ Severity: was blocking - every FLAC encode failed while the option defaulted to 
 ## Plain English
 
 FLAC can check its own work by decoding each frame right after encoding it and comparing the samples
-(the classic `flac -V`). Turning that on by default (commit d9198f2) broke every FLAC rip: the encode
+(the classic `flac -V`). Turning that on by default (commit 4e0c274) broke every FLAC rip: the encode
 died about 16 s in. The failure is in the CHECKER, not the audio. The encoder's output is valid FLAC.
 
 ## What was measured
@@ -26,7 +26,7 @@ died about 16 s in. The failure is in the CHECKER, not the audio. The encoder's 
 - Those files were from an earlier rip, but the evidence still applies to the CURRENT encoder:
   `git log -- CUETools.Codecs.Flake/AudioEncoder.cs` shows the encoding algorithm has only ever been
   touched by copyright-year bumps. The single functional change in that project during this work was
-  the `DoVerify` default (d9198f2) and its revert (fc04527). Same encoder code, so the clean decode is
+  the `DoVerify` default (4e0c274) and its revert (67d55fc). Same encoder code, so the clean decode is
   not stale evidence.
 
 ## What that means

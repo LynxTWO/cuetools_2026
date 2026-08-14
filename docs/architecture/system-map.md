@@ -33,7 +33,7 @@ verification, metadata, artwork, streaming, and update-message endpoints.
 | CLI projects | Scriptable conversion, verification, ripping, and codec entrypoints over shared libraries | mixed .NET Framework and SDK-style projects | verified: solution and project files |
 | `CUETools.eac3ui/` | Blu-ray/eac3to-oriented BluTools UI over shared processing code | SDK-style .NET Framework 4.7 WPF | verified: project and main UI/process call paths; old/new API, PE, config, image-resource, and live startup equivalence under R90 |
 | `CUERipper.WPF/` | Historical one-window stub, not the CUETools 2026 application | .NET Framework 4.7 | verified: project contents; deferred dead-weight decision |
-| Historical FlaCuda projects | CUDA.NET-based codec projects formerly present in the repository | deleted; no current runtime reachability | verified: deleted in commit `4e1b02d` |
+| Historical FlaCuda projects | CUDA.NET-based codec projects formerly present in the repository | deleted; no current runtime reachability | verified: deleted in commit `dc0a70b` |
 
 Shared libraries have product-specific target reach:
 
@@ -162,7 +162,7 @@ compiled/linked for both, and an Installer Projects 8/0 pass that produced a
 929,792-byte MSI. Hosted classic run `30518472651` passed 155/162 tests with
 the seven declared skips, WPF run `30518472662` passed 468/468, and release run
 `30518479906` completed on commit
-`a7f26bf457b736fcd61f186d5f34b6d139d94147`. Independent inspection of the
+`33c8eea3b8d085d5bb2473a7f6451dce2ba4e294`. Independent inspection of the
 downloaded release accepted both artifact contracts, exact SHA-256 manifests,
 97/97 and 557/557 SPDX closures, nonempty CycloneDX graphs, and clean-source
 provenance. All three final check runs have zero annotations.

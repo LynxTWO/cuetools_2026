@@ -112,7 +112,7 @@ as covered.
   are refreshed by the final canonical gate after all changes land; no stale total is
   promoted to current evidence.
 - **FlaCuda/CUDA.NET release reachability:** closed 2026-07-23. FlaCuda projects
-  and their CUDA.NET dependency were deleted in commit `4e1b02d`; they have no
+  and their CUDA.NET dependency were deleted in commit `dc0a70b`; they have no
   current scope or release reachability.
 - **BitReader and Windows reserved-name regression coverage:** closed
   2026-07-26 at the automated-test boundary. The fixes and corresponding test

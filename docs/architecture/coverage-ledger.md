@@ -54,7 +54,7 @@ are refreshed only by the final canonical gate:
 Historical total: 388 discovered, 381 passed, 0 failed, 7 expected skipped.
 
 Current hosted total at commit
-`a7f26bf457b736fcd61f186d5f34b6d139d94147`: 630 discovered, 623
+`33c8eea3b8d085d5bb2473a7f6451dce2ba4e294`: 630 discovered, 623
 passed, zero failed, and seven declared skips across the classic and modern
 workflow selections.
 

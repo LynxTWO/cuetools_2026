@@ -3,7 +3,7 @@
 ## Damaged-disc recovery addendum - 2026-08-01
 
 This pass challenged the complete damaged-media recovery surface at commit
-`082fe25`: the secure read loop and its retry/fallback policies, SCSI transport
+`51b7823`: the secure read loop and its retry/fallback policies, SCSI transport
 and sense handling, the sector vote and C2 evidence, CTDB parity repair and its
 WPF transaction, verify and Test & Copy held states, the classic parallel path,
 and the recovery closure claims in the backlog and ledger. Method: orchestrated
@@ -236,7 +236,7 @@ orchestrator's own re-checks instead.
 ## R69 cache-defeat addendum - 2026-07-29
 
 This pass reviewed only the secure reread cache-eviction slice at commit
-`a82bf88` plus the pending per-command retry change.
+`8798b3c` plus the pending per-command retry change.
 
 ### What the earlier work got right
 
@@ -322,7 +322,7 @@ that continuation is still pending.
 
 ### Final damaged-disc receipt
 
-Commit `5fa2c65` completed an uninterrupted K: Test & Copy in 2,275 seconds.
+Commit `17d984e` completed an uninterrupted K: Test & Copy in 2,275 seconds.
 Both reads were consistent, the encoded output passed the final PCM check, and
 the run crossed the earlier 92-percent Copy failure boundary. The optical
 reader reported three exhausted windows and six suspicious sectors. CTDB

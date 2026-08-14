@@ -165,7 +165,7 @@ not automatically cover .NET Framework 4.7 or .NET Framework 2.0.
   retired under R89 after proving its encoder registration was commented out,
   no first-party consumer referenced it, it was absent from release collection,
   and its project pointed at a missing `OpenCLNet.dll`. Historical FlaCuda
-  projects were deleted in commit `4e1b02d`.
+  projects were deleted in commit `dc0a70b`.
 - **Verified controls:** solution/release membership is mapped. The FLACCL
   plugin and command host are SDK-style net47 projects with explicit
   32-bit-preferred host behavior. Corrected per-frame verification passed on an

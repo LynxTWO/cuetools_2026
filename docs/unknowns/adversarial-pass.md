@@ -125,7 +125,7 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   proved the 250 ms settle plus one exact readiness retry also returns `24/00`.
   The next bounded build treats only those two results as indeterminate and
   still requires the complete cache eviction as the authoritative proof.
-  Commit `5fa2c65` then completed a 2,275-second Test & Copy and a verified
+  Commit `17d984e` then completed a 2,275-second Test & Copy and a verified
   six-sector CTDB repair, crossing the former Copy failure boundary. That run
   recorded zero wake attempts, readiness retries, indeterminate-readiness
   continuations, command retries, and chunk fallbacks.
