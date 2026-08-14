@@ -214,6 +214,27 @@ Original decision record:
 
 Original decision record:
 
+### D11. USB drive wedge under recovery grinding - OPEN 2026-08-14
+
+- **Observation (live, twice):** both USB-attached drives have entered a
+  reject-everything-24/00 state (even READ TOC and kernel reads) during or
+  after extended error-recovery activity on the damaged reference disc,
+  recoverable only by USB replug. The SATA internal drive survived the
+  same disc's full deep-recovery pass. Receipt:
+  `docs/review/2026-08-14-usb-wedge-finding.md`. Engine behavior was
+  correct both times (fail closed, full diagnostics, no partial output).
+- **Decision required:** (a) keep fail-closed and surface a clear
+  user-facing "drive needs a reset (replug)" message when the exact
+  all-shapes-24/00 eviction signature appears; (b) additionally attempt a
+  bounded, evidence-gated device recovery (e.g. one SG bus/device reset)
+  before failing - a new control command class that needs its own probe
+  evidence and carve-out discipline; (c) investigate the bridge hypothesis
+  first (clean-disc long-grind repro on a USB drive) before any code
+  change. Options compose; (a) is UI-only and low risk.
+- **Direction (owner, 2026-08-14 18:10): (c) first.** A clean-disc
+  Paranoid Test & Copy on the WH16NS40 is running as the discriminating
+  repro; (a)'s user-facing reset message stays open pending its outcome.
+
 ### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 
 - **Observation (live, Linux head):** the internal PLDS DVD-RW DU8A5SH

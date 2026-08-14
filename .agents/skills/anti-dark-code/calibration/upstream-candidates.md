@@ -83,8 +83,11 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
   sizes at any address; a 27-shape probe across three devices isolated
   the exact failing shapes in minutes, the fix reshaped the request plan
   without touching classification, and a later same-code failure on a
-  sibling device was correctly attributed to a transient device wedge
-  because the probe separated device state from command shape.
+  sibling device was recognized as a device-state wedge rather than a
+  command-shape problem because the probe separated the two (the
+  wedge's own cause was initially misattributed and corrected only by a
+  second organic incident - probe evidence separates state from shape,
+  not cause from coincidence).
 - Limits: needs at least one control device or a known-good baseline;
   probe cost must be trivial relative to the operation it explains.
 - Proposed target: references/repo-verification-profiles.md
