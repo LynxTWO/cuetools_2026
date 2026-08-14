@@ -214,6 +214,25 @@ Original decision record:
 
 Original decision record:
 
+### D10. PLDS partial-tail payload batches - OPEN 2026-08-13
+
+- **Observation (live, Linux head):** the internal PLDS DVD-RW DU8A5SH
+  (BU51) deterministically aborts BEh+C2 reads of exactly 15 or 2 sectors
+  (ABORTED COMMAND 0B/00/00) at any disc location; all other probed counts
+  succeed, and the ASUS BW-16D1HT and WH16NS40 accept every count. Full
+  receipt: `docs/review/2026-08-13-plds-partial-chunk-abort.md`. The
+  cache-defeat eviction hit this first and is fixed universally (the plan
+  pads to whole chunks). Normal window reads still batch by 16 with a
+  partial tail, so a disc whose geometry lands a 15- or 2-sector tail on
+  this drive fails fatally: ABORTED COMMAND is deliberately in no retry or
+  fallback class.
+- **Decision required:** (a) universal tail-shape splitting (any partial
+  tail batch splits into proven counts, e.g. 8+7), or (b) a drive-scoped
+  avoidance for the exact PLDS identity in the spirit of the WH16NS40
+  08/0A carve-out, or (c) leave fatal and document. Option (a) changes read
+  batching for every drive and needs its own evidence pass; (b) extends the
+  quirk table; (c) risks a mid-rip failure on this laptop's internal drive.
+
 ### D9 (original). Burst-mode re-read semantics - OPEN 2026-08-01
 
 - **Observation (user, live):** Burst appears to "get recovery". Two causes,
