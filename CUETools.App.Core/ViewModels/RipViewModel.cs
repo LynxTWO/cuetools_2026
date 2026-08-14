@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using System.Windows.Threading;
 using CUETools.Processor;
 using CUETools.Ripper.SCSI;
 using CUETools.Wpf.Models;
@@ -57,6 +56,13 @@ public sealed class RipViewModel : PageViewModel
     private readonly IConvertService _codecs;
     private readonly AppStatusService _status;
     private readonly EncoderCatalog _catalog;
+    // Platform seams (M2 pattern): UI timers, UI-thread marshaling, dialogs,
+    // artwork decoding, and display capabilities come from the head.
+    private readonly IUiTimerFactory _timers;
+    private readonly IUiDispatcher _ui;
+    private readonly IUserPrompt _prompt;
+    private readonly IArtworkPreviewFactory _artFactory;
+    private readonly IFileDialogService _dialogs;
     private AppActivity _baseActivity = AppActivity.Idle;   // what the icon returns to after a re-read clears
 
     // The last disc read, kept so a finished job can be turned into a full RipReport
@@ -302,7 +308,7 @@ public sealed class RipViewModel : PageViewModel
     public string DriveModel { get => _driveModel; private set => Set(ref _driveModel, value); }
 
     // disc-insertion watcher state
-    private DispatcherTimer? _trayWatch;
+    private IUiTimer? _trayWatch;
     private bool _triedCurrentMedia;   // guards against re-reading a data disc every poll
 
     private string _albumTitle = "Insert a disc";
@@ -352,9 +358,10 @@ public sealed class RipViewModel : PageViewModel
     /// in this view model, rather than a converter).</summary>
     public bool CodecUnlocked => !CodecLocked;
 
-    // Weak-hardware fallback: the 3D disc uses WPF's GPU-rasterized Viewport3D. With no hardware
-    // acceleration (software rendering / RemoteFX, tier 0) fall back to the 2D read-map.
-    public bool Supports3DDisc { get; } = (System.Windows.Media.RenderCapability.Tier >> 16) >= 1;
+    // Weak-hardware fallback: with no hardware-accelerated 3D (software
+    // rendering / RemoteFX on WPF) fall back to the 2D read-map. The head's
+    // capability service answers; see IPlatformCapabilities.
+    public bool Supports3DDisc { get; }
 
     // live read-speed readout for the SpeedGraph (0..1 of a 12x display cap) + "6.4x" text
     private double _speedLevel;
@@ -377,7 +384,7 @@ public sealed class RipViewModel : PageViewModel
     private readonly RipTelemetryDisplayFrame _telemetryDisplayA = new();
     private readonly RipTelemetryDisplayFrame _telemetryDisplayB = new();
     private RipTelemetryMailbox? _telemetryMailbox;
-    private DispatcherTimer? _telemetryTimer;
+    private IUiTimer? _telemetryTimer;
     private bool _useTelemetryDisplayB;
 
     // Re-read state, driven by the drive's real retry loop. RereadVisible governs the box (it lingers
@@ -402,7 +409,7 @@ public sealed class RipViewModel : PageViewModel
     public bool Unreadable { get => _unreadable; private set => Set(ref _unreadable, value); }
 
     private DateTime _lastRereadUtc;
-    private DispatcherTimer? _rereadTimer;
+    private IUiTimer? _rereadTimer;
     private bool _holdDamageZoom;   // stop-on-unrecoverable fired: hold the red zoom until the job ends
 
     private const double SpeedCapX = 12.0;
@@ -474,8 +481,8 @@ public sealed class RipViewModel : PageViewModel
 
     // Cover preview and immutable candidate choice. _coverBytes is the resized JPEG captured by a
     // job. Discovery is release-generation-bound so stale responses cannot replace a newer disc.
-    private System.Windows.Media.ImageSource? _artPreview;
-    public System.Windows.Media.ImageSource? ArtPreview { get => _artPreview; private set { if (Set(ref _artPreview, value)) OnPropertyChanged(nameof(HasArtPreview)); } }
+    private object? _artPreview;
+    public object? ArtPreview { get => _artPreview; private set { if (Set(ref _artPreview, value)) OnPropertyChanged(nameof(HasArtPreview)); } }
     public bool HasArtPreview => _artPreview != null;
     private string _artInfo = "";
     public string ArtInfo { get => _artInfo; private set => Set(ref _artInfo, value); }
@@ -531,8 +538,20 @@ public sealed class RipViewModel : PageViewModel
         AppStatusService status,
         SettingsStore settingsStore,
         AppLaunchOptions launchOptions,
-        IDiagnosticLog log)
+        IDiagnosticLog log,
+        IUiTimerFactory timers,
+        IUiDispatcher uiDispatcher,
+        IUserPrompt prompt,
+        IArtworkPreviewFactory artPreviewFactory,
+        IPlatformCapabilities capabilities,
+        IFileDialogService fileDialogs)
     {
+        _timers = timers;
+        _dialogs = fileDialogs;
+        _ui = uiDispatcher;
+        _prompt = prompt;
+        _artFactory = artPreviewFactory;
+        Supports3DDisc = capabilities.HardwareAccelerated3D;
         Title = "Rip";
         Group = "Work";
         Subtitle = "Rip a CD: read, encode, and verify against AccurateRip and CTDB.";
@@ -605,7 +624,7 @@ public sealed class RipViewModel : PageViewModel
             _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
-        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
+        BrowseOutputCommand = new RelayCommand(async _ => await BrowseOutputAsync());
         OpenFolderCommand = new RelayCommand(_ => OpenFolder(), _ => LastOutputDir.Length > 0);
         DismissDoneCommand = new RelayCommand(_ =>
         {
@@ -684,7 +703,7 @@ public sealed class RipViewModel : PageViewModel
     // we never fight the ripper for the device.
     private void StartTrayWatch()
     {
-        _trayWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
+        _trayWatch = _timers.Create(TimeSpan.FromMilliseconds(2000));
         _trayWatch.Tick += async (_, _) => await PollTrayAsync();
         _trayWatch.Start();
     }
@@ -736,8 +755,6 @@ public sealed class RipViewModel : PageViewModel
         {
         _triedCurrentMedia = true;           // this read counts as our attempt at the current media
         char drive = _selectedDrive;
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-
         // identity + tray state first (works with an empty tray) so the bar shows the drive model
         StatusText = "Reading drive...";
         DriveDetails details = await Task.Run(() => _drives.GetDriveDetails(drive));
@@ -746,7 +763,7 @@ public sealed class RipViewModel : PageViewModel
 
         StatusText = "Reading disc...";
         // surface the live metadata-lookup step (which database is being queried)
-        void OnStatus(string s) => dispatcher?.BeginInvoke(new Action(() => { if (_isBusy) StatusText = s; }));
+        void OnStatus(string s) => _ui.Post(() => { if (_isBusy) StatusText = s; });
 
         DiscInfo? info = await Task.Run(() => _drives.ReadDisc(drive, OnStatus));
         _lastDisc = info;
@@ -1078,23 +1095,10 @@ public sealed class RipViewModel : PageViewModel
         }
     }
 
-    internal static System.Windows.Media.ImageSource? MakeArtworkImage(byte[] bytes, int decodeWidth)
-    {
-        try
-        {
-            var bmp = new System.Windows.Media.Imaging.BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-            bmp.DecodePixelWidth = decodeWidth;
-            bmp.StreamSource = new System.IO.MemoryStream(bytes);
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
-        }
-        catch { return null; }
-    }
+    private object? MakeArtworkImage(byte[] bytes, int decodeWidth) =>
+        _artFactory.CreatePreview(bytes, decodeWidth);
 
-    private static System.Windows.Media.ImageSource? MakeThumb(byte[] bytes) =>
+    private object? MakeThumb(byte[] bytes) =>
         MakeArtworkImage(bytes, 240);
 
     // Ask the engine to stop the running rip/verify at the next safe point. The job's Task then
@@ -1115,11 +1119,8 @@ public sealed class RipViewModel : PageViewModel
         LevelL = 0;
         LevelR = 0;
 
-        _telemetryTimer ??= new DispatcherTimer(
-            DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
+        _telemetryTimer ??= _timers.Create(
+            TimeSpan.FromMilliseconds(16), renderPriority: true);
         _telemetryTimer.Tick -= TelemetryTick;
         _telemetryTimer.Tick += TelemetryTick;
         _telemetryTimer.Start();
@@ -1184,7 +1185,7 @@ public sealed class RipViewModel : PageViewModel
     {
         RereadVisible = false; RereadActive = false; RereadCount = 0; RereadErrors = 0; RereadText = "";
         Unreadable = false; _holdDamageZoom = false;
-        _rereadTimer ??= new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(200) };
+        _rereadTimer ??= _timers.Create(TimeSpan.FromMilliseconds(200));
         _rereadTimer.Tick -= RereadTick;
         _rereadTimer.Tick += RereadTick;
         _rereadTimer.Start();
@@ -1216,8 +1217,8 @@ public sealed class RipViewModel : PageViewModel
     // sectors failed - never on running mid-pass counts, which a later chunk of the same pass can
     // still converge, and never on a pass threshold, which would cut the deep-recovery extension
     // short (R110).
-    private Action<RereadReport> MakeRereadHandler(System.Windows.Threading.Dispatcher? dispatcher)
-        => r => dispatcher?.BeginInvoke(new Action(() =>
+    private Action<RereadReport> MakeRereadHandler()
+        => r => _ui.Post(() =>
         {
             if (r.ReReads > 0)
             {
@@ -1246,7 +1247,7 @@ public sealed class RipViewModel : PageViewModel
                 RereadErrors = 0;
                 if (!Unreadable) _status.Report(_baseActivity);   // badge drops with the recovery
             }
-        }));
+        });
 
     private async Task RunJobAsync(bool encode)
     {
@@ -1292,19 +1293,17 @@ public sealed class RipViewModel : PageViewModel
             Tracks[i].Active = false;
         }
 
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-
         // ReadProgress and re-read events fire on the ripper's thread; marshal those to the UI.
         // RMS and scope samples use the bounded mailbox drained by the UI timer.
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() =>
+            => _ui.Post(() =>
             {
                 RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac);
                 // feed the taskbar progress; keep a re-read/unreadable state's badge while it lasts
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
-            }));
-        var Reread = MakeRereadHandler(dispatcher);
+            });
+        var Reread = MakeRereadHandler();
 
         StartRereadTimer();
 
@@ -1315,7 +1314,7 @@ public sealed class RipViewModel : PageViewModel
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
-        void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
+        void LockCodec() => _ui.Post(() => CodecLocked = true);
         RipTelemetryMailbox telemetry = StartTelemetry();
         VerifyResult result;
         try
@@ -1490,19 +1489,19 @@ public sealed class RipViewModel : PageViewModel
             Tracks[i].Active = false;
         }
 
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
 
         // ReadProgress and re-read events fire on the ripper's thread; marshal those to the UI.
         // RMS and scope samples use the bounded mailbox drained by the UI timer.
         void Report(double frac, string status)
-            => dispatcher?.BeginInvoke(new Action(() =>
+            => _ui.Post(() =>
             {
                 RipProgress = frac; StatusText = status; UpdateSpeed(frac); UpdateTrackProgress(frac);
                 // feed the taskbar progress; keep a re-read/unreadable state's badge while it lasts
                 var act = _status.Activity is AppActivity.Rereading or AppActivity.Unreadable ? _status.Activity : _baseActivity;
                 _status.Report(act, frac);
-            }));
-        var Reread = MakeRereadHandler(dispatcher);
+            });
+        var Reread = MakeRereadHandler();
 
         StartRereadTimer();
 
@@ -1513,7 +1512,7 @@ public sealed class RipViewModel : PageViewModel
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
-        void LockCodec() => dispatcher?.BeginInvoke(new Action(() => CodecLocked = true));
+        void LockCodec() => _ui.Post(() => CodecLocked = true);
         void PublishCrcEvidence(CUETools.Wpf.Accuracy.TrackCrc[] evidence)
         {
             void Apply()
@@ -1525,8 +1524,8 @@ public sealed class RipViewModel : PageViewModel
                     // presentation failure must never terminate the active optical operation.
                 }
             }
-            if (dispatcher != null && !dispatcher.CheckAccess())
-                _ = dispatcher.BeginInvoke((Action)Apply);
+            if (!_ui.CheckAccess())
+                _ui.Post(Apply);
             else
                 Apply();
         }
@@ -1544,8 +1543,8 @@ public sealed class RipViewModel : PageViewModel
                 }
                 catch { }
             }
-            if (dispatcher != null && !dispatcher.CheckAccess())
-                _ = dispatcher.BeginInvoke((Action)Apply);
+            if (!_ui.CheckAccess())
+                _ui.Post(Apply);
             else
                 Apply();
         }
@@ -1558,8 +1557,8 @@ public sealed class RipViewModel : PageViewModel
                 try { ApplyLiveReadVerdict(verdict); }
                 catch { }
             }
-            if (dispatcher != null && !dispatcher.CheckAccess())
-                _ = dispatcher.BeginInvoke((Action)Apply);
+            if (!_ui.CheckAccess())
+                _ui.Post(Apply);
             else
                 Apply();
         }
@@ -1825,30 +1824,24 @@ public sealed class RipViewModel : PageViewModel
         if (!CanRepairLastRip || IsBusy || IsRipping ||
             string.IsNullOrWhiteSpace(_lastRepairSource))
             return;
-        if (System.Windows.MessageBox.Show(
+        if (!await _prompt.ConfirmOkCancelAsync(
                 "CTDB repair will build a new sibling folder, independently verify the repaired " +
                 "audio, and publish it only if verification succeeds. The completed rip will not " +
                 "be changed.\n\nProceed with repair?",
-                "Repair completed rip from CTDB parity",
-                System.Windows.MessageBoxButton.OKCancel,
-                System.Windows.MessageBoxImage.Question) !=
-            System.Windows.MessageBoxResult.OK)
+                "Repair completed rip from CTDB parity"))
             return;
 
         string source = _lastRepairSource;
         IsBusy = true;
         RequeryHub.RequestRequery();
         StatusText = "Repairing completed rip from CTDB parity...";
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-
         void Report(double fraction, string status)
         {
-            if (dispatcher != null)
-                dispatcher.BeginInvoke(new Action(() =>
+            _ui.Post(() =>
                 {
                     RipProgress = fraction;
                     StatusText = status;
-                }));
+                });
         }
 
         try
@@ -2093,10 +2086,10 @@ public sealed class RipViewModel : PageViewModel
         OnPropertyChanged(nameof(SelectedRelease));
     }
 
-    private void BrowseOutput()
+    private async Task BrowseOutputAsync()
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Choose where ripped albums go" };
-        if (dlg.ShowDialog() == true) OutputBaseDir = dlg.FolderName;
+        string? folder = await _dialogs.PickFolderAsync("Choose where ripped albums go");
+        if (folder != null) OutputBaseDir = folder;
     }
 
     private void PersistPrimarySettingsSnapshot()
@@ -2135,13 +2128,7 @@ public sealed class RipViewModel : PageViewModel
         {
             // A running job never changes this window's selected drive. Reassert
             // the source value after the ComboBox finishes its target update.
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher != null)
-                _ = dispatcher.BeginInvoke(
-                    new Action(() => OnPropertyChanged(nameof(SelectedDrive))),
-                    DispatcherPriority.DataBind);
-            else
-                OnPropertyChanged(nameof(SelectedDrive));
+            _ui.Post(() => OnPropertyChanged(nameof(SelectedDrive)));
         }
     }
 

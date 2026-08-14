@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
@@ -12,10 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using CUETools.Processor;
-using CUETools.Wpf.Imaging;
 using CUETools.Wpf.Services.Artwork;
 
 namespace CUETools.Wpf.Services;
@@ -67,24 +64,27 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
     private readonly HttpClient _http;
     private readonly IDiagnosticLog _log;
     private readonly AppSettings _settings;
+    private readonly IImageTranscoder _images;
 
-    public AlbumArtService(CUEConfig config, AppSettings settings, IDiagnosticLog log)
-        : this(CreateHandler(config), settings, log)
+    public AlbumArtService(CUEConfig config, AppSettings settings, IDiagnosticLog log, IImageTranscoder images)
+        : this(CreateHandler(config), settings, log, images)
     {
     }
 
-    internal AlbumArtService(HttpMessageHandler handler, IDiagnosticLog log)
-        : this(handler, new AppSettings(), log)
+    internal AlbumArtService(HttpMessageHandler handler, IDiagnosticLog log, IImageTranscoder images)
+        : this(handler, new AppSettings(), log, images)
     {
     }
 
     internal AlbumArtService(
         HttpMessageHandler handler,
         AppSettings settings,
-        IDiagnosticLog log)
+        IDiagnosticLog log,
+        IImageTranscoder images)
     {
         _settings = settings;
         _log = log;
+        _images = images;
         _http = new HttpClient(handler, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(25)
@@ -706,7 +706,7 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
         {
             throw new InvalidDataException("Artwork has an unsupported or unsafe image shape.");
         }
-        if (Decode(bytes) == null)
+        if (!_images.CanDecode(bytes))
             throw new InvalidDataException("Artwork could not be decoded.");
         return new AlbumArt(candidate, bytes, width, height);
     }
@@ -865,24 +865,7 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
         if (!TryReadImageDimensions(source, out int width, out int height) ||
             (long)width * height > MaxPixels)
             return null;
-        BitmapSource? src = Decode(source);
-        if (src == null) return null;
-        int w = src.PixelWidth;
-        int h = src.PixelHeight;
-
-        if (Math.Max(w, h) <= maxSize)
-        {
-            if (source.Length >= 2 && source[0] == 0xFF && source[1] == 0xD8)
-                return source;
-            return EncodeJpeg(src, quality);
-        }
-
-        double factor = (double)maxSize / Math.Max(w, h);
-        int destinationWidth = Math.Max(1, (int)Math.Round(w * factor));
-        int destinationHeight = Math.Max(1, (int)Math.Round(h * factor));
-        return EncodeJpeg(
-            RiotResampler.Resize(src, destinationWidth, destinationHeight),
-            quality);
+        return _images.ResizeToJpeg(source, maxSize, quality);
     }
 
     internal static bool TryReadImageDimensions(
@@ -952,32 +935,6 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
     private static bool IsStartOfFrame(byte marker) =>
         marker is 0xC0 or 0xC1 or 0xC2 or 0xC3 or 0xC5 or 0xC6 or 0xC7 or
             0xC9 or 0xCA or 0xCB or 0xCD or 0xCE or 0xCF;
-
-    private static BitmapSource? Decode(byte[] bytes)
-    {
-        try
-        {
-            using var stream = new MemoryStream(bytes);
-            BitmapFrame frame = BitmapFrame.Create(
-                stream,
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad);
-            var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
-            converted.Freeze();
-            return converted;
-        }
-        catch { return null; }
-    }
-
-    private static byte[] EncodeJpeg(BitmapSource source, int quality)
-    {
-        var encoder = new JpegBitmapEncoder { QualityLevel = Math.Clamp(quality, 1, 100) };
-        encoder.Frames.Add(BitmapFrame.Create(
-            new FormatConvertedBitmap(source, PixelFormats.Bgr24, null, 0)));
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-        return stream.ToArray();
-    }
 
     private static string GetCaaThumbnail(JsonElement image, string fallback)
     {
