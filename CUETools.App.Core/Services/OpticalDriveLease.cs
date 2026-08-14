@@ -148,6 +148,25 @@ internal class OpticalDriveLease : IDisposable
                         FileMode.OpenOrCreate,
                         FileAccess.ReadWrite,
                         FileShare.Read);
+                    if (OperatingSystem.IsLinux())
+                    {
+                        // Linux: the FileShare mode is not enforced across
+                        // processes, so exclusion comes from an explicit
+                        // advisory lock; a conflict throws and is treated
+                        // exactly like a Windows sharing violation.
+                        // (FileStream.Lock is unsupported on macOS, which
+                        // this project does not target.)
+                        try
+                        {
+                            stream.Lock(0, 1);
+                        }
+                        catch (IOException)
+                        {
+                            stream.Dispose();
+                            CloseOpened(opened);
+                            return null;
+                        }
+                    }
                     WriteOwner(stream, drive, physicalIdentity);
                     opened.Add((path, stream));
                 }
@@ -335,7 +354,24 @@ internal class OpticalDriveLease : IDisposable
         internal static string TryResolve(char drive)
         {
             if (!OperatingSystem.IsWindows())
+            {
+                // Linux letters map 1:1 to kernel sr numbers (the transport's
+                // pure function). The block device's MAJ:MIN is the stable
+                // physical identity for the mechanism, so two windows aiming
+                // at the same hardware collide on "device-sr-MAJ:MIN"
+                // regardless of node aliases.
+                int n = char.ToUpperInvariant(drive) - 'A';
+                try
+                {
+                    string devPath = "/sys/block/sr" + n + "/dev";
+                    if (n >= 0 && n <= 25 && File.Exists(devPath))
+                        return "sr-" + File.ReadAllText(devPath).Trim();
+                }
+                catch (IOException)
+                {
+                }
                 return "";
+            }
 
             IntPtr handle = CreateFileW(
                 $@"\\.\{drive}:",
