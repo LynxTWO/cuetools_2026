@@ -8,6 +8,7 @@ ThirdParty/musepack-r495-cuetools.patch text eol=lf
 eng/native/musepack/CMakeLists.txt text eol=lf
 eng/native/musepack/README.md text eol=lf
 ThirdParty/MAC_SDK/MAC_1320_SDK.zip binary
+ThirdParty/lame/lame-3.100.tar.gz binary
 ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.cpp -text
 ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.def -text
 ThirdParty/MAC_SDK/Source/MACLibDll/MACLibDll.h -text
