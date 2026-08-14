@@ -667,6 +667,20 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void SafeBatchSectorsSplitsOnlyTheObservedFailingShapes()
+        {
+            // The PLDS DU8A5SH BU51 aborts exactly 15- and 2-sector reads; the
+            // safe first sub-counts leave proven remainders (8+7, 1+1).
+            Assert.AreEqual(8, PayloadReadFailurePolicy.SafeBatchSectors(true, 15));
+            Assert.AreEqual(1, PayloadReadFailurePolicy.SafeBatchSectors(true, 2));
+            foreach (int count in new[] { 16, 14, 10, 8, 7, 4, 3, 1 })
+                Assert.AreEqual(count, PayloadReadFailurePolicy.SafeBatchSectors(true, count));
+            // Any other drive keeps every shape, including the failing ones.
+            Assert.AreEqual(15, PayloadReadFailurePolicy.SafeBatchSectors(false, 15));
+            Assert.AreEqual(2, PayloadReadFailurePolicy.SafeBatchSectors(false, 2));
+        }
+
+        [TestMethod]
         public void CacheDefeatChunkFallbackTerminatesAtOneSector()
         {
             int chunk = 16;

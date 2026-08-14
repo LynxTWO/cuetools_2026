@@ -145,6 +145,23 @@ namespace CUETools.Ripper.SCSI
 				m_inqury_result.FirmwareVersion.TrimEnd(' ', '\0'),
 				"1.05",
 				StringComparison.OrdinalIgnoreCase);
+		// D10 (2026-08-14): the PLDS DVD-RW DU8A5SH BU51 deterministically aborts
+		// BEh+C2 reads of exactly 15 or 2 sectors; see
+		// PayloadReadFailurePolicy.SafeBatchSectors and the finding receipt.
+		private bool IsPartialTailAbortDrive =>
+			m_inqury_result != null &&
+			string.Equals(
+				m_inqury_result.VendorIdentification.TrimEnd(' ', '\0'),
+				"PLDS",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.ProductIdentification.TrimEnd(' ', '\0'),
+				"DVD-RW DU8A5SH",
+				StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(
+				m_inqury_result.FirmwareVersion.TrimEnd(' ', '\0'),
+				"BU51",
+				StringComparison.OrdinalIgnoreCase);
 		// Offset correction needs samples just outside the nominal audio program. These switches are
 		// enabled only after calibration has proved that this exact drive accepts the corresponding
 		// READ CD address. Without proof the historic zero-padding behavior remains unchanged.
@@ -1050,7 +1067,11 @@ namespace CUETools.Ripper.SCSI
             bestStrengthPct = 0;
             try
             {
-                int chunk = Math.Min(m_max_sectors, _currentEnd - startSector);
+                // D10: the slip probe only needs a sample; on the observed PLDS
+                // identity a failing 15/2-sector shape shrinks to the safe count.
+                int chunk = PayloadReadFailurePolicy.SafeBatchSectors(
+                    IsPartialTailAbortDrive,
+                    Math.Min(m_max_sectors, _currentEnd - startSector));
                 if (chunk < 1) return;
                 int c2Size = _c2ErrorMode == Device.C2ErrorMode.None ? 0 : _c2ErrorMode == Device.C2ErrorMode.Mode294 ? 294 : 296;
                 int perSector = 4 * 588 + c2Size;
@@ -1507,7 +1528,26 @@ namespace CUETools.Ripper.SCSI
 			}
 		}
 
-		private unsafe Device.CommandStatus FetchSectors(int sector, int Sectors2Read, bool abort)
+		private Device.CommandStatus FetchSectors(int sector, int Sectors2Read, bool abort)
+		{
+			// D10 (drive-scoped): on the observed PLDS identity a 15- or 2-sector
+			// batch splits into proven-safe sub-reads. Each sub-read validates its
+			// own transfer and reorganises its own sectors, so the vote still sees
+			// every sector of the batch exactly once this pass. All other drives
+			// and shapes pass through unchanged.
+			int firstSafe = PayloadReadFailurePolicy.SafeBatchSectors(
+				IsPartialTailAbortDrive, Sectors2Read);
+			if (firstSafe != Sectors2Read)
+			{
+				Device.CommandStatus first = FetchSectorsCore(sector, firstSafe, abort);
+				if (first != Device.CommandStatus.Success)
+					return first;
+				return FetchSectorsCore(sector + firstSafe, Sectors2Read - firstSafe, abort);
+			}
+			return FetchSectorsCore(sector, Sectors2Read, abort);
+		}
+
+		private unsafe Device.CommandStatus FetchSectorsCore(int sector, int Sectors2Read, bool abort)
 		{
 			Device.CommandStatus st;
 			// R118: a re-read of known trouble at low speed can exceed the fixed timeout while
