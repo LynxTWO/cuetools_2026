@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -71,7 +71,7 @@ public partial class ArtworkBrowserWindow : Window, INotifyPropertyChanged
             .OrderBy(candidate => candidate, ArtworkCandidateComparer.Recommended)
             .ToArray();
         for (int index = 0; index < candidates.Length; index++)
-            Rows.Add(new ArtworkCandidateViewModel(candidates[index], index, _service));
+            Rows.Add(new ArtworkCandidateViewModel(candidates[index], index, _service, new WpfArtworkPreviewFactory()));
         SelectedRow = Rows.FirstOrDefault(
             row => row.Candidate.CandidateId == _rip.SelectedArtwork?.CandidateId)
             ?? Rows.FirstOrDefault();

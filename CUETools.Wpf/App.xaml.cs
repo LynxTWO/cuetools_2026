@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
 using CUETools.Processor;
 using CUETools.Wpf.Mvvm;
@@ -135,6 +135,9 @@ public partial class App : Application
         services.AddSingleton<IFileDialogService, WpfFileDialogService>();
         services.AddSingleton<IUserPrompt, WpfUserPrompt>();
         services.AddSingleton<IUiDispatcher, WpfUiDispatcher>();
+        services.AddSingleton<IUiTimerFactory, WpfUiTimerFactory>();
+        services.AddSingleton<IArtworkPreviewFactory, WpfArtworkPreviewFactory>();
+        services.AddSingleton<IPlatformCapabilities, WpfPlatformCapabilities>();
 
         // Nav destinations, in display order. Registered as PageViewModel so MainViewModel
         // receives them as one ordered collection.
