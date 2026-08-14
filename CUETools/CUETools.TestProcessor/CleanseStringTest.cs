@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using CUETools.Processor;
 
 namespace CUETools.TestProcessor
@@ -32,6 +32,26 @@ namespace CUETools.TestProcessor
             Assert.AreEqual("_COM1", Cleanse("COM1"));
             Assert.AreEqual("_LPT9", Cleanse("LPT9"));
             Assert.AreEqual("_NUL.mp3", Cleanse("NUL.mp3")); // base is reserved even with an extension
+        }
+
+        [TestMethod]
+        public void WindowsInvalidCharactersCleanseOnEveryPlatform()
+        {
+            // The invalid set is contract-stable across heads: Linux allows
+            // ':' in filenames, but outputs and profiles move between heads
+            // and the lossless output proof rejects ':' everywhere. Observed
+            // live 2026-08-14: a colon-bearing track title passed Linux
+            // cleansing and failed a completed Test & Copy at the proof.
+            Assert.AreEqual("Suite_ Live", Cleanse("Suite: Live"));
+            Assert.AreEqual("What_", Cleanse("What?"));
+            Assert.AreEqual("_Quoted_", Cleanse("\"Quoted\""));
+            Assert.AreEqual("a_b", Cleanse("a*b"));
+            Assert.AreEqual("a_b", Cleanse("a<b"));
+            Assert.AreEqual("a_b", Cleanse("a>b"));
+            Assert.AreEqual("a_b", Cleanse("a|b"));
+            Assert.AreEqual("a_b", Cleanse("a\\b"));
+            Assert.AreEqual("a_b", Cleanse("a/b"));
+            Assert.AreEqual("a_b", Cleanse("a\u0001b"));
         }
 
         [TestMethod]
