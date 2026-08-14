@@ -1,6 +1,6 @@
 # CUETools Invariants
 
-Freshness: reviewed at commit `2a8df3e3` on 2026-08-09. Recheck after changes to `CLAUDE.md`, `Directory.Build.props`, `eng/ci`, `eng/release`, `eng/mutation`, plugin discovery, ripping evidence, or publication transactions.
+Freshness: reviewed at commit `2a8df3e3` on 2026-08-09; diff-refreshed at `6036896b` on 2026-08-14. Recheck after changes to `CLAUDE.md`, `Directory.Build.props`, `eng/ci`, `eng/release`, `eng/mutation`, plugin discovery, ripping evidence, or publication transactions.
 
 This file indexes load-bearing repo truth. `CLAUDE.md` is the canonical operating policy; the referenced tests and manifests are the falsifiers.
 
@@ -36,6 +36,21 @@ This file indexes load-bearing repo truth. `CLAUDE.md` is the canonical operatin
 - Rule: UI progress, animation, and notifications observe durable work and cannot change producer correctness or cleanup.
   - Evidence: `CLAUDE.md` UI and thread-affinity policy; WPF tests; `docs/review/r12-3d-disc-visualization-design.md`.
   - Confidence: verified for covered state contracts; rendered-window and allocation claims require UI/runtime measurements.
+
+## Linux Head and Transport (added 2026-08-14)
+
+- Rule: cross-process drive exclusion must hold on every supported OS; on Linux the lease takes an explicit advisory lock because file-share modes are not enforced between processes there.
+  - Evidence: `CUETools.App.Core/Services/OpticalDriveLease.cs`; live two-process denial receipt in the Linux head's SLICE-009 brief (a pre-fix run acquired a held drive concurrently).
+  - Confidence: verified live on Linux; Windows path unchanged and verified by prior behavior.
+- Rule: cache-defeat eviction reads use whole chunks only (the plan pads up); complete-or-explicit is preserved in the safe direction and no sense classification changes for shape avoidance.
+  - Evidence: `CUETools.Ripper.SCSI/SCSIDrive.cs` FlushCache; `docs/review/2026-08-13-plds-partial-chunk-abort.md`.
+  - Confidence: verified by a deterministic probe matrix and a completed 54-minute live verify.
+- Rule: drive quirk carve-outs bind to exact vendor/product/firmware identity and reshape requests rather than reinterpret failure codes (WH16NS40 08/0A retry; PLDS 15/2 batch split).
+  - Evidence: `CUETools.Ripper.SCSI/PayloadReadFailurePolicy.cs` and its tests; the finding receipts under `docs/review/`.
+  - Confidence: verified for the observed drives; any new identity requires its own probe evidence.
+- Rule: App.Core persistence serializes through source-generated contexts only; reflection serialization is disabled in every build of an AOT-publishing head, including debug runs.
+  - Evidence: `CUETools.App.Core/Services/StoreJsonContext.cs`; `GzJson.cs`; three live failures recorded in the Linux head's brief before the sweep.
+  - Confidence: verified for current stores; a new persisted root type must be registered or it fails at runtime.
 
 ## Mutation Evidence
 

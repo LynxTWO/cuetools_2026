@@ -30,9 +30,6 @@ Migrated gates begin disabled and proposed. Gate execution and flow-back are ref
 This calibration was migrated 2026-08-09 and then sat on an unmerged
 branch while the App.Core extraction wave and the Linux head landed.
 The binding (origin-hash) remains valid; the system map, coverage
-ledger, and gates predate those changes and need a pass-02 diff
-refresh before being trusted for navigation. Upstream candidates
+ledger, and gates predate those changes and received a pass-02 routing diff refresh on 2026-08-14 (system map, coverage, invariants). The deep maps under docs/architecture keep their own freshness stamps and were not recrawled here. Upstream candidates
 ADC-CUETOOLS-003 through 008 were added 2026-08-14 from the rip
-sprint. The old pre-overlay copy at .claude/skills/anti-dark-code is
-now a duplicate; removing it in favor of this canonical install is an
-open housekeeping decision.
+sprint. The old pre-overlay copy at .claude/skills/anti-dark-code was removed 2026-08-14; this install is canonical.

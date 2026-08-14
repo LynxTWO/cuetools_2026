@@ -1,6 +1,6 @@
 # CUETools System Map Calibration
 
-Freshness: reviewed at commit `2a8df3e3` on 2026-08-09.
+Freshness: reviewed at commit `2a8df3e3` on 2026-08-09; routing diff-refreshed at `6036896b` on 2026-08-14 (post history rewrite - all pre-rewrite hashes changed).
 
 The canonical detailed maps remain:
 
@@ -14,8 +14,9 @@ This calibration records routing and authority rather than copying those documen
 | Unit | Purpose and entrypoints | Primary evidence | Boundary |
 |---|---|---|---|
 | CUETools 2026 WPF | Rip, Verify and Repair, Convert, settings, queue, report, multi-drive sessions | `CUETools.Wpf`; `CUETools.Wpf.Tests` | UI is observational; operations own state and devices |
+| CUETools.App.Core (new since 2026-08-12) | Platform-neutral application core: verify, convert, queue, settings, encoder catalog, album art, calibration, and the full rip service stack plus their view models | `CUETools.App.Core`; consumed by `CUETools.Wpf` and by the external Linux head (LynxTWO/cuetools-linux pins this repo as a submodule) | no WPF or Windows-only APIs; platform behavior enters only through `Services/Platform` seams; WMA joins the output-verification evaluator by name-identity gate |
 | Classic CUETools and CUEPlayer | Legacy desktop and CLI compatibility | `CUETools.sln`; classic release manifest | .NET Framework, C++/CLI, installer, and binary compatibility |
-| Processor, CD image, ripper, and SCSI | Audio pipeline, secure reads, evidence, repair orchestration | `CUETools.Processor`; `CUETools.CDImage`; `CUETools.Ripper*`; `Bwg.Scsi` | hardware, cache, transport, CTDB, AccurateRip |
+| Processor, CD image, ripper, and SCSI | Audio pipeline, secure reads, evidence, repair orchestration; Linux SG_IO transport behind the same SendCommand funnel (`Bwg.Scsi/LinuxSg.cs`); drive-identity-scoped quirk policies | `CUETools.Processor`; `CUETools.CDImage`; `CUETools.Ripper*`; `Bwg.Scsi` (neutral net8.0 flavors) | hardware, cache, transport, CTDB, AccurateRip; per-drive carve-outs bound to exact vendor/product/firmware |
 | Codec plugins and external encoders | Managed, native, plugin, and process-backed transforms | codec projects; plugin discovery; release encoder manifests | ABI, process finalization, licensing, provenance |
 | Metadata and artwork providers | Release selection, tags, artwork discovery and ranking | WPF services and tests; artwork plan | network, provider policy, credentials, bounded image input |
 | Build, CI, mutation, and release | Deterministic tests, warning policy, mutation profiles, artifacts, signing, SBOMs | `eng/ci`; `eng/mutation`; `eng/release`; `.github/workflows` | toolchains, hosted runners, signing control plane |
