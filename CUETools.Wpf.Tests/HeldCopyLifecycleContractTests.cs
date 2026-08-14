@@ -37,7 +37,7 @@ public sealed class HeldCopyLifecycleContractTests
     [TestMethod]
     public void RipViewModel_ParksTheHeldCopyInsteadOfDeletingIt()
     {
-        string source = Source("CUETools.Wpf", "ViewModels", "RipViewModel.cs");
+        string source = Source("CUETools.App.Core", "ViewModels", "RipViewModel.cs");
 
         StringAssert.Contains(source, "_parkedHeldResult = _heldResult;",
             "a tray/disc-view clear parks the held result");

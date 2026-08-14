@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CUETools.Wpf.Tests;
@@ -18,13 +18,13 @@ public sealed class RereadVerdictContractTests
         string root = DeadSwitchAnalyzer.FindRepoRoot(System.AppContext.BaseDirectory);
         Assert.IsNotNull(root);
         string source = File.ReadAllText(
-            Path.Combine(root, "CUETools.Wpf", "ViewModels", "RipViewModel.cs"));
+            Path.Combine(root, "CUETools.App.Core", "ViewModels", "RipViewModel.cs"));
 
         StringAssert.Contains(source, "bool failed = r.WindowGivenUpSectors > 0;",
             "the unreadable/stop latch must key on the engine's give-up verdict");
         Assert.IsFalse(source.Contains(">= RereadMax && errs > 0"),
             "the legacy mid-pass latch (reread threshold on a running error count) must not return");
-        Assert.AreEqual(1, CountOf(source, "MakeRereadHandler(System.Windows.Threading.Dispatcher"),
+        Assert.AreEqual(1, CountOf(source, "private Action<RereadReport> MakeRereadHandler()"),
             "exactly one shared reread handler; the two job paths must not fork the latch again");
     }
 
