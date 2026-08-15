@@ -24,7 +24,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-003: OS-enforced exclusion semantics do not port
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/07-adversarial-review.md (finding-class verification), with the reviewing skeptic's corrected wording
 - Scope: repo-agnostic
 - Lesson: A mutual-exclusion or file-locking mechanism that relies on one
   operating system's enforced semantics (for example, mandatory file-share
@@ -47,7 +47,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-004: build-mode flags change dev-build runtime capabilities
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/14-deterministic-verification.md (capability-restricting build flags), with the reviewing skeptic's corrected wording
 - Scope: repo-agnostic
 - Lesson: A build or publish configuration flag can alter the runtime
   capability set of builds that never ship (for example, an
@@ -71,7 +71,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-005: characterize hardware quirks before classifying them
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/11-remediation-loop.md (characterizing a component outside the repo), with the reviewing skeptic's corrected wording
 - Scope: hardware-facing repos
 - Lesson: When a device rejects an operation, run a minimal deterministic
   probe matrix (vary one command parameter at a time, at several
@@ -97,7 +97,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-006: full-cmdline process matching kills the agent's own shell
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/10-maintenance-harness.md (self-matching process selectors), with the reviewing skeptic's corrected wording
 - Scope: agent-harness operations
 - Lesson: Agent harnesses execute shell commands wrapped in an
   interpreter whose command line contains the command text itself, so
@@ -117,7 +117,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-007: tests that read source by path join the move checklist
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/11-remediation-loop.md (moves and extractions), with the reviewing skeptic's corrected wording
 - Scope: repo-agnostic
 - Lesson: Contract tests that read source files from disk (asserting
   ordering, patterns, or invariants in the text) fail on file moves and
@@ -137,7 +137,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-008: history rewrites are receipt events
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/09-artifact-gc.md (history rewrites and other identifier changes), with the reviewing skeptic's corrected wording
 - Scope: repo-agnostic (evidence-keeping repos)
 - Lesson: Rewriting version-control history invalidates every recorded
   commit hash in docs and receipts, orphans any submodule pinned to
@@ -162,7 +162,7 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
 
 ## ADC-CUETOOLS-009: a binary platform split fails open on the third platform
 
-- Status: ready
+- Status: promoted 2026-08-15 to references/07-adversarial-review.md (dogfeeding targets), with the reviewing skeptic's corrected wording
 - Scope: repo-agnostic (any multi-platform codebase)
 - Lesson: Guards written as "if not Windows then Linux" (or any
   two-platform else-branch) silently route a third platform down a path
