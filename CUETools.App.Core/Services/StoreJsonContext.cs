@@ -16,6 +16,7 @@ namespace CUETools.Wpf.Services;
 [JsonSerializable(typeof(Dictionary<string, DriveCalibration>))]
 [JsonSerializable(typeof(Dictionary<string, List<VerifyRecord>>))]
 [JsonSerializable(typeof(List<HistoryStore.Row>))]
+[JsonSerializable(typeof(Dictionary<string, List<DriveRecoveryIncident>>))]
 internal sealed partial class StoreJsonContext : JsonSerializerContext
 {
 }
