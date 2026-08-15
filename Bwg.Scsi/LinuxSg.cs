@@ -21,12 +21,24 @@ namespace Bwg.Scsi
     public static class LinuxSg
     {
         /// <summary>
-        /// True when running on a Unix-family OS (the platform split used by
-        /// WinDev and Device).
+        /// True exactly when the Linux SG_IO transport applies (the platform
+        /// split used by WinDev and Device). On modern TFMs this asks the
+        /// runtime precisely: PlatformID.Unix alone also matches macOS, which
+        /// has no /dev/srN or SG_IO and must fail closed in WinDev.Open
+        /// instead of walking the Linux path.
         /// </summary>
         public static bool IsLinux
         {
-            get { return Environment.OSVersion.Platform == PlatformID.Unix; }
+            get
+            {
+#if NETFRAMEWORK
+                // Legacy Windows-only TFMs (net20/net47): keep the historical
+                // check; RuntimeInformation is not available on net20.
+                return Environment.OSVersion.Platform == PlatformID.Unix;
+#else
+                return RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+#endif
+            }
         }
 
         // From scsi/sg.h.

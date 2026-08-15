@@ -117,6 +117,17 @@ internal class OpticalDriveLease : IDisposable
         string rootDirectory,
         IReadOnlyList<string> keys)
     {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+        {
+            // Cross-process exclusion is real on Windows (sharing modes) and
+            // Linux (advisory lock) only. Elsewhere the FileShare mode is not
+            // enforced between processes and FileStream.Lock is unsupported,
+            // so a lease taken here would exclude nobody. Scarce hardware
+            // must not be handed to two jobs at once: fail closed.
+            throw new PlatformNotSupportedException(
+                "Optical drive leasing has Windows and Linux implementations only.");
+        }
+
         string fullRoot = Path.GetFullPath(rootDirectory);
         Directory.CreateDirectory(fullRoot);
         var paths = new string[keys.Count];
@@ -154,8 +165,9 @@ internal class OpticalDriveLease : IDisposable
                         // processes, so exclusion comes from an explicit
                         // advisory lock; a conflict throws and is treated
                         // exactly like a Windows sharing violation.
-                        // (FileStream.Lock is unsupported on macOS, which
-                        // this project does not target.)
+                        // (FileStream.Lock is unsupported on macOS; the
+                        // method-top guard fails closed before this point
+                        // on any platform without an exclusion mechanism.)
                         try
                         {
                             stream.Lock(0, 1);
@@ -353,6 +365,15 @@ internal class OpticalDriveLease : IDisposable
 
         internal static string TryResolve(char drive)
         {
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            {
+                // No physical-identity resolver exists for this OS. Returning
+                // "" would silently downgrade the lease to letter-only
+                // exclusion, so refuse instead (the lease guard fails closed
+                // first in practice; this keeps the API honest on its own).
+                throw new PlatformNotSupportedException(
+                    "Optical drive physical identity has Windows and Linux resolvers only.");
+            }
             if (!OperatingSystem.IsWindows())
             {
                 // Linux letters map 1:1 to kernel sr numbers (the transport's
