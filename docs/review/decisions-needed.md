@@ -263,6 +263,22 @@ Original decision record:
   damaged-disc grinding session aimed at catching the wedge live with
   full failure context; option (b) (evidence-gated device reset) waits
   on that evidence.
+- **Option (b) closed by live evidence (2026-08-14 late).** The
+  grinding session reproduced the wedge on the ASUS within ~24 minutes
+  and it was probed while stuck: INQUIRY answers GOOD while TEST UNIT
+  READY, READ TOC, and READ CD all return one canned
+  IllegalRequest/24/00 in 4 ms (an all-zero TUR CDB has no field to be
+  invalid), the kernel sees nothing, and the state survives a SCSI
+  device reset, an undeliverable host reset, a kernel-confirmed USB
+  port reset, and a full cable replug with power maintained. Only an
+  enclosure power cycle cured it. No host-side reset can work and the
+  app is unprivileged besides: there is nothing for an engine recovery
+  command to do. The shipped message now leads with the power cycle.
+  Full ladder and sense capture:
+  `docs/review/2026-08-14-usb-wedge-finding.md`. The follow-up is
+  user guidance (a verified physical ladder dialog + per-drive
+  incident memory), parked as the SLICE-011 candidate in the Linux
+  repository.
 
 ### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 
