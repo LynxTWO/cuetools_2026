@@ -138,6 +138,17 @@ namespace Bwg.Scsi
         }
 
         /// <summary>
+        /// Issue an ioctl whose argument is a pointer to a caller-owned buffer,
+        /// for example CDROMREADTOCHDR's two-byte first/last track header. The
+        /// caller owns the buffer's lifetime and size. Returns the raw ioctl
+        /// result; errno via Marshal.GetLastWin32Error().
+        /// </summary>
+        public static int SendBufferIoctl(int fd, uint request, IntPtr arg)
+        {
+            return sys_ioctl_bare(fd, (UIntPtr)request, arg);
+        }
+
+        /// <summary>
         /// The block-device node for a drive letter (/dev/srN), or null when
         /// the sr device does not exist. The CDROM ioctls (tray control) talk
         /// to this node, not the sg alias.

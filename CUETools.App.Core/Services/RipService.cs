@@ -17,6 +17,16 @@ public sealed class VerifyResult
     public bool Ok { get; init; }
     public string Status { get; init; } = "";
     public string Error { get; init; } = "";
+    /// <summary>Empty unless this failure was the characterized stuck-drive state:
+    /// "cache-defeat" or "payload-storm", the two DriveRecoveryIncident triggers.
+    /// Classification only - it suppresses no throw and changes no verdict.</summary>
+    public string DriveStuckTrigger { get; init; } = "";
+    /// <summary>Drive signature the incident store keys on, normalized exactly like
+    /// the calibration store. Empty when INQUIRY never produced one, which means
+    /// run the ladder but persist nothing.</summary>
+    public string DriveSignature { get; init; } = "";
+    /// <summary>Scrubbed reader counters at the moment of failure.</summary>
+    public string DriveStuckContext { get; init; } = "";
     public int ArConfidence { get; init; }
     public int ArTotal { get; init; }
     public int CtdbConfidence { get; init; }
@@ -98,6 +108,13 @@ public sealed class TestCopyRunResult
 {
     public bool Ok { get; init; }
     public string Error { get; init; } = "";
+    /// <summary>See VerifyResult.DriveStuckTrigger. Also set on a Held result whose
+    /// confirming read hit the stuck drive: that path reports Ok = true, so a
+    /// consumer gating recovery on failure alone would miss the case where a
+    /// completed Copy is at stake.</summary>
+    public string DriveStuckTrigger { get; init; } = "";
+    public string DriveSignature { get; init; } = "";
+    public string DriveStuckContext { get; init; } = "";
     /// <summary>
     /// Why a completed Copy was held instead of committed. Empty means all requested
     /// reads completed and their checksum disagreement alone caused the hold.
@@ -422,7 +439,9 @@ public sealed class RipService : IRipService
         $"concealed_frames={reader.ConcealedFrameCount} " +
         $"extended_timeout_reads={reader.ExtendedTimeoutReadCount} " +
         $"short_payload_transfers={reader.ShortPayloadTransferCount} " +
-        $"given_up_windows={reader.GivenUpWindowCount}";
+        $"given_up_windows={reader.GivenUpWindowCount} " +
+        $"cache_defeat_unresponsive_signature={reader.CacheDefeatUnresponsiveSignature} " +
+        $"payload_rejection_storm_fatal={reader.PayloadRejectionStormFatalCount}";
 
     // R122: AccurateRipVerify can only build the fingerprint from a complete stream, so this
     // never throws outward - an unavailable measurement is an empty string, never a guess.
@@ -1283,6 +1302,27 @@ public sealed class RipService : IRipService
             // needed exactly this evidence and completed-only logging withheld it.
             try { _log.Info("rip", "counters at failure: " + ReaderCounterTelemetry(reader)); }
             catch { }
+            // Classify the stuck-drive state post-mortem (SLICE-011). The reader is
+            // still open here and unreachable after the finally, so this is the only
+            // place the drive's own flags can be read. Storm wins when both are set:
+            // the cache-defeat thrower fires the instant FlushCache fails, so a run
+            // that reached a storm cannot also carry an unthrown cache-defeat
+            // signature (inferred from the throw sites, not measured). Nothing here
+            // changes the verdict - a throw already happened and stands.
+            string stuckTrigger = "", stuckSignature = "", stuckContext = "";
+            try
+            {
+                if (reader.PayloadRejectionStormFatalCount > 0)
+                    stuckTrigger = "payload-storm";
+                else if (reader.CacheDefeatUnresponsiveSignature)
+                    stuckTrigger = "cache-defeat";
+                if (stuckTrigger.Length > 0)
+                {
+                    stuckSignature = (reader.ARName ?? "").Trim();
+                    stuckContext = ReaderCounterTelemetry(reader);
+                }
+            }
+            catch { }
             string incomplete = "";
             if (publication != null && !publication.IsPublished)
             {
@@ -1301,6 +1341,9 @@ public sealed class RipService : IRipService
             {
                 Error = ex.Message + (string.IsNullOrEmpty(incomplete)
                     ? "" : " Incomplete output was retained at: " + incomplete),
+                DriveStuckTrigger = stuckTrigger,
+                DriveSignature = stuckSignature,
+                DriveStuckContext = stuckContext,
             };
         }
         finally
@@ -1487,6 +1530,18 @@ public sealed class RipService : IRipService
         bool keepStaging = false;   // set true only when we return a HELD result the VM must clean up
         TestCopyRunResult Fail(string error) =>
             BuildTestCopyFailure(_log, sw.Elapsed, phase, error);
+        // Read failures carry the stuck-drive classification through to the caller
+        // so the recovery affordance can appear; every other Fail("...") caller is
+        // a policy or staging refusal that no drive recovery would help.
+        TestCopyRunResult FailFromRead(VerifyResult read) =>
+            BuildTestCopyFailure(
+                _log,
+                sw.Elapsed,
+                phase,
+                read.Error,
+                read.DriveStuckTrigger,
+                read.DriveSignature,
+                read.DriveStuckContext);
 
         Action<double, string> WithLabel(string label) => (frac, msg) => onProgress(frac, label + ": " + msg);
         // One completed read's database verdict (R120), so the Test phase reports what it found
@@ -1557,7 +1612,7 @@ public sealed class RipService : IRipService
             ThrowIfStopRequested();
             var testResult = Run(drive, rq, encode: false, "flac", metadata, "", WithLabel("Test read (1 of 2)"), telemetry, onReread, coverArt: null, stageOnly: true, forceCacheDefeat: true, salvage: salvage, outputLayout: outputLayout, onTrackCrc: onTrackCrc);
             PublishReadVerdict(0, "Test", testResult);
-            if (!testResult.Ok) return Fail(testResult.Error);
+            if (!testResult.Ok) return FailFromRead(testResult);
             VerifyRecord? testRecord = testResult.Record;
             if (testRecord == null)
                 return Fail("Test read completed without checksum evidence.");
@@ -1573,7 +1628,7 @@ public sealed class RipService : IRipService
             ThrowIfStopRequested();   // between reads: no CUESheet exists for Stop() to reach
             var copyResult = Run(drive, rq, encode: true, fmt, metadata, stage1, WithLabel("Copy read (2 of 2)"), telemetry, onReread, coverArt, stageOnly: true, forceCacheDefeat: true, salvage: salvage, onEncodeStart: onEncodeStart, outputLayout: outputLayout, onTrackCrc: onTrackCrc);
             PublishReadVerdict(1, "Copy", copyResult);
-            if (!copyResult.Ok) return Fail(copyResult.Error);
+            if (!copyResult.Ok) return FailFromRead(copyResult);
             VerifyRecord? copyRecord = copyResult.Record;
             if (copyRecord == null)
                 return Fail("Copy read completed without checksum evidence.");
@@ -1632,9 +1687,17 @@ public sealed class RipService : IRipService
                     _log.Warn(
                         "rip",
                         "confirming read failed after a complete staged Copy; holding the Copy instead of deleting it");
+                    // This Held result reports Ok = true, so the stuck-drive
+                    // classification must ride along or the recovery affordance
+                    // would be absent on the one path where a completed Copy is
+                    // already staged and waiting.
                     return BuildHeld(
                         resolve.HeldTracks,
-                        "Confirming read failed: " + thirdResult.Error);
+                        "Confirming read failed: " + thirdResult.Error,
+                        honorStop: true,
+                        driveStuckTrigger: thirdResult.DriveStuckTrigger,
+                        driveSignature: thirdResult.DriveSignature,
+                        driveStuckContext: thirdResult.DriveStuckContext);
                 }
                 VerifyRecord? thirdRecord = thirdResult.Record;
                 if (thirdRecord == null)
@@ -1684,7 +1747,10 @@ public sealed class RipService : IRipService
             TestCopyRunResult BuildHeld(
                 int[] heldTracks,
                 string holdReason = "",
-                bool honorStop = true)
+                bool honorStop = true,
+                string driveStuckTrigger = "",
+                string driveSignature = "",
+                string driveStuckContext = "")
             {
                 // A stop before any completed Copy exists cancels the album outright. Once a
                 // completed Copy is staged, the confirm-phase callers pass honorStop: false -
@@ -1724,6 +1790,9 @@ public sealed class RipService : IRipService
                     CtdbRepairWorstStripe = copyResult.CtdbRepairWorstStripe,
                     CtdbRepairStripeCapacity = copyResult.CtdbRepairStripeCapacity,
                     FailedWindows = failedWindows,
+                    DriveStuckTrigger = driveStuckTrigger,
+                    DriveSignature = driveSignature,
+                    DriveStuckContext = driveStuckContext,
                     RepairSourceRelativePath =
                         GetRepairSourceRelativePath(copyResult),
                     Accurate = (last?.ArConfidence ?? 0) > 0,
@@ -1933,7 +2002,10 @@ public sealed class RipService : IRipService
         IDiagnosticLog log,
         TimeSpan elapsed,
         string phase,
-        string error)
+        string error,
+        string driveStuckTrigger = "",
+        string driveSignature = "",
+        string driveStuckContext = "")
     {
         string outcome = error == "Stopped." ? "stopped" : "failed";
         try
@@ -1946,7 +2018,13 @@ public sealed class RipService : IRipService
         {
             // A diagnostic observer cannot turn a completed failure path into a throw.
         }
-        return new TestCopyRunResult { Error = error };
+        return new TestCopyRunResult
+        {
+            Error = error,
+            DriveStuckTrigger = driveStuckTrigger,
+            DriveSignature = driveSignature,
+            DriveStuckContext = driveStuckContext,
+        };
     }
 
     /// <summary>
