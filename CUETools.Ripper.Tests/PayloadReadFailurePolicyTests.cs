@@ -691,5 +691,37 @@ namespace CUETools.Ripper.Tests
                 Assert.AreEqual(next, chunk);
             }
         }
+
+        [TestMethod]
+        public void UnresponsiveSignatureNeedsExhaustedShapesAndSpentWake()
+        {
+            // The observed USB stuck state: shapes exhausted after the wake.
+            Assert.IsTrue(
+                PayloadReadFailurePolicy.IsUnresponsiveDriveSignature(true, 1));
+            // Exhausted shapes before the wake ran are not terminal yet.
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.IsUnresponsiveDriveSignature(true, 0));
+            // Any non-invalid-field failure mix never carries the signature,
+            // wake or no wake.
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.IsUnresponsiveDriveSignature(false, 0));
+            Assert.IsFalse(
+                PayloadReadFailurePolicy.IsUnresponsiveDriveSignature(false, 1));
+        }
+
+        [TestMethod]
+        public void UnresponsiveGuidanceNamesTheOnlyKnownCure()
+        {
+            // The message must tell the user the one action that has ever
+            // cleared the state, and must scope the claim to what was
+            // observed (USB, damaged-media recovery).
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "eplug");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "USB");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance,
+                "single sectors");
+        }
     }
 }

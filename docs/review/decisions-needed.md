@@ -214,7 +214,7 @@ Original decision record:
 
 Original decision record:
 
-### D11. USB drive wedge under recovery grinding - OPEN 2026-08-14
+### D11. USB drive wedge under recovery grinding - DECIDED 2026-08-14 (message shipped, investigation continues)
 
 - **Observation (live, twice):** both USB-attached drives have entered a
   reject-everything-24/00 state (even READ TOC and kernel reads) during or
@@ -241,6 +241,28 @@ Original decision record:
   informative: damage-grinding stays in the wedge's causal chain and
   the bridge-only hypothesis weakens. A complete clean-disc run after
   the cleansing fix finishes the experiment.
+- **Repro complete (2026-08-14 21:40): clean media does not wedge.** The
+  rerun on the fixed build ran the full Paranoid cache-defeated Test &
+  Copy on the same USB drive end to end and published under the complete
+  contract (both databases report the rip accurate; Test and Copy CRCs
+  identical on every track). A second clean disc ran the same mode on
+  the SATA drive concurrently, also published. No drive entered the
+  wedge state at any point. Two failed clean-media repros leave
+  extended damaged-media recovery as the implicated trigger, on USB
+  bridges only.
+- **Resolution (owner, 2026-08-14): option (a) now, and keep
+  investigating.** The fatal cache-defeat failure gains a plain-English
+  stuck-drive message when the exact terminal signature appears (every
+  region and shape down to one sector rejected 24/00 and the one
+  permitted wake spent):
+  `PayloadReadFailurePolicy.IsUnresponsiveDriveSignature` +
+  `UnresponsiveDriveGuidance`, surfaced by `SCSIDrive.FlushCache`'s
+  thrower and recorded as `unresponsive-signature=yes` in the scrubbed
+  failure context. Classification only; no retry policy or recovery
+  command changes. D11 stays under investigation via a deliberate
+  damaged-disc grinding session aimed at catching the wedge live with
+  full failure context; option (b) (evidence-gated device reset) waits
+  on that evidence.
 
 ### D10. PLDS partial-tail payload batches - RESOLVED 2026-08-14 (drive-scoped avoidance)
 
