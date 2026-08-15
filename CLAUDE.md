@@ -142,6 +142,10 @@ progress documents for it belong here, under `docs/review/`.
   child command shapes may then mark only that address untrusted. Never consume a
   rejected payload. Every different child failure remains fatal with its exact sector
   and sense context. Count successful batch fallbacks and corroborated pinpoints.
+  A sustained storm of fully corroborated `24/00` decompositions with no
+  intervening successful read or genuine per-sector sense is the characterized
+  stuck-drive state, not media evidence: it fails fatally with the power-cycle
+  guidance instead of mass-marking sectors untrusted, and it is counted.
 - Cache defeat is complete or explicit. If every unrelated region rejects the
   normal multi-sector `READ CD` shape with exact `IllegalRequest / 24/00`, reduce
   the transfer chunk deterministically down to one sector while preserving the

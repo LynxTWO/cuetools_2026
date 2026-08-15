@@ -481,5 +481,87 @@ namespace CUETools.Ripper.SCSI
             "cycle has cleared it. Power the drive off and on (for external " +
             "drives, replugging the USB cable alone may not be enough), then " +
             "retry; the disc and any completed evidence are unaffected.";
+
+        /// <summary>
+        /// Detects the stuck-drive state during ordinary payload reads
+        /// (SLICE-011 S11-006). On a wedged drive every rejected batch
+        /// decomposes and every child ends as a corroborated 24/00 pinpoint,
+        /// so without this the per-address untrusted rule would mass-mark a
+        /// healthy disc as damage, batch after batch. A storm is called only
+        /// on sustained, fully-corroborated consecutive batches with zero
+        /// signs of drive life between them; any successful payload read or
+        /// any genuine per-sector sense (a medium error) resets it, so the
+        /// documented single-address 24/00 carve-outs can never trip it.
+        /// The tracker classifies for a fatal message; it authorizes nothing.
+        /// </summary>
+        public sealed class PayloadRejectionStormTracker
+        {
+            /// <summary>Consecutive fully-corroborated decomposed batches
+            /// required before the storm is called.</summary>
+            public const int MinimumFullyCorroboratedBatches = 2;
+            /// <summary>Total corroborated pinpoints required, so a run of
+            /// tiny window-tail batches needs more than two data points.</summary>
+            public const int MinimumCorroboratedPinpoints = 4;
+
+            private int _fullyCorroboratedBatches;
+            private int _corroboratedPinpoints;
+            private bool _inBatch;
+            private int _currentBatchSectors;
+            private int _currentBatchCorroborated;
+
+            /// <summary>A rejected multi-sector batch is starting its
+            /// single-sector decomposition.</summary>
+            public void BeginRejectedBatch(int sectors)
+            {
+                _inBatch = true;
+                _currentBatchSectors = sectors;
+                _currentBatchCorroborated = 0;
+            }
+
+            /// <summary>A child pinpoint ended as corroborated-untrusted
+            /// (identical 24/00 after the bounded retry).</summary>
+            public void RecordCorroboratedPinpoint()
+            {
+                if (_inBatch)
+                    _currentBatchCorroborated++;
+                _corroboratedPinpoints++;
+            }
+
+            /// <summary>Any evidence the drive is alive: a successful payload
+            /// transfer (batch, child, or retry) or a genuine per-sector
+            /// medium-error sense. Resets the storm completely.</summary>
+            public void RecordDriveResponsive()
+            {
+                _fullyCorroboratedBatches = 0;
+                _corroboratedPinpoints = 0;
+                _inBatch = false;
+                _currentBatchSectors = 0;
+                _currentBatchCorroborated = 0;
+            }
+
+            /// <summary>The decomposition loop finished. Folds the batch into
+            /// the storm state when every child was corroborated.</summary>
+            public void CompleteBatch()
+            {
+                if (_inBatch &&
+                    _currentBatchSectors > 0 &&
+                    _currentBatchCorroborated == _currentBatchSectors)
+                {
+                    _fullyCorroboratedBatches++;
+                }
+                _inBatch = false;
+                _currentBatchSectors = 0;
+                _currentBatchCorroborated = 0;
+            }
+
+            public bool IsStorm =>
+                _fullyCorroboratedBatches >= MinimumFullyCorroboratedBatches &&
+                _corroboratedPinpoints >= MinimumCorroboratedPinpoints;
+
+            /// <summary>Scrubbed counters for the fatal failure context.</summary>
+            public string DescribeForFailureContext() =>
+                "storm-batches=" + _fullyCorroboratedBatches +
+                "; storm-pinpoints=" + _corroboratedPinpoints;
+        }
     }
 }
