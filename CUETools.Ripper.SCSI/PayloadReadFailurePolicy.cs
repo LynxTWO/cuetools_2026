@@ -449,5 +449,35 @@ namespace CUETools.Ripper.SCSI
                 return 0;
             return System.Math.Max(1, currentSectorCount / 2);
         }
+
+        /// <summary>
+        /// The stuck-drive signature: every bounded eviction address and
+        /// transfer shape, down to a single sector, ended in the exact
+        /// invalid-field rejection, and the one permitted dormant-drive wake
+        /// has already been spent. Observed live on both USB matrix drives
+        /// after extended damaged-media recovery (2026-08-13/14); the SATA
+        /// drive has never shown it, and only a power cycle or replug has
+        /// ever cleared it. This classifies the terminal state for the fatal
+        /// message; it never authorizes a read and changes no retry policy.
+        /// </summary>
+        public static bool IsUnresponsiveDriveSignature(
+            bool exhaustedInvalidFieldShapes,
+            int wakeAttempts)
+        {
+            return exhaustedInvalidFieldShapes && wakeAttempts >= 1;
+        }
+
+        /// <summary>
+        /// Plain-English guidance appended to the fatal cache-defeat failure
+        /// when the stuck-drive signature is present. The wording lives beside
+        /// the classifier so tests pin the two together.
+        /// </summary>
+        public const string UnresponsiveDriveGuidance =
+            "The drive is rejecting every read shape, down to single sectors, " +
+            "in regions it read successfully before. This stuck state has been " +
+            "observed on USB drives after extended recovery of damaged media, " +
+            "and only power-cycling or replugging the drive has cleared it. " +
+            "Replug the drive and retry; the disc and any completed evidence " +
+            "are unaffected.";
     }
 }

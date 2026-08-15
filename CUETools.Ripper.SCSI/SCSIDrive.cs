@@ -74,6 +74,7 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatWakeCount;
 		private int _cacheDefeatWakeReadinessRetryCount;
 		private int _cacheDefeatWakeReadinessIndeterminateCount;
+		private bool _cacheDefeatUnresponsiveSignature;
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _readCommunicationRetryCount;
@@ -99,6 +100,10 @@ namespace CUETools.Ripper.SCSI
 			_cacheDefeatWakeReadinessRetryCount;
 		public int CacheDefeatWakeReadinessIndeterminateCount =>
 			_cacheDefeatWakeReadinessIndeterminateCount;
+		/// <summary>True when the last failed cache defeat ended in the observed USB
+		/// stuck-drive state: every shape down to one sector rejected with the exact
+		/// invalid-field signature and the one permitted wake already spent (D11).</summary>
+		public bool CacheDefeatUnresponsiveSignature => _cacheDefeatUnresponsiveSignature;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
@@ -2180,6 +2185,7 @@ namespace CUETools.Ripper.SCSI
 		{
 			if (_cacheDefeatBytes <= 0 || _toc == null) return true;
 			_cacheDefeatJustFlushed = false;
+			_cacheDefeatUnresponsiveSignature = false;
 			string failure = "no usable in-program cache-defeat region";
 			int attemptedRegions = 0;
 			int transientRetries = 0;
@@ -2344,6 +2350,15 @@ namespace CUETools.Ripper.SCSI
 								else
 									failure = wakeFailure;
 							}
+							// Terminal-state classification only (no policy change):
+							// exhausted shapes surviving the one permitted wake is the
+							// observed USB stuck-drive signature, and the fatal message
+							// should say so in plain English.
+							if (!retryAfterWake)
+								_cacheDefeatUnresponsiveSignature =
+									PayloadReadFailurePolicy.IsUnresponsiveDriveSignature(
+										exhaustedInvalidFieldShapes,
+										wakeAttempts);
 						}
 						while (retryAfterWake);
 					}
@@ -2362,7 +2377,8 @@ namespace CUETools.Ripper.SCSI
 				$"wake-readiness-retries={wakeReadinessRetries}; " +
 				$"max-wake-readiness-retries=1; " +
 				$"wake-readiness-indeterminate={wakeReadinessIndeterminate}; " +
-				$"max-wake-readiness-indeterminate=1";
+				$"max-wake-readiness-indeterminate=1; " +
+				$"unresponsive-signature={(_cacheDefeatUnresponsiveSignature ? "yes" : "no")}";
 			return false;
 		}
 
@@ -2486,6 +2502,9 @@ namespace CUETools.Ripper.SCSI
 				if (_cacheDefeatBytes > 0 && pass >= 1 && !FlushCache())
 					throw new ReadCDException(
 						"Drive-cache flush failed; the secure re-read could not be proven independent. " +
+						(_cacheDefeatUnresponsiveSignature
+							? PayloadReadFailurePolicy.UnresponsiveDriveGuidance + " "
+							: "") +
 						_cacheDefeatFailure);
 				DateTime PassTime = DateTime.Now, LastFetch = DateTime.Now;
 
