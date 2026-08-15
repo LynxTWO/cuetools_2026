@@ -331,6 +331,32 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void AProbeThatCannotClaimTheDriveNeverReportsAWedge()
+        {
+            // Constructed without a log, the Linux probe cannot claim the drive
+            // and so must refuse to open it. The danger this guards is not the
+            // refusal but its shape: falling through to the timeout would report
+            // StillUnresponsive for a drive that was never probed, which is a
+            // false wedge verdict on healthy hardware.
+            var probe = new LinuxDriveRecoveryProbe();
+            DriveRecoveryProbeReport report = probe
+                .VerifyRungAsync(
+                    new DriveRecoveryFingerprint
+                    {
+                        Letter = 'B',
+                        SrNode = "sr1",
+                        Vendor = "V",
+                        Model = "M",
+                    },
+                    TimeSpan.Zero)
+                .GetAwaiter()
+                .GetResult();
+            Assert.AreNotEqual(DriveRecoveryProbeResult.StillUnresponsive, report.Result);
+            Assert.AreNotEqual(DriveRecoveryProbeResult.Responsive, report.Result);
+            Assert.AreNotEqual(DriveRecoveryProbeResult.NoDisc, report.Result);
+        }
+
+        [TestMethod]
         public void TheUnsupportedProbeNeverClaimsACure()
         {
             var probe = new UnsupportedDriveRecoveryProbe();

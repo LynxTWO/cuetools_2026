@@ -34,18 +34,26 @@ public sealed class LinuxDriveRecoveryProbe : IDriveRecoveryProbe
     private const int ENOENT = 2;
 
     private readonly Func<int, bool> _delayMs;
+    private readonly IDiagnosticLog? _log;
 
-    /// <summary>Production constructor: real waiting between polls.</summary>
-    public LinuxDriveRecoveryProbe()
-        : this(ms => { Thread.Sleep(ms); return true; })
+    /// <summary>
+    /// Production constructor. The log is required to verify a rung, because
+    /// claiming the drive needs one and this probe never opens a device it has
+    /// not claimed. Constructing without one yields an identity-only probe:
+    /// Snapshot works (it reads sysfs and touches no device) and rung
+    /// verification honestly reports Unverified.
+    /// </summary>
+    public LinuxDriveRecoveryProbe(IDiagnosticLog? log = null)
+        : this(ms => { Thread.Sleep(ms); return true; }, log)
     {
     }
 
     /// <summary>Test seam: the poll delay is injected so a suite never sleeps.
     /// Returning false ends the watch immediately.</summary>
-    internal LinuxDriveRecoveryProbe(Func<int, bool> delayMs)
+    internal LinuxDriveRecoveryProbe(Func<int, bool> delayMs, IDiagnosticLog? log = null)
     {
         _delayMs = delayMs;
+        _log = log;
     }
 
     public bool CanVerify => OperatingSystem.IsLinux();
@@ -107,10 +115,15 @@ public sealed class LinuxDriveRecoveryProbe : IDriveRecoveryProbe
             {
                 DriveRecoveryProbeReport probe = ProbeNode(sr, sawAbsent);
                 // Only a decided verdict ends the watch. A drive mid-reset can
-                // answer ENODEV/ENOMEDIUM transiently while it settles.
+                // answer ENODEV transiently while it settles, so absence keeps
+                // polling. Unverified is terminal for a different reason: it
+                // means the drive was never looked at (no claim available), and
+                // letting that fall through to the timeout would report a
+                // still-wedged drive we never actually probed.
                 if (probe.Result == DriveRecoveryProbeResult.Responsive ||
                     probe.Result == DriveRecoveryProbeResult.NoDisc ||
-                    probe.Result == DriveRecoveryProbeResult.PermissionDenied)
+                    probe.Result == DriveRecoveryProbeResult.PermissionDenied ||
+                    probe.Result == DriveRecoveryProbeResult.Unverified)
                     return probe;
                 lastDetail = probe.Detail;
             }
@@ -142,6 +155,26 @@ public sealed class LinuxDriveRecoveryProbe : IDriveRecoveryProbe
     private DriveRecoveryProbeReport ProbeNode(string sr, bool reEnumerated)
     {
         char letter = LetterForNode(sr);
+        // Claim the drive before querying its identity, exactly like every other
+        // hardware path. A cured drive can be claimed by another window within
+        // seconds, and a TOC read moves the head: probing an active rip would
+        // corrupt someone else's evidence. The claim is held only across this
+        // one command, never across the user's physical action - the lease is a
+        // file lock, not a device handle, so holding it through an unplug would
+        // protect nothing while blocking the returning drive's legitimate owner.
+        if (_log == null)
+            return Report(
+                DriveRecoveryProbeResult.Unverified,
+                letter,
+                reEnumerated,
+                "identity-only probe cannot claim the drive");
+        using IDisposable? claim = OpticalDriveLease.TryAcquire(letter, _log);
+        if (claim == null)
+            return Report(
+                DriveRecoveryProbeResult.Unverified,
+                letter,
+                reEnumerated,
+                "drive is in use by another CUETools job");
         string path = "/dev/" + sr;
         int fd = LinuxSg.OpenDevice(path);
         if (fd < 0)
