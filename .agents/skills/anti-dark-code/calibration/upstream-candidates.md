@@ -159,3 +159,43 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
   references/10-maintenance-harness.md.
 - Proposed change: add a history-rewrite checklist tying rewrites to the
   receipt/evidence ledger.
+
+## ADC-CUETOOLS-009: a binary platform split fails open on the third platform
+
+- Status: ready
+- Scope: repo-agnostic (any multi-platform codebase)
+- Lesson: Guards written as "if not Windows then Linux" (or any
+  two-platform else-branch) silently route a third platform down a path
+  built on another OS's assumptions. Coarse platform identifiers make
+  this worse: .NET reports PlatformID.Unix for both Linux and macOS, so
+  a check that reads as "Unix means Linux" is wrong the day a Mac runs
+  it. The failure is quiet by construction - the wrong branch often
+  half-works (file probes return false, locks no-op, enumerations come
+  back empty) - and the worst cases fail open: an exclusion mechanism
+  that excludes nobody. The rule: every platform branch names the
+  platforms it was actually built and tested for, and unlisted
+  platforms fail closed (throw) on operations while staying honest on
+  observations (enumerate nothing rather than fabricate). Audit for
+  else-branch platform assumptions before targeting a new OS, not
+  after.
+- Evidence: an audit ahead of a planned macOS port found five sites in
+  one rip stack where "not Windows" meant Linux: transport open would
+  have died in a confusing DllImport error, tray control and identity
+  resolution would have quietly no-opped, drive enumeration could have
+  fabricated letters from mounted-volume names, and the cross-process
+  drive lease would have acquired with no exclusion at all
+  (FileShare modes are not enforced between processes off Windows and
+  FileStream.Lock is unsupported on macOS). A prior live incident on
+  Linux had already proven the lease fail-open class (two processes
+  read one drive concurrently). All five converted to precise guards
+  plus PlatformNotSupportedException; existing suites on both
+  supported platforms stayed green.
+- Limits: the observation/operation split is a judgment call per site;
+  a headless service may prefer failing closed even on enumeration.
+  Framework-specific identifier coarseness (PlatformID.Unix) is a .NET
+  detail; the general rule is the else-branch, not the API.
+- Proposed target: references/07-adversarial-review.md (hidden
+  assumption checklist) or references/02-architecture-map.md trust
+  boundaries.
+- Proposed change: add "unlisted platforms fail closed" to the
+  adversarial review checklist for platform-split code.
