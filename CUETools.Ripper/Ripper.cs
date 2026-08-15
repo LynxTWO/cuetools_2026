@@ -42,6 +42,14 @@ namespace CUETools.Ripper
 			List<char> result = new List<char>();
 			if (Environment.OSVersion.Platform == PlatformID.Unix)
 			{
+#if NET
+				// macOS also reports PlatformID.Unix but has no letter-mapped
+				// sr transport. Enumerate no drives there (honest emptiness)
+				// rather than fall through to DriveInfo, whose mounted-volume
+				// names would fabricate phantom drive letters.
+				if (!OperatingSystem.IsLinux())
+					return result.ToArray();
+#endif
 				// Letters map 1:1 to kernel sr numbers (A = /dev/sr0, B =
 				// /dev/sr1, ...). Bwg.Scsi.LinuxSg applies the same pure
 				// function when opening by letter; keep the two in agreement.

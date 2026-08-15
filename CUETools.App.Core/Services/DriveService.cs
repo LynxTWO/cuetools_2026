@@ -488,6 +488,9 @@ public sealed class DriveService : IDriveService
       if (lease == null) return;
       lock (_scsiGate)
       {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            throw new PlatformNotSupportedException(
+                "Tray control has Windows storage-IOCTL and Linux CDROM-ioctl implementations only.");
         if (!OperatingSystem.IsWindows())
         {
             // Same funnel, platform transport: the CDROM block-device ioctls

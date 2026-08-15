@@ -123,6 +123,16 @@ namespace Bwg.Scsi
         {
             string dname = name;
 
+#if !NETFRAMEWORK
+            // Fail closed rather than guess: without this, macOS (and any
+            // other non-Windows non-Linux OS) would fall through to the
+            // Windows CreateFile path and die in a confusing DllImport error.
+            // (net20/net47 are Windows-only builds and lack RuntimeInformation.)
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                throw new PlatformNotSupportedException(
+                    "Optical transport has Windows (DeviceIoControl) and Linux (SG_IO) implementations only.");
+#endif
             if (LinuxSg.IsLinux)
             {
                 int fd = LinuxSg.OpenDevice(dname);
