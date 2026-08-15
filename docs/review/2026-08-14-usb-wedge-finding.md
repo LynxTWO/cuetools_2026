@@ -104,6 +104,38 @@ insufficient on this hardware.
   the cache-defeat path. A wedge during ordinary payload reads should
   feed the same classifier before any guided ladder is built.
 
+## Fourth incident, and the first one a tool found (2026-08-15)
+
+The ASUS wedged again after the roughly eleven-minute
+StopOnUnrecoverable verify that ended at 00:15, and nobody noticed at
+the time. The new recovery probe found it hours later during a routine
+hardware check of the SLICE-011 code: the ASUS answered its
+table-of-contents read with `errno=5` (EIO) while the internal PLDS and
+the WH16NS40 answered theirs in 190 ms and 8 ms. That is the first time
+the stuck state was detected by a tool rather than by a failed rip, and
+it is the same fingerprint as the third incident.
+
+Two hardware facts came out of the same check, both measured:
+
+- **Serial numbers need two-step symlink resolution.** `/sys/block/srN`
+  is itself a symlink, so resolving `/sys/block/srN/device` in one hop
+  does literal path arithmetic from `/sys/block` and lands at
+  `/6:0:0:0`. Resolving the block node first, then joining the device
+  link's own relative target onto that real path, reaches the USB
+  device directory.
+- **An enclosure here reports a placeholder serial.** The WH16NS40's
+  enclosure reports `0123456789ABCDEF`, a value shared across units of
+  that design; the ASUS enclosure reports a real one
+  (`2309248804E1`, the OWC Mercury Pro). Drive identity therefore
+  requires the whole vendor/model/revision/serial tuple, and the
+  resolver refuses to guess when more than one node still matches.
+
+The owner power-cycled the enclosure at 08:33 and the same probe
+reported the drive `Responsive` with a full 24-track table of contents
+in 10 ms. Before and after, from one tool, with nothing else changed:
+that is the cure-detection half of the recovery ladder verified on real
+hardware before any dialog exists.
+
 Confidence updated: the wedge state, its sense fingerprint, its
 survival of all host-side resets, and the power-cycle cure are verified
 on this enclosure. The clean-disc counter-experiment (two full Paranoid
