@@ -710,6 +710,82 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void RejectionStormNeedsTwoFullBatchesAndFourPinpoints()
+        {
+            var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
+            Assert.IsFalse(t.IsStorm);
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 16; i++) t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            // One fully corroborated batch: plenty of pinpoints, batches short.
+            Assert.IsFalse(t.IsStorm);
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 16; i++) t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            Assert.IsTrue(t.IsStorm);
+        }
+
+        [TestMethod]
+        public void TinyTailBatchesNeedFourPinpointsTotal()
+        {
+            var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
+            for (int b = 0; b < 2; b++)
+            {
+                t.BeginRejectedBatch(1);
+                t.RecordCorroboratedPinpoint();
+                t.CompleteBatch();
+            }
+            // Two batches but only two data points: not yet a storm.
+            Assert.IsFalse(t.IsStorm);
+            for (int b = 0; b < 2; b++)
+            {
+                t.BeginRejectedBatch(1);
+                t.RecordCorroboratedPinpoint();
+                t.CompleteBatch();
+            }
+            Assert.IsTrue(t.IsStorm);
+        }
+
+        [TestMethod]
+        public void AnySignOfDriveLifeResetsTheStorm()
+        {
+            var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 16; i++) t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            // A successful child read mid-batch resets everything; the batch
+            // that contained it can never fold in as fully corroborated.
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 8; i++) t.RecordCorroboratedPinpoint();
+            t.RecordDriveResponsive();
+            t.CompleteBatch();
+            Assert.IsFalse(t.IsStorm);
+            // A genuine-sense (medium) interlude between batches resets too.
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 16; i++) t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            t.RecordDriveResponsive();
+            t.BeginRejectedBatch(16);
+            for (int i = 0; i < 16; i++) t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            Assert.IsFalse(t.IsStorm);
+        }
+
+        [TestMethod]
+        public void PartiallyCorroboratedBatchesNeverFold()
+        {
+            var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
+            for (int b = 0; b < 3; b++)
+            {
+                t.BeginRejectedBatch(16);
+                for (int i = 0; i < 15; i++) t.RecordCorroboratedPinpoint();
+                t.CompleteBatch();
+            }
+            // 45 pinpoints, but no batch was fully corroborated.
+            Assert.IsFalse(t.IsStorm);
+        }
+
+        [TestMethod]
         public void UnresponsiveGuidanceNamesTheOnlyKnownCure()
         {
             // The message must tell the user the one action that has ever

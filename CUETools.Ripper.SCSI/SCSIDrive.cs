@@ -75,6 +75,9 @@ namespace CUETools.Ripper.SCSI
 		private int _cacheDefeatWakeReadinessRetryCount;
 		private int _cacheDefeatWakeReadinessIndeterminateCount;
 		private bool _cacheDefeatUnresponsiveSignature;
+		private int _payloadRejectionStormFatalCount;
+		private readonly PayloadReadFailurePolicy.PayloadRejectionStormTracker
+			_rejectionStormTracker = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
 		private bool _speedChangeJustApplied;
 		private int _controlTransitionRetryCount;
 		private int _readCommunicationRetryCount;
@@ -104,6 +107,11 @@ namespace CUETools.Ripper.SCSI
 		/// stuck-drive state: every shape down to one sector rejected with the exact
 		/// invalid-field signature and the one permitted wake already spent (D11).</summary>
 		public bool CacheDefeatUnresponsiveSignature => _cacheDefeatUnresponsiveSignature;
+		/// <summary>Payload-read rejection storms classified as the stuck-drive state
+		/// (SLICE-011): sustained fully-corroborated 24/00 batch decompositions with no
+		/// intervening sign of drive life. Each one ended a run fatally with guidance
+		/// instead of mass-marking healthy sectors as media damage.</summary>
+		public int PayloadRejectionStormFatalCount => _payloadRejectionStormFatalCount;
 		public int PayloadBatchFallbackCount => _payloadBatchFallbackCount;
 		public int PinpointRetryCount => _pinpointRetryCount;
 		public int CorroboratedUnreadablePinpointCount =>
@@ -1600,6 +1608,9 @@ namespace CUETools.Ripper.SCSI
 						_readCDCommand));
 				}
 				ReorganiseSectors(sector, Sectors2Read);
+				// A successful transfer is proof of drive life: the payload
+				// rejection storm (stuck-drive) state resets completely.
+				_rejectionStormTracker.RecordDriveResponsive();
 				return st;
 			}
 
@@ -1633,6 +1644,9 @@ namespace CUETools.Ripper.SCSI
 
 			if (Sectors2Read == 1 && mediumError)
 			{
+				// Genuine per-sector sense is drive life; the rejection-storm
+				// (stuck-drive) state resets on it.
+				_rejectionStormTracker.RecordDriveResponsive();
 				MarkSectorUnreadable(sector);
 				return Device.CommandStatus.Success;
 			}
@@ -1649,6 +1663,7 @@ namespace CUETools.Ripper.SCSI
 					System.Console.WriteLine(
 						"\n{0}: retrying the rejected batch one sector at a time",
 						ex.Message);
+				_rejectionStormTracker.BeginRejectedBatch(Sectors2Read);
 				for (int iSector = 0; iSector < Sectors2Read; iSector++)
 				{
 					int singleSector = sector + iSector;
@@ -1680,6 +1695,7 @@ namespace CUETools.Ripper.SCSI
 							singleFailure.Status,
 							singleFailure.SenseKey))
 						{
+							_rejectionStormTracker.RecordDriveResponsive();
 							MarkSectorUnreadable(singleSector);
 							continue;
 						}
@@ -1738,6 +1754,7 @@ namespace CUETools.Ripper.SCSI
 										repeatedFailure.Ascq))
 							{
 								_corroboratedUnreadablePinpointCount++;
+								_rejectionStormTracker.RecordCorroboratedPinpoint();
 								MarkSectorUnreadable(singleSector);
 								continue;
 							}
@@ -1747,6 +1764,21 @@ namespace CUETools.Ripper.SCSI
 					}
 				}
 				_payloadBatchFallbackCount++;
+				_rejectionStormTracker.CompleteBatch();
+				if (_rejectionStormTracker.IsStorm)
+				{
+					// Sustained fully-corroborated 24/00 decompositions with no
+					// sign of drive life are the stuck-drive state, not media
+					// evidence. Without this, a wedged drive would mass-mark a
+					// healthy disc as damage batch after batch (SLICE-011).
+					_payloadRejectionStormFatalCount++;
+					throw new ReadCDException(
+						"Payload reads are failing as a rejection storm. " +
+						PayloadReadFailurePolicy.UnresponsiveDriveGuidance + " [" +
+						_rejectionStormTracker.DescribeForFailureContext() +
+						", last-batch-sector=" + sector +
+						", last-batch-sectors=" + Sectors2Read + "]");
+				}
 				return Device.CommandStatus.Success;
 			}
 
@@ -1758,6 +1790,11 @@ namespace CUETools.Ripper.SCSI
 					ascq) &&
 				(mediumError || legacyTrackMode)) || driveTimeoutBatch))
 			{
+				// The parent batch carried genuine sense (medium, legacy track
+				// mode, or the drive's own 3E/02 surrender): the drive is
+				// alive, so the rejection-storm state resets before this
+				// media-evidence decomposition runs.
+				_rejectionStormTracker.RecordDriveResponsive();
 				if (_debugMessages)
 					System.Console.WriteLine("\n{0}: retrying one sector at a time", ex.Message);
 				int iErrors = 0;
