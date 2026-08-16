@@ -61,7 +61,7 @@ public sealed class VerificationSourceDiscoveryTests
 
         Assert.IsFalse(result.Ok);
         StringAssert.Contains(result.Error, "same audio");
-        StringAssert.Contains(result.Error, "instead of guessing");
+        StringAssert.Contains(result.Error, "does not have to guess");
     }
 
     [TestMethod]

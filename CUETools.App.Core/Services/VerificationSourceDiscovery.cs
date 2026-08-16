@@ -253,7 +253,7 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
                     "Two manifests reference the same audio (" +
                     Path.GetFileName(manifests[left].Path) + " and " +
                     Path.GetFileName(manifests[right].Path) +
-                    "). Choose the intended CUE/playlist instead of guessing.");
+                    "). Choose the intended CUE/playlist so CUETools does not have to guess.");
             }
         }
 
