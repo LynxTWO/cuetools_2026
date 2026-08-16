@@ -1336,12 +1336,18 @@ public sealed class RipViewModel : PageViewModel
         RipProgress = result.Ok ? 1 : RipProgress;
         if (result.Ok)
         {
-            ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
+            // The final line must not contradict the per-read line: a lookup that never
+            // completed reads as such rather than collapsing to 0 / 0.
+            ArText = result.ArLookupFailed && result.ArTotal == 0
+                ? "lookup failed"
+                : $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0
                 ? $"match . conf {result.CtdbConfidence}"
                 : result.CtdbCanRecover
                     ? $"recoverable damage . {result.CtdbRepairSectors} sector(s)"
-                    : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+                    : result.CtdbLookupFailed && result.CtdbTotal == 0
+                        ? "lookup failed"
+                        : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             ApplyHistoryStatus(result.HistoryRecorded, result.HistoryKnown,
                 result.HistoryMatches, result.HistoryPriorReads, result.HistoryDiffTracks);
@@ -1627,12 +1633,18 @@ public sealed class RipViewModel : PageViewModel
                         : "  WARNING: final output was not independently verified."
                     : "");
             TestCopyIsWarning = damagedAgreement;
-            ArText = $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
+            // The final line must not contradict the per-read line: a lookup that never
+            // completed reads as such rather than collapsing to 0 / 0.
+            ArText = result.ArLookupFailed && result.ArTotal == 0
+                ? "lookup failed"
+                : $"{result.ArConfidence} / {result.ArTotal}" + (result.Accurate ? "  accurate" : "");
             CtdbText = result.CtdbConfidence > 0
                 ? $"match . conf {result.CtdbConfidence}"
                 : result.CtdbCanRecover
                     ? $"recoverable damage . {result.CtdbRepairSectors} sector(s)"
-                    : $"{result.CtdbConfidence} / {result.CtdbTotal}";
+                    : result.CtdbLookupFailed && result.CtdbTotal == 0
+                        ? "lookup failed"
+                        : $"{result.CtdbConfidence} / {result.CtdbTotal}";
             Accurate = result.Accurate;
             ApplyHistoryStatus(result.HistoryRecorded, result.HistoryKnown,
                 result.HistoryMatches, result.HistoryPriorReads, result.HistoryDiffTracks);
