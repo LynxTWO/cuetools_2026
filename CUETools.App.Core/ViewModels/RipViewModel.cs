@@ -2196,12 +2196,16 @@ public sealed class RipViewModel : PageViewModel
             if (i < verdict.CtdbPerTrack.Length && verdict.CtdbPerTrack[i] > 0)
                 Tracks[i].CtdbResult = verdict.CtdbPerTrack[i].ToString();
         }
+        // A failed lookup is not an absent disc, and it is checked after the real answers
+        // so a database that replied before failing still reports what it said.
         ArText = verdict.Accurate
             ? $"{verdict.ArConfidence} / {verdict.ArTotal} accurate"
-            : verdict.ArTotal > 0 ? $"{verdict.ArConfidence} / {verdict.ArTotal}" : "not in database";
+            : verdict.ArTotal > 0 ? $"{verdict.ArConfidence} / {verdict.ArTotal}"
+            : verdict.ArLookupFailed ? "lookup failed" : "not in database";
         CtdbText = verdict.CtdbConfidence > 0
             ? $"match . conf {verdict.CtdbConfidence}"
-            : verdict.CtdbTotal > 0 ? "found, no exact match" : "not found";
+            : verdict.CtdbTotal > 0 ? "found, no exact match"
+            : verdict.CtdbLookupFailed ? "lookup failed" : "not found";
         StatusText = $"{verdict.ReadKind} read complete - {ArText} (AccurateRip), {CtdbText} (CTDB).";
     }
 

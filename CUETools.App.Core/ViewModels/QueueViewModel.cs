@@ -170,7 +170,7 @@ public sealed class QueueViewModel : PageViewModel
 
     private static readonly FilePickerGroup[] AddFileGroups =
     {
-        new("Rip sets", new[] { "cue", "m3u" }),
+        new("Rip sets (*.cue, *.m3u, *.m3u8)", new[] { "cue", "m3u", "m3u8" }),
         new("Audio with embedded cue", new[] { "flac", "wv", "ape", "tak", "m4a" }),
         new("All files", new[] { "*" }),
     };
@@ -265,7 +265,14 @@ public sealed class QueueViewModel : PageViewModel
             else
             {
                 var r = await Task.Run(() => _verify.Verify(item.Source, Report));
-                item.Status = r.Ok ? (r.Accurate || r.CtdbConfidence > 0 ? "Verified" : r.CanRecover ? "Repairable" : "No match") : "Failed";
+                // "No match" is a claim about the audio, so it may only be used when both
+                // databases actually answered. A lookup that never completed says nothing.
+                item.Status = r.Ok
+                    ? r.Accurate || r.CtdbConfidence > 0 ? "Verified"
+                        : r.CanRecover ? "Repairable"
+                        : r.ArLookupFailed && r.CtdbLookupFailed ? "Lookup failed"
+                        : "No match"
+                    : "Failed";
                 item.Result = r.Ok ? r.Status : r.Error;
             }
 

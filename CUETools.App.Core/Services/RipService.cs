@@ -32,6 +32,13 @@ public sealed class VerifyResult
     public int CtdbConfidence { get; init; }
     public int CtdbTotal { get; init; }
     public bool Accurate { get; init; }
+    /// <summary>
+    /// The lookup did not complete, so this database never judged the disc. A database
+    /// that answered "not here" leaves these false. Without the distinction a zero total
+    /// reads as an absent disc, and the rip panels report a verdict nobody gave.
+    /// </summary>
+    public bool ArLookupFailed { get; init; }
+    public bool CtdbLookupFailed { get; init; }
     public string OutputDir { get; init; } = "";
     public int FileCount { get; init; }
     /// <summary>Portable artist/album identity used for human-facing cue and log sidecars.</summary>
@@ -203,7 +210,9 @@ public readonly record struct ReadVerdict(
     int CtdbTotal,
     bool Accurate,
     int[] ArPerTrack,
-    int[] CtdbPerTrack);
+    int[] CtdbPerTrack,
+    bool ArLookupFailed = false,
+    bool CtdbLookupFailed = false);
 
 public interface IRipService
 {
@@ -1069,9 +1078,24 @@ public sealed class RipService : IRipService
             RcFlushWindow();   // emit the summary for the last stuck window (it never advances past)
 
             int arConf = 0, arTotal = 0, ctConf = cue.CTDB.Confidence, ctTotal = cue.CTDB.Total;
+            bool arFailed = false, ctdbFailed = false;
             // a throw here would otherwise read as "not found in AccurateRip" - a different fact
             try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
-            catch (Exception ex) { _log.Warn("rip", "AccurateRip result read failed (reported as not found): " + ex.GetType().Name); }
+            catch (Exception ex)
+            {
+                arFailed = true;
+                _log.Warn("rip", "AccurateRip result read failed: " + ex.GetType().Name);
+            }
+            // A database that answered "not here" is a real answer. Anything else never
+            // judged the disc, and the rip panels must not report it as an absent disc.
+            try
+            {
+                arFailed |= VerifyService.LookupFailed(
+                    cue.ArVerify.ExceptionStatus, cue.ArVerify.ResponseStatus);
+                ctdbFailed = VerifyService.LookupFailed(
+                    cue.CTDB.QueryExceptionStatus, cue.CTDB.QueryResponseStatus);
+            }
+            catch (Exception ex) { _log.Warn("rip", "database status read failed: " + ex.GetType().Name); }
             int files = 0;
             if (encode)
             {
@@ -1252,6 +1276,8 @@ public sealed class RipService : IRipService
                 CtdbConfidence = ctConf,
                 CtdbTotal = ctTotal,
                 Accurate = arConf > 0,
+                ArLookupFailed = arFailed,
+                CtdbLookupFailed = ctdbFailed,
                 OutputDir = outDir,
                 FileCount = files,
                 ArtifactStem = artifactStem,
@@ -1562,7 +1588,9 @@ public sealed class RipService : IRipService
                     read.CtdbTotal,
                     read.Accurate,
                     (int[])(read.ArPerTrack ?? Array.Empty<int>()).Clone(),
-                    (int[])(read.CtdbPerTrack ?? Array.Empty<int>()).Clone()));
+                    (int[])(read.CtdbPerTrack ?? Array.Empty<int>()).Clone(),
+                    read.ArLookupFailed,
+                    read.CtdbLookupFailed));
             }
             catch (Exception ex)
             {

@@ -209,7 +209,7 @@ public sealed class ConvertViewModel : PageViewModel
 
     private static readonly FilePickerGroup[] BrowseFileGroups =
     {
-        new("Rip sets", new[] { "cue", "m3u" }),
+        new("Rip sets (*.cue, *.m3u, *.m3u8)", new[] { "cue", "m3u", "m3u8" }),
         new("Audio with embedded cue", new[] { "flac", "wv", "ape", "tak", "m4a" }),
         new("All files", new[] { "*" }),
     };
