@@ -121,6 +121,15 @@ public sealed class AppSettings
         FormatTypeOverrides = string.Join(";", parts);
     }
 
+    /// <summary>
+    /// Whether reading a disc may download cover art on its own. Off by default: inserting a
+    /// disc is not a request to fetch anything, and the previous behaviour meant simply
+    /// launching the app with a disc in the drive downloaded a cover. Every explicit path
+    /// (turning artwork on, choosing a release, opening the artwork browser, starting a rip)
+    /// still fetches regardless of this setting.
+    /// </summary>
+    public bool AutoFetchArtOnDiscRead { get; set; }
+
     // The naming scheme (template + clean-up rule flags), edited on the Naming page. Defaults to the
     // owner's archival scheme with all rules on.
     public string NamingTemplate { get; set; } = NamingScheme.ArchivalTemplate;

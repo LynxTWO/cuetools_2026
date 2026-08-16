@@ -814,7 +814,10 @@ public sealed class RipViewModel : PageViewModel
             StatusText = info.Releases.Count > 0
                 ? $"Identified: {info.Artist} - {info.Album}. Ripping comes next."
                 : "Disc read; not found in the metadata databases (generic track names).";
-            TriggerArtFetch();
+            // Inserting a disc is not a request to download a cover. Off by default, so the
+            // app no longer reaches a cover-art host just because it started with a disc in
+            // the drive; every explicit path below still fetches.
+            if (_settings.AutoFetchArtOnDiscRead) TriggerArtFetch();
         }
         OnPropertyChanged(nameof(SelectedRelease));
         OnPropertyChanged(nameof(HasReleases));
@@ -870,8 +873,33 @@ public sealed class RipViewModel : PageViewModel
             generation,
             _chosenMetadata?.AlbumArt,
             _config.advanced.coversSearch);
-        _ = FetchArtAsync(query);
+        _artFetch = FetchArtAsync(query);
+        _ = _artFetch;
     }
+
+    /// <summary>
+    /// Starting a rip is an explicit request, so it may fetch a cover even when the disc read
+    /// did not (see AppSettings.AutoFetchArtOnDiscRead). Waits for a fetch already in flight,
+    /// or starts one, so the encode embeds the same cover the page shows. Bounded: a slow or
+    /// dead artwork host delays the rip by at most this wait, and never fails it.
+    /// </summary>
+    private async Task EnsureArtBeforeRipAsync()
+    {
+        if (!ArtEnabled || _localArtworkOverride) return;
+        if (_coverBytes == null && _artFetch == null) TriggerArtFetch();
+        Task? fetch = _artFetch;
+        if (fetch == null) return;
+        try
+        {
+            await Task.WhenAny(fetch, Task.Delay(TimeSpan.FromSeconds(20)));
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("rip", "cover fetch before rip failed: " + ex.GetType().Name);
+        }
+    }
+
+    private Task? _artFetch;
 
     private void ClearArt()
     {
@@ -1311,6 +1339,7 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         RipOutputLayout outputLayout = _settings.RipOutputLayout;
+        await EnsureArtBeforeRipAsync();
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
@@ -1515,6 +1544,7 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         RipOutputLayout outputLayout = _settings.RipOutputLayout;
+        await EnsureArtBeforeRipAsync();
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();

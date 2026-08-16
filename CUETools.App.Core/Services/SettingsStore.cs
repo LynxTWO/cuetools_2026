@@ -97,6 +97,7 @@ public sealed class SettingsStore
             // that choice persists.
             app.DeepRecovery = sr.LoadBoolean("WpfDeepRecovery") ?? true;
             app.NamingTemplate = sr.Load("WpfNamingTemplate") ?? app.NamingTemplate;
+            app.AutoFetchArtOnDiscRead = sr.LoadBoolean("WpfAutoFetchArtOnDiscRead") ?? false;
             app.NamingExtractFeatured = sr.LoadBoolean("WpfNamingExtractFeatured") ?? true;
             app.NamingUnifySeparators = sr.LoadBoolean("WpfNamingUnifySeparators") ?? true;
             app.NamingHandleArticles = sr.LoadBoolean("WpfNamingHandleArticles") ?? true;
@@ -256,6 +257,7 @@ public sealed class SettingsStore
             sw.Save("WpfAdaptiveReadSpeed", app.AdaptiveReadSpeed);
             sw.Save("WpfDeepRecovery", app.DeepRecovery);
             sw.Save("WpfNamingTemplate", app.NamingTemplate);
+            sw.Save("WpfAutoFetchArtOnDiscRead", app.AutoFetchArtOnDiscRead);
             sw.Save("WpfNamingExtractFeatured", app.NamingExtractFeatured);
             sw.Save("WpfNamingUnifySeparators", app.NamingUnifySeparators);
             sw.Save("WpfNamingHandleArticles", app.NamingHandleArticles);
