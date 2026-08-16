@@ -91,9 +91,14 @@ public sealed class CtdbSubmissionDecision
 }
 
 /// <summary>
-/// The submission rules, with no I/O of any kind.
+/// Which discs may be offered for submission, and whether the user still has to be asked.
 ///
-/// D-069: the first eligible disc raises one consent prompt; the answer is remembered in
+/// This sits on top of <see cref="CtdbSubmissionPolicy"/> in CUETools.Processor, which
+/// stays the one consent boundary: whether contribution is enabled at all is only ever
+/// answered by <see cref="CtdbSubmissionPolicy.IsEnabled"/>. What is added here is the
+/// quality bar and the ask-once flow, neither of which can turn contribution on.
+///
+/// D-069: the first eligible disc raises one consent prompt; a remembered answer is kept in
 /// <see cref="CUEConfigAdvanced.CTDBSubmit"/> and stops the asking via
 /// <see cref="CUEConfigAdvanced.CTDBAsk"/>. Both keys already round-trip through the
 /// settings store, so remembering costs no format change.
@@ -101,15 +106,15 @@ public sealed class CtdbSubmissionDecision
 /// D-070: only reads without unrecoverable windows may be submitted. Salvaged captures and
 /// held Test and Copy results never qualify, whatever the databases said about them.
 /// </summary>
-public static class CtdbSubmissionPolicy
+public static class CtdbSubmissionEligibility
 {
     /// <summary>The quality value classic sends. D-070 keeps the constant and gates who may send it.</summary>
     public const int CleanReadQuality = 100;
 
-    public static CtdbSubmissionDecision Decide(CtdbSubmissionCandidate candidate, CUEConfigAdvanced advanced)
+    public static CtdbSubmissionDecision Decide(CtdbSubmissionCandidate candidate, CUEConfig config)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        ArgumentNullException.ThrowIfNull(advanced);
+        ArgumentNullException.ThrowIfNull(config);
 
         if (!candidate.RunCompleted)
             return new CtdbSubmissionDecision { Block = CtdbSubmissionBlock.RunIncomplete };
@@ -122,27 +127,31 @@ public static class CtdbSubmissionPolicy
         if (candidate.FailedWindows > 0)
             return new CtdbSubmissionDecision { Block = CtdbSubmissionBlock.UnrecoverableWindows };
 
-        // The remembered "no" is checked last so the reason a disc is skipped is always the
+        // Quality is judged before consent so the reason a disc is skipped is always the
         // strongest one: a salvaged rip is ineligible whatever the user once answered.
-        if (!advanced.CTDBAsk && !advanced.CTDBSubmit)
-            return new CtdbSubmissionDecision { Block = CtdbSubmissionBlock.DeclinedPreviously };
+        if (config.advanced.CTDBAsk)
+            return new CtdbSubmissionDecision
+            {
+                Block = CtdbSubmissionBlock.None,
+                NeedsPrompt = true
+            };
 
-        return new CtdbSubmissionDecision
-        {
-            Block = CtdbSubmissionBlock.None,
-            NeedsPrompt = advanced.CTDBAsk
-        };
+        // Not asking any more, so the stored answer decides, and only the shared consent
+        // boundary may answer it.
+        return CtdbSubmissionPolicy.IsEnabled(config)
+            ? new CtdbSubmissionDecision { Block = CtdbSubmissionBlock.None }
+            : new CtdbSubmissionDecision { Block = CtdbSubmissionBlock.DeclinedPreviously };
     }
 
     /// <summary>
     /// Applies a remembered answer. Called only when the user checked "remember", so an
     /// unremembered answer leaves the prompt armed for the next disc.
     /// </summary>
-    public static void Remember(CUEConfigAdvanced advanced, bool submit)
+    public static void Remember(CUEConfig config, bool submit)
     {
-        ArgumentNullException.ThrowIfNull(advanced);
-        advanced.CTDBSubmit = submit;
-        advanced.CTDBAsk = false;
+        ArgumentNullException.ThrowIfNull(config);
+        config.advanced.CTDBSubmit = submit;
+        config.advanced.CTDBAsk = false;
     }
 }
 
@@ -175,7 +184,7 @@ public sealed class CtdbSubmissionService
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(candidate);
 
-        CtdbSubmissionDecision decision = CtdbSubmissionPolicy.Decide(candidate, _config.advanced);
+        CtdbSubmissionDecision decision = CtdbSubmissionEligibility.Decide(candidate, _config);
         if (!decision.Eligible)
         {
             _log.Info("ctdb", "submission skipped: " + decision.Block);
@@ -193,7 +202,7 @@ public sealed class CtdbSubmissionService
 
             CtdbSubmissionConsent consent = _prompt.Ask(candidate.Album);
             if (consent.Remember)
-                CtdbSubmissionPolicy.Remember(_config.advanced, consent.Submit);
+                CtdbSubmissionEligibility.Remember(_config, consent.Submit);
             if (!consent.Submit)
             {
                 _log.Info("ctdb", "submission declined by the user");
@@ -208,7 +217,7 @@ public sealed class CtdbSubmissionService
             _log.Redact(candidate.Album, candidate.Artist, candidate.Barcode);
             database.Submit(
                 candidate.Confidence,
-                CtdbSubmissionPolicy.CleanReadQuality,
+                CtdbSubmissionEligibility.CleanReadQuality,
                 candidate.Artist,
                 candidate.Album,
                 candidate.Barcode);
