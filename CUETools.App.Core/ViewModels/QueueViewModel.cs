@@ -188,7 +188,29 @@ public sealed class QueueViewModel : PageViewModel
     {
         if (_dialogs == null) return;
         string? folder = await _dialogs.PickFolderAsync("Add an album folder to the queue");
-        if (folder != null) Enqueue(folder);
+        if (folder == null) return;
+        if (!EnqueueFolder(folder, out string error)) StatusText = error;
+    }
+
+    /// <summary>
+    /// Resolve a folder to the manifests inside it and queue each disc. The engine cannot open
+    /// a directory (CUESheet.Open throws "is a directory"), so queuing the folder path itself
+    /// produced an item that always failed. A multi-disc folder becomes one item per disc,
+    /// which is what a queue is for.
+    /// </summary>
+    private bool EnqueueFolder(string folder, out string error)
+    {
+        VerificationSourceDiscoveryResult found =
+            new VerificationSourceDiscovery(_config).Discover(new[] { folder });
+        if (!found.Ok)
+        {
+            error = found.Error;
+            return false;
+        }
+        foreach (VerificationDiscSource disc in found.SourceSet!.Discs)
+            Enqueue(disc.Path);
+        error = "";
+        return true;
     }
 
     /// <summary>Programmatic enqueue (startup arguments, tests): the same
@@ -201,6 +223,11 @@ public sealed class QueueViewModel : PageViewModel
         {
             return false;
         }
+
+        // Same rule as the dialog: a directory is resolved to its manifests, because the
+        // engine cannot open one.
+        if (System.IO.Directory.Exists(source))
+            return EnqueueFolder(source, out _);
 
         Enqueue(source);
         return true;

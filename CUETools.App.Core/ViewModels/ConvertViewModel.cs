@@ -226,7 +226,30 @@ public sealed class ConvertViewModel : PageViewModel
     {
         if (_dialogs == null) return;
         string? folder = await _dialogs.PickFolderAsync("Choose an album folder to convert");
-        if (folder != null) SetSource(folder);
+        if (folder == null) return;
+
+        // The engine cannot open a directory: CUESheet.Open throws "is a directory", so the
+        // folder button used to fail every time it was pressed. Resolve the folder to the
+        // manifest inside it, exactly as the Verify page does.
+        VerificationSourceDiscoveryResult found =
+            new VerificationSourceDiscovery(_config).Discover(new[] { folder });
+        if (!found.Ok)
+        {
+            HasResult = false;
+            StatusText = found.Error;
+            return;
+        }
+
+        var discs = found.SourceSet!.Discs;
+        if (discs.Count > 1)
+        {
+            HasResult = false;
+            StatusText =
+                $"That folder holds {discs.Count} discs. Convert takes one at a time: " +
+                "choose a disc's CUE sheet or playlist, or add them on the Queue page.";
+            return;
+        }
+        SetSource(discs[0].Path);
     }
 
     private async void BrowseOutput()
