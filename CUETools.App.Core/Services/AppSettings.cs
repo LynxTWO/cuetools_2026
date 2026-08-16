@@ -131,6 +131,14 @@ public sealed class AppSettings
     public bool AutoFetchArtOnDiscRead { get; set; }
 
     /// <summary>
+    /// Whether the user has been asked about automatic artwork yet. Until they have, nothing
+    /// is fetched automatically and nothing is assumed: a convenience silently defaulted off
+    /// leaves the user with a feature that looks broken and no sign a choice exists, which is
+    /// no better than defaulting it on. See NetworkPreferences.
+    /// </summary>
+    public bool AutoFetchArtAnswered { get; set; }
+
+    /// <summary>
     /// Keep every diagnostic log forever, for archiving. Off by default, in which case logs
     /// older than DiagnosticLog.RetainedLogDays are removed once there are more than
     /// DiagnosticLog.RetainedLogCount of them, whichever rule keeps more.
