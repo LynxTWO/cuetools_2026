@@ -127,6 +127,13 @@ public sealed class TestCopyRunResult
     /// reads completed and their checksum disagreement alone caused the hold.
     /// </summary>
     public string HoldReason { get; init; } = "";
+    /// <summary>
+    /// Carried from the read whose figures this result reports, so the final line
+    /// cannot contradict the per-read line the user just watched. See
+    /// VerifyResult.ArLookupFailed.
+    /// </summary>
+    public bool ArLookupFailed { get; init; }
+    public bool CtdbLookupFailed { get; init; }
     public CUETools.Wpf.Accuracy.TestCopyOutcome Outcome { get; init; }
     public int ReadsUsed { get; init; }
     public int[] HeldTracks { get; init; } = System.Array.Empty<int>();
@@ -1811,6 +1818,8 @@ public sealed class RipService : IRipService
                     ArTotal = last?.ArTotal ?? 0,
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
+                    ArLookupFailed = copyResult.ArLookupFailed,
+                    CtdbLookupFailed = copyResult.CtdbLookupFailed,
                     CtdbHasErrors = copyResult.CtdbHasErrors,
                     CtdbCanRecover = copyResult.CtdbCanRecover,
                     CtdbRepairSectors = copyResult.CtdbRepairSectors,
@@ -1945,6 +1954,8 @@ public sealed class RipService : IRipService
                     ArTotal = last?.ArTotal ?? 0,
                     CtdbConfidence = last?.CtdbConfidence ?? 0,
                     CtdbTotal = last?.CtdbTotal ?? 0,
+                    ArLookupFailed = committedEncoded.ArLookupFailed,
+                    CtdbLookupFailed = committedEncoded.CtdbLookupFailed,
                     CtdbHasErrors = committedEncoded.CtdbHasErrors,
                     CtdbCanRecover = committedEncoded.CtdbCanRecover,
                     CtdbRepairSectors =
