@@ -565,8 +565,11 @@ public sealed class VerifyService : IVerifyService
     /// Both databases report a miss the same way: ProtocolError plus HTTP 404. Every other
     /// non-success status is the lookup itself failing, which is a different fact and must
     /// not be shown as "not in database".
+    ///
+    /// Internal rather than private so the rip path asks the same question the same way.
+    /// Two definitions of "the lookup failed" would drift.
     /// </summary>
-    private static bool LookupFailed(
+    internal static bool LookupFailed(
         System.Net.WebExceptionStatus exceptionStatus,
         System.Net.HttpStatusCode responseStatus)
         => exceptionStatus != System.Net.WebExceptionStatus.Success
