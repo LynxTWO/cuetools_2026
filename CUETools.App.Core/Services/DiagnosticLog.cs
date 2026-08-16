@@ -62,6 +62,8 @@ public sealed class DiagnosticLog : IDiagnosticLog
         }
         catch { }
         LogPath = selectedPath;
+        if (string.IsNullOrWhiteSpace(logPath) && !string.IsNullOrWhiteSpace(dir))
+            PruneOldLogs(dir!);
 
         // always-on scrub targets: user name + home + music folders
         AddSecret(Environment.UserName);
@@ -82,6 +84,48 @@ public sealed class DiagnosticLog : IDiagnosticLog
             sb.Append("\n    ").Append(e.GetType().Name).Append(": ").Append(e.Message)
               .Append("\n").Append(e.StackTrace);
         Write("ERROR", category, sb.ToString());
+    }
+
+    /// <summary>Keep at least this many launches, however old they are.</summary>
+    public const int RetainedLogCount = 200;
+
+    /// <summary>Keep everything from at least this long ago, however many launches that is.</summary>
+    public const int RetainedLogDays = 90;
+
+    /// <summary>
+    /// Set to keep every log forever. Off by default; the archival choice belongs to the
+    /// person whose disk it is, so nothing here deletes a log they asked to keep.
+    /// </summary>
+    public static bool KeepLogsForever { get; set; }
+
+    /// <summary>
+    /// Delete logs that are both older than the day limit and outside the newest N. Whichever
+    /// rule keeps more, wins, so a heavy week is not truncated by the day limit and a quiet
+    /// year is not truncated by the count.
+    ///
+    /// Pruning is per file rather than per line on purpose: one file is one launch, and half a
+    /// launch's log reads like a complete record of a session that did less than it did.
+    /// Never throws: losing a log must not stop the app starting.
+    /// </summary>
+    private static void PruneOldLogs(string directory)
+    {
+        if (KeepLogsForever) return;
+        try
+        {
+            var logs = new DirectoryInfo(directory).GetFiles("cuetools-*.log");
+            if (logs.Length <= RetainedLogCount) return;
+            DateTime cutoff = DateTime.UtcNow.AddDays(-RetainedLogDays);
+            Array.Sort(logs, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+            for (int i = RetainedLogCount; i < logs.Length; i++)
+            {
+                if (logs[i].LastWriteTimeUtc >= cutoff) continue;
+                try { logs[i].Delete(); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     public void Redact(params string?[] sensitive)

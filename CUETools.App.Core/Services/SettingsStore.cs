@@ -98,6 +98,10 @@ public sealed class SettingsStore
             app.DeepRecovery = sr.LoadBoolean("WpfDeepRecovery") ?? true;
             app.NamingTemplate = sr.Load("WpfNamingTemplate") ?? app.NamingTemplate;
             app.AutoFetchArtOnDiscRead = sr.LoadBoolean("WpfAutoFetchArtOnDiscRead") ?? false;
+            app.KeepLogsForever = sr.LoadBoolean("WpfKeepLogsForever") ?? false;
+            // The log directory is pruned when the next log is opened, so the choice has to be
+            // in place before that happens rather than at the next launch.
+            DiagnosticLog.KeepLogsForever = app.KeepLogsForever;
             app.NamingExtractFeatured = sr.LoadBoolean("WpfNamingExtractFeatured") ?? true;
             app.NamingUnifySeparators = sr.LoadBoolean("WpfNamingUnifySeparators") ?? true;
             app.NamingHandleArticles = sr.LoadBoolean("WpfNamingHandleArticles") ?? true;
@@ -258,6 +262,7 @@ public sealed class SettingsStore
             sw.Save("WpfDeepRecovery", app.DeepRecovery);
             sw.Save("WpfNamingTemplate", app.NamingTemplate);
             sw.Save("WpfAutoFetchArtOnDiscRead", app.AutoFetchArtOnDiscRead);
+            sw.Save("WpfKeepLogsForever", app.KeepLogsForever);
             sw.Save("WpfNamingExtractFeatured", app.NamingExtractFeatured);
             sw.Save("WpfNamingUnifySeparators", app.NamingUnifySeparators);
             sw.Save("WpfNamingHandleArticles", app.NamingHandleArticles);

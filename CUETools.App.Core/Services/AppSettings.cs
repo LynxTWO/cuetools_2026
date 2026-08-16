@@ -130,6 +130,13 @@ public sealed class AppSettings
     /// </summary>
     public bool AutoFetchArtOnDiscRead { get; set; }
 
+    /// <summary>
+    /// Keep every diagnostic log forever, for archiving. Off by default, in which case logs
+    /// older than DiagnosticLog.RetainedLogDays are removed once there are more than
+    /// DiagnosticLog.RetainedLogCount of them, whichever rule keeps more.
+    /// </summary>
+    public bool KeepLogsForever { get; set; }
+
     // The naming scheme (template + clean-up rule flags), edited on the Naming page. Defaults to the
     // owner's archival scheme with all rules on.
     public string NamingTemplate { get; set; } = NamingScheme.ArchivalTemplate;
