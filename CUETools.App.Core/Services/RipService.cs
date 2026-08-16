@@ -259,8 +259,10 @@ public interface IRipService
     /// codec choice once encoding actually starts. <paramref name="onCrcEvidence"/> receives a
     /// fresh named Test/Copy snapshot after each completed read; it is an ancillary notification
     /// and must not affect the read or final transaction result.
-    /// <paramref name="salvage"/> (R119) runs the reads at Burst quality with C2 pointers off
-    /// at the drive's minimum speed for defective-by-design discs. Cache defeat and the
+    /// <paramref name="salvage"/> (R119) runs the reads at Burst quality with C2 pointers on
+    /// at the drive's minimum speed for defective-by-design discs, concealing and counting
+    /// samples the vote cannot confirm. An early build turned C2 off here and produced
+    /// fourteen times a good rip's glitch rate; see the comment at the call site. Cache defeat and the
     /// calibration gate still apply - without independent reads, "agreement" could be the
     /// drive's cache echoing itself. The result is labeled salvaged, never read-verified.</summary>
     TestCopyRunResult RunTestAndCopy(char drive, int correctionQuality, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null, byte[]? coverArt = null, Func<string>? liveFormat = null, Action? onEncodeStart = null, Action<TrackCrc[]>? onCrcEvidence = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null, Action<ReadVerdict>? onReadVerdict = null);
@@ -2410,7 +2412,8 @@ public sealed class RipService : IRipService
             string log = "Test & Copy log\n\n" +
                 "NOT test-verified - accepted by user without agreement.\n" +
                 (held.Salvaged
-                    ? "SALVAGE capture: Burst quality, C2 pointers off, minimum read speed - " +
+                    ? "SALVAGE capture: Burst quality, C2 pointers on, minimum read speed; " +
+                      "samples the vote cannot confirm are concealed and counted - " +
                       "intended for defective-by-design discs that no drive reads repeatably.\n"
                     : "") +
                 $"Reads used: {held.ReadsUsed}\n" +

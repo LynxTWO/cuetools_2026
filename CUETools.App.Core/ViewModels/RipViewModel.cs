@@ -424,7 +424,19 @@ public sealed class RipViewModel : PageViewModel
     // Picker index: 0 = Burst, 1 = Secure, 2 = Paranoid, 3 = Salvage (R119: a defective-disc
     // capture - Burst-quality Test & Copy reads with C2 off at the drive's minimum speed).
     private int _correctionQuality = 1;
-    public int CorrectionQuality { get => _correctionQuality; set { if (Set(ref _correctionQuality, value)) _settings.CorrectionQuality = value; } }
+    public int CorrectionQuality
+    {
+        get => _correctionQuality;
+        set
+        {
+            if (!Set(ref _correctionQuality, value)) return;
+            _settings.CorrectionQuality = value;
+            // Rip and Verify are disabled for a Salvage selection, so their enablement has to
+            // be re-evaluated when the picker moves.
+            OnPropertyChanged(nameof(SalvageRead));
+            RequeryHub.RequestRequery();
+        }
+    }
     /// <summary>Engine quality for the picker selection: Salvage runs the engine at Burst.</summary>
     public int EffectiveCorrectionQuality => _correctionQuality == 3 ? 0 : _correctionQuality;
     /// <summary>True when the picker selects the Salvage capture mode (R119).</summary>
@@ -616,12 +628,18 @@ public sealed class RipViewModel : PageViewModel
         // canExecute, not just the early-return guard inside ReadDiscOrClose: without it the button
         // stays fully enabled during a rip and does nothing when pressed.
         ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose(), _ => !IsRipping && !IsBusy);
-        VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        // Salvage is a Test & Copy mode: only RunTestAndCopy takes the salvage flag, so Rip and
+        // Verify with Salvage selected used to run a plain Burst job with no minimum-speed pin,
+        // no concealment, and no salvaged grade on the output - the user believing they had
+        // made a salvage capture. They are disabled for that selection instead.
+        VerifyCommand = new RelayCommand(
+            _ => { _ = RunJobAsync(encode: false); },
+            _ => IsDiscPresent && !IsRipping && !IsBusy && !SalvageRead);
         // A cover is immutable job input. Do not freeze a null snapshot while release-bound
         // discovery is still resolving; Verify remains available because it publishes no audio.
         RipCommand = new RelayCommand(
             _ => { _ = RunJobAsync(encode: true); },
-            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
+            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading) && !SalvageRead);
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(async _ => await BrowseOutputAsync());
