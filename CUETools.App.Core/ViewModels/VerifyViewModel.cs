@@ -493,15 +493,20 @@ public sealed class VerifyDiscViewModel : ViewModelBase
         }
     }
 
+    // A failed lookup is not an absent disc. It is checked after the real answers so a
+    // database that replied before failing still reports what it said.
     public string ArText => Result?.Ok != true ? "not checked"
         : Result.Accurate ? $"accurate | confidence {Result.ArConfidence}"
         : Result.ArTotal > 0 ? $"no match | {Result.ArConfidence}/{Result.ArTotal}"
+        : Result.ArLookupFailed ? "lookup failed"
         : "not in database";
 
     public string CtdbText => Result?.Ok != true ? "not checked"
         : Result.CtdbConfidence > 0 ? $"verified | confidence {Result.CtdbConfidence}"
         : Result.CanRecover ? "damage found | parity available"
-        : Result.CtdbTotal > 0 ? $"no exact match | {Result.CtdbTotal} entries" : "not found";
+        : Result.CtdbTotal > 0 ? $"no exact match | {Result.CtdbTotal} entries"
+        : Result.CtdbLookupFailed ? "lookup failed"
+        : "not found";
 
     public int TrackCount => Result?.TrackCount ?? 0;
     public long DurationSeconds => Result?.DurationSeconds ?? 0;

@@ -791,7 +791,12 @@ namespace CUETools.Processor
 
             CheckStop();
             ReportProgress("Scanning *.m3u", (double)(j++) / n);
-            results.AddRange(Directory.GetFiles(folder, "*.m3u", SearchOption.AllDirectories));
+            // Glob both playlist extensions in one pass and filter exactly. "*.m3u" alone
+            // misses .m3u8 on Core, while a second "*.m3u8" pass would double-count on
+            // Windows, where the legacy short-name match already returns it here.
+            foreach (string playlist in Directory.GetFiles(folder, "*.m3u*", SearchOption.AllDirectories))
+                if (IsPlaylistExtension(Path.GetExtension(playlist)))
+                    results.Add(playlist);
 
             foreach (var fmt in _config.formats)
                 if (fmt.Value.allowLossless)
@@ -817,7 +822,7 @@ namespace CUETools.Processor
                             item.AudioPaths.Contains(path))
                     ) != null)
                     skip = true;
-                if (!skip && pathextension == ".m3u")
+                if (!skip && IsPlaylistExtension(pathextension))
                 {
                     var contents = new List<string>();
                     using (StreamReader m3u = StreamReader_UTF_ANSI(path))
@@ -856,7 +861,7 @@ namespace CUETools.Processor
                     if (!skip && _localDB.Find(item => item.EqualAudioPaths(contents)) != null)
                         skip = true;
                 }
-                if (!skip && pathextension != ".cue" && pathextension != ".m3u")
+                if (!skip && pathextension != ".cue" && !IsPlaylistExtension(pathextension))
                 {
                     if (_localDB.Find(item =>
                             item.AudioPaths != null &&
@@ -1192,7 +1197,7 @@ namespace CUETools.Processor
                     try { _logFiles.Add(new CUEToolsSourceFile(logPath, new StreamReader(logPath, CUESheet.Encoding))); }
                     catch { }
             }
-            else if (Path.GetExtension(pathIn).ToLower() == ".m3u")
+            else if (IsPlaylistExtension(Path.GetExtension(pathIn)))
             {
                 string cueSheet = CUESheet.CreateDummyCUESheet(_config, pathIn);
                 sr = new StringReader(cueSheet);
@@ -2008,6 +2013,20 @@ namespace CUETools.Processor
             {
                 return Encoding.Default;
             }
+        }
+
+        /// <summary>
+        /// True for a playlist manifest extension. .m3u8 is the same format declared as
+        /// UTF-8, and StreamReader_UTF_ANSI already decodes UTF-8 with or without a BOM,
+        /// so the extension is the only thing that separated them. Every reader of a
+        /// playlist must use this: verification discovery accepts .m3u8 and the file
+        /// picker offers it, so a site that compares against ".m3u" alone rejects a file
+        /// the user was invited to choose.
+        /// </summary>
+        public static bool IsPlaylistExtension(string extension)
+        {
+            return string.Equals(extension, ".m3u", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".m3u8", StringComparison.OrdinalIgnoreCase);
         }
 
         public static StreamReader StreamReader_UTF_ANSI(string path)
@@ -4605,7 +4624,7 @@ namespace CUETools.Processor
                     fileGroups.Add(new FileGroupInfo(file, FileGroupInfoType.CUESheetFile));
                     continue;
                 }
-                if (ext == ".m3u")
+                if (IsPlaylistExtension(ext))
                 {
                     FileGroupInfo m3uGroup = new FileGroupInfo(file, FileGroupInfoType.M3UFile);
                     using (StreamReader m3u = StreamReader_UTF_ANSI(file.FullName))

@@ -43,6 +43,14 @@ public sealed class VerifyFilesResult
     public bool Accurate { get; init; }
     public bool HasErrors { get; init; }
     public bool CanRecover { get; init; }
+    /// <summary>
+    /// The lookup did not complete: a transport error, or an HTTP status other than
+    /// NotFound. A database that answered "this disc is not here" is NOT a failure and
+    /// leaves these false. Without the distinction both cases arrive as a zero total and
+    /// the UI reports "not in database" for a service that never answered.
+    /// </summary>
+    public bool ArLookupFailed { get; init; }
+    public bool CtdbLookupFailed { get; init; }
     public string Source { get; init; } = "";
     /// <summary>The published repaired-copy directory. Empty for verification and failed repair.</summary>
     public string OutputPath { get; init; } = "";
@@ -365,6 +373,8 @@ public sealed class VerifyService : IVerifyService
             Accurate = verified.Accurate,
             HasErrors = false,
             CanRecover = false,
+            ArLookupFailed = verified.ArLookupFailed,
+            CtdbLookupFailed = verified.CtdbLookupFailed,
             Source = source,
             OutputPath = outputPath,
             RepairSamples = repaired.RepairSamples,
@@ -389,17 +399,27 @@ public sealed class VerifyService : IVerifyService
         IDiagnosticLog log)
     {
         int arConf = 0, arTotal = 0;
+        bool arFailed = false;
         // a throw here must not be reported as "not in database" - that is a different fact
         try { arConf = (int)cue.ArVerify.WorstConfidence(); arTotal = (int)cue.ArVerify.WorstTotal(); }
-        catch (Exception ex) { log.Warn("verify", "AccurateRip result read failed (shown as not in database): " + ex.GetType().Name); }
+        catch (Exception ex)
+        {
+            arFailed = true;
+            log.Warn("verify", "AccurateRip result read failed: " + ex.GetType().Name);
+        }
+        // A service that answered "not here" is a real answer; anything else is a failed
+        // lookup, and the two must not share the "not in database" wording.
+        try { arFailed |= LookupFailed(cue.ArVerify.ExceptionStatus, cue.ArVerify.ResponseStatus); }
+        catch (Exception ex) { log.Warn("verify", "AccurateRip status read failed: " + ex.GetType().Name); }
 
         int ctConf = 0, ctTotal = 0;
-        bool hasErrors = false, canRecover = false;
+        bool hasErrors = false, canRecover = false, ctdbFailed = false;
         DBEntry? rep = null;
         try
         {
             ctConf = cue.CTDB.Confidence;
             ctTotal = cue.CTDB.Total;
+            ctdbFailed = LookupFailed(cue.CTDB.QueryExceptionStatus, cue.CTDB.QueryResponseStatus);
             foreach (DBEntry e in cue.CTDB.Entries)
             {
                 if (e.hasErrors) hasErrors = true;
@@ -523,6 +543,8 @@ public sealed class VerifyService : IVerifyService
             Accurate = arConf > 0,
             HasErrors = hasErrors,
             CanRecover = canRecover,
+            ArLookupFailed = arFailed,
+            CtdbLookupFailed = ctdbFailed,
             Source = path,
             RepairSamples = repSamples,
             RepairSectors = repSectors,
@@ -538,6 +560,18 @@ public sealed class VerifyService : IVerifyService
             RepairApplied = applied
         };
     }
+
+    /// <summary>
+    /// Both databases report a miss the same way: ProtocolError plus HTTP 404. Every other
+    /// non-success status is the lookup itself failing, which is a different fact and must
+    /// not be shown as "not in database".
+    /// </summary>
+    private static bool LookupFailed(
+        System.Net.WebExceptionStatus exceptionStatus,
+        System.Net.HttpStatusCode responseStatus)
+        => exceptionStatus != System.Net.WebExceptionStatus.Success
+            && !(exceptionStatus == System.Net.WebExceptionStatus.ProtocolError
+                && responseStatus == System.Net.HttpStatusCode.NotFound);
 
     private static double Clamp(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
 }

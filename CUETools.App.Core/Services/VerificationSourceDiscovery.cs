@@ -125,6 +125,13 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
             return DiscoverDirectory(selected[0]);
 
         string root = CommonDirectory(selected);
+        // The path-root test above only separates volumes, which every absolute path shares
+        // on Unix. Files whose nearest shared ancestor is the filesystem root are unrelated
+        // on any platform, and treating that root as an album folder would scope the run to
+        // the whole disk.
+        if (selected.Length > 1 && IsFilesystemRoot(root))
+            return Failure("Selected files must belong to the same album location.");
+
         return Build(root, selected);
     }
 
@@ -442,6 +449,15 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
     {
         string relative = Path.GetRelativePath(root, path);
         return relative == "." ? Path.GetFileName(path) : relative;
+    }
+
+    private static bool IsFilesystemRoot(string directory)
+    {
+        if (string.IsNullOrEmpty(directory))
+            return false;
+        string? parent = Path.GetDirectoryName(directory.TrimEnd(Path.DirectorySeparatorChar)
+            + Path.DirectorySeparatorChar);
+        return string.IsNullOrEmpty(parent);
     }
 
     private static string CommonDirectory(IReadOnlyList<string> files)
