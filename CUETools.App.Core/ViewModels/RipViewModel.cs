@@ -22,6 +22,23 @@ internal enum TestCopyCompletionState
 }
 
 /// <summary>
+/// A rip that has published its files, and whether the databases answered while it read.
+/// A head that keeps an offline journal uses this to queue the published album when they did
+/// not, so the verdict arrives later instead of never.
+/// </summary>
+/// <param name="OutputDirectory">The published album directory.</param>
+/// <param name="ArLookupFailed">AccurateRip never answered during the read.</param>
+/// <param name="CtdbLookupFailed">CTDB never answered during the read.</param>
+public sealed record RipPublication(
+    string OutputDirectory,
+    bool ArLookupFailed,
+    bool CtdbLookupFailed)
+{
+    /// <summary>True when neither database judged this rip, so it has no verdict at all.</summary>
+    public bool NoDatabaseAnswered => ArLookupFailed && CtdbLookupFailed;
+}
+
+/// <summary>
 /// Rip page: enumerate drives, read the inserted disc (TOC + metadata + releases), rip or verify
 /// with live visuals (3D disc, VU, speed, re-read), embed the hi-res cover, and keep the
 /// recently-ripped history for the no-disc screen.
@@ -1419,6 +1436,7 @@ public sealed class RipViewModel : PageViewModel
                 if (result.LosslessOutput &&
                     !result.OutputVerificationPerformed)
                     StatusText += "  WARNING: final output verification was not performed.";
+                RaisePublished(result.OutputDir, result.ArLookupFailed, result.CtdbLookupFailed);
                 await FinishRipAsync(result.OutputDir, drive);   // shared tail: RipDone + eject
             }
             ApplyPerTrack(result);
@@ -1741,6 +1759,7 @@ public sealed class RipViewModel : PageViewModel
                 salvaged: result.Salvaged);
             // shared tail (sets RipDone, ejects when enabled). Only on PASSED: a HELD result may still
             // be re-run, and that needs the disc in the drive.
+            RaisePublished(result.OutputDir, result.ArLookupFailed, result.CtdbLookupFailed);
             await FinishRipAsync(result.OutputDir, drive);
         }
         else if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Held)
@@ -1944,6 +1963,32 @@ public sealed class RipViewModel : PageViewModel
     /// "Eject after rip" ended up working for Rip and doing nothing for Test &amp; Copy, and how accepting
     /// a held read left no "Open folder" panel. Anything that must happen when a rip ends belongs HERE,
     /// not in a caller.</summary>
+    /// <summary>
+    /// Raised when a rip has published its files, with the directory and whether the
+    /// databases actually answered during the read.
+    ///
+    /// A rip makes its own AccurateRip and CTDB contact rather than going through the
+    /// journaled verify service, so an offline rip used to finish with no verdict and
+    /// nothing queued: only the Verify page and the Queue journal. A head that keeps an
+    /// offline journal subscribes here and queues the published album, so the verdict
+    /// arrives on a later launch instead of the user having to know to re-verify by hand.
+    /// </summary>
+    public event Action<RipPublication>? Published;
+
+    private void RaisePublished(string outputDir, bool arFailed, bool ctdbFailed)
+    {
+        if (string.IsNullOrEmpty(outputDir)) return;
+        try
+        {
+            Published?.Invoke(new RipPublication(outputDir, arFailed, ctdbFailed));
+        }
+        catch (Exception ex)
+        {
+            // A subscriber is ancillary: it must never change a completed rip's outcome.
+            _log.Warn("rip", "published-notification subscriber failed: " + ex.GetType().Name);
+        }
+    }
+
     private async System.Threading.Tasks.Task FinishRipAsync(string outputDir, char drive)
     {
         if (!string.IsNullOrEmpty(outputDir)) LastOutputDir = outputDir;
@@ -1990,6 +2035,7 @@ public sealed class RipViewModel : PageViewModel
                 failedWindows: held.FailedWindows,
                 damageRepairRequired: held.CtdbHasErrors,
                 salvaged: held.Salvaged);
+            RaisePublished(dir, held.ArLookupFailed, held.CtdbLookupFailed);
             await FinishRipAsync(dir, _selectedDrive);
         }
     }
