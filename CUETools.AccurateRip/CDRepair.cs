@@ -294,9 +294,18 @@ namespace CUETools.AccurateRip
 		}
 
 		/// <summary>The worst per-stripe error count this fix needs. Together with
-		/// <see cref="StripeCapacity"/> this is the repair headroom (R115): at capacity, one
-		/// more error in that stripe would have made the disc unrecoverable, so the user can
-		/// weigh re-ripping against repairing.</summary>
+		/// <see cref="StripeCapacity"/> this is the repair headroom (R115) at the parity
+		/// depth this fix actually ran at, so the user can weigh re-ripping against
+		/// repairing.
+		/// <para>At capacity, one more error in that stripe would defeat the fix AT THIS
+		/// DEPTH. That is not the same as an unrecoverable disc. CUEToolsDB.LookupCTDB
+		/// walks a ladder of npar = 4, 8, 16 (capped at the entry's own Npar and at
+		/// AccurateRipVerify.maxNpar) and stops at the first depth that recovers, and
+		/// StripeCapacity is that fetched depth / 2. A capacity of 4 therefore means the
+		/// fix succeeded at npar = 8, with npar = 16 still unfetched. The disc is only out
+		/// of headroom when the reported capacity comes from the last rung the ladder can
+		/// reach. Do not describe a fix at capacity as "one error from unrecoverable"
+		/// without checking which rung it ran at.</para></summary>
 		public int WorstStripeErrors
 		{
 			get { return worstColumnErrors; }
