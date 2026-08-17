@@ -1012,7 +1012,17 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
                 host.Equals("www.theaudiodb.com", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("theaudiodb.com", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("r2.theaudiodb.com", StringComparison.OrdinalIgnoreCase),
-            _ => true
+            // Everything else arrives as a URL named by a database response, which is where
+            // the CTDB metadata provider lands. It used to be allowed anywhere, so a response
+            // chose the host the app connected to. The list is the one the enrichment path
+            // already enforces, plus MusicBrainz, which serves release cover redirects.
+            ProviderPolicy.ExternalArtwork =>
+                host.Equals("coverartarchive.org", StringComparison.OrdinalIgnoreCase) ||
+                host.Equals("archive.org", StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith(".archive.org", StringComparison.OrdinalIgnoreCase) ||
+                host.Equals("db.cuetools.net", StringComparison.OrdinalIgnoreCase) ||
+                host.Equals("musicbrainz.org", StringComparison.OrdinalIgnoreCase),
+            _ => false
         };
         if (!allowed)
             throw new InvalidDataException("Artwork URL redirected outside its provider.");

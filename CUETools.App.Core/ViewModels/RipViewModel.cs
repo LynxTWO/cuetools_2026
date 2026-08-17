@@ -424,7 +424,19 @@ public sealed class RipViewModel : PageViewModel
     // Picker index: 0 = Burst, 1 = Secure, 2 = Paranoid, 3 = Salvage (R119: a defective-disc
     // capture - Burst-quality Test & Copy reads with C2 off at the drive's minimum speed).
     private int _correctionQuality = 1;
-    public int CorrectionQuality { get => _correctionQuality; set { if (Set(ref _correctionQuality, value)) _settings.CorrectionQuality = value; } }
+    public int CorrectionQuality
+    {
+        get => _correctionQuality;
+        set
+        {
+            if (!Set(ref _correctionQuality, value)) return;
+            _settings.CorrectionQuality = value;
+            // Rip and Verify are disabled for a Salvage selection, so their enablement has to
+            // be re-evaluated when the picker moves.
+            OnPropertyChanged(nameof(SalvageRead));
+            RequeryHub.RequestRequery();
+        }
+    }
     /// <summary>Engine quality for the picker selection: Salvage runs the engine at Burst.</summary>
     public int EffectiveCorrectionQuality => _correctionQuality == 3 ? 0 : _correctionQuality;
     /// <summary>True when the picker selects the Salvage capture mode (R119).</summary>
@@ -616,12 +628,18 @@ public sealed class RipViewModel : PageViewModel
         // canExecute, not just the early-return guard inside ReadDiscOrClose: without it the button
         // stays fully enabled during a rip and does nothing when pressed.
         ReadDiscCommand = new RelayCommand(_ => ReadDiscOrClose(), _ => !IsRipping && !IsBusy);
-        VerifyCommand = new RelayCommand(_ => { _ = RunJobAsync(encode: false); }, _ => IsDiscPresent && !IsRipping && !IsBusy);
+        // Salvage is a Test & Copy mode: only RunTestAndCopy takes the salvage flag, so Rip and
+        // Verify with Salvage selected used to run a plain Burst job with no minimum-speed pin,
+        // no concealment, and no salvaged grade on the output - the user believing they had
+        // made a salvage capture. They are disabled for that selection instead.
+        VerifyCommand = new RelayCommand(
+            _ => { _ = RunJobAsync(encode: false); },
+            _ => IsDiscPresent && !IsRipping && !IsBusy && !SalvageRead);
         // A cover is immutable job input. Do not freeze a null snapshot while release-bound
         // discovery is still resolving; Verify remains available because it publishes no audio.
         RipCommand = new RelayCommand(
             _ => { _ = RunJobAsync(encode: true); },
-            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
+            _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading) && !SalvageRead);
         StopCommand = new RelayCommand(_ => Stop(), _ => IsRipping);
         EjectCommand = new RelayCommand(_ => ToggleTray(), _ => Drives.Count > 0 && !IsRipping && !IsBusy);
         BrowseOutputCommand = new RelayCommand(async _ => await BrowseOutputAsync());
@@ -814,7 +832,10 @@ public sealed class RipViewModel : PageViewModel
             StatusText = info.Releases.Count > 0
                 ? $"Identified: {info.Artist} - {info.Album}. Ripping comes next."
                 : "Disc read; not found in the metadata databases (generic track names).";
-            TriggerArtFetch();
+            // Inserting a disc is not a request to download a cover. Off by default, so the
+            // app no longer reaches a cover-art host just because it started with a disc in
+            // the drive; every explicit path below still fetches.
+            if (_settings.AutoFetchArtOnDiscRead) TriggerArtFetch();
         }
         OnPropertyChanged(nameof(SelectedRelease));
         OnPropertyChanged(nameof(HasReleases));
@@ -870,8 +891,33 @@ public sealed class RipViewModel : PageViewModel
             generation,
             _chosenMetadata?.AlbumArt,
             _config.advanced.coversSearch);
-        _ = FetchArtAsync(query);
+        _artFetch = FetchArtAsync(query);
+        _ = _artFetch;
     }
+
+    /// <summary>
+    /// Starting a rip is an explicit request, so it may fetch a cover even when the disc read
+    /// did not (see AppSettings.AutoFetchArtOnDiscRead). Waits for a fetch already in flight,
+    /// or starts one, so the encode embeds the same cover the page shows. Bounded: a slow or
+    /// dead artwork host delays the rip by at most this wait, and never fails it.
+    /// </summary>
+    private async Task EnsureArtBeforeRipAsync()
+    {
+        if (!ArtEnabled || _localArtworkOverride) return;
+        if (_coverBytes == null && _artFetch == null) TriggerArtFetch();
+        Task? fetch = _artFetch;
+        if (fetch == null) return;
+        try
+        {
+            await Task.WhenAny(fetch, Task.Delay(TimeSpan.FromSeconds(20)));
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("rip", "cover fetch before rip failed: " + ex.GetType().Name);
+        }
+    }
+
+    private Task? _artFetch;
 
     private void ClearArt()
     {
@@ -1311,6 +1357,7 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         RipOutputLayout outputLayout = _settings.RipOutputLayout;
+        await EnsureArtBeforeRipAsync();
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
@@ -1515,6 +1562,7 @@ public sealed class RipViewModel : PageViewModel
         var meta = _chosenMetadata;
         string outBase = OutputBaseDir;
         RipOutputLayout outputLayout = _settings.RipOutputLayout;
+        await EnsureArtBeforeRipAsync();
         byte[]? cover = _coverBytes == null
             ? null
             : (byte[])_coverBytes.Clone();
