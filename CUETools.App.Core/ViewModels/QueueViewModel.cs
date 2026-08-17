@@ -94,9 +94,27 @@ public sealed class QueueViewModel : PageViewModel
 
         AddFilesCommand = new RelayCommand(_ => AddFiles());
         AddFolderCommand = new RelayCommand(_ => AddFolder());
-        RemoveCommand = new RelayCommand(o => { if (o is QueueItem i) Items.Remove(i); }, _ => !IsRunning);
+        // Removing the row that is running would leave a job with no row to report into, so
+        // only a waiting row can be removed. Adding during a batch is fine: the runner takes
+        // the next waiting item each time round rather than a snapshot.
+        RemoveCommand = new RelayCommand(
+            o => { if (o is QueueItem i && !i.Running) Items.Remove(i); },
+            o => o is QueueItem item && !item.Running);
         ClearCommand = new RelayCommand(_ => Items.Clear(), _ => Items.Count > 0 && !IsRunning);
         RunAllCommand = new RelayCommand(_ => { _ = RunAllAsync(); }, _ => Items.Count > 0 && !IsRunning);
+        // Stops between items, the same promise Stop after disc makes on the Verify page: the
+        // item in flight finishes and keeps its result, and everything still waiting stays
+        // queued rather than being thrown away.
+        StopCommand = new RelayCommand(
+            _ =>
+            {
+                _stopRequested = true;
+                StatusText = "Stopping after the current item. Its result will be kept.";
+                // Nothing else changes an observable property here, so the button would stay
+                // enabled until the batch ended without this.
+                RequeryHub.RequestRequery();
+            },
+            _ => IsRunning && !_stopRequested);
         Items.CollectionChanged += (_, __) => RequeryHub.RequestRequery();
     }
 
@@ -147,6 +165,10 @@ public sealed class QueueViewModel : PageViewModel
     public ICommand RemoveCommand { get; }
     public ICommand ClearCommand { get; }
     public ICommand RunAllCommand { get; }
+    public ICommand StopCommand { get; }
+
+    /// <summary>Set by Stop; read between items so the one in flight keeps its result.</summary>
+    private bool _stopRequested;
 
     public void SelectCodec(CodecChoice choice)
     {
@@ -224,10 +246,26 @@ public sealed class QueueViewModel : PageViewModel
     {
         if (Items.Count == 0 || IsRunning) return;
         IsRunning = true;
-        int done = 0, total = Items.Count;
+        _stopRequested = false;
+        int done = 0;
 
-        foreach (var item in Items.ToList())
+        // Take the next item still waiting, rather than a snapshot of the list taken before
+        // the batch started. A row added while the batch ran used to appear in the list, be
+        // counted in neither the tally nor the bar, and sit at Pending after the batch
+        // reported completion.
+        while (true)
         {
+            if (_stopRequested)
+            {
+                StatusText = $"Stopped after {done} item(s). The rest are still queued.";
+                break;
+            }
+            QueueItem? item = Items.FirstOrDefault(candidate =>
+                string.Equals(candidate.Status, "Pending", StringComparison.Ordinal));
+            if (item == null) break;
+            int total = done + Items.Count(candidate =>
+                string.Equals(candidate.Status, "Pending", StringComparison.Ordinal));
+
             item.Status = "Running";
             item.Running = true;
             StatusText = $"[{done + 1}/{total}] {item.Action}: {item.Display}";
@@ -278,10 +316,12 @@ public sealed class QueueViewModel : PageViewModel
 
             item.Running = false;
             done++;
-            Progress = (double)done / total;
+            Progress = total == 0 ? 1 : (double)done / total;
         }
 
         IsRunning = false;
-        StatusText = $"Batch complete: {done}/{total} processed.";
+        if (!_stopRequested)
+            StatusText = $"Batch complete: {done} item(s) processed.";
+        _stopRequested = false;
     }
 }
