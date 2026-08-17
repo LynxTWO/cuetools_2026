@@ -293,6 +293,12 @@ public sealed class RipService : IRipService
     public RipService(CUEConfig config, IDiagnosticLog log, AppSettings settings, EncoderCatalog catalog, CUETools.Wpf.Accuracy.DriveCalibrationStore calStore, CUETools.Wpf.Accuracy.VerifyHistoryStore history, CUETools.Wpf.Accuracy.DriveCalibrationService calService)
     { _config = config; _log = log; _settings = settings; _catalog = catalog; _calStore = calStore; _history = history; _calService = calService; }
 
+    /// <summary>
+    /// Optional (SLICE-012). Null means no submission is ever offered, which is what every
+    /// head did before the consent dialog existed.
+    /// </summary>
+    public CtdbSubmissionService? Submissions { get; set; }
+
     internal static CUEStyle ResolveOutputStyle(
         bool encode,
         RipOutputLayout layout) =>
@@ -399,7 +405,11 @@ public sealed class RipService : IRipService
                 requireIndependentReads: cq > 0,
                 out string error))
             return new VerifyResult { Error = error };
-        return Run(drive, cq, encode: true, selectedFormat, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart, outputLayout: outputLayout);
+        // The only rip call site that publishes a finished album on its own. Test and Copy
+        // calls Run up to three times for one disc, so offering from inside Run would ask
+        // about the same disc twice and offer a staged intermediate read as if it were a
+        // result. Test and Copy has its own publication point and is not wired here yet.
+        return Run(drive, cq, encode: true, selectedFormat, metadata, outputBaseDir, onProgress, telemetry, onReread, coverArt, onEncodeStart: onEncodeStart, outputLayout: outputLayout, offerSubmission: true);
     }
 
     private string ValidateCodecBeforeOpticalRead(string format)
@@ -479,7 +489,7 @@ public sealed class RipService : IRipService
         }
     }
 
-    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null)
+    private VerifyResult Run(char drive, int cq, bool encode, string format, CUEMetadata? metadata, string outputBaseDir, Action<double, string> onProgress, RipTelemetryMailbox? telemetry, Action<RereadReport>? onReread = null, byte[]? coverArt = null, bool stageOnly = false, bool forceCacheDefeat = false, Action? onEncodeStart = null, RipOutputLayout outputLayout = RipOutputLayout.Tracks, bool salvage = false, Action<TrackCrcLive>? onTrackCrc = null, bool offerSubmission = false)
     {
         if (encode) RedactOutputRoot(outputBaseDir);
         var reader = new CDDriveReader();
@@ -1274,6 +1284,34 @@ public sealed class RipService : IRipService
             {
                 try { _log.Warn("rip", "completion callback failed: " + ex.GetType().Name); }
                 catch { }
+            }
+
+            // SLICE-012. Offered here because cue.CTDB is the live object from this read and
+            // its parity and checksums are what upload; nothing downstream can replay it.
+            // D-070 gates the quality, so a salvaged capture or any unrecoverable window is
+            // refused by the policy rather than by a judgement made here.
+            if (offerSubmission && Submissions != null)
+            {
+                try
+                {
+                    Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
+                    {
+                        RunCompleted = true,
+                        LookupFailed = arFailed || ctdbFailed,
+                        FailedWindows = failedWindows,
+                        Salvaged = salvage,
+                        Held = false,
+                        Album = cue.Metadata?.Title ?? "",
+                        Artist = cue.Metadata?.Artist ?? "",
+                        Barcode = cue.Metadata?.Barcode ?? "",
+                        Confidence = arConf,
+                    });
+                }
+                catch (Exception ex)
+                {
+                    try { _log.Warn("ctdb", "submission offer failed, rip unchanged: " + ex.GetType().Name); }
+                    catch { }
+                }
             }
 
             return new VerifyResult

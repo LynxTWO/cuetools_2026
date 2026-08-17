@@ -53,10 +53,14 @@ public sealed class CtdbSubmissionConsent
 /// <summary>
 /// Asks the user whether to submit. A head that does not implement this can never submit,
 /// which is the intended default: silence means no upload.
+///
+/// Takes the whole candidate rather than a title, because the dialog has to name what
+/// leaves the machine, and the artist and barcode are part of that. A prompt that could
+/// only show an album name would be describing the upload from memory.
 /// </summary>
 public interface ICtdbSubmissionPrompt
 {
-    CtdbSubmissionConsent Ask(string album);
+    CtdbSubmissionConsent Ask(CtdbSubmissionCandidate candidate);
 }
 
 /// <summary>
@@ -200,7 +204,7 @@ public sealed class CtdbSubmissionService
                 return CtdbSubmissionBlock.DeclinedPreviously;
             }
 
-            CtdbSubmissionConsent consent = _prompt.Ask(candidate.Album);
+            CtdbSubmissionConsent consent = _prompt.Ask(candidate);
             if (consent.Remember)
                 CtdbSubmissionEligibility.Remember(_config, consent.Submit);
             if (!consent.Submit)

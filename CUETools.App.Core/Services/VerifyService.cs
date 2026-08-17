@@ -104,6 +104,47 @@ public sealed class VerifyService : IVerifyService
         _repairEngine = repairEngine;
     }
 
+    /// <summary>
+    /// Optional (SLICE-012). Null means no submission is ever offered, which is what every
+    /// head did before the consent dialog existed. Settable rather than constructor-injected
+    /// so the many existing call sites keep working and keep their old behaviour.
+    /// </summary>
+    public CtdbSubmissionService? Submissions { get; set; }
+
+    /// <summary>
+    /// Offers this verify's result to the CUETools Database, if a head has wired a consent
+    /// surface. Never throws: a submission must not change a verify verdict, and the result
+    /// has already been built by the time this runs.
+    ///
+    /// FailedWindows is zero because a verify reads files, not a disc. The unrecoverable
+    /// window count that D-070 gates on belongs to a rip, and the rip path supplies its own.
+    /// </summary>
+    private void OfferSubmission(CUESheet cue, VerifyFilesResult result)
+    {
+        if (Submissions == null) return;
+        try
+        {
+            Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
+            {
+                RunCompleted = result.Ok,
+                // Either database failing to answer blocks a submission. Uploading a rip
+                // whose verdict came from one source claims more than the run established.
+                LookupFailed = result.ArLookupFailed || result.CtdbLookupFailed,
+                FailedWindows = 0,
+                Salvaged = false,
+                Held = false,
+                Album = result.Album,
+                Artist = result.Artist,
+                Barcode = result.Barcode,
+                Confidence = result.ArConfidence,
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("ctdb", "submission offer failed, verdict unchanged: " + ex.GetType().Name);
+        }
+    }
+
     /// <summary>Root the sheet's output at the verified source so an AccurateRip log written during a
     /// verify lands next to those files. Best-effort: a verify must never fail because of its log.</summary>
     private void TrySetVerifyLogTarget(CUESheet cue, string source)
@@ -168,7 +209,14 @@ public sealed class VerifyService : IVerifyService
             string status = cue.Go();
             onProgress(1, status);
 
-            return Gather(cue, status, path, ok: true, error: "", applied: false, _log);
+            VerifyFilesResult result =
+                Gather(cue, status, path, ok: true, error: "", applied: false, _log);
+            // Offered here, while cue.CTDB is the live object from this run. Its parity and
+            // checksums are what upload, so a submission cannot be replayed from the stored
+            // verdict later. Null Submissions, or a head with no consent surface, means the
+            // offer is never made and nothing leaves the machine.
+            OfferSubmission(cue, result);
+            return result;
         }
         catch (Exception ex)
         {
