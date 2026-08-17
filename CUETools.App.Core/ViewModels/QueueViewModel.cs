@@ -94,6 +94,10 @@ public sealed class QueueViewModel : PageViewModel
 
         AddFilesCommand = new RelayCommand(_ => AddFiles());
         AddFolderCommand = new RelayCommand(_ => AddFolder());
+        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput());
+        ClearOutputCommand = new RelayCommand(
+            _ => OutputDir = "",
+            _ => !string.IsNullOrWhiteSpace(OutputDir));
         // Removing the row that is running would leave a job with no row to report into, so
         // only a waiting row can be removed. Adding during a batch is fine: the runner takes
         // the next waiting item each time round rather than a snapshot.
@@ -125,7 +129,10 @@ public sealed class QueueViewModel : PageViewModel
         set
         {
             if (Set(ref _selectedAction, value))
+            {
                 OnPropertyChanged(nameof(CodecPickerEnabled));
+                OnPropertyChanged(nameof(OutputPickerEnabled));
+            }
         }
     }
 
@@ -148,11 +155,17 @@ public sealed class QueueViewModel : PageViewModel
         {
             if (!Set(ref _isRunning, value)) return;
             OnPropertyChanged(nameof(CodecPickerEnabled));
+            OnPropertyChanged(nameof(OutputPickerEnabled));
             RequeryHub.RequestRequery();
         }
     }
-    public bool CodecPickerEnabled => !IsRunning &&
+    /// <summary>Convert's own settings are editable: the action is Convert and no batch
+    /// owns the queue. Both pickers read this rather than repeating the condition, so they
+    /// cannot drift apart.</summary>
+    private bool ConvertOptionsEnabled => !IsRunning &&
         string.Equals(SelectedAction, "Convert", StringComparison.Ordinal);
+    public bool CodecPickerEnabled => ConvertOptionsEnabled;
+    public bool OutputPickerEnabled => ConvertOptionsEnabled;
 
     private double _progress;
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
@@ -166,6 +179,41 @@ public sealed class QueueViewModel : PageViewModel
     public ICommand ClearCommand { get; }
     public ICommand RunAllCommand { get; }
     public ICommand StopCommand { get; }
+    public ICommand BrowseOutputCommand { get; }
+    public ICommand ClearOutputCommand { get; }
+
+    private string _outputDir = "";
+    /// <summary>
+    /// Where converted files go. Empty means each album's own usual location, which is
+    /// what the Queue did unconditionally before: it passed "" to Convert and ignored
+    /// the Convert page's folder entirely, so a user who set one there watched the batch
+    /// write somewhere else (F-14).
+    ///
+    /// Each item freezes this when it is added, so this property only steers what is
+    /// queued next.
+    /// </summary>
+    public string OutputDir
+    {
+        get => _outputDir;
+        set
+        {
+            if (!Set(ref _outputDir, value ?? "")) return;
+            OnPropertyChanged(nameof(OutputLabel));
+            RequeryHub.RequestRequery();
+        }
+    }
+
+    /// <summary>What the page shows for the destination, never an empty box.</summary>
+    public string OutputLabel => string.IsNullOrWhiteSpace(OutputDir)
+        ? "Beside each album (default)"
+        : OutputDir;
+
+    private async void BrowseOutput()
+    {
+        if (_dialogs == null) return;
+        string? folder = await _dialogs.PickFolderAsync("Choose where converted files go");
+        if (folder != null) OutputDir = folder;
+    }
 
     /// <summary>Set by Stop; read between items so the one in flight keeps its result.</summary>
     private bool _stopRequested;
@@ -264,7 +312,11 @@ public sealed class QueueViewModel : PageViewModel
             Format = _selectedAction == "Convert" ? _selectedFormat : "",
             CodecStableId = _selectedAction == "Convert"
                 ? SelectedCodecChoice?.StableId ?? ""
-                : ""
+                : "",
+            // Frozen here rather than read at run time, the same rule CodecStableId
+            // follows. Changing the folder mid-batch retargets what is added next and
+            // cannot move work already queued somewhere the user has stopped looking.
+            OutputDir = _selectedAction == "Convert" ? OutputDir : ""
         });
         StatusText = $"{Items.Count} item(s) queued.";
     }
@@ -320,7 +372,7 @@ public sealed class QueueViewModel : PageViewModel
                 {
                     _catalog.SelectCodec(_config, queuedChoice);
                     var r = await Task.Run(() =>
-                        _convert.Convert(item.Source, item.Format, "", Report));
+                        _convert.Convert(item.Source, item.Format, item.OutputDir, Report));
                     item.Status = r.Ok ? "Done" : "Failed";
                     item.Result = r.Ok
                         ? $"{r.FileCount} {item.Format} file(s)"
