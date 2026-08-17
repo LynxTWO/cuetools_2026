@@ -456,6 +456,21 @@ public sealed class VerifyService : IVerifyService
                 repNpar = rep.Npar;
                 repWorstStripe = fx.WorstStripeErrors;
                 repStripeCapacity = fx.StripeCapacity;
+                // Two different depths meet here and have been read as one. rep.Npar is the
+                // entry's own parity depth from the first lookup; the fix ran at whatever
+                // depth the escalation (4, 8, 16) actually recovered at, which is
+                // StripeCapacity * 2 (CDRepair.cs:182). A "worst stripe 4 of 4" therefore
+                // does NOT mean the disc sat at the limit of what parity could do, unless
+                // the fetched depth already equals the entry's. Recorded so any repair
+                // settles that on its own; see needs-verification entry 13 in the Linux
+                // repository and findings F-19/F-20.
+                log.Info(
+                    "verify",
+                    $"ctdb parity: entry npar={rep.Npar}, fix ran at npar={fx.StripeCapacity * 2}, " +
+                    $"worst stripe {fx.WorstStripeErrors}/{fx.StripeCapacity}" +
+                    (fx.StripeCapacity * 2 < rep.Npar
+                        ? " (deeper parity was still available)"
+                        : " (this was the entry's full depth)"));
                 var arr = fx.AffectedSectorArray;   // one bit per CD sector, true = a sample there was corrected
                 repTotal = arr.Length;
                 const int B = 200;
