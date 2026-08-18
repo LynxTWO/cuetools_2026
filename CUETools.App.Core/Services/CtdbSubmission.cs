@@ -253,13 +253,30 @@ public sealed class CtdbSubmissionService
             // The server echoes what it was sent, so the album and artist have to be
             // scrubbable before the response is written to a log the user may share.
             _log.Redact(candidate.Album, candidate.Artist, candidate.Barcode);
-            database.Submit(
+            CTDBResponse? response = database.Submit(
                 candidate.Confidence,
                 CtdbSubmissionEligibility.CleanReadQuality,
                 candidate.Artist,
                 candidate.Album,
                 candidate.Barcode);
-            string reply = database.SubStatus ?? "";
+
+            // A null response is the engine refusing to send, not a silent success.
+            // CUEToolsDB.Submit returns null without any network call unless the disc's
+            // own lookup succeeded or answered NotFound, so a database object that never
+            // queried cannot submit. Reporting that as "shared" would be exactly the lie
+            // this outcome type exists to prevent.
+            if (response == null)
+            {
+                _log.Warn("ctdb", "submission refused: this disc was never looked up");
+                return new CtdbSubmissionOutcome
+                {
+                    Block = CtdbSubmissionBlock.None,
+                    Submitted = false,
+                    Message = "the disc was never looked up",
+                };
+            }
+
+            string reply = database.SubStatus ?? response.message ?? "";
             _log.Info("ctdb", "submitted: " + (reply.Length == 0 ? "no server message" : reply));
             return new CtdbSubmissionOutcome
             {
