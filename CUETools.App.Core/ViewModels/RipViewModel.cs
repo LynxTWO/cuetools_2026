@@ -435,6 +435,67 @@ public sealed class RipViewModel : PageViewModel
     private DateTime _lastSpeedTick;
     private double[] _trackEndFrac = Array.Empty<double>();
 
+    // SLICE-010: the pure derivation behind the track strip, phase chips, and pass lane.
+    // The VM feeds it engine events and copies its state out to bindables; it holds no UI.
+    private readonly TrackProgressModel _trackProgress = new();
+
+    private string _phaseChip = "";
+    /// <summary>TEST / COPY / READ 3 during a Test and Copy, empty otherwise.</summary>
+    public string PhaseChip { get => _phaseChip; private set { if (Set(ref _phaseChip, value)) OnPropertyChanged(nameof(PhaseChipVisible)); } }
+    public bool PhaseChipVisible => _phaseChip.Length > 0;
+
+    private string _modeChip = "";
+    /// <summary>BURST / SECURE / PARANOID / SALVAGE while a job runs, empty otherwise.</summary>
+    public string ModeChip { get => _modeChip; private set { if (Set(ref _modeChip, value)) OnPropertyChanged(nameof(ModeChipVisible)); } }
+    public bool ModeChipVisible => _modeChip.Length > 0;
+
+    private bool _passLaneVisible;
+    /// <summary>The pass lane exists only for modes that re-read; Burst shows none (D-058).</summary>
+    public bool PassLaneVisible { get => _passLaneVisible; private set => Set(ref _passLaneVisible, value); }
+
+    private int _passTicks;
+    /// <summary>Literal pass count of the window being re-read right now.</summary>
+    public int PassTicks { get => _passTicks; private set => Set(ref _passTicks, value); }
+
+    private int _passMax = 1;
+    public int PassMax { get => _passMax; private set => Set(ref _passMax, value); }
+
+    /// <summary>True while any job is showing Copy-phase fill, for the solid-in-hollow render.</summary>
+    public bool PhaseIsCopy => _trackProgress.Phase is RipPhaseKind.Copy or RipPhaseKind.Confirm;
+
+    /// <summary>True while the Test read runs: the current fill renders hollow (D-057).</summary>
+    public bool CurrentFillHollow => _trackProgress.Phase == RipPhaseKind.Test;
+
+    private void SyncTrackProgress()
+    {
+        TrackProgressModel model = _trackProgress;
+        for (int i = 0; i < Tracks.Count; i++)
+        {
+            TrackItem track = Tracks[i];
+            if (i < model.Current.Length) track.Progress = model.Current[i];
+            if (i < model.TestRetained.Length) track.TestProgress = model.TestRetained[i];
+            if (i < model.RereadWindows.Length) track.RereadWindows = model.RereadWindows[i];
+            if (i < model.GivenUpSectors.Length) track.UnrecoverableSectors = model.GivenUpSectors[i];
+            track.Active = i == model.ActiveIndex;
+        }
+        PhaseChip = model.PhaseChip;
+        ModeChip = model.ModeChip;
+        PassLaneVisible = model.PassLaneVisible;
+        PassTicks = model.PassTicks;
+        PassMax = model.PassMax;
+        OnPropertyChanged(nameof(PhaseIsCopy));
+        OnPropertyChanged(nameof(CurrentFillHollow));
+    }
+
+    /// <summary>The mode name the page shows for the current picker selection.</summary>
+    private string ModeName => _correctionQuality switch
+    {
+        0 => "Burst",
+        2 => "Paranoid",
+        3 => "Salvage",
+        _ => "Secure",
+    };
+
     private string _ripStatus = "";
     public string RipStatus { get => _ripStatus; private set => Set(ref _ripStatus, value); }
 
@@ -1283,6 +1344,9 @@ public sealed class RipViewModel : PageViewModel
     private Action<RereadReport> MakeRereadHandler()
         => r => _ui.Post(() =>
         {
+            // SLICE-010: pass lane and per-track attribution ride the same literal report.
+            _trackProgress.OnReread(r);
+            SyncTrackProgress();
             if (r.ReReads > 0)
             {
                 _lastRereadUtc = DateTime.UtcNow;
@@ -1320,6 +1384,7 @@ public sealed class RipViewModel : PageViewModel
         DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         char drive = _selectedDrive;
         int cq = EffectiveCorrectionQuality;   // a Salvage selection runs a plain job at Burst
+        _trackProgress.StartJob(testAndCopy: false, ModeName, multiPass: cq > 0);
         CodecLocked = encode;
         IsRipping = true;
         RipDone = false;
@@ -1343,17 +1408,18 @@ public sealed class RipViewModel : PageViewModel
         SpeedLevel = 0;
         SpeedText = "";
 
-        // per-track progress boundaries as fractions of the whole disc (by track length)
-        double totalSec = 0;
-        foreach (var t in Tracks) totalSec += t.Length.TotalSeconds;
-        _trackEndFrac = new double[Tracks.Count];
-        double cum = 0;
-        for (int i = 0; i < Tracks.Count; i++)
+        // per-track progress boundaries as fractions of the whole disc (by track length);
+        // the model owns the math (SLICE-010) and the VM mirrors its EndFractions.
+        var lengths = new System.Collections.Generic.List<TimeSpan>(Tracks.Count);
+        foreach (var t in Tracks) lengths.Add(t.Length);
+        _trackProgress.SetBoundaries(lengths);
+        _trackEndFrac = new double[_trackProgress.EndFractions.Count];
+        for (int i = 0; i < _trackEndFrac.Length; i++)
+            _trackEndFrac[i] = _trackProgress.EndFractions[i];
+        foreach (var t in Tracks)
         {
-            cum += Tracks[i].Length.TotalSeconds;
-            _trackEndFrac[i] = totalSec > 0 ? cum / totalSec : 0;
-            Tracks[i].Progress = 0;
-            Tracks[i].Active = false;
+            t.Progress = 0; t.Active = false; t.TestProgress = 0;
+            t.RereadWindows = 0; t.UnrecoverableSectors = 0;
         }
 
         // ReadProgress and re-read events fire on the ripper's thread; marshal those to the UI.
@@ -1450,6 +1516,8 @@ public sealed class RipViewModel : PageViewModel
         }
         LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
         StopRereadTimer();
+        _trackProgress.EndJob(result.Ok);
+        SyncTrackProgress();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
         CodecLocked = false;
@@ -1526,6 +1594,8 @@ public sealed class RipViewModel : PageViewModel
         char drive = _selectedDrive;
         int cq = EffectiveCorrectionQuality;
         bool salvage = SalvageRead;   // frozen with the rest of the job snapshot
+        // Salvage runs Burst-quality reads, but it re-reads by design, so its lane shows.
+        _trackProgress.StartJob(testAndCopy: true, ModeName, multiPass: cq > 0 || salvage);
         CodecLocked = true;
         IsRipping = true;
         RipDone = false;
@@ -1547,17 +1617,18 @@ public sealed class RipViewModel : PageViewModel
         SpeedLevel = 0;
         SpeedText = "";
 
-        // per-track progress boundaries as fractions of the whole disc (by track length)
-        double totalSec = 0;
-        foreach (var t in Tracks) totalSec += t.Length.TotalSeconds;
-        _trackEndFrac = new double[Tracks.Count];
-        double cum = 0;
-        for (int i = 0; i < Tracks.Count; i++)
+        // per-track progress boundaries as fractions of the whole disc (by track length);
+        // the model owns the math (SLICE-010) and the VM mirrors its EndFractions.
+        var lengths = new System.Collections.Generic.List<TimeSpan>(Tracks.Count);
+        foreach (var t in Tracks) lengths.Add(t.Length);
+        _trackProgress.SetBoundaries(lengths);
+        _trackEndFrac = new double[_trackProgress.EndFractions.Count];
+        for (int i = 0; i < _trackEndFrac.Length; i++)
+            _trackEndFrac[i] = _trackProgress.EndFractions[i];
+        foreach (var t in Tracks)
         {
-            cum += Tracks[i].Length.TotalSeconds;
-            _trackEndFrac[i] = totalSec > 0 ? cum / totalSec : 0;
-            Tracks[i].Progress = 0;
-            Tracks[i].Active = false;
+            t.Progress = 0; t.Active = false; t.TestProgress = 0;
+            t.RereadWindows = 0; t.UnrecoverableSectors = 0;
         }
 
 
@@ -1793,6 +1864,8 @@ public sealed class RipViewModel : PageViewModel
         }
         LevelL = 0; LevelR = 0;   // needles fall back to rest when the job ends
         StopRereadTimer();
+        _trackProgress.EndJob(result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed);
+        SyncTrackProgress();
         foreach (var t in Tracks) { t.Active = false; if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed) t.Progress = 1; }
         IsRipping = false;
         CodecLocked = false;
@@ -2259,15 +2332,8 @@ public sealed class RipViewModel : PageViewModel
     // its own progress, later tracks stay empty. Real (position-based), not a status-string guess.
     private void UpdateTrackProgress(double frac)
     {
-        double start = 0;
-        for (int i = 0; i < Tracks.Count && i < _trackEndFrac.Length; i++)
-        {
-            double end = _trackEndFrac[i];
-            if (frac >= end) { Tracks[i].Progress = 1; Tracks[i].Active = false; }
-            else if (frac >= start) { double span = end - start; Tracks[i].Progress = span > 1e-6 ? (frac - start) / span : 0; Tracks[i].Active = true; }
-            else { Tracks[i].Progress = 0; Tracks[i].Active = false; }
-            start = end;
-        }
+        _trackProgress.OnProgress(frac);
+        SyncTrackProgress();
     }
 
     private void ApplyPerTrack(VerifyResult result)
@@ -2300,6 +2366,10 @@ public sealed class RipViewModel : PageViewModel
     // and it is deliberately silent about tracks the read had no verdict for.
     private void ApplyLiveReadVerdict(ReadVerdict verdict)
     {
+        // SLICE-010: the phase flips on the NEXT progress event, so the finished read's
+        // final frame keeps its own label (the model documents the ordering).
+        _trackProgress.OnReadCompleted(verdict.ReadIndex);
+
         for (int i = 0; i < Tracks.Count; i++)
         {
             if (i < verdict.ArPerTrack.Length && verdict.ArPerTrack[i] > 0)
