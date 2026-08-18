@@ -11,6 +11,11 @@ public sealed class QueueItem : ViewModelBase
     public string Format { get; init; } = "";           // for Convert
     public string CodecStableId { get; init; } = "";    // exact format face + implementation
 
+    /// <summary>Where this item's converted files go, frozen when it was added. Empty means
+    /// the album's own usual location. Frozen for the same reason as CodecStableId: changing
+    /// the Queue's folder must steer what is queued next, not relocate work already waiting.</summary>
+    public string OutputDir { get; init; } = "";
+
     private string _status = "Pending";
     public string Status { get => _status; set => Set(ref _status, value); }
 
