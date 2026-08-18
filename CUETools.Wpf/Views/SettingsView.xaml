@@ -154,6 +154,19 @@
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Style="{StaticResource RowLabel}" Text="{Binding Display}"/>
                   <TextBlock Text="{Binding StatusText}" FontFamily="{StaticResource Mono}" FontSize="10" Foreground="{DynamicResource Muted}"/>
+                  <!-- The import used to report refusal with a message box, which only this
+                       platform had; the reason now rides the row for both heads. -->
+                  <TextBlock Text="{Binding ImportError}" FontSize="10" Foreground="{DynamicResource StatusWarning}" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding ImportError}" Value="">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                 </StackPanel>
               </DockPanel>
             </Border>

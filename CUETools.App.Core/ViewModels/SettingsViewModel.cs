@@ -10,9 +10,11 @@ namespace CUETools.Wpf.ViewModels;
 
 /// <summary>
 /// Settings page bound to the live CUEConfig singleton - editing here changes the actual
-/// config the rip/metadata paths use. A representative slice of the ~90 options across the
-/// main sections; the rest (and the codec editor) follow. CUEConfig exposes public fields,
-/// so each is wrapped as a bindable property.
+/// config the rip/metadata paths use (D-073: changes apply immediately; the file still
+/// writes once at exit, D-043). A representative slice of the ~90 options across the main
+/// sections; the rest (and the codec editor) follow. CUEConfig exposes public fields, so
+/// each is wrapped as a bindable property. Shared by both heads from App.Core; anything
+/// platform-shaped (file pickers, opening a folder) goes through seams.
 /// </summary>
 public sealed class SettingsViewModel : PageViewModel
 {
@@ -20,8 +22,14 @@ public sealed class SettingsViewModel : PageViewModel
     private readonly AppSettings _app;
     private readonly IDiagnosticLog _log;
     private readonly EncoderCatalog _catalog;
+    private readonly IFileDialogService? _dialogs;
 
-    public SettingsViewModel(CUEConfig config, AppSettings app, IDiagnosticLog log, EncoderCatalog catalog)
+    public SettingsViewModel(
+        CUEConfig config,
+        AppSettings app,
+        IDiagnosticLog log,
+        EncoderCatalog catalog,
+        IFileDialogService? dialogs = null)
     {
         Title = "Settings";
         Group = "Setup";
@@ -30,6 +38,7 @@ public sealed class SettingsViewModel : PageViewModel
         _app = app;
         _log = log;
         _catalog = catalog;
+        _dialogs = dialogs;
         OpenLogFolderCommand = new RelayCommand(_ => OpenLogFolder());
         RefreshExternalEncoders();
     }
@@ -42,7 +51,7 @@ public sealed class SettingsViewModel : PageViewModel
     {
         ExternalEncoders.Clear();
         foreach (var info in _catalog.Snapshot(_c))
-            ExternalEncoders.Add(new ExternalEncoderRow(info, _c, _catalog, RefreshExternalEncoders));
+            ExternalEncoders.Add(new ExternalEncoderRow(info, _c, _catalog, RefreshExternalEncoders, _dialogs));
     }
 
     private void Raise([CallerMemberName] string? n = null) => OnPropertyChanged(n);
@@ -175,6 +184,80 @@ public sealed class SettingsViewModel : PageViewModel
         _app.NotifyArtProviderChanged();
     }
 
+
+    // Privacy & data (D-073). The settings a user most plausibly comes looking for: the
+    // two remembered consents, and what happens to diagnostic logs. Both consents were
+    // ask-once dialogs, and until this page existed a remembered answer could only be
+    // changed by hand-editing settings.txt with the app closed.
+
+    /// <summary>The artwork consent, directly editable. Changing it here IS answering the
+    /// first-run question, so the dialog never re-asks after a visit to this page.</summary>
+    public bool ArtworkAutoLookup
+    {
+        get => _app.AutoFetchArtOnDiscRead;
+        set
+        {
+            _app.AutoFetchArtOnDiscRead = value;
+            _app.AutoFetchArtAnswered = true;
+            Raise();
+        }
+    }
+
+    public string[] CtdbSharingChoices { get; } =
+        { "Ask before sharing", "Always share", "Never share" };
+
+    /// <summary>
+    /// The CTDB sharing consent as one three-way choice over the two engine keys.
+    /// "Always share" still cannot push an unclean rip: D-070's quality gate outranks a
+    /// remembered yes, which CtdbSubmissionEligibility enforces and its tests pin.
+    /// </summary>
+    public string CtdbSharingChoice
+    {
+        get => _c.advanced.CTDBAsk
+            ? "Ask before sharing"
+            : _c.advanced.CTDBSubmit ? "Always share" : "Never share";
+        set
+        {
+            switch (value)
+            {
+                case "Always share":
+                    _c.advanced.CTDBAsk = false;
+                    _c.advanced.CTDBSubmit = true;
+                    break;
+                case "Never share":
+                    _c.advanced.CTDBAsk = false;
+                    _c.advanced.CTDBSubmit = false;
+                    break;
+                default:
+                    _c.advanced.CTDBAsk = true;
+                    break;
+            }
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Default-off archive switch. Off, logs follow the retention rule; on, nothing is
+    /// ever deleted. The static mirrors the running logger's own gate, so the choice
+    /// takes effect without a restart.
+    /// </summary>
+    public bool KeepLogsForever
+    {
+        get => _app.KeepLogsForever;
+        set
+        {
+            _app.KeepLogsForever = value;
+            DiagnosticLog.KeepLogsForever = value;
+            Raise();
+            Raise(nameof(LogRetentionText));
+        }
+    }
+
+    public string LogRetentionText => KeepLogsForever
+        ? "Logs are kept forever for archiving."
+        : $"Logs older than {DiagnosticLog.RetainedLogDays} days are removed once there " +
+          $"are more than {DiagnosticLog.RetainedLogCount}, whichever rule keeps more.";
+
     // HDCD
     public bool DetectHdcd { get => _c.detectHDCD; set { _c.detectHDCD = value; Raise(); } }
     public bool DecodeHdcd { get => _c.decodeHDCD; set { _c.decodeHDCD = value; Raise(); } }
@@ -192,12 +275,21 @@ public sealed class ExternalEncoderRow : ViewModelBase
     private readonly EncoderCatalog _catalog;
     private readonly Action _refresh;
 
-    public ExternalEncoderRow(ExternalEncoderInfo info, CUEConfig config, EncoderCatalog catalog, Action refresh)
+    private readonly IFileDialogService? _dialogs;
+
+    public ExternalEncoderRow(ExternalEncoderInfo info, CUEConfig config, EncoderCatalog catalog, Action refresh, IFileDialogService? dialogs = null)
     {
         _info = info; _config = config; _catalog = catalog; _refresh = refresh;
+        _dialogs = dialogs;
         DownloadCommand = new RelayCommand(_ => OpenSite());
-        LocateCommand = new RelayCommand(_ => Locate());
+        // No picker seam means no import; the row still shows status and the site link.
+        LocateCommand = new RelayCommand(_ => { _ = LocateAsync(); }, _ => _dialogs != null);
     }
+
+    private string _importError = "";
+    /// <summary>Why the last import was refused, or empty. Rendered by the page instead of
+    /// a message box, which only one platform had.</summary>
+    public string ImportError { get => _importError; private set => Set(ref _importError, value); }
 
     public string Display => $"{_info.FormatName}  (.{_info.Extension}, {(_info.Lossless ? "lossless" : "lossy")})";
     private string AcceptedNames => string.Join(
@@ -228,23 +320,25 @@ public sealed class ExternalEncoderRow : ViewModelBase
         catch { }
     }
 
-    private void Locate()
+    private async System.Threading.Tasks.Task LocateAsync()
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Locate " + AcceptedNames,
-            Filter = "Supported encoder|" +
-                string.Join(
-                    ";",
-                    _info.AcceptedExeNames.Length == 0
-                        ? new[] { _info.ExeName }
-                        : _info.AcceptedExeNames) +
-                "|Programs|*.exe"
-        };
-        if (dlg.ShowDialog() != true) return;
-        string? err = _catalog.Import(_config, _info, dlg.FileName);
-        if (err != null)
-            System.Windows.MessageBox.Show(err, "Import failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        if (_dialogs == null) return;
+        string[] names = _info.AcceptedExeNames.Length == 0
+            ? new[] { _info.ExeName }
+            : _info.AcceptedExeNames;
+        string[]? picked = await _dialogs.PickFilesAsync(
+            "Locate " + AcceptedNames,
+            multiselect: false,
+            new FilePickerGroup[]
+            {
+                new("Supported encoder", names
+                    .Select(n => n.Contains('.') ? n[(n.LastIndexOf('.') + 1)..] : n)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()),
+                new("All files", new[] { "*" }),
+            });
+        if (picked is not [{ } file, ..]) return;
+        ImportError = _catalog.Import(_config, _info, file) ?? "";
         _refresh();
     }
 }
