@@ -14,6 +14,13 @@ namespace CUETools.Wpf.Services;
 
 public sealed class VerifyResult
 {
+    /// <summary>
+    /// What a CTDB submission offer did, as one line for the status bar, or empty when
+    /// none was made. Settable for the same reason as the verify path's twin: the offer
+    /// happens while the live database is still in scope, before this result is returned.
+    /// </summary>
+    public string SubmissionStatus { get; set; } = "";
+
     public bool Ok { get; init; }
     public string Status { get; init; } = "";
     public string Error { get; init; } = "";
@@ -1290,11 +1297,12 @@ public sealed class RipService : IRipService
             // its parity and checksums are what upload; nothing downstream can replay it.
             // D-070 gates the quality, so a salvaged capture or any unrecoverable window is
             // refused by the policy rather than by a judgement made here.
+            string submissionStatus = "";
             if (offerSubmission && Submissions != null)
             {
                 try
                 {
-                    Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
+                    CtdbSubmissionOutcome outcome = Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
                     {
                         RunCompleted = true,
                         LookupFailed = arFailed || ctdbFailed,
@@ -1306,6 +1314,9 @@ public sealed class RipService : IRipService
                         Barcode = cue.Metadata?.Barcode ?? "",
                         Confidence = arConf,
                     });
+                    // A user who consented and saw nothing would reasonably believe they
+                    // had contributed, whether or not the upload actually landed.
+                    submissionStatus = outcome.StatusText;
                 }
                 catch (Exception ex)
                 {
@@ -1317,6 +1328,7 @@ public sealed class RipService : IRipService
             return new VerifyResult
             {
                 Ok = true,
+                SubmissionStatus = submissionStatus,
                 Status = status,
                 ArConfidence = arConf,
                 ArTotal = arTotal,

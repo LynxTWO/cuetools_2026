@@ -64,6 +64,33 @@ public interface ICtdbSubmissionPrompt
 }
 
 /// <summary>
+/// What an offer actually did. The block alone could not tell a caller whether an upload
+/// succeeded, so a consenting user got the same silence as a refusing one: the service
+/// logged "submitted" to the diagnostic log and nothing reached the screen.
+/// </summary>
+public sealed class CtdbSubmissionOutcome
+{
+    public CtdbSubmissionBlock Block { get; init; }
+
+    /// <summary>True only when bytes actually went to the server without throwing.</summary>
+    public bool Submitted { get; init; }
+
+    /// <summary>The server's own reply, or the reason nothing was sent. May be empty.</summary>
+    public string Message { get; init; } = "";
+
+    /// <summary>One line for a status bar, or empty when there is nothing worth saying.</summary>
+    public string StatusText => Submitted
+        ? "Shared with the CUETools Database" +
+          (Message.Length == 0 ? "." : ": " + Message)
+        : Block switch
+        {
+            CtdbSubmissionBlock.None when Message.Length > 0 =>
+                "Could not share with the CUETools Database: " + Message,
+            _ => "",
+        };
+}
+
+/// <summary>
 /// The facts a submission decision needs, lifted off a verify or rip result so the policy
 /// stays testable without a database, a disc, or a network.
 /// </summary>
@@ -180,10 +207,11 @@ public sealed class CtdbSubmissionService
     }
 
     /// <summary>
-    /// Returns the block that stopped a submission, or None when one was uploaded.
-    /// Never throws: a submission failure must not change a verify or rip verdict.
+    /// Reports what happened: the block that stopped a submission, or None plus
+    /// Submitted when one was uploaded. Never throws: a submission failure must not
+    /// change a verify or rip verdict.
     /// </summary>
-    public CtdbSubmissionBlock Offer(CUEToolsDB database, CtdbSubmissionCandidate candidate)
+    public CtdbSubmissionOutcome Offer(CUEToolsDB database, CtdbSubmissionCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(candidate);
@@ -192,7 +220,7 @@ public sealed class CtdbSubmissionService
         if (!decision.Eligible)
         {
             _log.Info("ctdb", "submission skipped: " + decision.Block);
-            return decision.Block;
+            return new CtdbSubmissionOutcome { Block = decision.Block };
         }
 
         if (decision.NeedsPrompt)
@@ -201,7 +229,10 @@ public sealed class CtdbSubmissionService
             if (_prompt == null)
             {
                 _log.Info("ctdb", "submission skipped: no consent surface on this head");
-                return CtdbSubmissionBlock.DeclinedPreviously;
+                return new CtdbSubmissionOutcome
+                {
+                    Block = CtdbSubmissionBlock.DeclinedPreviously,
+                };
             }
 
             CtdbSubmissionConsent consent = _prompt.Ask(candidate);
@@ -210,7 +241,10 @@ public sealed class CtdbSubmissionService
             if (!consent.Submit)
             {
                 _log.Info("ctdb", "submission declined by the user");
-                return CtdbSubmissionBlock.DeclinedPreviously;
+                return new CtdbSubmissionOutcome
+                {
+                    Block = CtdbSubmissionBlock.DeclinedPreviously,
+                };
             }
         }
 
@@ -225,13 +259,26 @@ public sealed class CtdbSubmissionService
                 candidate.Artist,
                 candidate.Album,
                 candidate.Barcode);
-            _log.Info("ctdb", "submitted: " + (database.SubStatus ?? "no server message"));
+            string reply = database.SubStatus ?? "";
+            _log.Info("ctdb", "submitted: " + (reply.Length == 0 ? "no server message" : reply));
+            return new CtdbSubmissionOutcome
+            {
+                Block = CtdbSubmissionBlock.None,
+                Submitted = true,
+                Message = reply,
+            };
         }
         catch (Exception ex)
         {
+            // Swallowed so the verdict cannot change, but no longer silent: a user who
+            // consented and got nothing would reasonably believe they had contributed.
             _log.Warn("ctdb", "submission failed, verdict unchanged: " + ex.GetType().Name);
+            return new CtdbSubmissionOutcome
+            {
+                Block = CtdbSubmissionBlock.None,
+                Submitted = false,
+                Message = ex.GetType().Name,
+            };
         }
-
-        return CtdbSubmissionBlock.None;
     }
 }

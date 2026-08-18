@@ -17,6 +17,13 @@ public sealed class VerifyTrackResult
 
 public sealed class VerifyFilesResult
 {
+    /// <summary>
+    /// What a CTDB submission offer did, as one line for the status bar, or empty when
+    /// none was made. Settable rather than init because the offer happens after this
+    /// result exists: the candidate it needs is built from the metadata Gather extracts.
+    /// </summary>
+    public string SubmissionStatus { get; set; } = "";
+
     public bool Ok { get; init; }
     public string Error { get; init; } = "";
     public string Status { get; init; } = "";
@@ -124,7 +131,7 @@ public sealed class VerifyService : IVerifyService
         if (Submissions == null) return;
         try
         {
-            Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
+            CtdbSubmissionOutcome outcome = Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
             {
                 RunCompleted = result.Ok,
                 // Either database failing to answer blocks a submission. Uploading a rip
@@ -138,6 +145,9 @@ public sealed class VerifyService : IVerifyService
                 Barcode = result.Barcode,
                 Confidence = result.ArConfidence,
             });
+            // Silence after a consent is indistinguishable from a refusal, and a user who
+            // said yes and saw nothing would reasonably believe they had contributed.
+            result.SubmissionStatus = outcome.StatusText;
         }
         catch (Exception ex)
         {
