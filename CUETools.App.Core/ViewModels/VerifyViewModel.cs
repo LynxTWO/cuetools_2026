@@ -209,6 +209,11 @@ public sealed class VerifyViewModel : PageViewModel
                 disc.Apply(result);
                 completed++;
                 HasResult = true;
+                // Kept for the completion line. A submission the user consented to must
+                // say whether it landed; logging it to a diagnostic file is not telling
+                // them.
+                if (result.SubmissionStatus.Length > 0)
+                    _lastSubmissionStatus = result.SubmissionStatus;
                 PublishReport(repair: false, disc, result);
                 UpdateOverview();
             }
@@ -371,15 +376,26 @@ public sealed class VerifyViewModel : PageViewModel
         }
     }
 
+    /// <summary>What the last CTDB submission in this run said, or empty if none was made.</summary>
+    private string _lastSubmissionStatus = "";
+
     private string BuildCompletionStatus()
     {
         int failed = Discs.Count(disc => disc.Failed);
         int repairable = Discs.Count(disc => disc.CanRepair);
-        if (failed > 0)
-            return $"Verification completed with {failed} failed disc(s). Review each card for details.";
-        if (repairable > 0)
-            return $"Verification found {repairable} disc(s) with CTDB-repairable damage.";
-        return $"Verification complete for {Discs.Count} disc(s).";
+        string line =
+            failed > 0
+                ? $"Verification completed with {failed} failed disc(s). Review each card for details."
+                : repairable > 0
+                    ? $"Verification found {repairable} disc(s) with CTDB-repairable damage."
+                    : $"Verification complete for {Discs.Count} disc(s).";
+
+        if (_lastSubmissionStatus.Length > 0)
+        {
+            line += "  " + _lastSubmissionStatus;
+            _lastSubmissionStatus = "";
+        }
+        return line;
     }
 
     private void PublishReport(bool repair, VerifyDiscViewModel disc, VerifyFilesResult result)
