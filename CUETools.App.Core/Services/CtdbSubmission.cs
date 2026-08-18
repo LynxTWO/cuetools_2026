@@ -112,6 +112,46 @@ public sealed class CtdbSubmissionCandidate
     public int Confidence { get; init; }
 }
 
+/// <summary>
+/// A deferred submission: the live CUEToolsDB from a completed read, plus the candidate
+/// facts known at read time. Test and Copy needs this because its offer may only happen
+/// after the tie-break (a Held result must never submit), by which point the read that
+/// produced the database has long returned. The engine object stays valid: nothing
+/// disposes it when a read ends, and Submit needs only its in-memory syndrome state plus
+/// the network.
+/// </summary>
+public sealed class CtdbSubmissionCapsule
+{
+    public CtdbSubmissionCapsule(CUEToolsDB database, CtdbSubmissionCandidate candidate)
+    {
+        Database = database ?? throw new ArgumentNullException(nameof(database));
+        Candidate = candidate ?? throw new ArgumentNullException(nameof(candidate));
+    }
+
+    internal CUEToolsDB Database { get; }
+    public CtdbSubmissionCandidate Candidate { get; }
+
+    /// <summary>
+    /// The candidate with the whole-transaction quality facts in place of the single
+    /// read's. A Test and Copy aggregates failed windows across up to three reads, and
+    /// the offer must be judged on the aggregate: a clean copy read inside a transaction
+    /// whose test read lost a window is not a clean transaction (D-070).
+    /// </summary>
+    public CtdbSubmissionCandidate WithTransactionQuality(int failedWindows, bool salvaged)
+        => new()
+        {
+            RunCompleted = Candidate.RunCompleted,
+            LookupFailed = Candidate.LookupFailed,
+            FailedWindows = failedWindows,
+            Salvaged = salvaged,
+            Held = Candidate.Held,
+            Album = Candidate.Album,
+            Artist = Candidate.Artist,
+            Barcode = Candidate.Barcode,
+            Confidence = Candidate.Confidence,
+        };
+}
+
 public sealed class CtdbSubmissionDecision
 {
     public required CtdbSubmissionBlock Block { get; init; }
@@ -204,6 +244,13 @@ public sealed class CtdbSubmissionService
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _prompt = prompt;
         _log = log ?? throw new ArgumentNullException(nameof(log));
+    }
+
+    /// <summary>Offers a deferred capsule, optionally with transaction-level quality facts.</summary>
+    public CtdbSubmissionOutcome Offer(CtdbSubmissionCapsule capsule, CtdbSubmissionCandidate? candidate = null)
+    {
+        ArgumentNullException.ThrowIfNull(capsule);
+        return Offer(capsule.Database, candidate ?? capsule.Candidate);
     }
 
     /// <summary>
