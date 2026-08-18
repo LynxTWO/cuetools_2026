@@ -19,6 +19,40 @@ public sealed class TrackItem : ViewModelBase
     private bool _include = true;
     public bool Include { get => _include; set => Set(ref _include, value); }
 
+    // SLICE-010 live progress. Progress/Active predate the slice; the rest arrived with it.
+    private double _testProgress;
+    /// <summary>Fill reached during the Test read, retained as the hollow outline the Copy
+    /// fill draws inside (D-057). Zero outside Test and Copy.</summary>
+    public double TestProgress { get => _testProgress; set => Set(ref _testProgress, value); }
+
+    private int _rereadWindows;
+    /// <summary>Distinct re-read windows the engine worked inside this track. Amber tick
+    /// when nonzero; the literal count rides the tooltip (S10-004).</summary>
+    public int RereadWindows
+    {
+        get => _rereadWindows;
+        set { if (Set(ref _rereadWindows, value)) OnPropertyChanged(nameof(StripTip)); }
+    }
+
+    private int _unrecoverableSectors;
+    /// <summary>Sectors the engine gave up on inside this track. Nonzero is the red-edged
+    /// terminal state (S10-005); routine corrections never mark (D-058).</summary>
+    public int UnrecoverableSectors
+    {
+        get => _unrecoverableSectors;
+        set { if (Set(ref _unrecoverableSectors, value)) OnPropertyChanged(nameof(StripTip)); }
+    }
+
+    /// <summary>Tooltip for this track's strip segment: the literal counts, or a quiet
+    /// none-needed line. Never a summary adjective.</summary>
+    public string StripTip =>
+        _unrecoverableSectors > 0
+            ? $"Track {Number}: {_unrecoverableSectors} unrecoverable sector(s), " +
+              $"{_rereadWindows} re-read window(s)."
+            : _rereadWindows > 0
+                ? $"Track {Number}: {_rereadWindows} re-read window(s), all recovered."
+                : $"Track {Number}: no re-reads needed.";
+
     // Per-track verification, filled in after a rip/verify. "-" until then (no data yet).
     private string _arResult = "-";
     public string ArResult { get => _arResult; set => Set(ref _arResult, value); }
