@@ -1697,6 +1697,11 @@ public sealed class RipViewModel : PageViewModel
                     ? result.OutputVerificationPerformed
                         ? "  Final output PCM was decoded and verified after metadata finalization."
                         : "  WARNING: final output was not independently verified."
+                    : "")
+                // A submission the user consented to must say whether it landed, in the
+                // same evidence line the rest of the transaction reports into.
+                + (result.SubmissionStatus.Length > 0
+                    ? "  " + result.SubmissionStatus
                     : "");
             TestCopyIsWarning = damagedAgreement;
             // The final line must not contradict the per-read line: a lookup that never

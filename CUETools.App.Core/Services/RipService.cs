@@ -21,6 +21,13 @@ public sealed class VerifyResult
     /// </summary>
     public string SubmissionStatus { get; set; } = "";
 
+    /// <summary>
+    /// The deferred submission handle for callers whose offer point is later than the
+    /// read, which is Test and Copy: its offer may only happen after the tie-break.
+    /// Null when no submission service is wired or the read produced no encode.
+    /// </summary>
+    public CtdbSubmissionCapsule? Submission { get; set; }
+
     public bool Ok { get; init; }
     public string Status { get; init; } = "";
     public string Error { get; init; } = "";
@@ -122,6 +129,10 @@ public sealed class TestCopyRunResult
 {
     public bool Ok { get; init; }
     public string Error { get; init; } = "";
+
+    /// <summary>What a CTDB submission offer did, as one line for the status bar, or
+    /// empty when none was made. Only a Passed outcome ever offers.</summary>
+    public string SubmissionStatus { get; init; } = "";
     /// <summary>See VerifyResult.DriveStuckTrigger. Also set on a Held result whose
     /// confirming read hit the stuck drive: that path reports Ok = true, so a
     /// consumer gating recovery on failure alone would miss the case where a
@@ -1298,22 +1309,32 @@ public sealed class RipService : IRipService
             // D-070 gates the quality, so a salvaged capture or any unrecoverable window is
             // refused by the policy rather than by a judgement made here.
             string submissionStatus = "";
-            if (offerSubmission && Submissions != null)
+            CtdbSubmissionCapsule? submissionCapsule = null;
+            if (encode && Submissions != null)
+            {
+                // Built for every encoding read, offered here only when this read IS the
+                // publication (a standalone rip). Test and Copy reads carry the capsule
+                // out instead, because their offer may only happen after the tie-break:
+                // a Held result must never submit, and a staged intermediate read is not
+                // a result.
+                submissionCapsule = new CtdbSubmissionCapsule(cue.CTDB, new CtdbSubmissionCandidate
+                {
+                    RunCompleted = true,
+                    LookupFailed = arFailed || ctdbFailed,
+                    FailedWindows = failedWindows,
+                    Salvaged = salvage,
+                    Held = false,
+                    Album = cue.Metadata?.Title ?? "",
+                    Artist = cue.Metadata?.Artist ?? "",
+                    Barcode = cue.Metadata?.Barcode ?? "",
+                    Confidence = arConf,
+                });
+            }
+            if (offerSubmission && Submissions != null && submissionCapsule != null)
             {
                 try
                 {
-                    CtdbSubmissionOutcome outcome = Submissions.Offer(cue.CTDB, new CtdbSubmissionCandidate
-                    {
-                        RunCompleted = true,
-                        LookupFailed = arFailed || ctdbFailed,
-                        FailedWindows = failedWindows,
-                        Salvaged = salvage,
-                        Held = false,
-                        Album = cue.Metadata?.Title ?? "",
-                        Artist = cue.Metadata?.Artist ?? "",
-                        Barcode = cue.Metadata?.Barcode ?? "",
-                        Confidence = arConf,
-                    });
+                    CtdbSubmissionOutcome outcome = Submissions.Offer(submissionCapsule);
                     // A user who consented and saw nothing would reasonably believe they
                     // had contributed, whether or not the upload actually landed.
                     submissionStatus = outcome.StatusText;
@@ -1329,6 +1350,7 @@ public sealed class RipService : IRipService
             {
                 Ok = true,
                 SubmissionStatus = submissionStatus,
+                Submission = submissionCapsule,
                 Status = status,
                 ArConfidence = arConf,
                 ArTotal = arTotal,
@@ -1990,9 +2012,33 @@ public sealed class RipService : IRipService
                     "rip",
                     $"test&copy done elapsed={sw.Elapsed.TotalSeconds:0}s " +
                     $"reads={resolve.ReadsUsed} outcome={completedOutcome}");
+                // SLICE-012: the offer happens here and nowhere earlier, after the
+                // tie-break chose a winner and the album actually published. The capsule
+                // is the COMMITTED read's (R109: evidence binds to the committed read),
+                // and the candidate is re-judged on transaction-level quality: failed
+                // windows aggregated across every read, and salvage. D-070 then refuses
+                // anything unclean in policy, so this cannot submit a damaged rip even
+                // if a future edit widens the call.
+                string submissionStatus = "";
+                if (Submissions != null && committedEncoded.Submission is { } submissionCapsule)
+                {
+                    try
+                    {
+                        CtdbSubmissionOutcome offerOutcome = Submissions.Offer(
+                            submissionCapsule,
+                            submissionCapsule.WithTransactionQuality(failedWindows, salvage));
+                        submissionStatus = offerOutcome.StatusText;
+                    }
+                    catch (Exception ex)
+                    {
+                        try { _log.Warn("ctdb", "submission offer failed, rip unchanged: " + ex.GetType().Name); }
+                        catch { }
+                    }
+                }
                 return new TestCopyRunResult
                 {
                     Ok = true,
+                    SubmissionStatus = submissionStatus,
                     Outcome = TestCopyOutcome.Passed,
                     Salvaged = salvage,
                     ReadsUsed = resolve.ReadsUsed,
