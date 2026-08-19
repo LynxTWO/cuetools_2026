@@ -145,6 +145,11 @@ public sealed class TrackProgressModel
         ActiveIndex = -1;
         PassTicks = 0;
         Phase = RipPhaseKind.None;
+        // The chips describe a running job; a finished one is described by its result
+        // text. Leaving PARANOID up beside a failure banner read as if a job were still
+        // going (owner screenshot, 2026-08-19).
+        ModeChip = "";
+        PassLaneVisible = false;
     }
 
     /// <summary>
