@@ -1434,6 +1434,17 @@ public sealed class RipViewModel : PageViewModel
                 {
                     _holdDamageZoom = true;   // keep the disc zoomed on the failed spot until the job ends
                     StatusText = $"Unrecoverable damage at {(int)(r.WindowFrac * 100)}% - stopping.";
+                    // Say WHO stopped before the generic "stopped by user" lands. The
+                    // service logs the same line for every Stop() and cannot tell a
+                    // policy stop from a click; a log that says "user" for an automated
+                    // stop misattributes the decision (F-46, found reading a real run).
+                    try
+                    {
+                        _log.Warn("rip",
+                            $"StopOnUnrecoverable: stopping at {(int)(r.WindowFrac * 100)}% " +
+                            $"(unresolved={r.WindowGivenUpSectors}); the next 'stopped by user' is this policy, not a click");
+                    }
+                    catch { }
                     Task.Run(() => { try { _rip.Stop(); } catch { } });
                 }
             }
