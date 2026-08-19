@@ -29,6 +29,14 @@ public sealed class DriveRecoveryIncident
 /// with the same signature normalization, so a drive's incidents and its
 /// calibration share one identity. Pure I/O - no SCSI - testable with no drive.
 /// </summary>
+/// <summary>The two services a head hands the Rip page so it can offer guided
+/// recovery (SLICE-011). A head that sets none, or whose probe cannot verify,
+/// never shows the affordance: a dialog whose rungs can never be checked would
+/// invite the user to perform hardware surgery for an unverifiable result.</summary>
+public sealed record DriveRecoveryServices(
+    CUETools.Wpf.Services.IDriveRecoveryProbe Probe,
+    DriveRecoveryIncidentStore Store);
+
 public sealed class DriveRecoveryIncidentStore
 {
     private readonly string _path;

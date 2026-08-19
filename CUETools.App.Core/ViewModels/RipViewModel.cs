@@ -433,6 +433,71 @@ public sealed class RipViewModel : PageViewModel
     private double _discSeconds;
     private double _lastSpeedFrac;
     private DateTime _lastSpeedTick;
+    // SLICE-011: guided drive recovery. The offer appears only after a failure the
+    // engine classified as the characterized stuck-drive state, and only on a head
+    // whose probe can actually verify a rung.
+    /// <summary>Set by the head's composition; null means the affordance never shows.</summary>
+    public CUETools.Wpf.Accuracy.DriveRecoveryServices? Recovery { get; set; }
+
+    private string _stuckTrigger = "";
+    private string _stuckContext = "";
+    private string _stuckSignature = "";
+    private char _stuckDrive;
+
+    private bool _recoveryOfferVisible;
+    public bool RecoveryOfferVisible
+    {
+        get => _recoveryOfferVisible;
+        private set { if (Set(ref _recoveryOfferVisible, value)) RequeryHub.RequestRequery(); }
+    }
+
+    private string _recoveryOfferText = "";
+    public string RecoveryOfferText { get => _recoveryOfferText; private set => Set(ref _recoveryOfferText, value); }
+
+    /// <summary>Raised when the user asks to recover: the head opens the dialog around
+    /// the prepared ladder. The second argument re-runs the failed job kind as a FRESH
+    /// operation after a cure (D-062: the failed transaction never resumes).</summary>
+    public event Action<CUETools.Wpf.Accuracy.DriveRecoveryLadder, Action>? RecoveryRequested;
+
+    /// <summary>The job kind that last started, for the fresh retry after a cure.</summary>
+    private enum LastJobKind { None, Verify, Rip, TestCopy }
+    private LastJobKind _lastJob = LastJobKind.None;
+
+    private void OfferRecoveryIfStuck(string trigger, string context, string signature)
+    {
+        if (trigger.Length == 0 || Recovery == null || !Recovery.Probe.CanVerify) return;
+        _stuckTrigger = trigger;
+        _stuckContext = context;
+        _stuckSignature = signature;
+        _stuckDrive = _selectedDrive;
+        RecoveryOfferText =
+            $"Drive {char.ToUpperInvariant(_stuckDrive)} appears wedged ({trigger}). " +
+            "Software cannot cure this state, but a guided physical recovery can.";
+        RecoveryOfferVisible = true;
+    }
+
+    private void RequestRecovery()
+    {
+        if (Recovery == null || !RecoveryOfferVisible) return;
+        var ladder = new CUETools.Wpf.Accuracy.DriveRecoveryLadder(
+            _stuckSignature, _stuckDrive, _stuckTrigger, _stuckContext,
+            Recovery.Probe, Recovery.Store);
+        RecoveryOfferVisible = false;
+        RecoveryRequested?.Invoke(ladder, () => _ = RetryLastJobAsync());
+    }
+
+    /// <summary>D-062: a fresh operation through the normal calibrated paths. The cured
+    /// drive re-runs the same kind of job the wedge killed; nothing resumes.</summary>
+    private async Task RetryLastJobAsync()
+    {
+        switch (_lastJob)
+        {
+            case LastJobKind.Verify: await RunJobAsync(encode: false); break;
+            case LastJobKind.Rip: await RunJobAsync(encode: true); break;
+            case LastJobKind.TestCopy: await RunTestCopyAsync(); break;
+        }
+    }
+
     private double[] _trackEndFrac = Array.Empty<double>();
 
     // SLICE-010: the pure derivation behind the track strip, phase chips, and pass lane.
@@ -602,6 +667,7 @@ public sealed class RipViewModel : PageViewModel
 
     public ICommand ReadDiscCommand { get; }
     public ICommand VerifyCommand { get; }
+    public ICommand RecoverDriveCommand { get; }
     public ICommand RipCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand EjectCommand { get; }
@@ -732,6 +798,9 @@ public sealed class RipViewModel : PageViewModel
         RepairLastRipCommand = new RelayCommand(
             _ => { _ = RepairLastRipAsync(); },
             _ => CanRepairLastRip && !IsBusy && !IsRipping);
+        RecoverDriveCommand = new RelayCommand(
+            _ => RequestRecovery(),
+            _ => RecoveryOfferVisible && !IsRipping && !IsBusy);
         TestCopyCommand = new RelayCommand(
             _ => { _ = RunTestCopyAsync(); },
             _ => CanStartEncodedJob(IsDiscPresent, IsRipping, IsBusy, ArtLoading));
@@ -1384,6 +1453,8 @@ public sealed class RipViewModel : PageViewModel
         DiscardParkedHeld("a new job started");   // the user moved on from the parked disc
         char drive = _selectedDrive;
         int cq = EffectiveCorrectionQuality;   // a Salvage selection runs a plain job at Burst
+        _lastJob = encode ? LastJobKind.Rip : LastJobKind.Verify;
+        RecoveryOfferVisible = false;   // a new job supersedes the old wedge's offer
         _trackProgress.StartJob(testAndCopy: false, ModeName, multiPass: cq > 0);
         CodecLocked = encode;
         IsRipping = true;
@@ -1518,6 +1589,8 @@ public sealed class RipViewModel : PageViewModel
         StopRereadTimer();
         _trackProgress.EndJob(result.Ok);
         SyncTrackProgress();
+        if (!result.Ok)
+            OfferRecoveryIfStuck(result.DriveStuckTrigger, result.DriveStuckContext, result.DriveSignature);
         foreach (var t in Tracks) { t.Active = false; if (result.Ok) t.Progress = 1; }
         IsRipping = false;
         CodecLocked = false;
@@ -1594,6 +1667,8 @@ public sealed class RipViewModel : PageViewModel
         char drive = _selectedDrive;
         int cq = EffectiveCorrectionQuality;
         bool salvage = SalvageRead;   // frozen with the rest of the job snapshot
+        _lastJob = LastJobKind.TestCopy;
+        RecoveryOfferVisible = false;   // a new job supersedes the old wedge's offer
         // Salvage runs Burst-quality reads, but it re-reads by design, so its lane shows.
         _trackProgress.StartJob(testAndCopy: true, ModeName, multiPass: cq > 0 || salvage);
         CodecLocked = true;
@@ -1866,6 +1941,10 @@ public sealed class RipViewModel : PageViewModel
         StopRereadTimer();
         _trackProgress.EndJob(result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed);
         SyncTrackProgress();
+        // A Held result can carry the trigger too: the confirming read hit the wedge
+        // while a completed Copy is at stake, and recovery is exactly what unblocks it.
+        if (result.DriveStuckTrigger.Length > 0)
+            OfferRecoveryIfStuck(result.DriveStuckTrigger, result.DriveStuckContext, result.DriveSignature);
         foreach (var t in Tracks) { t.Active = false; if (result.Ok && result.Outcome == CUETools.Wpf.Accuracy.TestCopyOutcome.Passed) t.Progress = 1; }
         IsRipping = false;
         CodecLocked = false;
