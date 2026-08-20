@@ -43,6 +43,13 @@ grammatical perfection, passive constructions, nominalizations
 ("perform a verification" -> "verify"). Read the sentence aloud at
 the bench; if it sounds like a deliverable, recast it.
 
+Owner rulings from the first golden round (2026-08-20): asides go in
+parentheses, never paired " - " dashes; when a " - " connector joins
+two halves that could stand alone, prefer the sentence break (a plain
+pivot like "Basically," is welcome); and name the thing - a count says
+what it counts, a pronoun gets its noun back when the referent is more
+than a line away.
+
 ## What never changes
 
 - Facts, numbers, flags, paths, commands, commit hashes, UI strings.
