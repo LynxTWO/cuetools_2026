@@ -48,6 +48,13 @@
       <Border Style="{StaticResource Row}" ToolTip="Decode audio on a separate thread from encoding. Can be faster on multi-core CPUs."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding SeparateDecodingThread}"/><TextBlock Style="{StaticResource RowLabel}" Text="Separate decoding thread"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Open the drive tray automatically when a rip finishes."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EjectAfterRip}"/><TextBlock Style="{StaticResource RowLabel}" Text="Eject after rip"/></DockPanel></Border>
 
+      <!-- database results: blue bulbs (color-coded category) -->
+      <StackPanel>
+        <StackPanel.Resources>
+          <Color x:Key="LampCore">#EAF6FF</Color><Color x:Key="LampLight">#79C4EC</Color><Color x:Key="LampBase">#2E86B8</Color>
+          <Color x:Key="LampDark">#123D57</Color><Color x:Key="LampEdge">#071925</Color><Color x:Key="LampHalo">#46B8E0</Color>
+          <Color x:Key="LampCapCore">#B8EFF9FF</Color><Color x:Key="LampCapMid">#5A5CB2DE</Color><Color x:Key="LampCapEdge">#0046B8E0</Color>
+        </StackPanel.Resources>
       <TextBlock Style="{StaticResource Sec}" Text="ACCURATERIP &amp; CTDB"/>
       <Border Style="{StaticResource Row}" ToolTip="Embed the AccurateRip confidence and CRCs into the encoded files' tags (proof of an accurate rip)."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteArTagsOnEncode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write AccurateRip tags on encode"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Also embed AccurateRip tags when verifying (not just when encoding a fresh rip)."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteArTagsOnVerify}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write AccurateRip tags on verify"/></DockPanel></Border>
@@ -56,6 +63,7 @@
       <Border Style="{StaticResource Row}" ToolTip="Put the AccurateRip log next to the source files instead of in the output folder."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ArLogToSourceFolder}"/><TextBlock Style="{StaticResource RowLabel}" Text="AccurateRip log to source folder"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Include the full per-track detail in the AccurateRip log rather than a summary."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding ArLogVerbose}"/><TextBlock Style="{StaticResource RowLabel}" Text="Verbose AccurateRip log"/></DockPanel></Border>
 
+      </StackPanel>
       <TextBlock Style="{StaticResource Sec}" Text="FILE NAMING &amp; OUTPUT"/>
       <Border Style="{StaticResource Row}" ToolTip="How ripped track files are named. Use fields like %tracknumber%, %title%, %artist%, %album%."><DockPanel><TextBox DockPanel.Dock="Right" Width="260" Style="{StaticResource Box}" Text="{Binding TrackFilenameFormat, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Track filename template"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Also write a .cue sheet when ripping to individual track files (records the disc layout and gaps)."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCueInTracksMode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Create .cue sheet in tracks mode"/></DockPanel></Border>

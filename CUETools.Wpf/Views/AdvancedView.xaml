@@ -42,6 +42,13 @@
       <Border Style="{StaticResource Row}" ToolTip="Write MP3 tags in the newer ID3v2.4 format instead of the more widely-compatible ID3v2.3. Turn on only if your player supports it."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding UseId3v24}"/><TextBlock Style="{StaticResource RowLabel}" Text="Use ID3v2.4 instead of ID3v2.3"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Embed the disc's table of contents (track offsets) as a tag in the encoded files, so the file can be matched back to a specific pressing later."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteCDTOCTag}"/><TextBlock Style="{StaticResource RowLabel}" Text="Write CDTOC tag"/></DockPanel></Border>
 
+      <!-- metadata / presentation settings: amber bulbs (color-coded category) -->
+      <StackPanel>
+        <StackPanel.Resources>
+          <Color x:Key="LampCore">#FFF6E9</Color><Color x:Key="LampLight">#F0C784</Color><Color x:Key="LampBase">#C8871F</Color>
+          <Color x:Key="LampDark">#7A5416</Color><Color x:Key="LampEdge">#241804</Color><Color x:Key="LampHalo">#E9A63F</Color>
+          <Color x:Key="LampCapCore">#B8FFF8EE</Color><Color x:Key="LampCapMid">#5AE0A94A</Color><Color x:Key="LampCapEdge">#00E9A63F</Color>
+        </StackPanel.Resources>
       <TextBlock Style="{StaticResource Sec}" Text="COVER ART"/>
       <Border Style="{StaticResource Row}" ToolTip="Semicolon-separated list of filenames to look for as the album cover when scanning a source folder (folder.jpg, cover.jpg, etc.). %album% is replaced with the album title."><DockPanel><TextBox DockPanel.Dock="Right" Width="300" Style="{StaticResource Box}" Text="{Binding CoverArtFiles, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Cover art file names"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Also look in subfolders when searching for a local cover art file, not just the album's own folder."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CoverArtSearchSubdirs}"/><TextBlock Style="{StaticResource RowLabel}" Text="Search subfolders for cover art"/></DockPanel></Border>
@@ -52,6 +59,7 @@
       <Border Style="{StaticResource Row}" ToolTip="Keep a local cache of fetched metadata so repeat lookups for the same disc do not need the network."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CacheMetadata}"/><TextBlock Style="{StaticResource RowLabel}" Text="Cache metadata"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Hostname of the CUETools Database server to query for disc metadata, album art and verification data."><DockPanel><TextBox DockPanel.Dock="Right" Width="260" Style="{StaticResource Box}" Text="{Binding CTDBServer, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="CTDB server"/></DockPanel></Border>
 
+      </StackPanel>
       <TextBlock Style="{StaticResource Sec}" Text="NETWORK"/>
       <Border Style="{StaticResource Row}" ToolTip="How outgoing lookups (CTDB, FreeDB/gnudb) reach the network: None (direct connection), System (use Windows' configured proxy), or Custom (use the proxy settings below)."><DockPanel><ComboBox DockPanel.Dock="Right" Width="140" ItemsSource="{Binding ProxyModes}" SelectedItem="{Binding ProxyMode}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy mode"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Custom proxy server hostname or IP address. Used only when Proxy mode is set to Custom."><DockPanel><TextBox DockPanel.Dock="Right" Width="200" Style="{StaticResource Box}" Text="{Binding ProxyServer, UpdateSourceTrigger=PropertyChanged}"/><TextBlock Style="{StaticResource RowLabel}" Text="Proxy server"/></DockPanel></Border>
