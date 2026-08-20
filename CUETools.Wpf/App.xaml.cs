@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Linq;
+using System.Windows;
 using System.Windows.Input;
 using CUETools.Processor;
 using CUETools.Wpf.Mvvm;
@@ -149,7 +150,12 @@ public partial class App : Application
         services.AddSingleton<PageViewModel, ReportViewModel>();
         services.AddSingleton<PageViewModel, DriveViewModel>();
         services.AddSingleton<PageViewModel, SettingsViewModel>();
-        services.AddSingleton<PageViewModel, NamingViewModel>();
+        services.AddSingleton<PageViewModel>(sp => new NamingViewModel(
+            sp.GetRequiredService<CUEConfig>(),
+            sp.GetRequiredService<AppSettings>(),
+            // The tray-disc preview group pulls the Rip page lazily; resolving the page
+            // list here mid-build would re-enter this registration and hang.
+            () => sp.GetServices<PageViewModel>().OfType<RipViewModel>().FirstOrDefault()));
         services.AddSingleton<PageViewModel, AdvancedViewModel>();
         services.AddSingleton<PageViewModel, ExploreViewModel>();
 

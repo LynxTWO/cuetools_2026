@@ -36,8 +36,14 @@ public sealed class NamingViewModel : PageViewModel
     public ObservableCollection<string> PresetNames { get; } = new(NamingEngine.Presets.Select(p => p.Name));
     public ObservableCollection<NamingPreviewGroup> Preview { get; } = new();
 
-    public NamingViewModel(CUEConfig config, AppSettings settings)
+    private readonly Func<RipViewModel?>? _ripSource;
+
+    /// <summary>ripSource supplies the Rip page for the tray-disc preview group; null
+    /// means examples only. A seam instead of a container static, so both heads and the
+    /// tests can hand it their own.</summary>
+    public NamingViewModel(CUEConfig config, AppSettings settings, Func<RipViewModel?>? ripSource = null)
     {
+        _ripSource = ripSource;
         Title = "Naming";
         Group = "Setup";
         Subtitle = "Design how ripped files and folders are named, with a live preview.";
@@ -125,8 +131,7 @@ public sealed class NamingViewModel : PageViewModel
     {
         try
         {
-            var rip = App.Services?.GetService(typeof(IEnumerable<PageViewModel>)) as IEnumerable<PageViewModel>;
-            var vm = rip?.OfType<RipViewModel>().FirstOrDefault();
+            RipViewModel? vm = _ripSource?.Invoke();
             if (vm == null || vm.Tracks.Count == 0 || string.IsNullOrWhiteSpace(vm.AlbumTitle)) return null;
 
             string year = vm.SelectedRelease?.Year ?? "";
