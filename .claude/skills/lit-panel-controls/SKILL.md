@@ -54,16 +54,23 @@ recolors:
 </StackPanel>
 ```
 
-Ramps used in CUETools 2026 (housing/cap/occlusion stay neutral - only these carry the hue):
+Ramps used in CUETools 2026 (housing/cap/occlusion stay neutral - only these carry the hue).
+Category semantics as shipped: teal = core rip engine, blue = database results
+(AccurateRip & CTDB), amber = metadata/presentation (tagging, album art), rose =
+privacy and consent, green = special audio decode (HDCD):
 
-| Role | Teal (default) | Amber | Green |
-|---|---|---|---|
-| LampCore | `#EAFFFB` | `#FFF6E9` | `#EAFFF1` |
-| LampLight | `#6FE3D6` | `#F0C784` | `#9FE9B8` |
-| LampBase | `#27A99C` | `#C8871F` | `#3FB877` |
-| LampDark | `#0E4F48` | `#7A5416` | `#1E5E38` |
-| LampEdge | `#06211E` | `#241804` | `#06210F` |
-| LampHalo | `#34CFC0` | `#E9A63F` | `#5CCB8B` |
+| Role | Teal (default) | Blue | Amber | Rose | Green |
+|---|---|---|---|---|---|
+| LampCore | `#EAFFFB` | `#EAF6FF` | `#FFF6E9` | `#FFEEF6` | `#EAFFF1` |
+| LampLight | `#6FE3D6` | `#79C4EC` | `#F0C784` | `#EFA3C8` | `#9FE9B8` |
+| LampBase | `#27A99C` | `#2E86B8` | `#C8871F` | `#C25789` | `#3FB877` |
+| LampDark | `#0E4F48` | `#123D57` | `#7A5416` | `#5E2743` | `#1E5E38` |
+| LampEdge | `#06211E` | `#071925` | `#241804` | `#29101E` | `#06210F` |
+| LampHalo | `#34CFC0` | `#46B8E0` | `#E9A63F` | `#E37DAD` | `#5CCB8B` |
+
+Cap-bleed triads follow the same construction per hue (`B8` near-white core, `5A` mid,
+`00` halo edge), e.g. blue `#B8EFF9FF`/`#5A5CB2DE`/`#0046B8E0`, rose
+`#B8FFF2F8`/`#5AD685B2`/`#00E37DAD`.
 
 Note: `DynamicResource` on a `GradientStop.Color` / `DropShadowEffect.Color` (both Freezables)
 DOES resolve through the scope here - verified - but it is a known-finicky corner; keep the
@@ -112,6 +119,31 @@ You usually cannot see the running WPF app. Render the control to a PNG and look
    styles apply. See `scratchpad/SwitchRender` in this repo for the harness.
 3. Read the PNG back and adjust hotspot origin, falloff offsets, and bleed opacity until the
    light reads right. This is how the switch physics were tuned.
+
+## Avalonia port notes (learned dialing in the Linux head, 2026-08-20)
+
+The four-layer model ports as an Avalonia ControlTheme, with three deltas:
+
+- **The light must die out INSIDE the housing.** The WPF gradient's opaque outer
+  stops read fine under WPF's rendering, but on the Avalonia head they painted
+  tinted corners with a hard stop at the border (owner-reported). Give the glow
+  border a rounded-vignette `OpacityMask` (radial, white plateau to ~0.45,
+  transparent by ~0.97) so the glow falls to bare housing before any edge or
+  corner - the physical story is plastic thickening toward the rim.
+- **ClipToBounds eats the halo.** The halo BoxShadow extends past the control's
+  bounds; anything clipping at those bounds turns the soft aura into a hard-edged
+  rectangle of light (this, not the gradient, was the original "light leaking with
+  a hard stop" report). Set `ClipToBounds="False"` on the control AND the template
+  root. Verify by rendering the CHECKED state zoomed 5x.
+- **BoxShadow resolves no resources.** Avalonia box shadows are structs, so the
+  halo cannot ride `DynamicResource LampHalo` the way WPF's DropShadowEffect does.
+  Recolor a scoped group with a sibling style next to the scoped ramp:
+  `<Style Selector="ToggleButton.lit /template/ Border#halo">` setting a literal
+  per-hue `BoxShadow`. Everything else recolors through the ramp keys as on WPF.
+
+The theme flip itself got the same physics on the Linux head: ThemeCrossfade holds
+the old theme's frame in an overlay and dims it out (560 ms going dark, 300 ms to
+light, CubicEaseOut) - the cooling-filament read, applied to the whole panel.
 
 ## Common mistakes
 
