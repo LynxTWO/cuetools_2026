@@ -368,19 +368,80 @@ public sealed class RipService : IRipService
     private const uint ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x00000001, ES_DISPLAY_REQUIRED = 0x00000002;
     private void KeepAwake(bool on)
     {
-        if (!OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows())
         {
-            // No power API is wired on this platform yet (a systemd sleep
-            // inhibitor is the eventual equivalent). Leave the same honest
-            // trace a rejected Windows request leaves, so a mid-rip sleep is
-            // explainable from the log.
-            if (on)
-                _log.Warn("rip", "keep-awake not implemented on this platform - the system may sleep during this rip");
+            // returns 0 on failure - the machine could then sleep mid-rip, so leave a trace
+            if (SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS) == 0 && on)
+                _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
             return;
         }
-        // returns 0 on failure - the machine could then sleep mid-rip, so leave a trace
-        if (SetThreadExecutionState(on ? ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED : ES_CONTINUOUS) == 0 && on)
-            _log.Warn("rip", "keep-awake request rejected - the system may sleep during this rip");
+        if (OperatingSystem.IsLinux())
+        {
+            KeepAwakeLinux(on);
+            return;
+        }
+        // Leave the same honest trace a rejected Windows request leaves, so a
+        // mid-rip sleep is explainable from the log.
+        if (on)
+            _log.Warn("rip", "keep-awake not implemented on this platform - the system may sleep during this rip");
+    }
+
+    private System.Diagnostics.Process? _inhibitor;
+
+    // Hold a logind block inhibitor for the duration of the job by keeping a systemd-inhibit
+    // child alive. The held command watches OUR pid, so a crashed app releases the lock by
+    // itself instead of pinning the machine awake forever; a normal end kills the tree here.
+    private void KeepAwakeLinux(bool on)
+    {
+        if (on)
+        {
+            if (_inhibitor is { HasExited: false }) return;
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("systemd-inhibit")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                psi.ArgumentList.Add("--what=sleep:idle");
+                psi.ArgumentList.Add("--who=CUETools");
+                psi.ArgumentList.Add("--why=Disc rip in progress");
+                psi.ArgumentList.Add("--mode=block");
+                psi.ArgumentList.Add("tail");
+                psi.ArgumentList.Add($"--pid={Environment.ProcessId}");
+                psi.ArgumentList.Add("-f");
+                psi.ArgumentList.Add("/dev/null");
+                var p = System.Diagnostics.Process.Start(psi)!;
+                p.EnableRaisingEvents = true;
+                // An inhibitor that dies mid-rip (logind refused, systemd absent under the
+                // binary, oom) leaves the machine free to sleep; that must reach the log.
+                p.Exited += (_, _) =>
+                {
+                    if (ReferenceEquals(_inhibitor, p))
+                        _log.Warn("rip", "keep-awake inhibitor exited early - the system may sleep during this rip");
+                };
+                _inhibitor = p;
+                _log.Info("rip", "keep-awake on: holding a systemd sleep inhibitor for this rip");
+            }
+            catch (Exception ex)
+            {
+                _inhibitor = null;
+                _log.Warn("rip", $"keep-awake unavailable ({ex.GetType().Name}) - the system may sleep during this rip");
+            }
+        }
+        else
+        {
+            var p = _inhibitor;
+            _inhibitor = null;
+            if (p == null) return;
+            try
+            {
+                if (!p.HasExited) p.Kill(entireProcessTree: true);
+                p.Dispose();
+            }
+            catch { }
+        }
     }
 
     public VerifyResult RunVerify(char drive, int cq, CUEMetadata? metadata, Action<double, string> onProgress, RipTelemetryMailbox? telemetry = null, Action<RereadReport>? onReread = null)
