@@ -2,7 +2,6 @@ using System.Globalization;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Input;
 using CUETools.Wpf.Accuracy;
 using CUETools.Wpf.Models;
@@ -19,19 +18,22 @@ public sealed class DriveViewModel : PageViewModel
 {
     private readonly IDriveService _drives;
     private readonly DriveCalibrationService _calibration;
+    private readonly IUiDispatcher? _ui;
     private bool _busy;
     private bool _selectionRefreshPending;
 
-    public DriveViewModel(IDriveService drives, DriveCalibrationService calibration)
-        : this(drives, calibration, autoDetect: true)
+    public DriveViewModel(IDriveService drives, DriveCalibrationService calibration, IUiDispatcher? ui = null)
+        : this(drives, calibration, autoDetect: true, ui)
     {
     }
 
     internal DriveViewModel(
         IDriveService drives,
         DriveCalibrationService calibration,
-        bool autoDetect)
+        bool autoDetect,
+        IUiDispatcher? ui = null)
     {
+        _ui = ui;
         Title = "Drive & Read";
         Group = "Setup";
         Subtitle = "Everything this drive reports about itself. Detect reads it live over SCSI - no disc needed.";
@@ -152,9 +154,8 @@ public sealed class DriveViewModel : PageViewModel
             }
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.CheckAccess())
-            _ = dispatcher.BeginInvoke((Action)Apply);
+        if (_ui != null && !_ui.CheckAccess())
+            _ui.Post(Apply);
         else
             Apply();
     }
@@ -178,9 +179,8 @@ public sealed class DriveViewModel : PageViewModel
             }
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.CheckAccess())
-            _ = dispatcher.BeginInvoke((Action)Apply);
+        if (_ui != null && !_ui.CheckAccess())
+            _ui.Post(Apply);
         else
             Apply();
     }
