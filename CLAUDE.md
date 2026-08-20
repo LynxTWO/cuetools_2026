@@ -246,3 +246,9 @@ lame_v4 repository). The hard rules:
   upgrade an inferred claim to verified in prose.
 - Never alter numbers, flags, commit hashes, paths, or commands when editing prose.
 - Do not call the non-engineer reader a "layman"; use "plain English" or "normal reader".
+- Warm, not stiff (D-077, cuetools-linux): write like a person talking to a person.
+  Contractions, direct address, varied sentence rhythm, plain verbs. Never manufacture
+  typos, dropped apostrophes, or rushed-typing texture to look human; humanity comes
+  from voice, not damage. No emoji, no comic archetypes. Levels and the per-surface
+  map live in `.claude/skills/house-voice` - manual/records at level 1, README/PR
+  prose/reports at level 2, teaching pages up to 3.
