@@ -475,12 +475,12 @@ namespace CUETools.Ripper.SCSI
         public const string UnresponsiveDriveGuidance =
             "The drive is rejecting every read shape, down to single sectors, " +
             "in regions it read successfully before. This stuck state has been " +
-            "observed on USB drives after extended recovery of damaged media; " +
-            "live characterization (2026-08-14) showed it survives every " +
-            "software reset and even a cable replug, and only a full power " +
-            "cycle has cleared it. Power the drive off and on (for external " +
-            "drives, replugging the USB cable alone may not be enough), then " +
-            "retry; the disc and any completed evidence are unaffected.";
+            "observed on USB drives after extended recovery of damaged media, " +
+            "and it survives every software reset. Unplugging and reconnecting " +
+            "the drive has cured it at least once (2026-08-19); other wedges " +
+            "have needed a full power cycle (2026-08-14). Try the cable first, " +
+            "then power the drive off and on, and retry; the disc and any " +
+            "completed evidence are unaffected.";
 
         /// <summary>
         /// Detects the stuck-drive state during ordinary payload reads

@@ -786,18 +786,30 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
-        public void UnresponsiveGuidanceNamesTheOnlyKnownCure()
+        public void UnresponsiveGuidanceNamesBothObservedCures()
         {
-            // The message must tell the user the one action that has ever
-            // cleared the state, and must scope the claim to what was
-            // observed (USB, damaged-media recovery).
+            // The message must name both actions that have cleared the state,
+            // cheapest first, each scoped to its observation date: a cable
+            // replug cured a wedge on 2026-08-19, a full power cycle was the
+            // only cure on 2026-08-14. It must also keep the claim scoped to
+            // what was observed (USB, damaged-media recovery) and say that
+            // completed evidence survives.
             StringAssert.Contains(
-                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "eplug");
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "cable");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "power");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "2026-08-19");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "2026-08-14");
             StringAssert.Contains(
                 PayloadReadFailurePolicy.UnresponsiveDriveGuidance, "USB");
             StringAssert.Contains(
                 PayloadReadFailurePolicy.UnresponsiveDriveGuidance,
                 "single sectors");
+            StringAssert.Contains(
+                PayloadReadFailurePolicy.UnresponsiveDriveGuidance,
+                "completed evidence are unaffected");
         }
     }
 }
