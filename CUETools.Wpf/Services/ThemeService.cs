@@ -102,6 +102,7 @@ public sealed class ThemeService
     private static readonly Dictionary<string, string> Dark = new()
     {
         ["Ground"] = "#0C0F0D", ["Bar"] = "#0E1310", ["Face"] = "#161C16", ["Panel"] = "#141A16",
+        ["StripEtched"] = "#4A554B", ["StripLit"] = "#C9FBF4", ["StripGlowColor"] = "#34CFC0",
         ["Line"] = "#28312A", ["Ink"] = "#EDF1E9", ["InkDim"] = "#B1BCAE", ["Muted"] = "#7D887C",
         ["StatusAccent"] = "#34CFC0", ["StatusGood"] = "#5CCB8B",
         ["StatusWarning"] = "#E9A63F", ["StatusDanger"] = "#E06C75",
@@ -125,6 +126,7 @@ public sealed class ThemeService
     private static readonly Dictionary<string, string> Light = new()
     {
         ["Ground"] = "#E7ECE2", ["Bar"] = "#DEE4D8", ["Face"] = "#F4F7EF", ["Panel"] = "#F1F5EB",
+        ["StripEtched"] = "#8A968B", ["StripLit"] = "#0A8A7F", ["StripGlowColor"] = "#087067",
         ["Line"] = "#CAD2C2", ["Ink"] = "#1A211B", ["InkDim"] = "#414A40", ["Muted"] = "#6C766A",
         ["StatusAccent"] = "#087067", ["StatusGood"] = "#246D3C",
         ["StatusWarning"] = "#835600", ["StatusDanger"] = "#A83442",

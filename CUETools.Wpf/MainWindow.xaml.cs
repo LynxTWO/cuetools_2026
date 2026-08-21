@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using CUETools.Wpf.Services;
+using CUETools.Wpf.Theme;
 
 namespace CUETools.Wpf;
 
@@ -52,6 +53,36 @@ public partial class MainWindow : Window
             _status.Changed += onStatus;
             Closed += (_, _) => { _status.Changed -= onStatus; _spinTimer.Stop(); };
         }
+
+        // SLICE-013 port: the rail collapses to the icon strip below 1140 logical
+        // pixels, and below 860 the page area holds its 860 layout inside a
+        // horizontal scroll instead of clipping (D-076's floor).
+        SizeChanged += (_, e) => ApplyRailLayout(e.NewSize.Width);
+        Loaded += (_, _) => ApplyRailLayout(ActualWidth);
+    }
+
+    private (bool Compact, bool Floor)? _railState;
+
+    private void ApplyRailLayout(double width)
+    {
+        bool compact = width < RailBreakpointValues.FullAt;
+        bool floor = width < RailBreakpointValues.FloorBelow;
+        if (_railState == (compact, floor))
+            return;
+        _railState = (compact, floor);
+
+        RailColumn.Width = new GridLength(compact ? 56 : 214);
+        NavList.ItemTemplate = (DataTemplate)Resources[compact ? "StripNavTemplate" : "FullNavTemplate"];
+        NavList.ItemContainerStyle = compact
+            ? (Style)Resources["StripNavItem"]
+            : (Style)FindResource("NavItem");
+        NavList.GroupStyle[0].HeaderTemplate =
+            (DataTemplate)Resources[compact ? "StripGroupHeader" : "FullGroupHeader"];
+
+        PageScroll.HorizontalScrollBarVisibility = floor
+            ? System.Windows.Controls.ScrollBarVisibility.Auto
+            : System.Windows.Controls.ScrollBarVisibility.Disabled;
+        PageHost.Width = floor ? RailBreakpointValues.HeldLayoutWidth : double.NaN;
     }
 
     private static Uri Pack(string rel) => new("pack://application:,,,/" + rel);
