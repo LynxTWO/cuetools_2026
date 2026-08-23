@@ -1,6 +1,6 @@
 ---
 name: lit-panel-controls
-description: Use when building or restyling WPF "hi-fi bench" controls that model a real bulb behind translucent plastic - toggle switches, indicator lamps, VU/meters, accent keys - or when recoloring that emissive glow to a different light color. WPF/XAML specific.
+description: Use when building or restyling WPF "hi-fi bench" controls that model a real bulb behind translucent plastic - toggle switches, indicator lamps, VU/meters, accent keys - or when recoloring that emissive glow to a different light color. WPF and Avalonia; see soft-body-controls for controls that DEFORM rather than light up.
 ---
 
 # Lit Panel Controls
@@ -100,25 +100,12 @@ You usually cannot see the running WPF app. Render the control to a PNG and look
 2. For STATIC looks (off state, geometry, colors), a tiny net8 WPF console loads it with
    `XamlReader.Parse(File.ReadAllText(path))`, builds the control with the real `Style`,
    `Measure`/`Arrange`, renders via `RenderTargetBitmap` (192 dpi = 2x). Put the theme dict in
-   `root.Resources.MergedDictionaries` so implicit styles apply. See `scratchpad/SwitchRender`.
+   `root.Resources.MergedDictionaries` so implicit styles apply. Build this harness fresh; no checked-in copy exists.
 3. For ANIMATION or the lit ON state (which needs the storyboard clock, and for `DynamicResource`
    recolor which needs a real resource scope), run a real `Application` + `Window` off-screen,
    wait ~600ms on a `DispatcherTimer`, THEN `RenderTargetBitmap`. A single headless frame captures
-   the animation at t=0 (looks off). See `scratchpad/AnimTest` - it is how the warm-up and the
+   the animation at t=0 (looks off). Build this harness fresh; no checked-in copy exists - it is how the warm-up and the
    teal/amber/green recolor were verified.
-
-## Verify by rendering, never by guessing
-
-You usually cannot see the running WPF app. Render the control to a PNG and look at it:
-
-1. Keep the styles in a standalone `ResourceDictionary` (e.g. `Theme/Theme.xaml`) merged by the
-   app, so a harness can load the SAME file.
-2. A tiny net8 WPF console loads it with `XamlReader.Parse(File.ReadAllText(path))`, builds the
-   control with the real `Style`, `Measure`/`Arrange`, and renders via `RenderTargetBitmap`
-   (192 dpi = 2x) to a PNG. Put the theme dict in `root.Resources.MergedDictionaries` so implicit
-   styles apply. See `scratchpad/SwitchRender` in this repo for the harness.
-3. Read the PNG back and adjust hotspot origin, falloff offsets, and bleed opacity until the
-   light reads right. This is how the switch physics were tuned.
 
 ## Avalonia port notes (learned dialing in the Linux head, 2026-08-20)
 
@@ -144,6 +131,17 @@ The four-layer model ports as an Avalonia ControlTheme, with three deltas:
 The theme flip itself got the same physics on the Linux head: ThemeCrossfade holds
 the old theme's frame in an overlay and dims it out (560 ms going dark, 300 ms to
 light, CubicEaseOut) - the cooling-filament read, applied to the whole panel.
+
+## Sibling skill: deformation
+
+`soft-body-controls` owns controls that physically deform under a pointer - rubber keys,
+dome switches, membrane pads. This skill owns emissive layers, the `Lamp*` ramp, and
+state-driven light curves; that one owns geometry, pointer response, and spring motion.
+
+Where they meet, one rule belongs to both: **a specular highlight that stays put while the
+surface bends is the tell that breaks the illusion.** If a lit control is also a deforming
+one, the glow layers must ride the deformation, and a press must suppress the crown's
+specular locally rather than adding a second highlight of its own.
 
 ## Common mistakes
 
