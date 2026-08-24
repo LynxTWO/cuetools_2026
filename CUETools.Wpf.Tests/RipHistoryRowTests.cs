@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -69,5 +70,48 @@ public sealed class RipHistoryRowTests
             "{Binding Result}",
             result.Attribute("ToolTip")?.Value,
             "CLAUDE.md allows trimming only when the full value stays available in a tooltip");
+    }
+
+    [TestMethod]
+    public void TheTitleColumnIsBoundedAndTrimsWithATooltip()
+    {
+        // Same defect class as D13, one element over. The title block is the first-reserved
+        // DockPanel.Dock="Left" child, and DockPanel grants it min(desired, remaining) before
+        // anything else. An unbounded title - a classical box set runs to roughly 600px at
+        // Serif 14 - starves the fill child to zero width, and a zero-width TextBlock has no
+        // hover surface, so the tooltip that makes its trimming legal becomes unreachable.
+        XElement row = HistoryRow();
+        XElement titles = row.Elements(Presentation + "StackPanel").Single();
+
+        string? declared = titles.Attribute("MaxWidth")?.Value;
+        Assert.IsNotNull(
+            declared,
+            "the title block must be bounded, or a long title starves the evidence text");
+        Assert.IsTrue(
+            double.TryParse(
+                declared!.Trim(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out double maxWidth),
+            "the title block's MaxWidth must be a finite number, was " + declared);
+        Assert.IsTrue(
+            maxWidth > 0 && maxWidth <= 430,
+            "the title column must keep at most half the 860 floor layout so the timestamp and "
+                + "the evidence text always keep a hover surface, was " + maxWidth);
+
+        foreach (string binding in new[] { "{Binding Title}", "{Binding Artist}" })
+        {
+            XElement line = titles.Elements(Presentation + "TextBlock")
+                .Single(e => (string?)e.Attribute("Text") == binding);
+            Assert.AreEqual(
+                "CharacterEllipsis",
+                line.Attribute("TextTrimming")?.Value,
+                binding + " is bounded now, so it must trim rather than clip");
+            Assert.AreEqual("NoWrap", line.Attribute("TextWrapping")?.Value, binding);
+            Assert.AreEqual(
+                binding,
+                line.Attribute("ToolTip")?.Value,
+                "CLAUDE.md allows trimming only when the full value stays available in a tooltip");
+        }
     }
 }

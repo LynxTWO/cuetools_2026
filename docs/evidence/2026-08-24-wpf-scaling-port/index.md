@@ -17,7 +17,7 @@ regenerated after the fix, so they show the corrected layout, not the original d
 | Display | single monitor, 2560x1440, originally 100% scale (96 dpi) |
 | Build | `CUETools.Wpf`, Release, net8.0-windows, .NET SDK 8.0.422 |
 | Prerequisites | `Prepare-VendorSources.ps1` current (1556 files); `Test-VendorSubmodulesClean.ps1` PASS on 5 worktrees |
-| Tests | `CUETools.Wpf.Tests` 730 passing, `RailStripPortTests` 3 of 3 |
+| Tests | `CUETools.Wpf.Tests` 746 passing, `RailStripPortTests` 3 of 3 |
 
 Display scale was driven live through `SPI_SETLOGICALDPIOVERRIDE` and restored to the original
 index on every exit path. **Verified after the run:** effective DPI back to 96, and the
@@ -58,11 +58,10 @@ therefore walked at four widths: 1200 (the documented default, full rail), 1100 
 | Full card rail at and above 1140 | correct at all 5 scales, both themes |
 | Rail collapses to the 44x38 icon strip below 1140 | correct at all 5 scales, both themes |
 | Glyphs legible at 44x38 | yes, and they sharpen with scale rather than blurring |
-| Below 860: layout held at its 860 shape, horizontal scroll | correct, horizontal scrollbars appear and content is not squeezed; at 640x480 that is a uniform 314px of overflow (78 + 860 - 624), reachable by scrollbar |
+| Below 860: layout held at its 860 shape, horizontal scroll | measured correct, horizontal scrollbars appear and content is not squeezed; at 640x480 the overflow is uniform and reachable by scrollbar. Its size is **computed, not measured**: 78 + 860 - 624 = 314px. The 292px in the original probe was measured against the old 56px rail column and was not re-probed after the column widened to 78 |
 | Window drags to 640x480 without breaking | yes; the rail strip gains a vertical scrollbar for overflow |
 | Light/dark flip restyles the strip | correct at all 5 scales, no stranded brushes from the previous palette |
-| Nothing clips | fails on the Rip page history rows, see below |
-| Rip page history rows (D13, fixed after this walkthrough) | `When` now docks before `Result`; the timestamp renders and `Result` trims with a tooltip (`RipHistoryRowTests`) |
+| Nothing clips | correct in all 40 captures. The one failure this walkthrough found, the Rip page history rows, was fixed afterwards as D13 and every capture here was regenerated: `When` now docks before `Result`, so the timestamp renders and `Result` trims with its full value in a tooltip (`RipHistoryRowTests`). See below |
 
 At 200%, the 1200 and 1100 captures are height-clamped to 1470 physical pixels by the desktop work
 area. Width is what the breakpoints key off, so this does not affect the rail result.

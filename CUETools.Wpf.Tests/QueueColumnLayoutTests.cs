@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -104,6 +105,36 @@ public sealed class QueueColumnLayoutTests
         Assert.IsNull(
             resultColumn.Attribute("Width"),
             "the result column width is computed on resize, not fixed in XAML");
+
+        // The three fixed widths live in the markup and are only mirrored here. Without this
+        // check, editing a GridViewColumn width leaves the reflow arithmetic silently wrong and
+        // the Result column runs off the edge again with a green suite.
+        (string Header, double Mirrored)[] fixedColumns =
+        {
+            ("Source", QueueColumnLayout.SourceWidth),
+            ("Action", QueueColumnLayout.ActionWidth),
+            ("Status", QueueColumnLayout.StatusWidth),
+        };
+        foreach ((string header, double mirrored) in fixedColumns)
+        {
+            XElement column = document.Descendants(Presentation + "GridViewColumn")
+                .Single(c => (string?)c.Attribute("Header") == header);
+            string? declared = column.Attribute("Width")?.Value;
+            Assert.IsNotNull(declared, header + " column must declare a fixed width");
+            Assert.IsTrue(
+                double.TryParse(
+                    declared!.Trim(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double width),
+                header + " column width must be a number, was " + declared);
+            Assert.AreEqual(
+                mirrored,
+                width,
+                0.001,
+                header + " column width in QueueView.xaml must match the constant the reflow "
+                    + "arithmetic mirrors");
+        }
     }
 
     [TestMethod]

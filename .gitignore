@@ -33,3 +33,6 @@ launchSettings.json
 /ThirdParty/encoders/
 /ThirdPartyDebug/
 publish/
+
+# subagent-driven-development scratch workspace (ledger, briefs, review packages)
+.superpowers/
