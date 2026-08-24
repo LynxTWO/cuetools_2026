@@ -35,7 +35,10 @@
     </Border>
 
     <!-- body -->
-    <Grid Grid.Row="1">
+    <!-- Only the body scrolls. The row above and the status bar below are fixed, so the page
+         root must stay a grid. MinHeight keeps the centred states centred while there is room. -->
+    <ScrollViewer Grid.Row="1" x:Name="ConvertBodyScroller" VerticalScrollBarVisibility="Auto">
+    <Grid MinHeight="{Binding ActualHeight, ElementName=ConvertBodyScroller}">
       <!-- instruction state -->
       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="600"
                   Visibility="{Binding HasResult, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
@@ -73,6 +76,7 @@
         <TextBlock Text="{Binding ResultText}" Foreground="{DynamicResource InkDim}" FontFamily="{StaticResource Mono}" FontSize="11.5" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0"/>
       </StackPanel>
     </Grid>
+    </ScrollViewer>
 
     <!-- progress bar -->
     <Border Grid.Row="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,10">
