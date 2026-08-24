@@ -44,5 +44,21 @@ public sealed class ConvertBodyScrollTests
             "{Binding ActualHeight, ElementName=ConvertBodyScroller}",
             body.Attribute("MinHeight")?.Value,
             "MinHeight keeps the content vertically centred while there is room to centre it");
+
+        // Search the whole document (not just rootGrid's direct children) so that if a future
+        // edit slides the closing </Grid></ScrollViewer> pair too far down and swallows the
+        // status bar into the scroller's content, this assertion catches it by location rather
+        // than silently passing because Single() still finds exactly one match somewhere.
+        XElement statusBar = document.Descendants(Presentation + "Border")
+            .Single(e => (string?)e.Attribute("Grid.Row") == "2");
+        Assert.AreSame(
+            rootGrid,
+            statusBar.Parent,
+            "the Grid.Row=\"2\" status bar Border must be a direct child of the root Grid, " +
+            "not nested inside ConvertBodyScroller, or it would scroll away with the body");
+        Assert.IsFalse(
+            scroller.Descendants().Contains(statusBar),
+            "the Grid.Row=\"2\" status bar Border must stay outside ConvertBodyScroller, " +
+            "or it would scroll away with the body");
     }
 }
