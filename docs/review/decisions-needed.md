@@ -166,6 +166,27 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
+### D13. Rip page history rows starve the timestamp and hard-clip the result - OPEN 2026-08-24
+
+- **Ask:** fix the history row layout, or accept it. It is a Rip page design decision, so it was
+  left alone during the scaling-port walkthrough.
+- **Found by:** the SLICE-013 port walkthrough,
+  `docs/evidence/2026-08-24-wpf-scaling-port/`. **Not a port regression** - the port did not touch
+  this template, and the fault reproduces at all five display scales and all four window widths
+  tested, including the 1200 default.
+- **Cause, verified from markup:** `CUETools.Wpf/Views/RipView.xaml:526-533` uses
+  `<DockPanel LastChildFill="False">` with `Result` docked Right before `When`. DockPanel reserves
+  space in declaration order, so `Result` takes all remaining width and `When` is left zero width.
+- **Consequence 1:** the relative timestamp never renders, at any scale or width, in any of the 40
+  captures. `HistoryStore.cs:75` always populates it as `When = Relative(r.When)`.
+- **Consequence 2:** `Result` sets no `TextTrimming` and no `ToolTip`, so the evidence sentence is
+  cut mid-word at the panel edge with no ellipsis and no way to read the remainder. CLAUDE.md
+  requires long identity text to be trimmed only with its full value in a tooltip, so this is a
+  standing violation rather than a cosmetic gap.
+- **Smallest safe fix:** dock `When` before `Result`, give `Result` `TextTrimming="CharacterEllipsis"`
+  and a `ToolTip` bound to the same value. That restores the timestamp, satisfies the tooltip rule,
+  and also closes the title/result collision at narrow widths, which is the same root cause.
+
 ### D12. Mutation harness: restore the unlanded test half - RESOLVED 2026-08-24 (A)
 
 - **User chose (A):** land the production-test half of `2a8df3e3` onto master, then re-baseline
