@@ -199,3 +199,13 @@ Queue only repo-agnostic lessons. Local product facts stay in the other calibrat
   boundaries.
 - Proposed change: add "unlisted platforms fail closed" to the
   adversarial review checklist for platform-split code.
+
+## ADC-CUETOOLS-012: Cleanup steps must not sit behind a fallible command
+
+- Status: ready
+- Scope: repo-agnostic
+- Lesson: In a shell chain, a cleanup or revert step placed after `&&` is skipped whenever any earlier link fails, and the surviving output still reads like completion; run cleanup unconditionally, then assert the working tree is clean before committing.
+- Evidence: a chain of the form `copy A && copy B && remove scratch && restore harness && build` lost its first link on a missing directory, so a scratch test file and a locally modified test harness rode into the commit; every continuous-integration lane went red while local runs stayed green, because the scratch test wrote to a machine-specific path. Same family as two earlier incidents in this repository where a piped verification discarded a non-zero exit status and where a checks query returned a previous commit's results.
+- Limits: applies to shell-composed automation with conditional operators; a task runner that always executes teardown, or a language-level `finally`, already provides this.
+- Proposed target: references/14-deterministic-verification.md
+- Proposed change: add cleanup-and-revert ordering as a third named failure mode alongside discarded exit status and stale check results, with the rule that teardown runs unconditionally and the tree is asserted clean before the artifact is created.
