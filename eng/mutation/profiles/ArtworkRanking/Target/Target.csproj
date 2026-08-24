@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.ArtworkRanking</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ArtworkContracts.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\Artwork\ArtworkModels.cs" Link="Production\ArtworkModels.cs" />
+  </ItemGroup>
+</Project>
