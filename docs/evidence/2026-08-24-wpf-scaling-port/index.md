@@ -3,9 +3,10 @@
 Evidence for the SLICE-013 Windows port (fork PR 72). 40 captures: five Windows display scales,
 both themes, four window widths each.
 
-**The port itself behaves as specified at every scale and width tested.** One pre-existing defect
-was found on the Rip page that the port did not introduce; it is described at the bottom and is
-visible in every capture.
+**The port itself behaves as specified at every scale and width tested.** This walkthrough also
+found one pre-existing defect on the Rip page that the port did not introduce; it is described at
+the bottom. That defect has since been fixed (D13) and all 40 captures in this folder were
+regenerated after the fix, so they show the corrected layout, not the original defect.
 
 ## Host and method
 
@@ -66,12 +67,15 @@ therefore walked at four widths: 1200 (the documented default, full rail), 1100 
 At 200%, the 1200 and 1100 captures are height-clamped to 1470 physical pixels by the desktop work
 area. Width is what the breakpoints key off, so this does not affect the rail result.
 
-## Finding: Rip page history rows starve the timestamp and hard-clip the result
+## Finding: Rip page history rows starved the timestamp and hard-clipped the result - fixed (D13)
 
-Not a scaling-port regression. It reproduces at every scale and every width, including the 1200
-default, and the port did not touch this template.
+Found during this walkthrough. Not a scaling-port regression: it reproduced at every scale and
+every width, including the 1200 default, and the port did not touch this template. Logged as D13
+in `docs/review/decisions-needed.md` and left unfixed at the time the walkthrough was written up,
+because the row layout is a Rip page design decision and this walkthrough was scoped to reviewing
+the scaling port.
 
-`CUETools.Wpf/Views/RipView.xaml:526-533` lays each history row out as:
+`CUETools.Wpf/Views/RipView.xaml:526-533` laid each history row out as:
 
 ```xml
 <DockPanel LastChildFill="False">
@@ -81,21 +85,27 @@ default, and the port did not touch this template.
 </DockPanel>
 ```
 
-`DockPanel` reserves space in declaration order, so `Result` docks against the right edge first and
-takes everything left over. `Result` carries the full evidence sentence, which is far wider than
-the row, so it consumes the entire remaining width and `When` is left zero width.
+`DockPanel` reserves space in declaration order, so `Result` docked against the right edge first
+and took everything left over. `Result` carried the full evidence sentence, which is far wider
+than the row, so it consumed the entire remaining width and `When` was left zero width.
 
-Two consequences, both **measured** across all 40 captures:
+Two consequences, both **measured** across the original 40 captures:
 
-1. **The relative timestamp never renders.** `When` is always populated -
-   `HistoryStore.cs:75` sets `When = Relative(r.When)` - but it does not appear in a single
+1. **The relative timestamp never rendered.** `When` was always populated -
+   `HistoryStore.cs:75` sets `When = Relative(r.When)` - but it did not appear in a single
    capture at any scale or width.
-2. **`Result` is hard-clipped mid-word.** That `TextBlock` sets no `TextTrimming` and no
-   `ToolTip`, so the text is cut at the panel edge with no ellipsis and no way to read the rest.
+2. **`Result` was hard-clipped mid-word.** That `TextBlock` set no `TextTrimming` and no
+   `ToolTip`, so the text was cut at the panel edge with no ellipsis and no way to read the rest.
    CLAUDE.md requires that long identity text be trimmed only with its full value in a tooltip.
 
-The album title also abuts the result text with no gap once the row is narrow, which is the same
-root cause.
+The album title also abutted the result text with no gap once the row was narrow, which was the
+same root cause.
 
-Left as a finding rather than fixed: the row layout is a Rip page design decision, and this
-walkthrough was scoped to reviewing the scaling port.
+**Fixed 2026-08-24.** `RipView.xaml` now docks `When` before `Result`: `When` docks Right and
+always gets its width, and `Result` is the `LastChildFill` child, so it fills the remaining
+middle and trims with `TextTrimming="CharacterEllipsis"` plus a `ToolTip` bound to the same
+value. `RipHistoryRowTests` (`CUETools.Wpf.Tests`) pins both halves of the fix - the dock order
+and the trim/tooltip pair. D13 is resolved with this fix; see
+`docs/review/decisions-needed.md`. All 40 captures in this folder were regenerated after the fix
+landed, so every capture here, including the 1200-width ones, shows the timestamp rendering and
+the result trimming with an ellipsis rather than the original defect.
