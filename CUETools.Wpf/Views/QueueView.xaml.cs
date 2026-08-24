@@ -23,4 +23,14 @@ public partial class QueueView : UserControl
         if (window.ShowDialog() == true && window.SelectedChoice != null)
             viewModel.SelectCodec(window.SelectedChoice);
     }
+
+    // GridViewColumn has no star sizing, so the last column is measured here instead. See
+    // QueueColumnLayout for the arithmetic and why it is a pure function.
+    private void QueueList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged)
+            return;
+        ResultColumn.Width =
+            QueueColumnLayout.ResultWidth(e.NewSize.Width, QueueColumnLayout.Chrome);
+    }
 }

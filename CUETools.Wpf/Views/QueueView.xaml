@@ -35,14 +35,17 @@
                  Text="Queue is empty - add album folders or .cue files above."
                  Visibility="{Binding Items.Count, Converter={StaticResource ZeroToVis}}"/>
 
-      <ListView Margin="12" BorderThickness="0" Background="Transparent" ItemsSource="{Binding Items}"
-                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+      <!-- Result takes the leftover width so the columns reflow down to the 860 floor. The
+           horizontal scrollbar is the fallback for when even that is not enough. -->
+      <ListView x:Name="QueueList" Margin="12" BorderThickness="0" Background="Transparent"
+                ItemsSource="{Binding Items}" SizeChanged="QueueList_SizeChanged"
+                ScrollViewer.HorizontalScrollBarVisibility="Auto">
         <ListView.View>
           <GridView>
             <GridViewColumn Header="Source" Width="300" DisplayMemberBinding="{Binding Display}"/>
             <GridViewColumn Header="Action" Width="90" DisplayMemberBinding="{Binding Action}"/>
             <GridViewColumn Header="Status" Width="110" DisplayMemberBinding="{Binding Status}"/>
-            <GridViewColumn Header="Result" Width="320" DisplayMemberBinding="{Binding Result}"/>
+            <GridViewColumn x:Name="ResultColumn" Header="Result" DisplayMemberBinding="{Binding Result}"/>
           </GridView>
         </ListView.View>
       </ListView>
