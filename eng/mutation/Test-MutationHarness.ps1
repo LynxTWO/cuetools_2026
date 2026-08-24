@@ -136,13 +136,27 @@ Assert-Contains $ripperContract "PopulationCount(this BitArray bits)" `
     "BitArray population-count contract changed."
 
 $repairEvidence = Get-Content -LiteralPath `
-    (Join-Path $repoRoot "CUETools.Wpf\Services\RepairEvidence.cs") -Raw
+    (Join-Path $repoRoot "CUETools.App.Core\Services\RepairEvidence.cs") -Raw
 $albumTransaction = Get-Content -LiteralPath `
-    (Join-Path $repoRoot "CUETools.Wpf\Services\AlbumOutputTransaction.cs") -Raw
+    (Join-Path $repoRoot "CUETools.App.Core\Services\AlbumOutputTransaction.cs") -Raw
 Assert-Contains $repairEvidence 'ReceiptFileName = "repair.verify"' `
     "Repair receipt filename contract changed."
 Assert-Contains $albumTransaction 'CompletionMarkerName = ".cuetools-complete"' `
     "Album completion marker contract changed."
+
+# The TestCopyHistory profile re-declares StoreJsonContext rather than linking production, because
+# the production file also registers roots that would drag HistoryStore and CUETools.Wpf.Models into
+# the isolated graph. Pin the production declaration and the two roots the linked sources resolve.
+$storeJsonContext = Get-Content -LiteralPath `
+    (Join-Path $repoRoot "CUETools.App.Core\Services\StoreJsonContext.cs") -Raw
+Assert-Contains $storeJsonContext "internal sealed partial class StoreJsonContext : JsonSerializerContext" `
+    "StoreJsonContext declaration contract changed."
+Assert-Contains $storeJsonContext "JsonSerializable(typeof(Dictionary<string, List<VerifyRecord>>))" `
+    "StoreJsonContext verify-history root registration changed."
+$verifyHistorySource = Get-Content -LiteralPath `
+    (Join-Path $repoRoot "CUETools.App.Core\Accuracy\VerifyHistory.cs") -Raw
+Assert-Contains $verifyHistorySource "StoreJsonContext.Default.VerifyRecord" `
+    "VerifyHistory serializer-context usage changed."
 
 $cueConfig = Get-Content -LiteralPath (Join-Path $repoRoot "CUETools.Processor\CUEConfig.cs") -Raw
 $format = Get-Content -LiteralPath (Join-Path $repoRoot "CUETools.Codecs\CUEToolsFormat.cs") -Raw

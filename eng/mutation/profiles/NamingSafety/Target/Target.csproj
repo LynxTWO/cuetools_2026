@@ -6,9 +6,8 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="ProcessorContract.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\AlbumArtifactNames.cs" Link="Production\AlbumArtifactNames.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\NamingEngine.cs" Link="Production\NamingEngine.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\NamingPresentation.cs" Link="Production\NamingPresentation.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\NamingPaths.cs" Link="Production\NamingPaths.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\AlbumArtifactNames.cs" Link="Production\AlbumArtifactNames.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\NamingEngine.cs" Link="Production\NamingEngine.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\NamingPaths.cs" Link="Production\NamingPaths.cs" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ArtworkContracts.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\Artwork\ArtworkModels.cs" Link="Production\ArtworkModels.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\Artwork\ArtworkModels.cs" Link="Production\ArtworkModels.cs" />
   </ItemGroup>
 </Project>

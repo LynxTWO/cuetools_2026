@@ -166,6 +166,35 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
+### D12. Mutation harness: restore the unlanded test half, or accept a weaker gate - OPEN 2026-08-24
+
+- **Ask:** the mutation harness landed without the production tests it was calibrated against.
+  Decide whether to land that half, or to re-baseline the thresholds down to what master scores.
+- **Evidence:** `docs/review/2026-08-24-mutation-harness-rebaseline.md`. Commit `2a8df3e3` on
+  `origin/agent/mutation-harness` changed the harness and the production tests together. The
+  landing commit `e8e21739` took 41 files, all under `eng/mutation/`. Four files it depends on
+  never landed, and roughly a hundred test methods across 15 files stayed on the branch.
+- **Measured 2026-08-24, master `439decf9`, Quick:** 78.18 / 48.11 / 78.43 / 53.33 / 58.82 / 32.00
+  against floors of 95.0 / 89.0 / 89.0 / 92.0 / 75.0 / 89.0. Every runnable profile fails. Full
+  mode is worse: 76.19 / 41.48 / 73.03 / 31.34 / 61.43 / 29.11.
+- **Verified 2026-08-24, worktree at `8961b0b6`:** all seven profiles pass and reproduce the
+  README's measured column to the hundredth (96.14, 90.72, 94.09, 90.20, 93.10, 76.47, 90.20).
+  The harness is sound and deterministic. The drop is missing tests, not a code regression.
+- **Option A (recommended):** cherry-pick the production-test half of `2a8df3e3` onto master,
+  adapting for the `CUETools.App.Core` move, then re-baseline from the restored suite. Cost: the
+  tests were written against 2026-08-08 production code and master has moved 155 commits, so some
+  will need rework. `NamingMutationContractTests` (19 tests) targets `NamingEngine`, which changed.
+- **Option B:** accept the reduced suite and write the measured numbers in as the new floors. This
+  encodes the loss as the standard and should only be chosen deliberately.
+- **Not decided here; nothing was lowered.** The thresholds in `profiles.json` are untouched. The
+  harness remains unwired, so it gates nothing either way.
+- **Separate sub-question:** `test-copy-history` cannot run at all in either option.
+  `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` now calls `RipService.BuildTestCopyCrcEvidence`,
+  and `RipService.cs` is 3223 lines pulling AccurateRip, Codecs, CTDB, Processor, Ripper, and
+  Ripper.SCSI. Either extract that method into a linkable file, or accept the critical profile as
+  non-runnable and record it. A contract shim is not acceptable: the method is behavior-bearing
+  Test and Copy evidence logic, not an identity.
+
 ### D8. Classic secure-rip calibration and cache-defeat port - RESOLVED 2026-08-01 (B)
 
 - **User chose (B):** classic stays a frozen legacy surface with no behavior

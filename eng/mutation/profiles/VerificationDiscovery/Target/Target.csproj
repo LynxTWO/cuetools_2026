@@ -5,6 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ProcessorContract.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\VerificationSourceDiscovery.cs" Link="Production\VerificationSourceDiscovery.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\VerificationSourceDiscovery.cs" Link="Production\VerificationSourceDiscovery.cs" />
   </ItemGroup>
 </Project>

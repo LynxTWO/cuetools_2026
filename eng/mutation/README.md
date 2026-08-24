@@ -1,22 +1,37 @@
 # CUETools mutation harness
 
-> **Status on landing (2026-08-24): the harness is here, its thresholds are NOT current.**
+> **Status after the first real run (2026-08-24): measured, and the thresholds still stand
+> unchanged on purpose. Do not treat any profile here as passing.**
 >
-> This was written on 2026-08-08 and sat on a branch while master moved 155 commits.
-> It is landed unchanged and deliberately **not wired into any workflow**, so it gates
-> nothing and cannot break a build. What that also means is that no gate in this
-> directory has been run against current code.
+> Run on DESKTOP-D084LOM (Ryzen 9 5950X) under Windows 11 Pro 10.0.26220.0, PowerShell 7.6.5,
+> .NET SDK 8.0.422, runtime 8.0.30, `dotnet-stryker` 4.16.0, net8.0 Release. The .NET Framework
+> toolchain turned out not to be needed: these profiles are standalone net8.0 projects, and
+> `Prepare-VendorSources.ps1` is not a prerequisite for them.
 >
-> All 16 `expectedSources` still resolve, so the surfaces it aims at survived the drift.
-> The per-profile `minimumQuickScore` / `minimumFullScore` / `maximum*NoCoverage` numbers
-> did not survive anything - they were baselined against 2026-08-08 code and should be
-> treated as unknown until re-measured.
+> The harness did **not** run on master `439decf9` as landed. The claim that all 16
+> `expectedSources` still resolve is **wrong** - only the 7 `CUETools.Ripper.SCSI` entries did.
+> Repairs in this commit: the 9 mutated sources moved to `CUETools.App.Core/`; a new
+> `StoreJsonContext` seam needed a dependency contract; and four files the harness depends on were
+> never landed at all, because `e8e21739` took only `eng/mutation/**` and left the production-test
+> half of `2a8df3e3` on `origin/agent/mutation-harness`.
 >
-> Before trusting any number here: run `Test-MutationHarness.ps1`, then
-> `Invoke-MutationTests.ps1`, on Windows with the .NET Framework toolchain, and
-> re-baseline the thresholds from that run. It could not be verified from the Linux
-> head, which is why it is landed as available rather than as a gate.
-
+> That missing half is why the numbers collapsed. Master now measures 78.18 / 48.11 / 78.43 /
+> 53.33 / 58.82 / 32.00 in Quick against floors of 95.0 / 89.0 / 89.0 / 92.0 / 75.0 / 89.0. The
+> same seven profiles, run unmodified in a worktree at `8961b0b6`, **all pass and reproduce the
+> measured column below to the hundredth**. The harness is sound; the tests it grades are missing.
+>
+> The thresholds were therefore not lowered to the master numbers. Doing so would encode the loss
+> of roughly two thirds of the assertions as the new standard. The owner decision is D12 in
+> `docs/review/decisions-needed.md`; the full evidence is
+> `docs/review/2026-08-24-mutation-harness-rebaseline.md`.
+>
+> `test-copy-history` **cannot run at all** and is left in place, not deleted.
+> `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` now calls `RipService.BuildTestCopyCrcEvidence`,
+> and `RipService.cs` is 3223 lines pulling AccurateRip, Codecs, CTDB, Processor, Ripper, and
+> Ripper.SCSI - the exact graph these profiles isolate against. That method is behavior-bearing
+> logic, so it does not qualify for a contract shim.
+>
+> Still deliberately **not wired into any workflow**. It gates nothing and cannot break a build.
 
 This harness asks a stricter question than line coverage: if a decision in a critical pure-logic
 surface is changed, do the tests fail? It runs pinned `dotnet-stryker` 4.16.0 against small .NET 8
@@ -44,6 +59,11 @@ The no-coverage ceiling separately prevents a stable score from hiding newly unt
 | `output-guard` | critical | non-clobbering publication directory selection | 76.47 / 75.0 | 91.43 / 90.0 | 0 / 2 |
 | `artwork-ranking` | medium | release-identity and image-quality ordering | 90.20 / 89.0 | 91.36 / 90.0 | 0 / 0 |
 
+**The measured columns describe `8961b0b6`, not master.** They were taken on 2026-08-08 and
+re-confirmed exactly on 2026-08-24 in a worktree at that commit. Master `439decf9` scores far lower
+because the production-test half of that branch never landed; see the status note at the top and
+`docs/review/2026-08-24-mutation-harness-rebaseline.md` for both measurement sets side by side.
+
 Quick uses Stryker's Basic mutation level and is the pull-request lane. Full uses Standard and is the
 scheduled/manual deep lane. Exact source inventories, score floors, and no-coverage ceilings live in
 `profiles.json`; changing them is a reviewable quality-policy change.
@@ -52,6 +72,12 @@ The 2026-08-08 survivor review split naming into two profiles. Path safety and t
 have independent scores. `NamingPresentation.cs` contains preset names, palette entries, and sample
 previews. Those catalogs are covered by exact-value tests but are not mutation-scored because string
 replacement mutants measure catalog text, not naming correctness.
+
+On master that split does not exist: `NamingPresentation.cs` was part of the unlanded half, so
+`NamingEngine.cs` still carries `Presets`, `PaletteFields`, and `Examples()` inline. Measured
+2026-08-24, that costs `naming-semantics` almost nothing - bucketing its mutants by line region
+gives 53.57 for the behavior region against 53.33 overall. The missing `NamingMutationContractTests`
+is what moved that score, not the catalogs.
 
 The same review added missing behavior contracts for secure-sector voting, C2 weighting, sample
 concealment, slip alignment, failed-sector accounting, Test & Copy evidence, CRC history roles,
@@ -82,6 +108,13 @@ From the repository root:
 # Standard mutants for the scheduled/manual deep pass.
 .\eng\mutation\Invoke-MutationTests.ps1 -Mode Full
 ```
+
+**Known failure until D12 is decided.** `Test-MutationHarness.ps1 -Build` stops on
+`test-copy-history`, whose test project does not compile (see the status note above), and
+`Invoke-MutationTests.ps1` with no `-Profile` stops on the first profile below its floor. To
+measure the six runnable profiles today, drive them one at a time with `-Profile` and read the
+score out of the run's `mutation-report.json`; the runner writes the report before it throws. The
+contract gate alone, `Test-MutationHarness.ps1` without `-Build`, passes.
 
 Every run uses a new `TestResults/Mutation/...` directory by default. It writes a compact summary,
 the Stryker JSON and HTML reports, and logs. A failed profile also writes a bounded

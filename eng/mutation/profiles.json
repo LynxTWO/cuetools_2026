@@ -19,7 +19,6 @@
         "CUETools.Ripper.Tests/ReadTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/RecoveryPolicyTests.cs",
         "CUETools.Ripper.Tests/SampleConcealmentTests.cs",
-        "CUETools.Ripper.Tests/SecureSectorVoteTests.cs",
         "CUETools.Ripper.Tests/SlipCorrelatorTests.cs",
         "CUETools.Ripper.Tests/SplitChildAndTransitionPolicyTests.cs",
         "CUETools.Ripper.Tests/WindowBudgetTests.cs"
@@ -49,7 +48,7 @@
         "eng/mutation/profiles/VerificationDiscovery/Tests/ConfiguredFormatTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/VerificationSourceDiscovery.cs"
+        "CUETools.App.Core/Services/VerificationSourceDiscovery.cs"
       ]
     },
     {
@@ -68,9 +67,9 @@
         "CUETools.Wpf.Tests/VerifyHistoryStoreTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Accuracy/TestAndCopyResolver.cs",
-        "CUETools.Wpf/Accuracy/VerifyHistory.cs",
-        "CUETools.Wpf/Services/GzJson.cs"
+        "CUETools.App.Core/Accuracy/TestAndCopyResolver.cs",
+        "CUETools.App.Core/Accuracy/VerifyHistory.cs",
+        "CUETools.App.Core/Services/GzJson.cs"
       ]
     },
     {
@@ -88,15 +87,13 @@
         "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
         "CUETools.Wpf.Tests/DiscPaddingTests.cs",
         "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
-        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
         "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
         "CUETools.Wpf.Tests/NamingPathsTests.cs",
-        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/AlbumArtifactNames.cs",
-        "CUETools.Wpf/Services/NamingPaths.cs"
+        "CUETools.App.Core/Services/AlbumArtifactNames.cs",
+        "CUETools.App.Core/Services/NamingPaths.cs"
       ]
     },
     {
@@ -114,14 +111,12 @@
         "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
         "CUETools.Wpf.Tests/DiscPaddingTests.cs",
         "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
-        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
         "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
         "CUETools.Wpf.Tests/NamingPathsTests.cs",
-        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/NamingEngine.cs"
+        "CUETools.App.Core/Services/NamingEngine.cs"
       ]
     },
     {
@@ -138,7 +133,7 @@
         "CUETools.Wpf.Tests/OutputGuardTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/OutputGuard.cs"
+        "CUETools.App.Core/Services/OutputGuard.cs"
       ]
     },
     {
@@ -155,7 +150,7 @@
         "CUETools.Wpf.Tests/ArtworkCandidateTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/Artwork/ArtworkModels.cs"
+        "CUETools.App.Core/Services/Artwork/ArtworkModels.cs"
       ]
     }
   ]
