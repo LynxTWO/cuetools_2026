@@ -11,7 +11,7 @@
       "minimumQuickScore": 95.0,
       "minimumFullScore": 93.0,
       "maximumQuickNoCoverage": 0,
-      "maximumFullNoCoverage": 1,
+      "maximumFullNoCoverage": 3,
       "expectedTests": [
         "CUETools.Ripper.Tests/DriveReportedTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/FailedSectorAccountingTests.cs",
@@ -19,6 +19,7 @@
         "CUETools.Ripper.Tests/ReadTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/RecoveryPolicyTests.cs",
         "CUETools.Ripper.Tests/SampleConcealmentTests.cs",
+        "CUETools.Ripper.Tests/SecureSectorVoteTests.cs",
         "CUETools.Ripper.Tests/SlipCorrelatorTests.cs",
         "CUETools.Ripper.Tests/SplitChildAndTransitionPolicyTests.cs",
         "CUETools.Ripper.Tests/WindowBudgetTests.cs"
@@ -39,10 +40,10 @@
       "sourceProject": "profiles/VerificationDiscovery/Target/Target.csproj",
       "testProject": "profiles/VerificationDiscovery/Tests/Tests.csproj",
       "config": "profiles/VerificationDiscovery/Target/stryker-config.json",
-      "minimumQuickScore": 89.0,
-      "minimumFullScore": 84.0,
+      "minimumQuickScore": 87.0,
+      "minimumFullScore": 82.0,
       "maximumQuickNoCoverage": 2,
-      "maximumFullNoCoverage": 8,
+      "maximumFullNoCoverage": 10,
       "expectedTests": [
         "CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs",
         "eng/mutation/profiles/VerificationDiscovery/Tests/ConfiguredFormatTests.cs"
@@ -87,8 +88,10 @@
         "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
         "CUETools.Wpf.Tests/DiscPaddingTests.cs",
         "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
+        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
         "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
         "CUETools.Wpf.Tests/NamingPathsTests.cs",
+        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
@@ -111,8 +114,10 @@
         "CUETools.Wpf.Tests/BoxSetNamingTests.cs",
         "CUETools.Wpf.Tests/DiscPaddingTests.cs",
         "CUETools.Wpf.Tests/NamingAuditRegressionTests.cs",
+        "CUETools.Wpf.Tests/NamingMutationContractTests.cs",
         "CUETools.Wpf.Tests/NamingPathSafetyTests.cs",
         "CUETools.Wpf.Tests/NamingPathsTests.cs",
+        "CUETools.Wpf.Tests/NamingPresentationTests.cs",
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
@@ -125,8 +130,8 @@
       "sourceProject": "profiles/OutputGuard/Target/Target.csproj",
       "testProject": "profiles/OutputGuard/Tests/Tests.csproj",
       "config": "profiles/OutputGuard/Target/stryker-config.json",
-      "minimumQuickScore": 75.0,
-      "minimumFullScore": 90.0,
+      "minimumQuickScore": 81.0,
+      "minimumFullScore": 91.0,
       "maximumQuickNoCoverage": 0,
       "maximumFullNoCoverage": 2,
       "expectedTests": [

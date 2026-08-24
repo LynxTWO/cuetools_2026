@@ -13,6 +13,7 @@
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\ReadTimeoutPolicyTests.cs" Link="ProductionTests\ReadTimeoutPolicyTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\RecoveryPolicyTests.cs" Link="ProductionTests\RecoveryPolicyTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SampleConcealmentTests.cs" Link="ProductionTests\SampleConcealmentTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SecureSectorVoteTests.cs" Link="ProductionTests\SecureSectorVoteTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SlipCorrelatorTests.cs" Link="ProductionTests\SlipCorrelatorTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SplitChildAndTransitionPolicyTests.cs" Link="ProductionTests\SplitChildAndTransitionPolicyTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\WindowBudgetTests.cs" Link="ProductionTests\WindowBudgetTests.cs" />

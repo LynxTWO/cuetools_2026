@@ -166,7 +166,39 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
-### D12. Mutation harness: restore the unlanded test half, or accept a weaker gate - OPEN 2026-08-24
+### D12. Mutation harness: restore the unlanded test half - RESOLVED 2026-08-24 (A)
+
+- **User chose (A):** land the production-test half of `2a8df3e3` onto master, then re-baseline
+  against the restored suite. Done the same day.
+- **How it landed:** the branch is two commits off merge base `ad424f1c` while master is 159
+  ahead, so every file came across as a three-way merge, not an overwrite. That mattered: master
+  had independently gained tests in `PayloadReadFailurePolicyTests.cs` (30 methods against the
+  branch's 23), and an overwrite would have deleted seven of them. All 15 modified files merged
+  with no conflicts; 3 new test files and 4 production sources were added.
+- **The predicted rework did not materialise.** `CUETools.Wpf.Tests` went 561 -> 730 passing and
+  `CUETools.Ripper.Tests` holds at 97, with all 169 restored tests green against master's
+  production code. `NamingMutationContractTests` compiled and passed unchanged because the merge
+  carried its `NamingEngine` production changes with it.
+- **The sub-question resolved itself.** `2a8df3e3` already moves `BuildTestCopyCrcEvidence` out of
+  `RipService` into `TestAndCopyResolver.BuildCrcEvidence`. Master's copy of the method body is
+  byte-identical to the merge base, so the move applied cleanly and `test-copy-history` now runs.
+  No contract shim was needed.
+- **Result:** all seven profiles pass both gates in one command. Six thresholds moved.
+  `output-guard` was raised (75.0 -> 81.0 quick, 90.0 -> 91.0 full) because master's own tests
+  improved that surface. `verification-discovery` was lowered (89.0 -> 87.0 quick, 84.0 -> 82.0
+  full, full no-coverage 8 -> 10) and `ripper-policies` full no-coverage went 1 -> 3, all for named
+  new code that arrived without mutation-killing tests. Sites are listed in
+  `docs/review/2026-08-24-mutation-harness-rebaseline.md`.
+- **Deliberately not landed:** `.github/workflows/mutation.yml`, `CI-wpf.yml`,
+  `Test-NuGetLockFiles.ps1`, and `Test-WorkflowActionPins.ps1`. Wiring the harness into CI remains
+  a separate decision; the harness still gates nothing.
+- **Two follow-ups left open:** a drive-root fixture would let `verification-discovery` recover its
+  89.0 floor, and an exact-value test on `DescribeForFailureContext()` would kill two of the three
+  `ripper-policies` no-coverage mutants. Both are new tests rather than merges.
+
+Original decision record:
+
+### D12 (original). Mutation harness: restore the unlanded test half, or accept a weaker gate - OPEN 2026-08-24
 
 - **Ask:** the mutation harness landed without the production tests it was calibrated against.
   Decide whether to land that half, or to re-baseline the thresholds down to what master scores.

@@ -8,6 +8,7 @@
     <Compile Include="ProcessorContract.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\AlbumArtifactNames.cs" Link="Production\AlbumArtifactNames.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\NamingEngine.cs" Link="Production\NamingEngine.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\NamingPresentation.cs" Link="Production\NamingPresentation.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\NamingPaths.cs" Link="Production\NamingPaths.cs" />
   </ItemGroup>
 </Project>

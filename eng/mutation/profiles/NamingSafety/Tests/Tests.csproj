@@ -11,8 +11,10 @@
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\BoxSetNamingTests.cs" Link="ProductionTests\BoxSetNamingTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\DiscPaddingTests.cs" Link="ProductionTests\DiscPaddingTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingAuditRegressionTests.cs" Link="ProductionTests\NamingAuditRegressionTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingMutationContractTests.cs" Link="ProductionTests\NamingMutationContractTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingPathSafetyTests.cs" Link="ProductionTests\NamingPathSafetyTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingPathsTests.cs" Link="ProductionTests\NamingPathsTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingPresentationTests.cs" Link="ProductionTests\NamingPresentationTests.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.Wpf.Tests\NamingTokenTests.cs" Link="ProductionTests\NamingTokenTests.cs" />
   </ItemGroup>
 </Project>

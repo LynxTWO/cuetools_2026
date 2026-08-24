@@ -53,4 +53,78 @@ public sealed class AlbumArtifactNamesTests
             "Unknown Album",
             AlbumArtifactNames.CreateStem(new CUEMetadata(), _ => ""));
     }
+
+    [TestMethod]
+    public void PartialMetadataAndSingleDiscIdentityDoNotCreateDanglingSyntax()
+    {
+        Assert.AreEqual(
+            "Artist",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata { Artist = "Artist" },
+                value => value));
+        Assert.AreEqual(
+            "Album",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata { Title = "Album" },
+                value => value));
+        Assert.AreEqual(
+            "Artist - Album",
+            AlbumArtifactNames.CreateStem(
+                new CUEMetadata
+                {
+                    Artist = "Artist",
+                    Title = "Album",
+                    DiscNumber = "1",
+                    TotalDiscs = "1"
+                },
+                value => value));
+    }
+
+    [TestMethod]
+    public void NullCleanserIsRejectedBeforeMetadataIsRead()
+    {
+        Assert.ThrowsException<ArgumentNullException>(
+            () => AlbumArtifactNames.CreateStem(null, null));
+    }
+
+    [TestMethod]
+    public void FallbackAndNullCleanserResultCannotProduceABlankStem()
+    {
+        Assert.AreEqual(
+            "Fallback Album",
+            AlbumArtifactNames.CreateStem(null, value => value, "Fallback Album"));
+        Assert.AreEqual(
+            "Unknown Album",
+            AlbumArtifactNames.CreateStem(null, _ => null, "Fallback Album"));
+    }
+
+    [TestMethod]
+    public void DiscNameWithoutATotalDoesNotAddAnEmptyOfClause()
+    {
+        var metadata = new CUEMetadata
+        {
+            Artist = "Artist",
+            Title = "Album",
+            DiscNumber = "2",
+            TotalDiscs = "",
+            DiscName = "Bonus",
+        };
+
+        Assert.AreEqual(
+            "Artist - Album (Disc 2 - Bonus)",
+            AlbumArtifactNames.CreateStem(metadata, value => value));
+    }
+
+    [TestMethod]
+    public void BlankStemUsesFallbackForEveryHumanFacingArtifactName()
+    {
+        Assert.AreEqual("Unknown Album.cue", AlbumArtifactNames.CueFileName(" "));
+        Assert.AreEqual(
+            "Unknown Album - Test & Copy.log",
+            AlbumArtifactNames.TestCopyLogFileName(null));
+        Assert.AreEqual(
+            "Unknown Album - CTDB Repair.log",
+            AlbumArtifactNames.RepairLogFileName(""));
+        Assert.AreEqual("Unknown Album.accurip", AlbumArtifactNames.AccurateRipFileName("\t"));
+    }
 }

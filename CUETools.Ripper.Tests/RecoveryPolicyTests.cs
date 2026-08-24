@@ -49,7 +49,26 @@ namespace CUETools.Ripper.Tests
         public void StopsAtTimeCeiling()
         {
             var p = new RecoveryPolicy(); p.StartWindow();
+            Assert.IsFalse(p.ShouldContinue(50, RecoveryPolicy.CeilingSeconds),
+                "the ceiling itself is outside the recovery budget");
             Assert.IsFalse(p.ShouldContinue(50, RecoveryPolicy.CeilingSeconds + 1), "over the ceiling -> stop even if improving");
+        }
+
+        [TestMethod]
+        public void StartWindowResetsPlateauStateForPolicyReuse()
+        {
+            var policy = new RecoveryPolicy();
+            policy.StartWindow();
+            Assert.IsTrue(policy.ShouldContinue(100, 1));
+            for (int i = 0; i < RecoveryPolicy.PlateauPasses - 1; i++)
+                Assert.IsTrue(policy.ShouldContinue(100, 2 + i));
+
+            policy.StartWindow();
+
+            Assert.IsTrue(policy.ShouldContinue(100, 1));
+            for (int i = 0; i < RecoveryPolicy.PlateauPasses - 1; i++)
+                Assert.IsTrue(policy.ShouldContinue(100, 2 + i));
+            Assert.IsFalse(policy.ShouldContinue(100, 20));
         }
     }
 }

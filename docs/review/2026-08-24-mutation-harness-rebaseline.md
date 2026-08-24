@@ -2,12 +2,15 @@
 
 ## Outcome
 
-**The harness could not be re-baselined, and the thresholds were deliberately left unchanged.**
-The blocker is not threshold drift. It is that the mutation harness landed on master without the
-production tests it was measured against, so every profile now scores far below its floor for a
-reason that is not a code regression.
+**The harness runs on master, all seven profiles pass, and the thresholds are measured from a
+restored test suite.** Getting there took two steps that the work order did not anticipate: the
+harness did not run at all as landed, and the reason was that its companion production tests were
+never merged.
 
-Status verbs below follow `docs/review/` convention: measured, verified, inferred, rejected.
+The owner's decision on D12 was option A: land the missing test half, then re-baseline against it.
+That is what this document records.
+
+Status verbs follow `docs/review/` convention: measured, verified, inferred, rejected.
 
 ## Host and toolchain receipt
 
@@ -21,151 +24,146 @@ Status verbs below follow `docs/review/` convention: measured, verified, inferre
 | Stryker | dotnet-stryker 4.16.0, pinned in `eng/mutation/.config/dotnet-tools.json` |
 | Target framework | net8.0 |
 | Configuration | Release |
-| Repository state | master `439decf9`, plus the harness repairs described below |
+| Starting point | master `439decf9` |
 
-`eng/ci/Prepare-VendorSources.ps1` was **not** required and was not run. The mutation profiles are
-standalone net8.0 projects that link individual first-party `.cs` files; no tracked profile input
-references `ThirdParty` or `obj/vendor-sources`. Restore produced no `packages.lock.json` churn.
+`eng/ci/Prepare-VendorSources.ps1` is **not** a prerequisite for these profiles. They are standalone
+net8.0 projects that link individual first-party `.cs` files; no tracked profile input references
+`ThirdParty` or `obj/vendor-sources`. Restore produced no `packages.lock.json` churn.
 
-## The harness did not run at all on current master
+## Step 1: the harness did not run on master as landed
 
-The landed README states that all 16 `expectedSources` still resolve. That claim is **rejected**.
-On master `439decf9`, only the 7 `CUETools.Ripper.SCSI` entries resolve. All 9 `CUETools.Wpf`
-entries are missing, and 5 `expectedTests` entries are missing.
-
-Four separate causes, all measured:
+The landed README claimed all 16 `expectedSources` still resolved. That claim is **rejected**. On
+master `439decf9` only the 7 `CUETools.Ripper.SCSI` entries resolved. Four separate causes:
 
 1. **The App.Core extraction.** Nine mutated sources moved from `CUETools.Wpf/` to
-   `CUETools.App.Core/` with identical subpaths. The same move broke the `RepairEvidence.cs` and
-   `AlbumOutputTransaction.cs` contract assertions in `Test-MutationHarness.ps1`. Repaired by
-   repointing the paths. The files kept their `CUETools.Wpf.*` namespaces, so no other change was
-   needed.
-2. **Four files that never landed.** `CUETools.Ripper.Tests/SecureSectorVoteTests.cs`,
-   `CUETools.Wpf.Tests/NamingMutationContractTests.cs`,
-   `CUETools.Wpf.Tests/NamingPresentationTests.cs`, and
-   `CUETools.Wpf/Services/NamingPresentation.cs` exist only on `origin/agent/mutation-harness`,
-   added by `2a8df3e3`. The landing commit `e8e21739` took 41 files, all under `eng/mutation/`,
-   and left these behind. Their references were removed so the harness could run.
+   `CUETools.App.Core/` with identical subpaths, which also broke the `RepairEvidence.cs` and
+   `AlbumOutputTransaction.cs` contract assertions. The files kept their `CUETools.Wpf.*`
+   namespaces, so repointing the paths was sufficient.
+2. **Four files that never landed.** The landing commit `e8e21739` took 41 files, all under
+   `eng/mutation/`, leaving the production half of `2a8df3e3` on `origin/agent/mutation-harness`.
 3. **A new source-generated serializer context.** `GzJson.cs` and `VerifyHistory.cs` now resolve
-   through `StoreJsonContext`, declared in `CUETools.App.Core/Services/StoreJsonContext.cs`.
-   Linking that file would pull `HistoryStore` and `CUETools.Wpf.Models` into the isolated graph.
-   Added `eng/mutation/profiles/TestCopyHistory/Target/StoreJsonContract.cs` as a dependency
-   contract registering only the two roots the linked sources use, and pinned the production
-   declaration in `Test-MutationHarness.ps1` per the harness rule for seams.
-4. **`RipService` in a production test file.** `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs`
-   now calls `RipService.BuildTestCopyCrcEvidence`. `RipService.cs` is 3223 lines and pulls
-   `CUETools.AccurateRip`, `Codecs`, `CTDB`, `Processor`, `Ripper`, and `Ripper.SCSI`. This is the
-   exact legacy graph the profiles exist to avoid, and the method is behavior-bearing logic rather
-   than an identity, so a contract shim would be dishonest. **`test-copy-history` therefore cannot
-   run.** The profile was left in place, per the standing instruction not to delete a profile that
-   cannot run.
+   through `StoreJsonContext`. Linking the production file would pull `HistoryStore` and
+   `CUETools.Wpf.Models` into the isolated graph, so
+   `eng/mutation/profiles/TestCopyHistory/Target/StoreJsonContract.cs` registers only the two roots
+   the linked sources use, with the production declaration pinned in `Test-MutationHarness.ps1`.
+4. **`RipService` reached from a production test.** Resolved by step 2; see below.
 
-## Measured: current master
+## Step 2: landing the missing test half
 
-Quick mode, Basic mutation level, 2026-08-24. `test-copy-history` is blocked and produced no
-number. Floors and ceilings shown are the unchanged 2026-08-08 values.
+Commit `2a8df3e3` changed the harness and the production tests together, and only the harness half
+landed. The branch is exactly two commits off merge base `ad424f1c`, while master is 159 commits
+ahead, so each file was brought across with a three-way merge rather than an overwrite. That
+distinction matters: master had independently **gained** tests in
+`PayloadReadFailurePolicyTests.cs` (30 methods against the branch's 23), and an overwrite would
+have silently deleted seven of them. All 15 modified files merged with no conflicts.
 
-| Profile | Risk | Score | Floor | No coverage | Ceiling | Killed | Survived |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `ripper-policies` | critical | **78.18** | 95.0 | 0 | 0 | 258 | 70 |
-| `verification-discovery` | high | **48.11** | 89.0 | 14 | 2 | 51 | 41 |
-| `test-copy-history` | critical | blocked | 92.5 | n/a | 4 | n/a | n/a |
-| `naming-path-safety` | high | **78.43** | 89.0 | 0 | 0 | 40 | 11 |
-| `naming-semantics` | high | **53.33** | 92.0 | 10 | 0 | 48 | 32 |
-| `output-guard` | critical | **58.82** | 75.0 | 4 | 0 | 10 | 3 |
-| `artwork-ranking` | medium | **32.00** | 89.0 | 17 | 0 | 16 | 17 |
+Landed: 15 merged test files, 3 new test files, and 4 production sources. Deliberately **not**
+landed, because wiring is a separate decision: `.github/workflows/mutation.yml`, `CI-wpf.yml`,
+`Test-NuGetLockFiles.ps1`, and `Test-WorkflowActionPins.ps1`.
 
-Every runnable profile fails its floor, and four of six also breach their no-coverage ceiling.
+Test method counts, before and after, counted as `[TestMethod]` occurrences:
 
-Full mode, Standard mutation level, same day and host:
+| Test file | before | after |
+| --- | --- | --- |
+| `CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs` | 12 | 36 |
+| `CUETools.Wpf.Tests/VerifyHistoryStoreTests.cs` | 9 | 24 |
+| `CUETools.Wpf.Tests/NamingMutationContractTests.cs` | 0 | 19 |
+| `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` | 20 | 31 |
+| `CUETools.Wpf.Tests/ArtworkCandidateTests.cs` | 3 | 12 |
+| `CUETools.Ripper.Tests/SampleConcealmentTests.cs` | 6 | 12 |
+| `CUETools.Wpf.Tests/OutputGuardTests.cs` | 10 | 15 |
+| `CUETools.Ripper.Tests/SlipCorrelatorTests.cs` | 3 | 8 |
+| `CUETools.Ripper.Tests/SecureSectorVoteTests.cs` | 0 | 6 |
+| `CUETools.Wpf.Tests/GzJsonTests.cs` | 8 | 13 |
+| `CUETools.Wpf.Tests/AlbumArtifactNamesTests.cs` | 2 | 7 |
+| `CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs` | 30 | 30 |
 
-| Profile | Risk | Score | Floor | No coverage | Ceiling | Killed | Survived |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `ripper-policies` | critical | **76.19** | 93.0 | 4 | 1 | 336 | 92 |
-| `verification-discovery` | high | **41.48** | 84.0 | 42 | 8 | 95 | 92 |
-| `test-copy-history` | critical | blocked | 84.0 | n/a | 29 | n/a | n/a |
-| `naming-path-safety` | high | **73.03** | 89.0 | 8 | 3 | 111 | 33 |
-| `naming-semantics` | high | **31.34** | 91.0 | 119 | 7 | 136 | 179 |
-| `output-guard` | critical | **61.43** | 90.0 | 17 | 2 | 43 | 10 |
-| `artwork-ranking` | medium | **29.11** | 90.0 | 32 | 0 | 23 | 24 |
+**Measured:** `CUETools.Wpf.Tests` went from 561 to 730 passing, `CUETools.Ripper.Tests` holds at
+97 passing. All 169 restored tests pass against master's production code with no rework, because
+the merge carried their production-side changes with them.
 
-Full mode fails every runnable profile on both score and no-coverage. The README records the
-2026-08-08 Full measurements as 94.42, 85.78, 85.85, 90.13, 92.35, 91.43, and 91.36. Standard
-level generates more mutants than Basic, so the missing tests cost more here: `naming-semantics`
-alone now carries 119 no-coverage mutants against a ceiling of 7.
+### The `test-copy-history` blocker resolved itself
 
-## Verified: the baseline commit still reproduces its documented numbers
+Before landing, `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` called
+`RipService.BuildTestCopyCrcEvidence`, and `RipService.cs` is 3223 lines pulling AccurateRip,
+Codecs, CTDB, Processor, Ripper, and Ripper.SCSI. That is the exact legacy graph the profiles
+isolate against, and the method is behavior-bearing logic rather than an identity, so it did not
+qualify for a contract shim.
 
-To separate "the harness is wrong" from "the tests are missing", the same seven profiles were run
-unmodified in a detached worktree at `8961b0b6`, the tip of `origin/agent/mutation-harness`.
+The branch had already solved this: `2a8df3e3` moves the method to
+`TestAndCopyResolver.BuildCrcEvidence` and repoints its four call sites. **Verified** that master's
+copy of the method body is byte-identical to the merge base, so the move applied cleanly.
+`TestAndCopyResolver.cs` is already a linked and mutated source, so the logic is now scored rather
+than unreachable.
 
-**All seven pass, and every score matches the landed README to the hundredth.**
+## Step 3: the re-baseline
 
-| Profile | README documented | Reproduced 2026-08-24 | Master today |
+All seven profiles pass both gates in a single command. `Invoke-MutationTests.ps1 -Mode Quick` and
+`-Mode Full` both exit 0.
+
+| Profile | Risk | Quick measured / floor | Full measured / floor | No coverage quick / full |
+| --- | --- | --- | --- | --- |
+| `ripper-policies` | critical | 95.76 / 95.0 | 93.42 / 93.0 | 0 / 3 |
+| `verification-discovery` | high | 88.12 / 87.0 | 83.33 / 82.0 | 2 / 10 |
+| `test-copy-history` | critical | 94.12 / 92.5 | 85.61 / 84.0 | 4 / 29 |
+| `naming-path-safety` | high | 90.20 / 89.0 | 90.13 / 89.0 | 0 / 3 |
+| `naming-semantics` | high | 93.10 / 92.0 | 92.35 / 91.0 | 0 / 7 |
+| `output-guard` | critical | 82.35 / 81.0 | 92.86 / 91.0 | 0 / 2 |
+| `artwork-ranking` | medium | 90.20 / 89.0 | 91.36 / 90.0 | 0 / 0 |
+
+Six thresholds moved. Every other floor and ceiling is unchanged from 2026-08-08.
+
+**Raised, because master's own tests improved the surface:**
+
+| Threshold | From | To | Measured |
 | --- | --- | --- | --- |
-| `ripper-policies` | 96.14 | **96.14** | 78.18 |
-| `verification-discovery` | 90.72 | **90.72** | 48.11 |
-| `test-copy-history` | 94.09 | **94.09** | blocked |
-| `naming-path-safety` | 90.20 | **90.20** | 78.43 |
-| `naming-semantics` | 93.10 | **93.10** | 53.33 |
-| `output-guard` | 76.47 | **76.47** | 58.82 |
-| `artwork-ranking` | 90.20 | **90.20** | 32.00 |
+| `output-guard` quick floor | 75.0 | **81.0** | 82.35 |
+| `output-guard` full floor | 90.0 | **91.0** | 92.86 |
 
-This is a verified result, not an inference. The harness is deterministic and sound, and the
-2026-08-08 thresholds were honestly measured. The collapse is entirely on the master side.
+`OutputGuardTests.cs` grew from 10 to 15 methods, and the quick score rose from the 2026-08-08
+measurement of 76.47 to 82.35. Leaving the floor at 75.0 would have let a seven-point regression
+pass silently.
 
-## Why master scores low: the tests were never landed
+**Lowered, with a named cause:**
 
-Commit `2a8df3e3` hardened the production tests and the harness together. Only the harness half
-landed. Test method counts, counted as `[TestMethod]` occurrences:
-
-| Test file | master | branch | Delta |
+| Threshold | From | To | Measured |
 | --- | --- | --- | --- |
-| `CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs` | 12 | 36 | -24 |
-| `CUETools.Wpf.Tests/NamingMutationContractTests.cs` | 0 | 19 | -19 |
-| `CUETools.Wpf.Tests/VerifyHistoryStoreTests.cs` | 9 | 24 | -15 |
-| `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` | 20 | 31 | -11 |
-| `CUETools.Wpf.Tests/ArtworkCandidateTests.cs` | 3 | 12 | -9 |
-| `CUETools.Ripper.Tests/SecureSectorVoteTests.cs` | 0 | 6 | -6 |
-| `CUETools.Ripper.Tests/SampleConcealmentTests.cs` | 6 | 12 | -6 |
-| `CUETools.Wpf.Tests/OutputGuardTests.cs` | 10 | 15 | -5 |
-| `CUETools.Ripper.Tests/SlipCorrelatorTests.cs` | 3 | 8 | -5 |
-| `CUETools.Wpf.Tests/AlbumArtifactNamesTests.cs` | 2 | 7 | -5 |
-| `CUETools.Wpf.Tests/GzJsonTests.cs` | 8 | 13 | -5 |
-| `CUETools.Wpf.Tests/NamingPathsTests.cs` | 14 | 17 | -3 |
-| `CUETools.Ripper.Tests/FailedSectorAccountingTests.cs` | 8 | 11 | -3 |
-| `CUETools.Wpf.Tests/NamingPresentationTests.cs` | 0 | 3 | -3 |
-| `CUETools.Wpf.Tests/NamingTokenTests.cs` | 3 | 5 | -2 |
-| `CUETools.Ripper.Tests/RecoveryPolicyTests.cs` | 5 | 6 | -1 |
-| `CUETools.Ripper.Tests/ReadTimeoutPolicyTests.cs` | 4 | 4 | 0 |
-| `CUETools.Ripper.Tests/PayloadReadFailurePolicyTests.cs` | 30 | 23 | +7 |
+| `verification-discovery` quick floor | 89.0 | **87.0** | 88.12 |
+| `verification-discovery` full floor | 84.0 | **82.0** | 83.33 |
+| `verification-discovery` full no-coverage | 8 | **10** | 10 |
+| `ripper-policies` full no-coverage | 1 | **3** | 3 |
 
-The ordering matches the score drops. `artwork-ranking` fell furthest, -58.20, and retains 3 of 12
-tests. `verification-discovery` fell -42.61 and retains 12 of 36.
+These are not the restored suite falling short. They are new production code that master added
+after the 2026-08-08 baseline, arriving without mutation-killing tests. That is exactly what the
+gate exists to surface, so the sites are named here rather than left as a number.
 
-One secondary observation, **measured and minor**: master's `NamingEngine.cs` is 388 lines and
-still holds the `Presets`, `PaletteFields`, and `Examples()` catalogs inline, because the split
-into `NamingPresentation.cs` was part of the unlanded half. The README predicted this would
-depress `naming-semantics`. It does not explain the drop: bucketing that profile's mutants by line
-region gives a behavior-region-only score of 53.57 against 53.33 overall. The missing
-`NamingMutationContractTests` is the cause, not the catalogs.
+`verification-discovery` lost 2.60 points against its 2026-08-08 measurement of 90.72. **Measured**
+by mapping each surviving mutant to the diff against merge base: three of the ten survivors sit in
+code master added, and all three are in the `IsFilesystemRoot` guard that stops a multi-file
+selection whose only shared ancestor is the filesystem root from scoping a run to the whole disk.
+Line 134 carries two survivors on the `selected.Length > 1` boundary, and line 459 carries a block
+removal on the empty-directory guard. Killing them needs real files at a drive root, which is a
+fixture question rather than a missing assertion, so they are recorded instead of chased.
 
-## Why the thresholds were not rewritten
+`ripper-policies` keeps its score floor and moves only the ceiling. The three no-coverage mutants
+are `PayloadReadFailurePolicy.cs:563-564`, two string mutants inside
+`DescribeForFailureContext()`, and `SlipCorrelator.cs:49`, the `count < n / 2` overlap-sufficiency
+guard. The first two fall in the README's reviewed "error text and default-value" group and mutate
+scrubbed diagnostic counters rather than policy behavior.
 
-The instruction was to set each threshold from what the code actually scores now. Applied
-literally here, that would write 32.00 in as the `artwork-ranking` floor and 48.11 as
-`verification-discovery`, permanently encoding the loss of tests that were written, reviewed, and
-measured, and that still exist on a branch. A gate calibrated to a suite missing two thirds of its
-assertions is worse than no gate, because it reports green.
+Both are worth follow-up work, and neither is a regression in a shipping decision path.
 
-Nothing in the mutated production sources regressed. The measurement apparatus lost its tests.
-Those are different problems, and only one of them is fixed by moving a number.
+## Two follow-ups, not done here
 
-## Decision needed
+1. A drive-root fixture would let `verification-discovery` recover its 89.0 floor by killing the
+   three `IsFilesystemRoot` mutants.
+2. A test pinning `DescribeForFailureContext()` output would kill two of the three
+   `ripper-policies` no-coverage mutants and is independently worth having, because CLAUDE.md
+   requires scrubbed failure context that never includes sector payload bytes.
 
-Recorded as D12 in `docs/review/decisions-needed.md`. In short: land the production-test half of
-`2a8df3e3` onto master and then re-baseline against the restored suite, or accept the reduced
-suite and re-baseline to the numbers above. The second option should be taken only deliberately.
+Both are new tests rather than merges, so they are left as reviewable quality changes.
 
-`test-copy-history` needs its own answer either way, because `BuildTestCopyCrcEvidence` is
-Test-and-Copy evidence logic that now sits inside an unlinkable 3223-line service.
+## Still not wired into CI
+
+The harness gates nothing. `mutation.yml` was left on the branch on purpose. Whether these gates
+should run in CI, and in which lane, is a separate decision.

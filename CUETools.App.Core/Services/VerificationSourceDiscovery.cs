@@ -115,7 +115,9 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
         if (Enumerable.Range(0, selected.Length).Any(index =>
             !files[index] && !directories[index]))
             return Failure("One or more dropped files no longer exist.");
-        if (directories.Any(value => value) && (selected.Length != 1 || files.Any(value => value)))
+        // A selected path cannot be both a file and a directory. Once any directory is present,
+        // the only valid shape is that one directory by itself.
+        if (directories.Any(value => value) && selected.Length != 1)
             return Failure("Drop one album folder at a time, or select manifest files from one album.");
 
         if (selected.Select(Path.GetPathRoot).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
@@ -272,8 +274,8 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
                     : InferDiscNumber(info.Path))
                 .OrderBy(number => number)
                 .ToArray();
-            if (discNumbers.Any(number => number <= 0) ||
-                !discNumbers.SequenceEqual(Enumerable.Range(1, manifests.Count)))
+            // Exact equality with 1..N also rejects zero, negative, duplicate, and missing ids.
+            if (!discNumbers.SequenceEqual(Enumerable.Range(1, manifests.Count)))
                 return Failure(
                     "Multiple manifests were found, but their disc numbers are missing, " +
                     "duplicated, or incomplete. Name/tag them as Disc 1, Disc 2, and so on " +
@@ -435,7 +437,9 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
     {
         if (BaselineAudioExtensions.Contains(extension))
             return true;
-        if (_config == null || extension.Length == 0 || extension[0] != '.')
+        if (extension.Length == 0 || extension[0] != '.')
+            return false;
+        if (_config == null)
             return false;
 
         return _config.formats.TryGetValue(extension[1..], out var format) &&
