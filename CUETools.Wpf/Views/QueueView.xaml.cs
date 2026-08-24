@@ -30,7 +30,14 @@ public partial class QueueView : UserControl
     {
         if (!e.WidthChanged)
             return;
-        ResultColumn.Width =
-            QueueColumnLayout.ResultWidth(e.NewSize.Width, QueueColumnLayout.Chrome);
+        ApplyResultWidth(ResultColumn, e.NewSize.Width);
+    }
+
+    // Extracted so a test can drive the real SizeChanged behaviour against a real GridViewColumn
+    // without constructing QueueView itself, which needs an Application with merged resource
+    // dictionaries for its StaticResource lookups.
+    internal static void ApplyResultWidth(GridViewColumn column, double listWidth)
+    {
+        column.Width = QueueColumnLayout.ResultWidth(listWidth, QueueColumnLayout.Chrome);
     }
 }

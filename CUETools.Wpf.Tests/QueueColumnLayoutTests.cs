@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
 using System.Xml.Linq;
 using CUETools.Wpf.Views;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -40,15 +43,40 @@ public sealed class QueueColumnLayoutTests
     }
 
     [TestMethod]
+    public void ChromeIsTheSumOfItsMeasuredParts()
+    {
+        // Both numbers were measured, not guessed: see QueueColumnLayout's remarks for how. This
+        // pins them so a future edit to one part cannot leave Chrome stale.
+        Assert.AreEqual(6, QueueColumnLayout.BaseChrome,
+            "layout chrome with no vertical scrollbar showing, measured 2026-08-24");
+        Assert.AreEqual(
+            SystemParameters.VerticalScrollBarWidth,
+            QueueColumnLayout.ScrollBar,
+            0.001,
+            "the scrollbar part must be read live, not a hardcoded guess");
+        Assert.AreEqual(
+            QueueColumnLayout.BaseChrome + QueueColumnLayout.ScrollBar,
+            QueueColumnLayout.Chrome,
+            0.001,
+            "Chrome must stay the sum of its named parts");
+    }
+
+    [TestMethod]
     public void EveryColumnFitsAtTheFloorWidth()
     {
         // 860 window minus the 78px rail and the list margin is the tightest reflow case.
         double list = 860 - 78 - 24;
+
+        // Recomputed from the fixed three plus the decomposed chrome parts, independently of the
+        // QueueColumnLayout.Chrome property used inside ResultWidth, so a wiring bug in that
+        // property (a dropped or duplicated part) makes this assertion able to fail instead of
+        // holding true by construction of ResultWidth for any Chrome value.
+        double independentChrome = QueueColumnLayout.BaseChrome + SystemParameters.VerticalScrollBarWidth;
         double total = QueueColumnLayout.SourceWidth
             + QueueColumnLayout.ActionWidth
             + QueueColumnLayout.StatusWidth
             + QueueColumnLayout.ResultWidth(list, QueueColumnLayout.Chrome);
-        Assert.IsTrue(total <= list - QueueColumnLayout.Chrome + 0.01,
+        Assert.IsTrue(total <= list - independentChrome + 0.01,
             "columns must reflow inside the list at the 860 floor, total was " + total);
     }
 
@@ -76,5 +104,46 @@ public sealed class QueueColumnLayoutTests
         Assert.IsNull(
             resultColumn.Attribute("Width"),
             "the result column width is computed on resize, not fixed in XAML");
+    }
+
+    [TestMethod]
+    public void ApplyResultWidthDrivesARealGridViewColumnFromTheSizeChangedSeam()
+    {
+        // QueueView cannot be constructed directly here: its StaticResource lookups need an
+        // Application with merged resource dictionaries. QueueView.ApplyResultWidth is the
+        // extracted seam QueueList_SizeChanged calls, so this drives the real runtime behaviour
+        // against a real GridViewColumn instead of only the pure QueueColumnLayout function.
+        RunSta(() =>
+        {
+            var column = new GridViewColumn();
+
+            QueueView.ApplyResultWidth(column, 900);
+
+            Assert.AreEqual(
+                QueueColumnLayout.ResultWidth(900, QueueColumnLayout.Chrome),
+                column.Width,
+                0.01);
+        });
+    }
+
+    private static void RunSta(Action action)
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (error != null)
+            throw error;
     }
 }
