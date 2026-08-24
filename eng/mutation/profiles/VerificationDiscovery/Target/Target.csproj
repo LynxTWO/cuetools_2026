@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.VerificationDiscovery</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ProcessorContract.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\VerificationSourceDiscovery.cs" Link="Production\VerificationSourceDiscovery.cs" />
+  </ItemGroup>
+</Project>

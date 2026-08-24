@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>CUETools.Mutation.RipperPolicies.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Target\Target.csproj" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\DriveReportedTimeoutPolicyTests.cs" Link="ProductionTests\DriveReportedTimeoutPolicyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\FailedSectorAccountingTests.cs" Link="ProductionTests\FailedSectorAccountingTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\PayloadReadFailurePolicyTests.cs" Link="ProductionTests\PayloadReadFailurePolicyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\ReadTimeoutPolicyTests.cs" Link="ProductionTests\ReadTimeoutPolicyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\RecoveryPolicyTests.cs" Link="ProductionTests\RecoveryPolicyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SampleConcealmentTests.cs" Link="ProductionTests\SampleConcealmentTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SecureSectorVoteTests.cs" Link="ProductionTests\SecureSectorVoteTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SlipCorrelatorTests.cs" Link="ProductionTests\SlipCorrelatorTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\SplitChildAndTransitionPolicyTests.cs" Link="ProductionTests\SplitChildAndTransitionPolicyTests.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.Ripper.Tests\WindowBudgetTests.cs" Link="ProductionTests\WindowBudgetTests.cs" />
+  </ItemGroup>
+</Project>
