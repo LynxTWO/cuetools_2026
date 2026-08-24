@@ -50,7 +50,9 @@
     </DataTemplate>
 
     <Style x:Key="StripNavItem" TargetType="ListBoxItem">
-      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <!-- Left, not Center: the rail's scrollbar appears and disappears with window height, and a
+           centred icon jumps about 8px when it does. -->
+      <Setter Property="HorizontalAlignment" Value="Left"/>
       <Setter Property="Margin" Value="0,2"/>
       <Setter Property="Padding" Value="0"/>
       <Setter Property="Template">
