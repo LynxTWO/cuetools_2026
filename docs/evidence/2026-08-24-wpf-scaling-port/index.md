@@ -57,10 +57,11 @@ therefore walked at four widths: 1200 (the documented default, full rail), 1100 
 | Full card rail at and above 1140 | correct at all 5 scales, both themes |
 | Rail collapses to the 44x38 icon strip below 1140 | correct at all 5 scales, both themes |
 | Glyphs legible at 44x38 | yes, and they sharpen with scale rather than blurring |
-| Below 860: layout held at its 860 shape, horizontal scroll | correct, horizontal scrollbars appear and content is not squeezed |
+| Below 860: layout held at its 860 shape, horizontal scroll | correct, horizontal scrollbars appear and content is not squeezed; at 640x480 that is a uniform 314px of overflow (78 + 860 - 624), reachable by scrollbar |
 | Window drags to 640x480 without breaking | yes; the rail strip gains a vertical scrollbar for overflow |
 | Light/dark flip restyles the strip | correct at all 5 scales, no stranded brushes from the previous palette |
-| Nothing clips | **fails on the Rip page history rows, see below** |
+| Nothing clips | fails on the Rip page history rows, see below |
+| Rip page history rows (D13, fixed after this walkthrough) | `When` now docks before `Result`; the timestamp renders and `Result` trims with a tooltip (`RipHistoryRowTests`) |
 
 At 200%, the 1200 and 1100 captures are height-clamped to 1470 physical pixels by the desktop work
 area. Width is what the breakpoints key off, so this does not affect the rail result.
