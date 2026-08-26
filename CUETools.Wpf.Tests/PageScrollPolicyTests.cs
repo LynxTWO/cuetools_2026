@@ -60,7 +60,10 @@ public sealed class PageScrollPolicyTests
             XDocument document = XDocument.Load(Path.Combine(ViewsDirectory(), view));
 
             bool verticalScroller = document.Descendants(Presentation + "ScrollViewer")
-                .Any(e => (e.Attribute("VerticalScrollBarVisibility")?.Value ?? "Auto") != "Disabled");
+                .Any(e =>
+                    // WPF's real default for a missing attribute is Visible, not Auto; either
+                    // way it is not Disabled, which is all this check needs.
+                    (e.Attribute("VerticalScrollBarVisibility")?.Value ?? "Visible") != "Disabled");
             bool scrollingList =
                 document.Descendants(Presentation + "ListView").Any() ||
                 document.Descendants(Presentation + "ListBox").Any() ||

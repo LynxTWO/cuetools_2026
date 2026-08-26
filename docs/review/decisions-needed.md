@@ -166,6 +166,12 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
+None right now. Every decision below has been made; the records are kept
+byte-for-byte under Resolved / actioned.
+
+## Resolved / actioned
+
+
 ### D12. Mutation harness: restore the unlanded test half - RESOLVED 2026-08-24 (A)
 
 - **User chose (A):** land the production-test half of `2a8df3e3` onto master, then re-baseline
@@ -386,9 +392,6 @@ Original decision record:
   until trouble" with the historical cap; Secure/Paranoid keep deep
   recovery), and say in the Burst tooltip that flagged windows still re-read
   up to 16 passes. Test & Copy stays forced-Secure: it is the assured mode.
-
-## Resolved / actioned
-
 ### D13. Rip page history rows starve the timestamp and hard-clip the result - RESOLVED 2026-08-24
 
 - **Fix:** `CUETools.Wpf/Views/RipView.xaml` now docks `When` before `Result` in the history row's
@@ -400,8 +403,9 @@ Original decision record:
   declaration order, and `TheEvidenceTextTrimsAndKeepsItsFullValueInATooltip` checks the
   `CharacterEllipsis`/`NoWrap`/`ToolTip` triple on `Result`. The relative timestamp now renders and
   the evidence sentence trims instead of hard-clipping, confirmed live in the recaptured screenshots
-  under `docs/evidence/2026-08-24-wpf-scaling-port/` (the 1100/0800/0640 captures; the port's own
-  strip-width fix moved those files, so they were recaptured together).
+  under `docs/evidence/2026-08-24-wpf-scaling-port/` (all 40 captures: the 1100/0800/0640 set was
+  recaptured with the strip-width fix, and the 1200 set followed once the review showed the row
+  fix is width-independent, so every capture in the folder shows the corrected layout).
 
 Original decision record:
 

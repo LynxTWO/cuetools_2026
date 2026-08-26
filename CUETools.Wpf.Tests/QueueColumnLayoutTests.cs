@@ -65,8 +65,11 @@ public sealed class QueueColumnLayoutTests
     [TestMethod]
     public void EveryColumnFitsAtTheFloorWidth()
     {
-        // 860 window minus the 78px rail and the list margin is the tightest reflow case.
-        double list = 860 - 78 - 24;
+        // 860 window minus the strip rail and the list margin is the tightest reflow case.
+        // The rail width comes from RailColumnWidths.Strip, not a copied 78: Strip follows the
+        // live scrollbar metric, and a hardcoded twin would silently disagree with it on any
+        // machine whose scrollbar is not 17px.
+        double list = 860 - CUETools.Wpf.Theme.RailColumnWidths.Strip - 24;
 
         // Recomputed from the fixed three plus the decomposed chrome parts, independently of the
         // QueueColumnLayout.Chrome property used inside ResultWidth, so a wiring bug in that
@@ -92,10 +95,10 @@ public sealed class QueueColumnLayoutTests
             XDocument.Load(Path.Combine(repoRoot, "CUETools.Wpf", "Views", "QueueView.xaml"));
         XElement list = document.Descendants(Presentation + "ListView").Single();
 
+        // Attached-property attributes are written unprefixed throughout this file's XAML.
         Assert.AreEqual(
             "Auto",
-            list.Attribute(Presentation + "ScrollViewer.HorizontalScrollBarVisibility")?.Value
-                ?? list.Attribute("ScrollViewer.HorizontalScrollBarVisibility")?.Value,
+            list.Attribute("ScrollViewer.HorizontalScrollBarVisibility")?.Value,
             "reflow first, but the scrollbar is the fallback when reflow cannot fit");
         Assert.AreEqual("QueueList", list.Attribute(Xaml + "Name")?.Value);
 

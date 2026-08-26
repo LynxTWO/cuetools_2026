@@ -526,12 +526,15 @@
                   <!-- Order matters: DockPanel reserves space in declaration order. When docks
                        first so the timestamp always shows, then Result fills the leftover middle
                        and trims there, keeping its full value in a tooltip.
-                       The title block is the first-reserved left child, so it is capped at 320px:
-                       an unbounded one takes min(desired, remaining) and a long box-set title
-                       starves Result to zero width, which also removes the hover surface its
-                       tooltip needs. Both lines trim with the full value in a tooltip. -->
-                  <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Left" MaxWidth="320">
+                       The title block is the first-reserved left child, so it is bounded to a
+                       share of the row: an unbounded one takes min(desired, remaining) and a long
+                       box-set title starves Result to zero width, which also removes the hover
+                       surface its tooltip needs. The bound is proportional (45 percent, roughly
+                       the old 320px at the 860 floor) so a long title only trims when the row is
+                       actually short of room. Both lines trim with the full value in a tooltip. -->
+                  <DockPanel LastChildFill="True" x:Name="HistoryRowDock">
+                    <StackPanel DockPanel.Dock="Left"
+                                MaxWidth="{Binding ActualWidth, ElementName=HistoryRowDock, Converter={StaticResource FractionOfWidth}, ConverterParameter=0.45}">
                       <TextBlock Text="{Binding Title}" FontFamily="{StaticResource Serif}" FontSize="14" Foreground="{DynamicResource Ink}"
                                  TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Title}"/>
                       <TextBlock Text="{Binding Artist}" FontFamily="{StaticResource Serif}" FontStyle="Italic" FontSize="11.5" Foreground="{DynamicResource Muted}"
