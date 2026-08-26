@@ -231,6 +231,13 @@ progress documents for it belong here, under `docs/review/`.
   proportional layout and wrapping at supported widths, vertical scrolling for
   rail overflow, and horizontal scrolling instead of clipping below the supported
   work-area minimum. Trim long identity text only with its full value in a tooltip.
+- Window layout has three tiers. Navigation and primary controls never clip: the rail
+  may scroll but must draw whole icons or whole labels. Page content reflows down to
+  860 logical pixels, with flexible columns and wrapping before any inner scrollbar.
+  Below 860 the page area holds its 860 layout and scrolls horizontally. Trimming is
+  allowed only with the full value in a tooltip, and a trimmed element must keep a
+  non-zero hover surface. New pages inherit all three; `PageScrollPolicyTests` and the
+  layout contract tests defend them.
 
 ## Writing rules for all human-facing text
 

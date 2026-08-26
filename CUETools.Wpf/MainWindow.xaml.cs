@@ -71,7 +71,8 @@ public partial class MainWindow : Window
             return;
         _railState = (compact, floor);
 
-        RailColumn.Width = new GridLength(compact ? 56 : 214);
+        RailColumn.Width =
+            new GridLength(compact ? RailColumnWidths.Strip : RailColumnWidths.Full);
         NavList.ItemTemplate = (DataTemplate)Resources[compact ? "StripNavTemplate" : "FullNavTemplate"];
         NavList.ItemContainerStyle = compact
             ? (Style)Resources["StripNavItem"]
