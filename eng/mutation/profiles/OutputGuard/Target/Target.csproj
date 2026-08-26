@@ -5,6 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ArtifactContract.cs" />
-    <Compile Include="$(RepositoryRoot)\CUETools.Wpf\Services\OutputGuard.cs" Link="Production\OutputGuard.cs" />
+    <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\OutputGuard.cs" Link="Production\OutputGuard.cs" />
   </ItemGroup>
 </Project>

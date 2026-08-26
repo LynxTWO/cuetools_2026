@@ -166,6 +166,88 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
+### D13. Rip page history rows starve the timestamp and hard-clip the result - OPEN 2026-08-24
+
+- **Ask:** fix the history row layout, or accept it. It is a Rip page design decision, so it was
+  left alone during the scaling-port walkthrough.
+- **Found by:** the SLICE-013 port walkthrough,
+  `docs/evidence/2026-08-24-wpf-scaling-port/`. **Not a port regression** - the port did not touch
+  this template, and the fault reproduces at all five display scales and all four window widths
+  tested, including the 1200 default.
+- **Cause, verified from markup:** `CUETools.Wpf/Views/RipView.xaml:526-533` uses
+  `<DockPanel LastChildFill="False">` with `Result` docked Right before `When`. DockPanel reserves
+  space in declaration order, so `Result` takes all remaining width and `When` is left zero width.
+- **Consequence 1:** the relative timestamp never renders, at any scale or width, in any of the 40
+  captures. `HistoryStore.cs:75` always populates it as `When = Relative(r.When)`.
+- **Consequence 2:** `Result` sets no `TextTrimming` and no `ToolTip`, so the evidence sentence is
+  cut mid-word at the panel edge with no ellipsis and no way to read the remainder. CLAUDE.md
+  requires long identity text to be trimmed only with its full value in a tooltip, so this is a
+  standing violation rather than a cosmetic gap.
+- **Smallest safe fix:** dock `When` before `Result`, give `Result` `TextTrimming="CharacterEllipsis"`
+  and a `ToolTip` bound to the same value. That restores the timestamp, satisfies the tooltip rule,
+  and also closes the title/result collision at narrow widths, which is the same root cause.
+
+### D12. Mutation harness: restore the unlanded test half - RESOLVED 2026-08-24 (A)
+
+- **User chose (A):** land the production-test half of `2a8df3e3` onto master, then re-baseline
+  against the restored suite. Done the same day.
+- **How it landed:** the branch is two commits off merge base `ad424f1c` while master is 159
+  ahead, so every file came across as a three-way merge, not an overwrite. That mattered: master
+  had independently gained tests in `PayloadReadFailurePolicyTests.cs` (30 methods against the
+  branch's 23), and an overwrite would have deleted seven of them. All 15 modified files merged
+  with no conflicts; 3 new test files and 4 production sources were added.
+- **The predicted rework did not materialise.** `CUETools.Wpf.Tests` went 561 -> 730 passing and
+  `CUETools.Ripper.Tests` holds at 97, with all 169 restored tests green against master's
+  production code. `NamingMutationContractTests` compiled and passed unchanged because the merge
+  carried its `NamingEngine` production changes with it.
+- **The sub-question resolved itself.** `2a8df3e3` already moves `BuildTestCopyCrcEvidence` out of
+  `RipService` into `TestAndCopyResolver.BuildCrcEvidence`. Master's copy of the method body is
+  byte-identical to the merge base, so the move applied cleanly and `test-copy-history` now runs.
+  No contract shim was needed.
+- **Result:** all seven profiles pass both gates in one command. Six thresholds moved.
+  `output-guard` was raised (75.0 -> 81.0 quick, 90.0 -> 91.0 full) because master's own tests
+  improved that surface. `verification-discovery` was lowered (89.0 -> 87.0 quick, 84.0 -> 82.0
+  full, full no-coverage 8 -> 10) and `ripper-policies` full no-coverage went 1 -> 3, all for named
+  new code that arrived without mutation-killing tests. Sites are listed in
+  `docs/review/2026-08-24-mutation-harness-rebaseline.md`.
+- **Deliberately not landed:** `.github/workflows/mutation.yml`, `CI-wpf.yml`,
+  `Test-NuGetLockFiles.ps1`, and `Test-WorkflowActionPins.ps1`. Wiring the harness into CI remains
+  a separate decision; the harness still gates nothing.
+- **Two follow-ups left open:** a drive-root fixture would let `verification-discovery` recover its
+  89.0 floor, and an exact-value test on `DescribeForFailureContext()` would kill two of the three
+  `ripper-policies` no-coverage mutants. Both are new tests rather than merges.
+
+Original decision record:
+
+### D12 (original). Mutation harness: restore the unlanded test half, or accept a weaker gate - OPEN 2026-08-24
+
+- **Ask:** the mutation harness landed without the production tests it was calibrated against.
+  Decide whether to land that half, or to re-baseline the thresholds down to what master scores.
+- **Evidence:** `docs/review/2026-08-24-mutation-harness-rebaseline.md`. Commit `2a8df3e3` on
+  `origin/agent/mutation-harness` changed the harness and the production tests together. The
+  landing commit `e8e21739` took 41 files, all under `eng/mutation/`. Four files it depends on
+  never landed, and roughly a hundred test methods across 15 files stayed on the branch.
+- **Measured 2026-08-24, master `439decf9`, Quick:** 78.18 / 48.11 / 78.43 / 53.33 / 58.82 / 32.00
+  against floors of 95.0 / 89.0 / 89.0 / 92.0 / 75.0 / 89.0. Every runnable profile fails. Full
+  mode is worse: 76.19 / 41.48 / 73.03 / 31.34 / 61.43 / 29.11.
+- **Verified 2026-08-24, worktree at `8961b0b6`:** all seven profiles pass and reproduce the
+  README's measured column to the hundredth (96.14, 90.72, 94.09, 90.20, 93.10, 76.47, 90.20).
+  The harness is sound and deterministic. The drop is missing tests, not a code regression.
+- **Option A (recommended):** cherry-pick the production-test half of `2a8df3e3` onto master,
+  adapting for the `CUETools.App.Core` move, then re-baseline from the restored suite. Cost: the
+  tests were written against 2026-08-08 production code and master has moved 155 commits, so some
+  will need rework. `NamingMutationContractTests` (19 tests) targets `NamingEngine`, which changed.
+- **Option B:** accept the reduced suite and write the measured numbers in as the new floors. This
+  encodes the loss as the standard and should only be chosen deliberately.
+- **Not decided here; nothing was lowered.** The thresholds in `profiles.json` are untouched. The
+  harness remains unwired, so it gates nothing either way.
+- **Separate sub-question:** `test-copy-history` cannot run at all in either option.
+  `CUETools.Wpf.Tests/TestAndCopyResolverTests.cs` now calls `RipService.BuildTestCopyCrcEvidence`,
+  and `RipService.cs` is 3223 lines pulling AccurateRip, Codecs, CTDB, Processor, Ripper, and
+  Ripper.SCSI. Either extract that method into a linkable file, or accept the critical profile as
+  non-runnable and record it. A contract shim is not acceptable: the method is behavior-bearing
+  Test and Copy evidence logic, not an identity.
+
 ### D8. Classic secure-rip calibration and cache-defeat port - RESOLVED 2026-08-01 (B)
 
 - **User chose (B):** classic stays a frozen legacy surface with no behavior

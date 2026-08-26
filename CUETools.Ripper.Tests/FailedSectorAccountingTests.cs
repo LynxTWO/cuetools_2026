@@ -132,6 +132,61 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void WindowEndIsExclusiveAndRetryIndexZeroIsValid()
+        {
+            const int lastPass = 5;
+            var retry = new byte[4];
+            retry[0] = (byte)(lastPass + 2);
+            retry[3] = (byte)(lastPass + 2);
+            var failed = new BitArray(4);
+
+            int marked = FailedSectorAccounting.FinalizeWindow(
+                retry, 0, 0, 3, lastPass, failed);
+
+            Assert.AreEqual(1, marked);
+            Assert.IsTrue(failed[0]);
+            Assert.IsFalse(failed[3]);
+        }
+
+        [TestMethod]
+        public void RetryAndFailedArrayUpperBoundsAreSkippedWithoutReadingPastThem()
+        {
+            const int lastPass = 5;
+            var retry = new byte[2];
+            retry[1] = (byte)(lastPass + 2);
+            var failed = new BitArray(1);
+
+            int marked = FailedSectorAccounting.FinalizeWindow(
+                retry, 0, 0, 3, lastPass, failed);
+
+            Assert.AreEqual(0, marked);
+            Assert.AreEqual(0, failed.PopulationCount());
+        }
+
+        [TestMethod]
+        public void PartialPassBoundaryUsesThePreviousFlagAtAndAfterTheCut()
+        {
+            const int lastPass = 5;
+            var retry = new byte[4];
+            retry[1] = (byte)(lastPass + 1);
+            retry[2] = (byte)(lastPass + 1);
+            var failed = new BitArray(4);
+
+            int marked = FailedSectorAccounting.FinalizeWindow(
+                retry,
+                retrySectorBase: 0,
+                windowStartSector: 0,
+                windowEndSector: 4,
+                lastExecutedPass: lastPass,
+                failedSectors: failed,
+                partialFromSector: 2);
+
+            Assert.AreEqual(1, marked);
+            Assert.IsFalse(failed[1]);
+            Assert.IsTrue(failed[2]);
+        }
+
+        [TestMethod]
         public void DeepRecoveryPassCapProtectsByteAccumulators()
         {
             // R107: every per-sector accumulator is 8-bit (UserData bit lanes carry into their

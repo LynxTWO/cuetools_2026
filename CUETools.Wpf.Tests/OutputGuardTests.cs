@@ -41,8 +41,11 @@ namespace CUETools.Wpf.Tests
         [TestMethod]
         public void FreeName_IsUsedAsIs()
         {
+            int notes = 0;
             Assert.AreEqual("Artist - Album",
-                OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, "Artist - Album", "flac", _ => notes++));
+            Assert.AreEqual(0, notes);
         }
 
         [TestMethod]
@@ -54,11 +57,48 @@ namespace CUETools.Wpf.Tests
         }
 
         [TestMethod]
+        public void MissingBaseDirectoryIsRecognizedAsFree()
+        {
+            string missingBase = Path.Combine(_root, "missing", "nested");
+
+            Assert.AreEqual(
+                "Artist - Album",
+                OutputGuard.NonClobberingAlbumDir(
+                    missingBase, "Artist - Album", "flac"));
+        }
+
+        [TestMethod]
+        public void UnrelatedFilesDoNotMakeAnAlbumDirectoryOccupied()
+        {
+            MakeAlbum("Artist - Album", "notes.txt", "scan.png");
+
+            Assert.AreEqual("Artist - Album",
+                OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+            Assert.IsFalse(OutputGuard.HoldsARip(
+                Path.Combine(_root, "Artist - Album"), ""));
+        }
+
+        [TestMethod]
         public void ExistingAudio_ForcesANewFolder()
         {
             MakeAlbum("Artist - Album", "01 - One.flac");
+            string note = null;
             Assert.AreEqual("Artist - Album (2)",
-                OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+                OutputGuard.NonClobberingAlbumDir(
+                    _root, "Artist - Album", "flac", value => note = value));
+            Assert.AreEqual(
+                "output folder already held a rip - writing to \"Artist - Album (2)\" instead",
+                note);
+        }
+
+        [TestMethod]
+        public void AudioAndSidecarMatchingIsCaseInsensitive()
+        {
+            string audio = MakeAlbum("Audio", "01 - One.FLAC");
+            string sidecar = MakeAlbum("Sidecar", "ALBUM.CUE");
+
+            Assert.IsTrue(OutputGuard.HoldsARip(audio, "flac"));
+            Assert.IsTrue(OutputGuard.HoldsARip(sidecar, "flac"));
         }
 
         [DataTestMethod]
@@ -99,6 +139,43 @@ namespace CUETools.Wpf.Tests
             MakeAlbum("Artist - Album (3)", "album.cue");
             Assert.AreEqual("Artist - Album (4)",
                 OutputGuard.NonClobberingAlbumDir(_root, "Artist - Album", "flac"));
+        }
+
+        [TestMethod]
+        public void LastSequentialCandidateRemainsAvailable()
+        {
+            const string album = "Boundary Album";
+            MakeAlbum(album, "album.cue");
+            for (int number = 2; number < 999; number++)
+                MakeAlbum(album + " (" + number + ")", "album.cue");
+
+            Assert.AreEqual(
+                album + " (999)",
+                OutputGuard.NonClobberingAlbumDir(_root, album, "flac"));
+        }
+
+        [TestMethod]
+        public void PathologicalSequentialOccupancyUsesAProbedRandomCandidate()
+        {
+            const string album = "Occupied Album";
+            MakeAlbum(album, "album.cue");
+            for (int number = 2; number <= 999; number++)
+                MakeAlbum(album + " (" + number + ")", "album.cue");
+
+            string note = null;
+            string candidate = OutputGuard.NonClobberingAlbumDir(
+                _root,
+                album,
+                "flac",
+                value => note = value);
+
+            StringAssert.StartsWith(candidate, album + " (");
+            StringAssert.EndsWith(candidate, ")");
+            Assert.AreEqual(album.Length + 35, candidate.Length);
+            Assert.IsFalse(Directory.Exists(Path.Combine(_root, candidate)));
+            Assert.AreEqual(
+                "output folder is heavily occupied - writing to \"" + candidate + "\" instead",
+                note);
         }
 
         [TestMethod]
@@ -151,15 +228,32 @@ namespace CUETools.Wpf.Tests
         [TestMethod]
         public void TraversalAndProbeFailuresFailClosed()
         {
-            Assert.ThrowsException<ArgumentException>(() =>
+            ArgumentException missingBase = Assert.ThrowsException<ArgumentException>(() =>
+                OutputGuard.NonClobberingAlbumDir(
+                    "", "Artist - Album", "flac"));
+            Assert.AreEqual("baseDir", missingBase.ParamName);
+            StringAssert.Contains(missingBase.Message, "An output base directory is required.");
+
+            ArgumentException missingAlbum = Assert.ThrowsException<ArgumentException>(() =>
                 OutputGuard.NonClobberingAlbumDir(
                     _root, "", "flac"));
-            Assert.ThrowsException<IOException>(() =>
+            Assert.AreEqual("albumRel", missingAlbum.ParamName);
+            StringAssert.Contains(missingAlbum.Message, "An album directory is required.");
+
+            IOException traversal = Assert.ThrowsException<IOException>(() =>
                 OutputGuard.NonClobberingAlbumDir(
                     _root, Path.Combine("..", "escape"), "flac"));
-            Assert.ThrowsException<IOException>(() =>
+            Assert.AreEqual("Could not safely probe the output directory.", traversal.Message);
+            Assert.IsInstanceOfType<IOException>(traversal.InnerException);
+            Assert.AreEqual(
+                "The album path escapes the selected output directory.",
+                traversal.InnerException.Message);
+
+            IOException invalid = Assert.ThrowsException<IOException>(() =>
                 OutputGuard.NonClobberingAlbumDir(
                     _root, "invalid\0album", "flac"));
+            Assert.AreEqual("Could not safely probe the output directory.", invalid.Message);
+            Assert.IsNotNull(invalid.InnerException);
         }
     }
 }

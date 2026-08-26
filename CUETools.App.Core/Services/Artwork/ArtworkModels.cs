@@ -122,7 +122,7 @@ public sealed class ArtworkCandidateComparer : IComparer<ArtworkCandidate>
         if (result != 0) return result;
         result = Asc(SquarePenalty(x), SquarePenalty(y));
         if (result != 0) return result;
-        result = Desc(x.ByteLength ?? -1, y.ByteLength ?? -1);
+        result = Desc(KnownByteLength(x), KnownByteLength(y));
         if (result != 0) return result;
         result = string.Compare(x.Provider, y.Provider, StringComparison.OrdinalIgnoreCase);
         if (result != 0) return result;
@@ -135,6 +135,9 @@ public sealed class ArtworkCandidateComparer : IComparer<ArtworkCandidate>
         candidate.Width is > 0 && candidate.Height is > 0
             ? (long)candidate.Width.Value * candidate.Height.Value
             : -1;
+
+    private static long KnownByteLength(ArtworkCandidate candidate) =>
+        candidate.ByteLength is > 0 ? candidate.ByteLength.Value : -1;
 
     private static double SquarePenalty(ArtworkCandidate candidate)
     {

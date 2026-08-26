@@ -45,6 +45,32 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void NullEmptyAndNonPositiveInputsDoNothing()
+        {
+            Assert.AreEqual(0, SampleConcealment.Conceal(null, new byte[4], 1));
+            Assert.AreEqual(0, SampleConcealment.Conceal(new byte[4], null, 1));
+            Assert.AreEqual(0, SampleConcealment.Conceal(new byte[4], new byte[4], 0));
+            Assert.AreEqual(0, SampleConcealment.Conceal(new byte[4], new byte[4], -1));
+        }
+
+        [TestMethod]
+        public void UsableFramesAreClampedToBothBuffersAndWholeStereoFrames()
+        {
+            var pcm = Pcm(100, 200, -30000, -30000, 500, 600);
+            var map = new byte[7];
+            map[2] = 1;
+            byte[] trailingFrame = { pcm[4], pcm[5], pcm[6], pcm[7], pcm[8], pcm[9], pcm[10], pcm[11] };
+
+            int concealed = SampleConcealment.Conceal(pcm, map, 99);
+
+            Assert.AreEqual(1, concealed);
+            Assert.AreEqual(0, Sample(pcm, 0, 1));
+            CollectionAssert.AreEqual(
+                trailingFrame,
+                new[] { pcm[4], pcm[5], pcm[6], pcm[7], pcm[8], pcm[9], pcm[10], pcm[11] });
+        }
+
+        [TestMethod]
         public void AnUnconfirmedRunIsInterpolatedAcrossItsNeighbours()
         {
             // L: 1000, [garbage], [garbage], 4000 -> expect a ramp, not the garbage.
@@ -78,6 +104,44 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void EitherByteOfAChannelMarksItsFrameBad()
+        {
+            var lowByte = Pcm(100, 0, -20000, 0, 300, 0);
+            var highByte = (byte[])lowByte.Clone();
+            var lowMap = new byte[lowByte.Length];
+            var highMap = new byte[highByte.Length];
+            lowMap[4] = 1;
+            highMap[5] = 1;
+
+            Assert.AreEqual(1, SampleConcealment.Conceal(lowByte, lowMap, 3));
+            Assert.AreEqual(1, SampleConcealment.Conceal(highByte, highMap, 3));
+            Assert.AreEqual(200, Sample(lowByte, 1, 0));
+            Assert.AreEqual(200, Sample(highByte, 1, 0));
+        }
+
+        [TestMethod]
+        public void ARunAtEitherEdgeUsesTheOnlyAvailableAnchor()
+        {
+            var atStart = Pcm(-30000, 0, -20000, 0, 1200, 0);
+            var startMap = new byte[atStart.Length];
+            startMap[0] = startMap[1] = 1;
+            startMap[4] = startMap[5] = 1;
+
+            Assert.AreEqual(2, SampleConcealment.Conceal(atStart, startMap, 3));
+            Assert.AreEqual(1200, Sample(atStart, 0, 0));
+            Assert.AreEqual(1200, Sample(atStart, 1, 0));
+
+            var atEnd = Pcm(-1200, 0, 20000, 0, 30000, 0);
+            var endMap = new byte[atEnd.Length];
+            endMap[4] = endMap[5] = 1;
+            endMap[8] = endMap[9] = 1;
+
+            Assert.AreEqual(2, SampleConcealment.Conceal(atEnd, endMap, 3));
+            Assert.AreEqual(-1200, Sample(atEnd, 1, 0));
+            Assert.AreEqual(-1200, Sample(atEnd, 2, 0));
+        }
+
+        [TestMethod]
         public void AWideRunIsMutedRatherThanRamped()
         {
             int frames = SampleConcealment.MaxInterpolatedFrames + 100;
@@ -94,6 +158,34 @@ namespace CUETools.Ripper.Tests
             Assert.AreEqual(0, Sample(pcm, middle, 0),
                 "damage this wide fades to silence instead of drawing a quarter-second ramp");
             Assert.AreEqual(9000, Sample(pcm, 0, 0), "the good sample before it stands");
+            Assert.AreEqual(9000, Sample(pcm, 1, 0), "the fade starts at the prior anchor");
+            Assert.AreEqual(8938, Sample(pcm, 2, 0));
+            Assert.AreEqual(61, Sample(pcm, 1 + 146, 0));
+            Assert.AreEqual(0, Sample(pcm, 1 + 147, 0));
+            Assert.AreEqual(8938, Sample(pcm, frames - 1, 0));
+            Assert.AreEqual(9000, Sample(pcm, frames, 0), "the fade ends at the next anchor");
+            Assert.AreEqual(9000, Sample(pcm, frames + 1, 0), "the next good sample is untouched");
+        }
+
+        [TestMethod]
+        public void ExactlyTheInterpolationLimitStillUsesTheFullLinearRamp()
+        {
+            const int Anchor = 5890;
+            int run = SampleConcealment.MaxInterpolatedFrames;
+            var values = new short[(run + 2) * 2];
+            values[(run + 1) * 2] = Anchor;
+            var pcm = Pcm(values);
+            var map = new byte[pcm.Length];
+            for (int frame = 1; frame <= run; frame++)
+                map[frame * 4] = 1;
+
+            int concealed = SampleConcealment.Conceal(pcm, map, run + 2);
+
+            Assert.AreEqual(run, concealed);
+            Assert.AreEqual(10, Sample(pcm, 1, 0));
+            Assert.AreEqual(2940, Sample(pcm, 294, 0));
+            Assert.AreEqual(5880, Sample(pcm, run, 0));
+            Assert.AreEqual(Anchor, Sample(pcm, run + 1, 0));
         }
 
         [TestMethod]
@@ -109,6 +201,20 @@ namespace CUETools.Ripper.Tests
             for (int f = 0; f < 2; f++)
                 for (int c = 0; c < 2; c++)
                     Assert.AreEqual(0, Sample(pcm, f, c));
+        }
+
+        [TestMethod]
+        public void RightChannelInterpolationReadsAndWritesItsOwnSignedSamples()
+        {
+            var pcm = Pcm(10, -3000, 20, 30000, 30, -1000);
+            var map = new byte[pcm.Length];
+            map[6] = 1;
+
+            int concealed = SampleConcealment.Conceal(pcm, map, 3);
+
+            Assert.AreEqual(1, concealed);
+            Assert.AreEqual(-2000, Sample(pcm, 1, 1));
+            Assert.AreEqual(20, Sample(pcm, 1, 0));
         }
 
         [TestMethod]

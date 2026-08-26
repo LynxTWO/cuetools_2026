@@ -60,24 +60,8 @@ public sealed class NamingScheme
 /// distilled intent of the owner's MusicBrainz Picard script lives in the rule methods below - no
 /// scripting interpreter, just a fixed set of well-tested transforms.
 /// </summary>
-public static class NamingEngine
+public static partial class NamingEngine
 {
-    // built-in presets shown in the editor's picker
-    public static readonly (string Name, NamingScheme Scheme)[] Presets =
-    {
-        ("Archival (default)", new NamingScheme()),
-        ("Artist - Album (year)", new NamingScheme { Template = "%artist% - %album% (%year%)/%tracknumber% - %title%", ReleaseDescriptor = false }),
-        ("Simple", new NamingScheme { Template = "%artist%/%album%/%tracknumber% - %title%", ReleaseDescriptor = false, ExtractFeatured = false }),
-    };
-
-    public static readonly string[] PaletteFields =
-    {
-        "%albumartist%", "%artist%", "%album%", "%title%", "%tracknumber%", "%year%",
-        "%disc%", "%discnumber%", "%totaldiscs%", "%discsubtitle%", "%releasedescriptor%", "%featsuffix%",
-        "%label%", "%catalog%", "%barcode%", "%country%", "%genre%", "%originalyear%", "%isrc%",
-        "%releasetype%", "%releasestatus%",
-    };
-
     /// <summary>Render a full relative path for one track.</summary>
     public static string Render(NamingContext c, NamingScheme s)
     {
@@ -166,11 +150,11 @@ public static class NamingEngine
         // Never pad narrower than the disc number itself needs: bad metadata can report a disc number
         // higher than the total (e.g. "disc 12 of 5"), and truncating that would collide two discs.
         int widest = Math.Max(c.TotalDiscs, c.DiscNumber);
-        int width = Math.Max(1, Abs(widest).ToString().Length);
+        // Both callers require TotalDiscs > 1, so widest is always positive. Keeping a negative-value
+        // branch here implied a reachable state that the public renderer cannot produce.
+        int width = Math.Max(1, widest.ToString().Length);
         return c.DiscNumber.ToString(new string('0', width));
     }
-
-    private static int Abs(int v) => v < 0 ? -v : v;
 
     // ---- the distilled Picard rules ----
 
@@ -360,29 +344,4 @@ public static class NamingEngine
         return char.ToUpperInvariant(v[0]) + v.Substring(1);
     }
 
-    // ---- canned example albums for the live preview (no disc needed) ----
-    public static IReadOnlyList<(string Label, NamingContext[] Tracks)> Examples()
-    {
-        return new List<(string, NamingContext[])>
-        {
-            ("Single artist", new[]
-            {
-                new NamingContext { AlbumArtist = "Radiohead", Artist = "Radiohead", Album = "OK Computer", Title = "Airbag", Year = "1997", TrackNumber = 1, TotalTracks = 12 },
-                new NamingContext { AlbumArtist = "Radiohead", Artist = "Radiohead", Album = "OK Computer", Title = "Paranoid Android", Year = "1997", TrackNumber = 2, TotalTracks = 12 },
-            }),
-            ("Leading article + guest", new[]
-            {
-                new NamingContext { AlbumArtist = "The Weeknd", Artist = "The Weeknd feat. Daft Punk", Album = "Starboy", Title = "Starboy", Year = "2016", TrackNumber = 1, TotalTracks = 18 },
-            }),
-            ("Multi-disc live set", new[]
-            {
-                new NamingContext { AlbumArtist = "Pink Floyd", Artist = "Pink Floyd", Album = "Pulse", Title = "Shine On You Crazy Diamond", Year = "1995", DiscNumber = 1, TotalDiscs = 2, TrackNumber = 1, SecondaryTypes = new[] { "live" } },
-                new NamingContext { AlbumArtist = "Pink Floyd", Artist = "Pink Floyd", Album = "Pulse", Title = "Money", Year = "1995", DiscNumber = 2, TotalDiscs = 2, TrackNumber = 3, SecondaryTypes = new[] { "live" } },
-            }),
-            ("Various-artists soundtrack", new[]
-            {
-                new NamingContext { AlbumArtist = "Various Artists", Artist = "a-ha", Album = "Grosse Pointe Blank", Title = "Take On Me", Year = "1997", TrackNumber = 1, SecondaryTypes = new[] { "soundtrack", "compilation" } },
-            }),
-        };
-    }
 }

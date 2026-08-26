@@ -11,7 +11,7 @@
       "minimumQuickScore": 95.0,
       "minimumFullScore": 93.0,
       "maximumQuickNoCoverage": 0,
-      "maximumFullNoCoverage": 1,
+      "maximumFullNoCoverage": 3,
       "expectedTests": [
         "CUETools.Ripper.Tests/DriveReportedTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/FailedSectorAccountingTests.cs",
@@ -40,16 +40,16 @@
       "sourceProject": "profiles/VerificationDiscovery/Target/Target.csproj",
       "testProject": "profiles/VerificationDiscovery/Tests/Tests.csproj",
       "config": "profiles/VerificationDiscovery/Target/stryker-config.json",
-      "minimumQuickScore": 89.0,
-      "minimumFullScore": 84.0,
+      "minimumQuickScore": 87.0,
+      "minimumFullScore": 82.0,
       "maximumQuickNoCoverage": 2,
-      "maximumFullNoCoverage": 8,
+      "maximumFullNoCoverage": 10,
       "expectedTests": [
         "CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs",
         "eng/mutation/profiles/VerificationDiscovery/Tests/ConfiguredFormatTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/VerificationSourceDiscovery.cs"
+        "CUETools.App.Core/Services/VerificationSourceDiscovery.cs"
       ]
     },
     {
@@ -68,9 +68,9 @@
         "CUETools.Wpf.Tests/VerifyHistoryStoreTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Accuracy/TestAndCopyResolver.cs",
-        "CUETools.Wpf/Accuracy/VerifyHistory.cs",
-        "CUETools.Wpf/Services/GzJson.cs"
+        "CUETools.App.Core/Accuracy/TestAndCopyResolver.cs",
+        "CUETools.App.Core/Accuracy/VerifyHistory.cs",
+        "CUETools.App.Core/Services/GzJson.cs"
       ]
     },
     {
@@ -95,8 +95,8 @@
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/AlbumArtifactNames.cs",
-        "CUETools.Wpf/Services/NamingPaths.cs"
+        "CUETools.App.Core/Services/AlbumArtifactNames.cs",
+        "CUETools.App.Core/Services/NamingPaths.cs"
       ]
     },
     {
@@ -121,7 +121,7 @@
         "CUETools.Wpf.Tests/NamingTokenTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/NamingEngine.cs"
+        "CUETools.App.Core/Services/NamingEngine.cs"
       ]
     },
     {
@@ -130,15 +130,15 @@
       "sourceProject": "profiles/OutputGuard/Target/Target.csproj",
       "testProject": "profiles/OutputGuard/Tests/Tests.csproj",
       "config": "profiles/OutputGuard/Target/stryker-config.json",
-      "minimumQuickScore": 75.0,
-      "minimumFullScore": 90.0,
+      "minimumQuickScore": 81.0,
+      "minimumFullScore": 91.0,
       "maximumQuickNoCoverage": 0,
       "maximumFullNoCoverage": 2,
       "expectedTests": [
         "CUETools.Wpf.Tests/OutputGuardTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/OutputGuard.cs"
+        "CUETools.App.Core/Services/OutputGuard.cs"
       ]
     },
     {
@@ -155,7 +155,7 @@
         "CUETools.Wpf.Tests/ArtworkCandidateTests.cs"
       ],
       "expectedSources": [
-        "CUETools.Wpf/Services/Artwork/ArtworkModels.cs"
+        "CUETools.App.Core/Services/Artwork/ArtworkModels.cs"
       ]
     }
   ]

@@ -111,5 +111,53 @@ namespace CUETools.Wpf.Accuracy
             }
             return -1;
         }
+
+        /// <summary>Preserve the full-range checksum from the committed read while also carrying
+        /// the named Test (R1) and Copy (R2) evidence. A confirming R3 may be the committed source,
+        /// but it does not silently rename itself "Copy" in the UI.</summary>
+        internal static TrackCrc[] BuildCrcEvidence(
+            IReadOnlyList<VerifyRecord> reads,
+            int sourceReadIndex)
+        {
+            TrackCrc[] source =
+                sourceReadIndex >= 0 &&
+                sourceReadIndex < reads.Count
+                    ? reads[sourceReadIndex]?.Tracks ?? Array.Empty<TrackCrc>()
+                    : Array.Empty<TrackCrc>();
+            TrackCrc[] test =
+                reads.Count > 0
+                    ? reads[0]?.Tracks ?? Array.Empty<TrackCrc>()
+                    : Array.Empty<TrackCrc>();
+            TrackCrc[] copy =
+                reads.Count > 1
+                    ? reads[1]?.Tracks ?? Array.Empty<TrackCrc>()
+                    : Array.Empty<TrackCrc>();
+            int count = Math.Max(source.Length, Math.Max(test.Length, copy.Length));
+            var result = new TrackCrc[count];
+            for (int i = 0; i < count; i++)
+            {
+                TrackCrc? selected = i < source.Length ? source[i] : null;
+                TrackCrc? testTrack = i < test.Length ? test[i] : null;
+                TrackCrc? copyTrack = i < copy.Length ? copy[i] : null;
+                result[i] = new TrackCrc
+                {
+                    ArV1 = selected?.ArV1 ?? 0,
+                    ArV2 = selected?.ArV2 ?? 0,
+                    Crc32 = selected?.Crc32 ?? 0,
+                    TestCrc32 =
+                        testTrack != null && testTrack.Crc32 != 0
+                            ? testTrack.Crc32
+                            : testTrack?.TestCrc32 ?? 0,
+                    CopyCrc32 =
+                        copyTrack != null && copyTrack.Crc32 != 0
+                            ? copyTrack.Crc32
+                            : copyTrack?.CopyCrc32
+                                ?? selected?.CopyCrc32
+                                ?? testTrack?.CopyCrc32
+                                ?? 0,
+                };
+            }
+            return result;
+        }
     }
 }
