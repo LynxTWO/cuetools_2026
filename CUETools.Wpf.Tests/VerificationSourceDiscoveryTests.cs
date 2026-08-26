@@ -624,6 +624,83 @@ public sealed class VerificationSourceDiscoveryTests
         StringAssert.Contains(result.Error, "one album folder at a time");
     }
 
+    // The filesystem-root guard: files whose nearest shared ancestor is a drive root are
+    // unrelated, and treating that root as an album folder would scope the run to the whole
+    // disk. Its branches survived the 2026-08 mutation campaign unexercised because no test
+    // could put real files at a root. SubstDrive maps a drive letter onto a shared temp
+    // directory (the programmatic `subst`), so these tests get a genuine root without
+    // touching a real one.
+
+    [TestMethod]
+    public void TheFilesystemRootTestKnowsARootFromAFolderFromNothing()
+    {
+        Assert.IsFalse(
+            VerificationSourceDiscovery.IsFilesystemRoot(""),
+            "an empty string is not a root; treating it as one would misfire the guard");
+        string root = Path.GetPathRoot(Path.GetTempPath())!;
+        Assert.IsTrue(
+            VerificationSourceDiscovery.IsFilesystemRoot(root),
+            root + " is a filesystem root");
+        Assert.IsTrue(
+            VerificationSourceDiscovery.IsFilesystemRoot(root.TrimEnd(Path.DirectorySeparatorChar)),
+            "a root without its trailing separator is still a root");
+        Assert.IsFalse(
+            VerificationSourceDiscovery.IsFilesystemRoot(Path.GetTempPath()),
+            "an ordinary directory is not a root");
+    }
+
+    [TestMethod]
+    public void ASingleManifestSelectedAtADriveRootIsStillAccepted()
+    {
+        using var drive = new SubstDrive();
+        if (drive.Root == null)
+            Assert.Inconclusive("No free drive letter to map a test root onto.");
+
+        string cue = Path.Combine(drive.Root, drive.Unique("Album") + ".cue");
+        File.WriteAllText(cue, "FILE \"album.flac\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n");
+        try
+        {
+            VerificationSourceDiscoveryResult result =
+                new VerificationSourceDiscovery().Discover(new[] { cue });
+
+            Assert.IsTrue(result.Ok, result.Error);
+            Assert.AreEqual(1, result.SourceSet!.Discs.Count);
+        }
+        finally
+        {
+            File.Delete(cue);
+        }
+    }
+
+    [TestMethod]
+    public void MultipleManifestsWhoseOnlySharedAncestorIsADriveRootAreRejected()
+    {
+        using var drive = new SubstDrive();
+        if (drive.Root == null)
+            Assert.Inconclusive("No free drive letter to map a test root onto.");
+
+        // Two cues that would form a valid two-disc set anywhere else, so the failure is
+        // attributable to the root guard alone.
+        string stem = drive.Unique("Album");
+        string cue1 = Path.Combine(drive.Root, stem + " Disc 1.cue");
+        string cue2 = Path.Combine(drive.Root, stem + " Disc 2.cue");
+        WriteCue(drive.Root, Path.GetFileName(cue1), 1, 2, "d1.flac");
+        WriteCue(drive.Root, Path.GetFileName(cue2), 2, 2, "d2.flac");
+        try
+        {
+            VerificationSourceDiscoveryResult result =
+                new VerificationSourceDiscovery().Discover(new[] { cue1, cue2 });
+
+            Assert.IsFalse(result.Ok, "a whole drive root must not become the album scope");
+            StringAssert.Contains(result.Error, "same album location");
+        }
+        finally
+        {
+            File.Delete(cue1);
+            File.Delete(cue2);
+        }
+    }
+
     private static void WriteCue(
         string directory,
         string filename,
@@ -637,6 +714,75 @@ public sealed class VerificationSourceDiscoveryTests
             (total > 0 ? $"REM TOTALDISCS {total}\n" : "") +
             $"FILE \"{audio}\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n");
     }
+
+    /// <summary>
+    /// Maps a free drive letter onto one fixed shared temp directory - the programmatic
+    /// `subst` - so tests can place files at a genuine filesystem root. Every process maps
+    /// its letter to the SAME target, so concurrent test sessions (Stryker runs many) can
+    /// stack identical definitions harmlessly; tests keep their files collision-free with
+    /// Unique() names instead. Dispose pops only this instance's definition, leaving any
+    /// identical stacked ones intact for the sessions that own them.
+    /// </summary>
+    // The mutation profile compiles this file with Nullable=disable while the main test
+    // project enables it; the directive keeps the annotations legal in both hosts.
+#nullable enable
+    private sealed class SubstDrive : IDisposable
+    {
+        [System.Runtime.InteropServices.DllImport(
+            "kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode,
+            SetLastError = true)]
+        private static extern bool DefineDosDevice(int flags, string deviceName, string? targetPath);
+
+        private const int RemoveDefinition = 2;    // DDD_REMOVE_DEFINITION
+        private const int ExactMatchOnRemove = 4;  // DDD_EXACT_MATCH_ON_REMOVE
+
+        private readonly string _device = "";
+        private readonly string _target = "";
+
+        public string? Root { get; }
+
+        public SubstDrive()
+        {
+            string target = Path.Combine(Path.GetTempPath(), "cuetools-subst-root");
+            System.IO.Directory.CreateDirectory(target);
+            for (char letter = 'Z'; letter >= 'E'; letter--)
+            {
+                string device = letter + ":";
+                string root = device + Path.DirectorySeparatorChar;
+                if (System.IO.Directory.Exists(root))
+                    continue;
+                if (!DefineDosDevice(0, device, target))
+                    continue;
+
+                // Prove the letter really serves OUR target before trusting it: a probe file
+                // written into the target must be visible through the root. A letter that
+                // raced with a real drive or a foreign mapping fails this and is released.
+                string probe = Path.Combine(target, "probe-" + Guid.NewGuid().ToString("N"));
+                File.WriteAllText(probe, "");
+                bool visible = File.Exists(Path.Combine(root, Path.GetFileName(probe)));
+                File.Delete(probe);
+                if (!visible)
+                {
+                    DefineDosDevice(RemoveDefinition | ExactMatchOnRemove, device, target);
+                    continue;
+                }
+
+                _device = device;
+                _target = target;
+                Root = root;
+                return;
+            }
+        }
+
+        public string Unique(string prefix) => prefix + "-" + Guid.NewGuid().ToString("N");
+
+        public void Dispose()
+        {
+            if (Root != null)
+                DefineDosDevice(RemoveDefinition | ExactMatchOnRemove, _device, _target);
+        }
+    }
+#nullable restore
 
     private sealed class TestFolder : IDisposable
     {

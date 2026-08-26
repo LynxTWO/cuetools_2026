@@ -174,10 +174,12 @@ $advanced = Get-Content -LiteralPath `
 Assert-True ($advanced -match "(?s)enum CTDBCoversSearch.*?None.*?Primary.*?Extensive") `
     "Artwork search-mode ordering changed."
 
+# killed 7 + timeout 1 = 8 detected of 10 eligible: pins that a timeout counts as a
+# detection, exactly on the reviewed floor.
 $passingMeasurement = [pscustomobject]@{
     Eligible = 10
     Score = 80.0
-    Counts = [pscustomobject]@{ killed = 8; noCoverage = 1 }
+    Counts = [pscustomobject]@{ killed = 7; timeout = 1; noCoverage = 1 }
 }
 Assert-True ((Get-MutationFailureReason 0 $passingMeasurement 80.0 1).Length -eq 0) `
     "Mutation gate rejected a measurement exactly on both reviewed boundaries."
@@ -188,10 +190,10 @@ Assert-Contains (Get-MutationFailureReason 0 $passingMeasurement 79.0 0) `
 $emptyMeasurement = [pscustomobject]@{
     Eligible = 0
     Score = 0.0
-    Counts = [pscustomobject]@{ killed = 0; noCoverage = 0 }
+    Counts = [pscustomobject]@{ killed = 0; timeout = 0; noCoverage = 0 }
 }
 Assert-Contains (Get-MutationFailureReason 0 $emptyMeasurement 1.0 0) `
-    "did not execute and kill" "An empty mutation campaign did not fail closed."
+    "did not execute and detect" "An empty mutation campaign did not fail closed."
 
 $packetPath = Join-Path ([IO.Path]::GetTempPath()) `
     ("cuetools-mutation-packet-" + [Guid]::NewGuid().ToString("N") + ".json")
@@ -203,7 +205,7 @@ try {
         "Mutation failure packet schema drifted."
     Assert-True ($packet.profile -ceq "self-test" -and $packet.exitCode -eq 9) `
         "Mutation failure packet identity drifted."
-    Assert-True ($packet.counts.killed -eq 8 -and `
+    Assert-True ($packet.counts.killed -eq 7 -and $packet.counts.timeout -eq 1 -and `
         $packet.reason -ceq "expected failure") `
         "Mutation failure packet evidence drifted."
     Assert-Contains ([string]$packet.replay) "-Mode Full -Profile self-test" `

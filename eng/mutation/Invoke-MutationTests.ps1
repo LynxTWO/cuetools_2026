@@ -121,9 +121,10 @@ foreach ($profileEntry in $selected) {
     }
 
     Write-Host (("MUTATION PASS: profile={0}, level={1}, score={2:N2}, killed={3}, " +
-        "survived={4}, no-coverage={5}, report={6}") -f
+        "timeout={4}, survived={5}, no-coverage={6}, report={7}") -f
         $profileId,$level,$measurement.Score,$measurement.Counts.killed,
-        $measurement.Counts.survived,$measurement.Counts.noCoverage,$report.FullName)
+        $measurement.Counts.timeout,$measurement.Counts.survived,
+        $measurement.Counts.noCoverage,$report.FullName)
 }
 
 $summaryPath = Join-Path $ResultsDirectory "mutation-summary.json"

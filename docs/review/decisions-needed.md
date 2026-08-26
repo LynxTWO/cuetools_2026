@@ -195,6 +195,11 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 - **Two follow-ups left open:** a drive-root fixture would let `verification-discovery` recover its
   89.0 floor, and an exact-value test on `DescribeForFailureContext()` would kill two of the three
   `ripper-policies` no-coverage mutants. Both are new tests rather than merges.
+- **Addendum 2026-08-26:** both follow-ups landed (subst-drive fixture, exact-value counters, plus
+  the slip-overlap boundary), the floors are back at 89.0/84.0, a timeout-scoring flake found
+  while proving the gate was fixed at the root, and the owner approved wiring: `mutation.yml` now
+  runs Quick on pull requests and Full weekly. Evidence in
+  `docs/review/2026-08-24-mutation-harness-rebaseline.md`.
 
 Original decision record:
 
