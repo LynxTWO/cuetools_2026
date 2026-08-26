@@ -12,9 +12,10 @@ namespace CUETools.Wpf.Theme;
 /// The scrollbar part is read live from SystemParameters rather than frozen at 17, because the
 /// app's ScrollBar style overrides only Background and Template - the WPF theme style's
 /// Width="{DynamicResource SystemParameters.VerticalScrollBarWidthKey}" still governs the real
-/// layout width. A themed, high-DPI, or accessibility-configured system moves the bar, and a
-/// frozen constant would not follow it. The sum leaves exactly one whole icon and no slack, so
-/// tracking the live metric is what keeps the tier-1 never-clip guarantee true.
+/// layout width. A themed or accessibility-configured system moves the bar - the metric is
+/// device-independent, so DPI does not move it, but the accessibility scrollbar-size setting
+/// does - and a frozen constant would not follow it. The sum leaves exactly one whole icon and
+/// no slack, so tracking the live metric is what keeps the tier-1 never-clip guarantee true.
 /// </summary>
 internal static class RailColumnWidths
 {

@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -16,6 +17,8 @@ public sealed class RipHistoryRowTests
 {
     private static readonly XNamespace Presentation =
         "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    private static readonly XNamespace Xaml =
+        "http://schemas.microsoft.com/winfx/2006/xaml";
 
     private static XElement HistoryRow()
     {
@@ -41,10 +44,10 @@ public sealed class RipHistoryRowTests
         XElement result = children.Single(
             e => (string?)e.Attribute("Text") == "{Binding Result}");
 
+        // Attached-property attributes are written unprefixed throughout this file's XAML.
         Assert.AreEqual(
             "Right",
-            when.Attribute(Presentation + "DockPanel.Dock")?.Value
-                ?? when.Attribute("DockPanel.Dock")?.Value,
+            when.Attribute("DockPanel.Dock")?.Value,
             "When must dock right so the timestamp always has room");
         Assert.IsTrue(
             Array.IndexOf(children, when) < Array.IndexOf(children, result),
@@ -81,23 +84,30 @@ public sealed class RipHistoryRowTests
         // Serif 14 - starves the fill child to zero width, and a zero-width TextBlock has no
         // hover surface, so the tooltip that makes its trimming legal becomes unreachable.
         XElement row = HistoryRow();
+        Assert.AreEqual(
+            "HistoryRowDock",
+            row.Attribute(Xaml + "Name")?.Value,
+            "the row panel must be named so the title bound can follow its width");
         XElement titles = row.Elements(Presentation + "StackPanel").Single();
 
         string? declared = titles.Attribute("MaxWidth")?.Value;
         Assert.IsNotNull(
             declared,
             "the title block must be bounded, or a long title starves the evidence text");
+        StringAssert.Contains(
+            declared!, "Binding ActualWidth",
+            "the bound is proportional - a fixed cap trims long titles even when the row has room");
+        StringAssert.Contains(declared!, "ElementName=HistoryRowDock");
+        StringAssert.Contains(declared!, "FractionOfWidth");
+
+        Match fraction = Regex.Match(declared!, "ConverterParameter=(?<f>[0-9.]+)");
+        Assert.IsTrue(fraction.Success, "the share must be declared, was " + declared);
+        double share = double.Parse(
+            fraction.Groups["f"].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
         Assert.IsTrue(
-            double.TryParse(
-                declared!.Trim(),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out double maxWidth),
-            "the title block's MaxWidth must be a finite number, was " + declared);
-        Assert.IsTrue(
-            maxWidth > 0 && maxWidth <= 430,
-            "the title column must keep at most half the 860 floor layout so the timestamp and "
-                + "the evidence text always keep a hover surface, was " + maxWidth);
+            share > 0 && share <= 0.5,
+            "the title column keeps at most half the row so the timestamp and the evidence text "
+                + "always keep a hover surface, was " + share);
 
         foreach (string binding in new[] { "{Binding Title}", "{Binding Artist}" })
         {
