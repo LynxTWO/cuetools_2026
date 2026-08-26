@@ -11,7 +11,7 @@
       "minimumQuickScore": 95.0,
       "minimumFullScore": 93.0,
       "maximumQuickNoCoverage": 0,
-      "maximumFullNoCoverage": 3,
+      "maximumFullNoCoverage": 0,
       "expectedTests": [
         "CUETools.Ripper.Tests/DriveReportedTimeoutPolicyTests.cs",
         "CUETools.Ripper.Tests/FailedSectorAccountingTests.cs",
@@ -40,10 +40,10 @@
       "sourceProject": "profiles/VerificationDiscovery/Target/Target.csproj",
       "testProject": "profiles/VerificationDiscovery/Tests/Tests.csproj",
       "config": "profiles/VerificationDiscovery/Target/stryker-config.json",
-      "minimumQuickScore": 87.0,
-      "minimumFullScore": 82.0,
+      "minimumQuickScore": 89.0,
+      "minimumFullScore": 84.0,
       "maximumQuickNoCoverage": 2,
-      "maximumFullNoCoverage": 10,
+      "maximumFullNoCoverage": 8,
       "expectedTests": [
         "CUETools.Wpf.Tests/VerificationSourceDiscoveryTests.cs",
         "eng/mutation/profiles/VerificationDiscovery/Tests/ConfiguredFormatTests.cs"

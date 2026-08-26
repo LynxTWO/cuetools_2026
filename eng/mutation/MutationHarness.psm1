@@ -15,10 +15,17 @@ function Get-MutationCounts([string]$ReportPath) {
         ignored = @($statuses | Where-Object { $_ -ceq "Ignored" }).Count
     }
     $eligible = $counts.killed + $counts.survived + $counts.noCoverage + $counts.timeout
-    $score = if ($eligible -eq 0) { 0.0 } else { 100.0 * $counts.killed / $eligible }
+    # A timeout IS a detection: the mutant made the program hang, which the tests observed.
+    # Stryker itself scores timeouts as killed. Counting them only in the denominator made the
+    # gate timing-flaky - the same mutant flips Killed/Timeout run to run on a loaded machine,
+    # and on 2026-08-26 that flipped verification-discovery between 91.09 and 81.19 with
+    # identical code. Detected = killed + timeout keeps the score identical across the flip.
+    $detected = $counts.killed + $counts.timeout
+    $score = if ($eligible -eq 0) { 0.0 } else { 100.0 * $detected / $eligible }
     return [pscustomobject]@{
         Counts = [pscustomobject]$counts
         Eligible = $eligible
+        Detected = $detected
         Score = [Math]::Round($score, 2)
     }
 }
@@ -31,8 +38,9 @@ function Get-MutationFailureReason(
     if ($ExitCode -ne 0) {
         return "Stryker exited with code $ExitCode."
     }
-    if ($Measurement.Eligible -eq 0 -or $Measurement.Counts.killed -eq 0) {
-        return "The profile did not execute and kill any eligible mutant."
+    if ($Measurement.Eligible -eq 0 -or
+        ($Measurement.Counts.killed + $Measurement.Counts.timeout) -eq 0) {
+        return "The profile did not execute and detect any eligible mutant."
     }
     if ($Measurement.Score -lt $MinimumScore) {
         return "Mutation score $($Measurement.Score) is below the reviewed floor $MinimumScore."

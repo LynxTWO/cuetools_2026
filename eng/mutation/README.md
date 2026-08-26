@@ -18,12 +18,15 @@
 >
 > Six thresholds moved; the rest are unchanged from 2026-08-08. `output-guard` was **raised**
 > (75.0 -> 81.0 quick, 90.0 -> 91.0 full) because master's own tests improved that surface.
-> `verification-discovery` was **lowered** (89.0 -> 87.0 quick, 84.0 -> 82.0 full) and two
-> no-coverage ceilings were raised, all for named new code that arrived without mutation-killing
-> tests. Those sites are listed in
-> `docs/review/2026-08-24-mutation-harness-rebaseline.md`, which is the full evidence record.
+> `verification-discovery` was temporarily lowered for named new code that had arrived without
+> mutation-killing tests; the follow-up tests landed on 2026-08-26 (a subst-drive fixture for the
+> filesystem-root guard, exact-value storm counters, and the slip-overlap boundary), and its
+> floors are back at their original 89.0 quick / 84.0 full. `ripper-policies` now carries zero
+> full-mode no-coverage mutants. `docs/review/2026-08-24-mutation-harness-rebaseline.md` is the
+> full evidence record.
 >
-> Still deliberately **not wired into any workflow**. It gates nothing and cannot break a build.
+> **Wired into CI on 2026-08-26**: `.github/workflows/mutation.yml` runs Quick on pull requests
+> and Full weekly and on manual dispatch, uploading the reports as run artifacts.
 
 This harness asks a stricter question than line coverage: if a decision in a critical pure-logic
 surface is changed, do the tests fail? It runs pinned `dotnet-stryker` 4.16.0 against small .NET 8
@@ -41,13 +44,19 @@ The floors are regression gates, not claims that every survivor is a defect. The
 measured baseline so small timing or compiler differences do not create a false failure. The
 no-coverage ceiling separately prevents a stable score from hiding newly untested code.
 
-**Measured columns are master at 2026-08-24, with the restored test suite.**
+**Measured columns are the latest recorded runs (2026-08-24 baseline, the two profiles
+re-measured 2026-08-26), scored as detected mutants: killed plus timeout, over eligible.** A
+timeout is a detection - the mutant made the program hang, which the tests observed, and Stryker
+itself scores it as killed. The harness originally counted timeouts in the denominator only,
+which made the gate timing-flaky: the same mutant flips between Killed and Timeout run to run on
+a loaded machine, and on 2026-08-26 that swung `verification-discovery` between 91.09 and 81.19
+with identical code. Under the detected formula both runs score 91.09.
 
 | Profile | Risk | Production surface | Quick measured / floor | Full measured / floor | No coverage quick / full |
 | --- | --- | --- | --- | --- | --- |
-| `ripper-policies` | critical | secure-read recovery, voting, timeout, concealment, slip correlation | 95.76 / 95.0 | 93.42 / 93.0 | 0 / 3 |
-| `verification-discovery` | high | album, CUE, playlist, and lossless-source discovery | 88.12 / 87.0 | 83.33 / 82.0 | 2 / 10 |
-| `test-copy-history` | critical | Test & Copy resolution, CRC history, bounded persistence | 94.12 / 92.5 | 85.61 / 84.0 | 4 / 29 |
+| `ripper-policies` | critical | secure-read recovery, voting, timeout, concealment, slip correlation | 96.36 / 95.0 | 95.92 / 93.0 | 0 / 0 |
+| `verification-discovery` | high | album, CUE, playlist, and lossless-source discovery | 91.09 / 89.0 | 86.49 / 84.0 | 2 / 8 |
+| `test-copy-history` | critical | Test & Copy resolution, CRC history, bounded persistence | 94.57 / 92.5 | 85.85 / 84.0 | 4 / 29 |
 | `naming-path-safety` | high | artifact names, portable paths, and collision handling | 90.20 / 89.0 | 90.13 / 89.0 | 0 / 3 |
 | `naming-semantics` | high | token expansion, metadata normalization, and fallbacks | 93.10 / 92.0 | 92.35 / 91.0 | 0 / 7 |
 | `output-guard` | critical | non-clobbering publication directory selection | 82.35 / 81.0 | 92.86 / 91.0 | 0 / 2 |
@@ -76,14 +85,17 @@ survivors fall into four reviewed groups:
 - OS, timeout, and durability branches that need integration or fault-injection tests. These remain
   visible through the no-coverage ceilings instead of being excluded from mutation.
 
-The 2026-08-24 re-baseline added four named sites to that last group, all in code master wrote
-after the original review. `VerificationSourceDiscovery.cs:134` (two survivors on the
-`selected.Length > 1` boundary) and `:459` (the empty-directory guard) both sit in
-`IsFilesystemRoot` and need real files at a drive root to exercise. `PayloadReadFailurePolicy.cs`
-lines 563-564 mutate the scrubbed counter text in `DescribeForFailureContext()`, and
-`SlipCorrelator.cs:49` is the `count < n / 2` overlap-sufficiency guard. Closing the first pair
-needs a fixture; the `DescribeForFailureContext()` pair deserves an exact-value test, because
-CLAUDE.md requires that failure context stay scrubbed of payload bytes.
+The 2026-08-24 re-baseline named four sites in that last group, all in code master wrote after
+the original review, and the 2026-08-26 follow-up closed every one. The filesystem-root guard in
+`VerificationSourceDiscovery` (the `selected.Length > 1` boundary and the empty-directory branch)
+is exercised by a subst-drive fixture: `SubstDrive` in `VerificationSourceDiscoveryTests` maps a
+free drive letter onto a shared temp directory so tests can put real manifests at a genuine root,
+and the guard itself is internal so its branches are unit-tested directly. The scrubbed counter
+text in `DescribeForFailureContext()` is pinned by an exact-value test, per CLAUDE.md's rule that
+failure context never carries payload bytes. The `count < n / 2` overlap-sufficiency guard in
+`SlipCorrelator` has both a spurious-tiny-overlap rejection test and an exactly-half-overlap
+boundary test. Measured after landing: `verification-discovery` 91.09 quick / 86.49 full and
+`ripper-policies` 94.10 full with zero no-coverage mutants.
 
 ## Run it
 

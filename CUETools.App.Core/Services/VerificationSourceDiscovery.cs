@@ -455,7 +455,9 @@ public sealed class VerificationSourceDiscovery : IVerificationSourceDiscovery
         return relative == "." ? Path.GetFileName(path) : relative;
     }
 
-    private static bool IsFilesystemRoot(string directory)
+    // Internal (not private) so the guard's own boundaries are unit-tested: the mutation
+    // campaign showed its empty-string and root/non-root branches surviving unexercised.
+    internal static bool IsFilesystemRoot(string directory)
     {
         if (string.IsNullOrEmpty(directory))
             return false;

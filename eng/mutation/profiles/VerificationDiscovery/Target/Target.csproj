@@ -4,6 +4,7 @@
     <AssemblyName>CUETools.Mutation.VerificationDiscovery</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AssemblyInfo.cs" />
     <Compile Include="ProcessorContract.cs" />
     <Compile Include="$(RepositoryRoot)\CUETools.App.Core\Services\VerificationSourceDiscovery.cs" Link="Production\VerificationSourceDiscovery.cs" />
   </ItemGroup>

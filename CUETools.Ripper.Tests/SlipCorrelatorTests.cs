@@ -15,6 +15,46 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void ATinyOverlapCannotOutvoteTheRealAlignment()
+        {
+            // Small-overlap shifts correlate spuriously: two parallel pairs have cosine
+            // exactly 1 no matter how quiet they are. The count < n/2 guard exists to
+            // reject exactly that. Candidate matches the reference on samples 0..5 and
+            // carries a quiet copy of samples 0..1 at its tail (0.1x, still parallel), so
+            // shift 6 - two pairs, perfect correlation - would win if the guard were
+            // removed, while the guarded best stays the six-sample alignment at shift 0
+            // (corr ~0.70 against ~0.54 for its nearest trusted rival).
+            short[] reference = { -1900, -1200, -600, 100, 800, 1500, 1700, 1900 };
+            short[] candidate = { -1900, -1200, -600, 100, 800, 1500, -190, -120 };
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 6);
+
+            Assert.AreEqual(
+                0, result.Offset,
+                "a two-sample overlap must never outvote the six-sample alignment");
+        }
+
+        [TestMethod]
+        public void ExactlyHalfOverlapIsStillTrusted()
+        {
+            // The guard is count < n/2, strictly: an overlap of exactly half the window is
+            // the smallest one still trusted. The candidate is the reference shifted by 4,
+            // its first half filled with alternating full-scale noise that aligns nowhere,
+            // so the only perfect correlation sits at shift 4 with exactly n/2 pairs.
+            short[] reference = { -1900, -1200, -600, 100, 800, 1500, 1700, 1900 };
+            short[] candidate = { 2000, -2000, 2000, -2000, -1900, -1200, -600, 100 };
+
+            SlipCorrelationResult result =
+                SlipCorrelator.FindOffset(reference, candidate, 6);
+
+            Assert.AreEqual(
+                4, result.Offset,
+                "an exactly-half overlap is inside the trusted boundary");
+            Assert.AreEqual(1.0, result.Strength, 1e-9);
+        }
+
+        [TestMethod]
         public void ZeroOffsetForIdentical()
         {
             var a = Ramp(2000, 0);

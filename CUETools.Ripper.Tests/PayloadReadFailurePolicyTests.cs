@@ -803,6 +803,28 @@ namespace CUETools.Ripper.Tests
         }
 
         [TestMethod]
+        public void TheFailureContextCarriesTheExactScrubbedCounters()
+        {
+            // The storm's failure context is the only evidence an operator gets before the
+            // power-cycle guidance, and CLAUDE.md requires it scrubbed: counters, never
+            // payload bytes. Pin the exact strings so a mutation of the wording or the
+            // counter wiring cannot ship silently.
+            var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();
+            Assert.AreEqual(
+                "storm-batches=0; storm-pinpoints=0", t.DescribeForFailureContext());
+
+            t.BeginRejectedBatch(2);
+            t.RecordCorroboratedPinpoint();
+            t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            t.BeginRejectedBatch(2);
+            t.RecordCorroboratedPinpoint();
+            t.CompleteBatch();
+            Assert.AreEqual(
+                "storm-batches=1; storm-pinpoints=3", t.DescribeForFailureContext());
+        }
+
+        [TestMethod]
         public void PartiallyCorroboratedBatchesNeverFold()
         {
             var t = new PayloadReadFailurePolicy.PayloadRejectionStormTracker();

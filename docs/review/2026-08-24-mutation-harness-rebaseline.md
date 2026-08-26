@@ -163,7 +163,37 @@ Both are worth follow-up work, and neither is a regression in a shipping decisio
 
 Both are new tests rather than merges, so they are left as reviewable quality changes.
 
-## Still not wired into CI
+**Completed 2026-08-26.** The drive-root fixture is `SubstDrive` in
+`VerificationSourceDiscoveryTests`: it maps a free drive letter onto one shared temp directory
+(the programmatic subst), so tests place real manifests at a genuine filesystem root without
+touching an actual drive root, and every concurrent Stryker test session can stack the identical
+mapping harmlessly. `IsFilesystemRoot` became internal so its empty-string and root/non-root
+branches are unit-tested directly. The storm counters got their exact-value pin, and the
+`SlipCorrelator` overlap guard got a spurious-tiny-overlap rejection test plus an
+exactly-half-overlap boundary test, which also cleared the third no-coverage mutant.
 
-The harness gates nothing. `mutation.yml` was left on the branch on purpose. Whether these gates
-should run in CI, and in which lane, is a separate decision.
+Measured after landing: `verification-discovery` 91.09 quick / 86.49 full, floors restored to
+their original 89.0 / 84.0 with the full no-coverage ceiling back at 8; `ripper-policies` 95.92
+full with a no-coverage ceiling of zero. Quick-mode `ripper-policies` generates no string mutants
+at Basic level, so its quick score moved only with the scoring correction below.
+
+**Scoring correction, same day.** Proving the gate exposed a flake: two runs of identical code
+scored `verification-discovery` 91.09 and then 81.19, and the report diff showed the entire swing
+was ten mutants flipping between Killed and Timeout. A timeout is a detection - the mutant made
+the program hang, which the tests observed, and Stryker itself scores timeouts as killed - but
+the harness counted timeouts in the denominator only, so a timing flip on a loaded machine moved
+the score. `Get-MutationCounts` now scores detected mutants, killed plus timeout, over eligible;
+under that formula both runs score 91.09 exactly. The self-test in `Test-MutationHarness.ps1`
+pins a timeout inside the boundary fixture so the formula cannot silently regress. Floors were
+not moved for this: detection scores are equal or higher than the old formula's, so every
+existing floor remains a valid minimum, and the README's measured columns were recomputed from
+the recorded reports.
+
+## Wired into CI, 2026-08-26
+
+The harness gated nothing when this document was written; `mutation.yml` stayed on the branch on
+purpose until the floors were trustworthy. With the follow-up tests landed, the floors restored,
+and the timeout scoring corrected, the owner approved wiring. `.github/workflows/mutation.yml`
+now runs Quick as the pull-request lane and Full weekly and on manual dispatch, with the same
+pinned action set as the other lanes and the Stryker reports uploaded as run artifacts. The
+reviewed pin counts in `eng/ci/Test-WorkflowActionPins.ps1` moved with it.
