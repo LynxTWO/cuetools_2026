@@ -36,7 +36,7 @@ No automatic upload path was found. Retention/purge behavior is not claimed.
 | F4 | Icecast network auth | endpoint policy defaults source and metadata requests to HTTPS; HTTP needs explicit persisted opt-in and a UI warning; trace failures record exception type, not credential value | verified control plus disposable Icecast 2.5.0 source/auth rejection, metadata, listener-byte, flush/close, and teardown smoke; HTTPS certificate and Mono interoperability remain unknown | bounded external gap |
 | F5 | CUETools 2026 diagnostic log | registers username, profile/music roots, proxy password, album metadata, user-selected input/output roots, and owned staging paths before work; error records include exception type, message, stack, and inner exceptions | verified: case-insensitive longest-match redaction scrubs direct messages, nested exception messages, and stack text without reprocessing the replacement token | fixed |
 | F6 | Plugin discovery traces | records manifest/development-mode/load failures and exception details through `Trace` | paths and error details, not credential values in inspected calls | low |
-| F7 | `Bwg.Scsi/Device.cs` and `Bwg.Logging` | emits SCSI command, sense, drive, and sector diagnostics when enabled | sampled only; no credential data found, but raw-buffer verbosity is not exhaustively ruled out | open low-risk audit |
+| F7 | `Bwg.Scsi/Device.cs` and `Bwg.Logging` | emits SCSI command, sense, drive, and sector diagnostics when enabled | read exhaustively 2026-08-27: 88 `LogMessage` calls are command echoes with scalar arguments (the buffer parameter is echoed as the literal word `data`), sense and CDB bytes, SG_IO status, and the burn-time cue sheet; the only two `DumpBuffer` callers dump the raw Inquiry result at debug level 9. No read payload is ever formatted, and every `Device` in the repository is built with a bare `new Logger()` that no code ever attaches a sink to, so nothing is emitted in any shipping path. `ScsiLogPayloadRuleTests` pins all three facts | closed |
 | F8 | CLI and classic GUI traces | progress, drive selection, offsets, file/playlist errors, and exception types | paths and device information may be user-identifying in shared logs; no secret values found in inspected call sites | local disclosure boundary |
 | F9 | Classic MOTD | bounded HTTPS text is held in memory for display; former remote JPEG/text cache is gone | remote input, not telemetry; prior disk-cache/render finding is closed | fixed |
 | F10 | CUERipper CTDB contribution | successful rips previously called `CTDB.Submit` unconditionally, ignoring both advanced submission preferences | disc layout, checksums/parity, drive name, pseudonymous machine-derived ID, barcode, artist, and title were sent over plaintext HTTP | fixed: contribution defaults off, uses one shared policy boundary, and an enabled ask preference displays a detailed yes/no disclosure |
@@ -104,11 +104,13 @@ diagnostic material, not anonymous telemetry.
 Verified: first-party credential save/load paths; classic `Trace` call sites
 around credentials and plugin loading; CUETools 2026 diagnostic implementation,
 job-boundary registration, and nested-exception redaction test; current MOTD and
-Icecast policy; all first-party CTDB submission call sites; and telemetry
-opt-outs in every checked GitHub Actions workflow.
+Icecast policy; all first-party CTDB submission call sites; telemetry opt-outs
+in every checked GitHub Actions workflow; and, since 2026-08-27, every
+`Bwg.Scsi/Device.cs` and `CUETools.Ripper.SCSI` log call, read and classified
+with the no-payload rule pinned by `ScsiLogPayloadRuleTests`.
 
-Sampled, not exhaustive: all 89-style `Bwg.Scsi/Device.cs` log calls and every
-possible exception message from native/external components.
+Sampled, not exhaustive: every possible exception message from native/external
+components.
 
 External/unknown: Icecast HTTPS certificate and Mono behavior, hosted runner
 logs, and any logging performed internally by vendored native/managed

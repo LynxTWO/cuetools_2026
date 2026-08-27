@@ -31,26 +31,20 @@ Current-state refresh: 2026-07-30.
 - **Risk level:** medium
 - **Status:** open
 
-### Bwg SCSI log verbosity
-
-- **Area or file:** `Bwg.Scsi/Device.cs`, `Bwg.Logging/`,
-  `CUETools.Ripper.SCSI/SCSIDrive.cs`
-- **Concern:** the many opt-in device log calls were sampled rather than read
-  exhaustively. Commands, sense data, sector counts, and drive state are
-  expected; raw audio-buffer dumping has not been fully ruled out.
-- **Why it matters:** raw dumps could make logs unexpectedly large and expose
-  disc content or identifying data.
-- **Evidence found so far:** grep inventory and representative reads found
-  structural SCSI diagnostics, not credentials.
-- **Confidence:** inferred
-- **Likely owner:** ripper/SCSI maintainer
-- **Next best check:** classify every read/correct-path log call as command,
-  device identity, count/timing, sense payload, path, or raw audio; add an
-  explicit no-audio-buffer rule/test where practical.
-- **Risk level:** low
-- **Status:** open
-
 ## Closed items
+
+- **Bwg SCSI log verbosity:** closed 2026-08-27. Every log call in `Bwg.Scsi/Device.cs`
+  and `CUETools.Ripper.SCSI` was read and classified rather than sampled: 88 `LogMessage`
+  calls are command echoes with scalar arguments (the buffer parameter is echoed as the
+  literal word `data`, never formatted), sense and CDB bytes, SG_IO status, and the burn-time
+  cue sheet at level 1; the only two `DumpBuffer` callers dump the raw Inquiry result
+  (device identity) at debug level 9. `SCSIDrive.cs` writes only exception messages and
+  retry narration to the console behind `_debugMessages`, and its one `Trace.WriteLine`
+  names the read command. No audio or sector payload reaches any log. Separately, every
+  `Device` in the repository is constructed with a bare `new Logger()` and no code attaches
+  a sink or raises a level, so the opt-in diagnostics emit nothing in any shipping path.
+  `CUETools.Ripper.Tests/ScsiLogPayloadRuleTests.cs` pins the Inquiry-only dump rule, the
+  no-buffer-formatting rule for command echoes, and the sinkless default.
 
 - **CUERipper CTDB contribution ignored consent settings:** closed 2026-07-30.
   The rip-success path now crosses `CtdbSubmissionPolicy`, the shared default is
