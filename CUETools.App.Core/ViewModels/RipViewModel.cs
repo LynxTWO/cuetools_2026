@@ -43,7 +43,7 @@ public sealed record RipPublication(
 /// with live visuals (3D disc, VU, speed, re-read), embed the hi-res cover, and keep the
 /// recently-ripped history for the no-disc screen.
 /// </summary>
-public sealed class RipViewModel : PageViewModel
+public sealed class RipViewModel : PageViewModel, IArtworkBrowserHost
 {
     internal static TestCopyCompletionState ClassifyTestCopyCompletion(
         TestCopyRunResult result)

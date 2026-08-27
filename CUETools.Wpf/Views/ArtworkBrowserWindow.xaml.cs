@@ -17,7 +17,7 @@ namespace CUETools.Wpf.Views;
 
 public partial class ArtworkBrowserWindow : Window, INotifyPropertyChanged
 {
-    private readonly RipViewModel _rip;
+    private readonly IArtworkBrowserHost _rip;
     private readonly IAlbumArtService _service;
     private readonly CancellationTokenSource _cts = new();
     private ArtworkCandidateViewModel? _selectedRow;
@@ -43,7 +43,7 @@ public partial class ArtworkBrowserWindow : Window, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public ArtworkBrowserWindow(RipViewModel rip, IAlbumArtService service)
+    public ArtworkBrowserWindow(IArtworkBrowserHost rip, IAlbumArtService service)
     {
         InitializeComponent();
         _rip = rip;

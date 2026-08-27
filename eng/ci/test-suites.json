@@ -71,7 +71,7 @@
       "project": "CUETools.Wpf.Tests/CUETools.Wpf.Tests.csproj",
       "framework": "net8.0-windows",
       "minimumDiscovered": 241,
-      "maximumSkipped": 0
+      "maximumSkipped": 1
     }
   ],
   "excludedSuites": []

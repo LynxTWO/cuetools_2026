@@ -1782,8 +1782,9 @@ does not relax evidence, rollback, or verification requirements.
   The first live dark capture exposed a default-white DataGrid body; the browser
   now uses only dynamic palette resources and passed dark/light 1040x700 captures
   at 96 DPI. The live image FLAC contains exactly one selected cover byte-for-byte
-  equal to the published `folder.jpg`. High-contrast and 150/200 percent DPI
-  captures remain. TheAudioDB is available only as an off-by-default user-key
+  equal to the published `folder.jpg`. 100 to 200 percent DPI captures of the
+  browser and the codec picker landed 2026-08-26 under
+  `docs/evidence/2026-08-26-selector-scaling/`; high-contrast captures remain. TheAudioDB is available only as an off-by-default user-key
   provider pending a distribution-tier/default decision.
 
 ### R73. Local artwork import and optional provider credentials need explicit trust boundaries - bucket B, risk high
@@ -1818,8 +1819,11 @@ does not relax evidence, rollback, or verification requirements.
   and match class, validates text fallback identity, host-binds requests, rate
   gates calls, and retries one bounded 429. Front/All filtering keeps non-front
   art out of automatic selection. Live normal-theme browser captures and
-  independent selected-cover embedding inspection now pass. High-contrast and
-  150/200 percent DPI browser captures remain the release evidence gap.
+  independent selected-cover embedding inspection now pass. Browser and codec
+  picker captures at 100/125/150/175/200 percent DPI in both themes landed
+  2026-08-26 (`docs/evidence/2026-08-26-selector-scaling/`); the capture also
+  found and fixed the match-reason column cutting mid-word with no tooltip.
+  High-contrast browser captures remain the release evidence gap.
 
 ### R74. Archival output defaults lag the intended profile - bucket A, risk low
 
@@ -3503,9 +3507,10 @@ counters, and the scratched CD-R deserves a run on the LG, which reached
 Remaining work beyond the recovery domain is ordered by the authority or
 evidence it requires:
 
-1. Finish R72/R73's optional high-contrast and 150/200-percent-DPI selector
-   captures. The automatic and local-override embedded-output paths are already
-   byte-proven; TheAudioDB remains explicitly opt-in.
+1. Finish R72/R73's optional high-contrast selector captures; the 150/200
+   percent DPI half landed 2026-08-26. The automatic and local-override
+   embedded-output paths are already byte-proven; TheAudioDB remains
+   explicitly opt-in.
 2. Retain the source-bound hosted receipts recorded in
    `2026-07-29-live-release-evidence.md` and compare future runner-image updates
    against them.

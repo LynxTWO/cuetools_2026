@@ -110,8 +110,20 @@
                               SortMemberPath="Approval"/>
           <DataGridTextColumn Header="Type" Binding="{Binding ArtworkType}" Width="85"
                               SortMemberPath="ArtworkType"/>
+          <!-- The star column takes what is left, and the match reason is a full sentence, so it
+               trims with an ellipsis and keeps its full value in a tooltip rather than cutting
+               mid-word at the grid edge. Foreground repeats the grid's implicit TextBlock style,
+               which an explicit ElementStyle would otherwise replace. -->
           <DataGridTextColumn Header="Why this matched" Binding="{Binding Why}" Width="*"
-                              CanUserSort="False"/>
+                              CanUserSort="False">
+            <DataGridTextColumn.ElementStyle>
+              <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                <Setter Property="ToolTip" Value="{Binding Why}"/>
+              </Style>
+            </DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
         </DataGrid.Columns>
       </DataGrid>
     </Border>
