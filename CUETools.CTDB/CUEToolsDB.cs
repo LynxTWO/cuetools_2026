@@ -75,31 +75,51 @@ namespace CUETools.CTDB
 			}
 		}
 
-        public void ContactDB(bool ctdb, bool fuzzy, CTDBMetadataSearch metadataSearch)
-        {
-            this.ContactDB(this.urlbase.Substring(7), this.userAgent, this.driveName, ctdb, fuzzy, metadataSearch);
-        }
+		/// <summary>Bind the lookup and submission endpoint. Lookup and submission go over
+		/// TLS to db.cue.tools (verified live 2026-08-27: the same 15,750-byte lookup response
+		/// over https as over the old plain-http host, and no downgrade). Everything a lookup
+		/// receives - match entries, metadata, parity locations - is still treated as
+		/// corroboration of locally computed CRCs and syndromes, never as independent proof
+		/// of rip quality, because the parity host it points at is plain HTTP and the repair
+		/// gate is what checks those bytes. Pure: no request is made here.</summary>
+		public void UseServer(string server)
+		{
+			this.urlbase = "https://" + ResolveServer(server);
+		}
+
+		/// <summary>The lookup request for this disc against the bound endpoint. Pure, so the
+		/// repeat path can be checked without a network.</summary>
+		public string LookupUrl(bool ctdb, bool fuzzy, CTDBMetadataSearch metadataSearch)
+		{
+			if (this.urlbase == null)
+				throw new InvalidOperationException("The CTDB endpoint is not bound; call UseServer or the ContactDB overload that takes a server first.");
+			return urlbase
+				+ "/lookup2.php"
+				+ "?version=3"
+				+ "&ctdb=" + (ctdb ? 1 : 0)
+				+ "&fuzzy=" + (fuzzy ? 1 : 0)
+				+ "&metadata=" + (metadataSearch == CTDBMetadataSearch.None ? "none" : metadataSearch == CTDBMetadataSearch.Fast ? "fast" : metadataSearch == CTDBMetadataSearch.Default ? "default" : "extensive")
+				+ "&toc=" + toc.ToString();
+		}
 
 		public void ContactDB(string server, string userAgent, string driveName, bool ctdb, bool fuzzy, CTDBMetadataSearch metadataSearch)
 		{
 			this.driveName = driveName;
 			this.userAgent = userAgent + " (" + Environment.OSVersion.VersionString + ")" + (driveName != null ? " (" + driveName + ")" : "");
-			// Lookup and submission go over TLS to db.cue.tools (verified live 2026-08-27:
-			// the same 15,750-byte lookup response over https as over the old plain-http host,
-			// and no downgrade). Everything this method receives - match entries, metadata,
-			// parity locations - is still treated as corroboration of locally computed CRCs
-			// and syndromes, never as independent proof of rip quality, because the parity
-			// host it points at is plain HTTP and the repair gate is what checks those bytes.
-			this.urlbase = "https://" + ResolveServer(server);
+			UseServer(server);
+			this.ContactDB(ctdb, fuzzy, metadataSearch);
+		}
+
+		/// <summary>Repeat a lookup against the endpoint the first contact bound. This used to
+		/// re-derive the host by slicing seven characters (the length of "http://") off the
+		/// base URL; after the move to TLS that was one character short and produced
+		/// https:///db.cue.tools, which failed a live Test &amp; Copy after its complete
+		/// 1,628-second Test pass.</summary>
+		public void ContactDB(bool ctdb, bool fuzzy, CTDBMetadataSearch metadataSearch)
+		{
 			this.total = 0;
 
-			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(urlbase
-				+ "/lookup2.php"
-                + "?version=3"
-                + "&ctdb=" + (ctdb ? 1 : 0)
-                + "&fuzzy=" + (fuzzy ? 1 : 0)
-				+ "&metadata=" + (metadataSearch == CTDBMetadataSearch.None ? "none" : metadataSearch == CTDBMetadataSearch.Fast ? "fast" : metadataSearch == CTDBMetadataSearch.Default ? "default" : "extensive")
-				+ "&toc=" + toc.ToString());
+			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(LookupUrl(ctdb, fuzzy, metadataSearch));
 			req.Method = "GET";
 			req.Proxy = proxy;
 			req.UserAgent = this.userAgent;

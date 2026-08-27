@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Xml.Serialization;
+using CUETools.CDImage;
 using CUETools.CTDB;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -232,6 +233,40 @@ namespace CUETools.Wpf.Tests
                 "no plaintext downgrade for lookup or submission");
             string freedb = File.ReadAllText(Path.Combine(root, "Freedb", "Site.cs"));
             StringAssert.Contains(freedb, "return \"https://\" + this.m_SiteAddress");
+        }
+
+        [TestMethod]
+        public void CtdbRepeatLookupsReuseTheBoundTlsEndpoint()
+        {
+            // Regression seen live on 2026-08-27 with the damaged disc in K:. The Test pass read
+            // for 1,628 seconds, then the post-read CTDB contact threw UriFormatException and the
+            // whole Test & Copy failed. The overload that repeats a lookup re-derived the host as
+            // urlbase.Substring(7): the length of "http://", one short of "https://", so it asked
+            // for https:///db.cue.tools/lookup2.php. The first contact binds the endpoint once;
+            // every later lookup must build from that binding, never from a scheme length.
+            var db = new CUEToolsDB(new CDImageLayout("0 10 20"), null);
+            db.UseServer("db.cuetools.net");
+            var first = new Uri(db.LookupUrl(true, true, CTDBMetadataSearch.None));
+            Assert.AreEqual("https", first.Scheme);
+            Assert.AreEqual("db.cue.tools", first.Host);
+            Assert.AreEqual("/lookup2.php", first.AbsolutePath);
+            StringAssert.Contains(first.Query, "ctdb=1");
+            StringAssert.Contains(first.Query, "fuzzy=1");
+            StringAssert.Contains(first.Query, "metadata=none");
+            StringAssert.Contains(first.Query, "toc=");
+            // The repeat is the same URL from the same binding, with its own flags.
+            var repeat = new Uri(db.LookupUrl(true, false, CTDBMetadataSearch.Fast));
+            Assert.AreEqual(first.Scheme, repeat.Scheme);
+            Assert.AreEqual(first.Host, repeat.Host);
+            Assert.AreEqual(first.AbsolutePath, repeat.AbsolutePath);
+            StringAssert.Contains(repeat.Query, "fuzzy=0");
+            StringAssert.Contains(repeat.Query, "metadata=fast");
+
+            string root = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
+            string client = File.ReadAllText(Path.Combine(root, "CUETools.CTDB", "CUEToolsDB.cs"));
+            Assert.IsFalse(client.Contains("urlbase.Substring(", StringComparison.Ordinal),
+                "the repeat overload must reuse the bound endpoint, not re-derive the host from a fixed scheme length");
+            StringAssert.Contains(client, "UseServer(server);");
         }
     }
 }
