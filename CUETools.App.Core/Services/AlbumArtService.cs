@@ -1021,6 +1021,7 @@ public sealed class AlbumArtService : IAlbumArtService, IDisposable
                 host.Equals("archive.org", StringComparison.OrdinalIgnoreCase) ||
                 host.EndsWith(".archive.org", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("db.cuetools.net", StringComparison.OrdinalIgnoreCase) ||
+                host.Equals("db.cue.tools", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("musicbrainz.org", StringComparison.OrdinalIgnoreCase),
             _ => false
         };

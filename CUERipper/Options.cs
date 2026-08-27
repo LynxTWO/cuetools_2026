@@ -37,7 +37,7 @@ namespace CUERipper
             this.config = config;
         }
 
-        [DefaultValue("db.cuetools.net"), Category("CTDB"), DisplayName("CTDB Server")]
+        [DefaultValue("db.cue.tools"), Category("CTDB"), DisplayName("CTDB Server")]
         public string CTDBServer { get { return config.advanced.CTDBServer; } set { config.advanced.CTDBServer = value; } }
 
         [DefaultValue(CUETools.Processor.CUEConfigAdvanced.ProxyMode.System), Category("Proxy"), DisplayName("Proxy mode")]

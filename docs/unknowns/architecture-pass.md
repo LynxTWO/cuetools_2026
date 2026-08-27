@@ -95,7 +95,18 @@ below as history.
   the client; verify gnudb TLS/protocol options and choose migrate, proxy, or
   retire.
 - **Risk level:** high
-- **Status:** open
+- **Status:** resolved 2026-08-27 for lookup, submission, and gnudb; parity downloads
+  remain plaintext by the server's design. Probed live: `db.cuetools.net` and `db.cue.tools`
+  resolve to the same address, the certificate presented is a valid Let's Encrypt cert for
+  `db.cue.tools` (the old name fails the name check), and a real-disc lookup2 request returned
+  the identical 15,750-byte response over https at the new name as over plain http at the old
+  one; `submit2.php` answers over TLS. The client now uses `https://db.cue.tools` with the
+  legacy name mapped so saved configurations keep working, and no downgrade. `gnudb.gnudb.org`
+  answers `cddb.cgi` and `submit.cgi` over valid TLS, and `Freedb/Site.cs` now builds https
+  URLs. Residual: the parity URLs the server returns point at `p.cuetools.net`, which serves
+  plain HTTP only (`p.cue.tools` does not answer on 443); those bytes are consumed only through
+  the repair CRC and syndrome gate, so an on-path change is detected as corruption rather than
+  trusted. Tracking issue LynxTWO/cuetools_2026#1 can close for the lookup and submission half.
 
 ### Hosted and full classic release execution - closed 2026-07-30
 

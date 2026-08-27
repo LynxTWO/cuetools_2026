@@ -161,7 +161,17 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   confirm the intended distribution channel, and accept the in-app attribution
   before enabling the provider by default.
 - **Risk level:** medium
-- **Status:** open
+- **Status:** resolved 2026-08-27 (decision D15). Terms re-read live on 2026-08-27:
+  the free key is `123` at 30 requests per minute; "You cannot publish apps to an
+  appstore unless you are a paid subscriber"; the apply page now says "Apps should
+  now join our $8 Patreon" and delivers a private key by email; and "You can use our
+  custom artwork in your projects but must mention us as the source of the data."
+  None of it distinguishes free or open-source applications. The shipped design
+  already satisfies this as a tool the user configures with their own subscription:
+  `AppSettings.TheAudioDbEnabled` defaults to false, `IsTheAudioDbEnabled()` also
+  requires a non-empty user-supplied key, no key is bundled, and the browser labels
+  TheAudioDB as the source. The owner ratified exactly that: off by default, never
+  bundle a key, keep the in-app attribution, never promote it to a default provider.
 
 ### Provider image metadata completeness
 

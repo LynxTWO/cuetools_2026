@@ -31,9 +31,10 @@ namespace Freedb
 	public class FreedbHelper
 	{
 		// gnudb.org is the maintained community mirror; the original freedb.org service
-		// shut down in 2020. The protocol is CDDBP over plain HTTP. Responses are display
-		// metadata that flows into tags and filename templates downstream - they carry no
-		// rip-integrity meaning.
+		// shut down in 2020. The protocol is CDDBP carried over HTTPS since 2026-08-27:
+		// gnudb.gnudb.org answers cddb.cgi and submit.cgi over valid TLS (probed live),
+		// and there is no plaintext downgrade. Responses are display metadata that flows
+		// into tags and filename templates downstream - they carry no rip-integrity meaning.
 		public const string MAIN_FREEDB_ADDRESS = "gnudb.gnudb.org";
 		public const string DEFAULT_ADDITIONAL_URL_INFO = "/~cddb/cddb.cgi";
 		public const string SUBMIT_ADDITIONAL_URL_INFO = "/~cddb/submit.cgi";
@@ -472,7 +473,7 @@ namespace Freedb
 		{
 			StreamReader reader = null;
 			HttpWebResponse response = null;
-			string url = "http://" + m_mainSite.SiteAddress + SUBMIT_ADDITIONAL_URL_INFO;
+			string url = "https://" + m_mainSite.SiteAddress + SUBMIT_ADDITIONAL_URL_INFO;
 			string command = "";
 			string result = "";
 
