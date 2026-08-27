@@ -34,6 +34,27 @@ public sealed class ArtworkBrowserLayoutTests
     }
 
     [TestMethod]
+    public void TheMatchReasonColumnTrimsWithItsFullValueInATooltip()
+    {
+        // Found by the 2026-08-26 on-screen capture at the 1040 default width: the star column's
+        // sentence was cut mid-word at the grid edge with no ellipsis and no tooltip, which the
+        // clipping policy (CLAUDE.md) does not allow for tier-2 content.
+        XDocument browser = Load("ArtworkBrowserWindow.xaml");
+        XElement why = browser.Descendants(Presentation + "DataGridTextColumn")
+            .Single(column => column.Attribute("Header")?.Value == "Why this matched");
+        Assert.AreEqual("*", why.Attribute("Width")?.Value, "the match reason takes the leftover width");
+
+        XElement style = why.Element(Presentation + "DataGridTextColumn.ElementStyle")!
+            .Element(Presentation + "Style")!;
+        var setters = style.Elements(Presentation + "Setter")
+            .ToDictionary(s => s.Attribute("Property")!.Value, s => s.Attribute("Value")!.Value);
+        Assert.AreEqual("CharacterEllipsis", setters["TextTrimming"]);
+        Assert.AreEqual("{Binding Why}", setters["ToolTip"], "trimming is legal only with the full value in a tooltip");
+        Assert.AreEqual("{DynamicResource Ink}", setters["Foreground"],
+            "an explicit ElementStyle replaces the grid's implicit TextBlock style, so it must carry the palette foreground");
+    }
+
+    [TestMethod]
     public void BrowserIsResizableAndExposesRequiredSortableFacts()
     {
         XDocument browser = Load("ArtworkBrowserWindow.xaml");
@@ -110,10 +131,22 @@ public sealed class ArtworkBrowserLayoutTests
                     setter.Attribute("Value")?.Value ==
                     "{DynamicResource Face}"));
 
+        // The implicit style lives in DataGrid.Resources; column ElementStyles are separate
+        // explicit TextBlock styles, and every one of them must carry the palette foreground
+        // too, because an explicit style replaces the implicit one rather than extending it.
         XElement textStyle = grid
-            .Descendants(Presentation + "Style")
+            .Element(Presentation + "DataGrid.Resources")!
+            .Elements(Presentation + "Style")
             .Single(style =>
                 style.Attribute("TargetType")?.Value == "TextBlock");
+        foreach (XElement anyTextStyle in grid.Descendants(Presentation + "Style")
+                     .Where(style => style.Attribute("TargetType")?.Value == "TextBlock"))
+            Assert.IsTrue(
+                anyTextStyle.Elements(Presentation + "Setter").Any(
+                    setter =>
+                        setter.Attribute("Property")?.Value == "Foreground" &&
+                        setter.Attribute("Value")?.Value == "{DynamicResource Ink}"),
+                "every TextBlock style in the grid must set the palette foreground");
         Assert.IsTrue(
             textStyle.Descendants(Presentation + "Setter").Any(
                 setter =>
