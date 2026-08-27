@@ -49,6 +49,7 @@ public sealed class ArtworkHostAllowlistTests
         Check("https://coverartarchive.org/release/1/front.jpg", "ExternalArtwork");
         Check("https://ia800207.us.archive.org/art.jpg", "ExternalArtwork");
         Check("https://db.cuetools.net/art.jpg", "ExternalArtwork");
+        Check("https://db.cue.tools/art.jpg", "ExternalArtwork");
         Check("https://musicbrainz.org/release/1/front", "ExternalArtwork");
     }
 

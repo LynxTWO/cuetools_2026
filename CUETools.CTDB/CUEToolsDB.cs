@@ -23,7 +23,20 @@ namespace CUETools.CTDB
 {
 	public class CUEToolsDB
 	{
-		const string defaultServer = "db.cuetools.net";
+		const string defaultServer = "db.cue.tools";
+		const string legacyServer = "db.cuetools.net";
+
+		/// <summary>The CTDB service moved to db.cue.tools, which is the name its TLS
+		/// certificate carries; the old name still resolves to the same box but fails the
+		/// certificate name check. Saved configurations from before the move keep working
+		/// because the legacy name is mapped here rather than failing at the handshake.</summary>
+		public static string ResolveServer(string configured)
+		{
+			if (string.IsNullOrEmpty(configured) ||
+				string.Equals(configured, legacyServer, StringComparison.OrdinalIgnoreCase))
+				return defaultServer;
+			return configured;
+		}
 		string urlbase;
 		string userAgent;
 		string driveName;
@@ -71,12 +84,13 @@ namespace CUETools.CTDB
 		{
 			this.driveName = driveName;
 			this.userAgent = userAgent + " (" + Environment.OSVersion.VersionString + ")" + (driveName != null ? " (" + driveName + ")" : "");
-			// Plain HTTP is deliberate: db.cuetools.net did not answer TLS as of 2026-07,
-			// so the scheme is hardcoded. Everything this method receives - match entries,
-			// metadata, parity locations - is unauthenticated. An on-path attacker can forge
-			// match confidence, so treat CTDB results as corroboration of locally computed
-			// CRCs and syndromes, never as independent proof of rip quality.
-			this.urlbase = "http://" + (server ?? defaultServer);
+			// Lookup and submission go over TLS to db.cue.tools (verified live 2026-08-27:
+			// the same 15,750-byte lookup response over https as over the old plain-http host,
+			// and no downgrade). Everything this method receives - match entries, metadata,
+			// parity locations - is still treated as corroboration of locally computed CRCs
+			// and syndromes, never as independent proof of rip quality, because the parity
+			// host it points at is plain HTTP and the repair gate is what checks those bytes.
+			this.urlbase = "https://" + ResolveServer(server);
 			this.total = 0;
 
 			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(urlbase

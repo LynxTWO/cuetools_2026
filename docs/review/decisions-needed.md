@@ -21,6 +21,13 @@ Vocabulary: `.claude/skills/anti-dark-code/references/00-conventions.md`.
 
 - **Decision:** file an issue / ask upstream to enable TLS on db.cuetools.net; revisit the client once the server answers TLS.
 - **Done:** filed tracking issue LynxTWO/cuetools_2026#1 (had to enable Issues on the fork first; the third-party gchudov repo was NOT posted to). Includes upstream-ready ask text. Client `CUEToolsDB.cs` left unchanged until the server answers TLS.
+- **Addendum 2026-08-27:** the server answers TLS now, at its new name. `db.cue.tools` presents
+  a valid certificate and serves the identical lookup2 response to a real-disc query as the old
+  plain-http `db.cuetools.net`; `submit2.php` answers over TLS too. The client switched to
+  `https://db.cue.tools` with the legacy name mapped in `CUEToolsDB.ResolveServer` and no
+  downgrade, the same policy as D1. gnudb moved to https in the same change. Parity downloads
+  (`p.cuetools.net`) stay plaintext because that host has no TLS endpoint; they remain behind the
+  repair CRC and syndrome gate.
 
 ### D3. unrar.dll upgrade - DONE 2026-07-26
 
@@ -170,6 +177,21 @@ None right now. Every decision below has been made; the records are kept
 byte-for-byte under Resolved / actioned.
 
 ## Resolved / actioned
+
+### D15. TheAudioDB distribution tier - RESOLVED 2026-08-27 (ratify the shipped design)
+
+- **Ask:** whether the way TheAudioDB ships in the artwork browser satisfies the provider's
+  terms, which distinguish free lookups from paid application use.
+- **Terms, read live 2026-08-27:** free key `123` at 30 requests per minute; "You cannot
+  publish apps to an appstore unless you are a paid subscriber"; "Apps should now join our
+  $8 Patreon" for a private key; "must mention us as the source of the data." No carve-out
+  for free or open-source applications.
+- **User chose:** ratify the shipped design. The provider is a tool the user configures with
+  their own subscription, not CUETools acting as the paying app: `TheAudioDbEnabled` defaults
+  off, the provider is inert without a user-supplied key, no key is ever bundled, the browser
+  labels TheAudioDB as the source, and it is never promoted to a default provider. Nothing
+  changed in code; the unknown closes on the terms snapshot above.
+
 
 ### D14. High contrast: keep the custom palette, fix the picker's mixed selection - RESOLVED 2026-08-27 (B)
 

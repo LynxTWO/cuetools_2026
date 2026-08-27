@@ -97,7 +97,7 @@ namespace CUETools.Processor
         [DefaultValue(true), Category("CTDB"), DisplayName("Ask before submitting")]
         public bool CTDBAsk { get; set; }
 
-        [DefaultValue("db.cuetools.net"), Category("CTDB"), DisplayName("CTDB Server")]
+        [DefaultValue("db.cue.tools"), Category("CTDB"), DisplayName("CTDB Server")]
         public string CTDBServer { get; set; }
 
         // Extensive, because that is what this app has always used to IDENTIFY a disc; the value used to

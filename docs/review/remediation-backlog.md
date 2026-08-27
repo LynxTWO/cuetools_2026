@@ -42,6 +42,11 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
 
 ### R4. CTDB HTTPS - upstream request filed (decision D2) - external boundary
 
+- **Done 2026-08-27:** the server answers TLS at its new name. `CUEToolsDB.cs`
+  now uses `https://db.cue.tools` for lookup and submission with the legacy
+  name mapped and no downgrade, and gnudb moved to https in the same change.
+  Parity downloads stay plaintext behind the repair CRC and syndrome gate
+  because `p.cuetools.net` has no TLS endpoint. Details under D2.
 - **Done:** filed LynxTWO/cuetools_2026 issue #1 requesting TLS for
   `db.cuetools.net`. Revisit `CUEToolsDB.cs` when the server answers HTTPS; no
   insecure client-side inference or forced switch is appropriate before then.
@@ -3516,8 +3521,9 @@ evidence it requires:
 1. R72/R73's selector evidence is complete (DPI 2026-08-26, high contrast
    2026-08-27) and D14 is resolved (B): the custom palette stays, and the
    codec picker's selection now comes entirely from it. The automatic and
-   local-override embedded-output paths are already byte-proven; TheAudioDB
-   remains explicitly opt-in.
+   local-override embedded-output paths are already byte-proven; TheAudioDB's opt-in,
+   user-key-only design was ratified against its live terms on 2026-08-27
+   (D15).
 2. Retain the source-bound hosted receipts recorded in
    `2026-07-29-live-release-evidence.md` and compare future runner-image updates
    against them.

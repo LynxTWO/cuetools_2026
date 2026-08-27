@@ -220,8 +220,9 @@ namespace Freedb
 		public string GetUrl()
 		{
 
+			// PROTOCOLS.HTTP names the CDDB-over-HTTP transport; the scheme is TLS.
 			if (this.m_Protocol == Site.PROTOCOLS.HTTP)
-				return "http://" + this.m_SiteAddress + this.m_AdditionalAddressInfo;
+				return "https://" + this.m_SiteAddress + this.m_AdditionalAddressInfo;
 			else
 				return this.m_SiteAddress;
 		}

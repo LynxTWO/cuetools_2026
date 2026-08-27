@@ -212,5 +212,26 @@ namespace CUETools.Wpf.Tests
             for (int i = 0; i < expected.Length; i++)
                 compare(expected[i], actual[i], tag + "[" + i + "]");
         }
+
+        [TestMethod]
+        public void CtdbLookupsUseTlsAtTheServiceNameAndMapTheLegacyHost()
+        {
+            // Verified live 2026-08-27: https://db.cue.tools serves the same lookup2 response as the
+            // old plain-http db.cuetools.net, whose name no longer matches the certificate. Saved
+            // configurations carry the old name, so it maps rather than failing the handshake.
+            Assert.AreEqual("db.cue.tools", CUETools.CTDB.CUEToolsDB.ResolveServer(null));
+            Assert.AreEqual("db.cue.tools", CUETools.CTDB.CUEToolsDB.ResolveServer(""));
+            Assert.AreEqual("db.cue.tools", CUETools.CTDB.CUEToolsDB.ResolveServer("db.cuetools.net"));
+            Assert.AreEqual("db.cue.tools", CUETools.CTDB.CUEToolsDB.ResolveServer("DB.CUETOOLS.NET"));
+            Assert.AreEqual("dev.db.cue.tools", CUETools.CTDB.CUEToolsDB.ResolveServer("dev.db.cue.tools"));
+
+            string root = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
+            string client = File.ReadAllText(Path.Combine(root, "CUETools.CTDB", "CUEToolsDB.cs"));
+            StringAssert.Contains(client, "this.urlbase = \"https://\" + ResolveServer(server);");
+            Assert.IsFalse(client.Contains("this.urlbase = \"http://\"", StringComparison.Ordinal),
+                "no plaintext downgrade for lookup or submission");
+            string freedb = File.ReadAllText(Path.Combine(root, "Freedb", "Site.cs"));
+            StringAssert.Contains(freedb, "return \"https://\" + this.m_SiteAddress");
+        }
     }
 }
