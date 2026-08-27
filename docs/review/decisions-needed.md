@@ -166,8 +166,28 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
-None right now. Every decision below has been made; the records are kept
-byte-for-byte under Resolved / actioned.
+### D14. High contrast: honour the system scheme, or keep the custom palette and fix the one mixed spot - OPEN 2026-08-27
+
+- **Ask:** the app has no high-contrast handling at all (no `SystemParameters.HighContrast`
+  references). Decide whether it should adopt system colours when Windows high contrast is on,
+  or keep its own dark/light palette on purpose.
+- **Evidence:** `docs/evidence/2026-08-27-selector-high-contrast/`, four on-screen captures of
+  the artwork browser and the codec picker with "High Contrast Black" active, both app themes.
+- **Measured:** the app palette persists entirely; only the OS window chrome goes high-contrast.
+  The artwork browser stays legible because its `DataGridCell` and `TextBlock` styles override
+  every system colour. The codec picker's `ListView` selection half-adopts the system highlight:
+  the selected row's background becomes system cyan while its text keeps the palette colour, so
+  in the dark theme it is white on cyan. Unavailable rows keep the dimmed palette grey, which is
+  lower contrast than high contrast intends.
+- **Option A:** honour the scheme - when `SystemParameters.HighContrast` is true, swap the palette
+  dictionary for one built from `SystemColors`, and retest both selectors. Most respectful of the
+  user's setting; the largest change.
+- **Option B:** keep the custom palette as the deliberate look, and fix only the mixed spot by
+  overriding the ListView's selection brushes so text and background come from the same source.
+  Small, contained, and the browser already works this way.
+- **Not decided here.** Nothing was changed; the captures record what ships today.
+
+
 
 ## Resolved / actioned
 
