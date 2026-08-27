@@ -47,13 +47,42 @@
                   BorderThickness="0" MouseDoubleClick="CodecList_MouseDoubleClick"
                   AutomationProperties.Name="Output codecs">
           <ListView.Resources>
+            <!-- The row owns its own template. Under Windows high contrast WPF swaps to its
+                 Classic theme, whose stock ListViewItem template paints selection with
+                 SystemColors.HighlightBrush from a template trigger - and template triggers
+                 outrank style triggers, so the palette Face never applied while the cell text
+                 stayed palette Ink: white on system cyan in the dark theme (D14, 2026-08-27).
+                 With an explicit template, selection background, border, and text all come
+                 from the palette in every theme dictionary. -->
             <Style TargetType="ListViewItem">
               <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
               <Setter Property="Padding" Value="2"/>
+              <Setter Property="Background" Value="Transparent"/>
+              <Setter Property="BorderBrush" Value="Transparent"/>
+              <Setter Property="BorderThickness" Value="1"/>
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="ListViewItem">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                      <GridViewRowPresenter Columns="{TemplateBinding GridView.ColumnCollection}"
+                                            Content="{TemplateBinding Content}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
               <Style.Triggers>
                 <DataTrigger Binding="{Binding CanSelect}" Value="False">
                   <Setter Property="Opacity" Value="0.58"/>
                 </DataTrigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter Property="Background" Value="{DynamicResource Glass}"/>
+                </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                   <Setter Property="Background" Value="{DynamicResource Face}"/>
                   <Setter Property="BorderBrush" Value="{DynamicResource Teal}"/>

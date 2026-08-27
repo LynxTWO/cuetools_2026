@@ -3513,11 +3513,11 @@ counters, and the scratched CD-R deserves a run on the LG, which reached
 Remaining work beyond the recovery domain is ordered by the authority or
 evidence it requires:
 
-1. Decide D14: the R72/R73 selector captures are complete (DPI 2026-08-26,
-   high contrast 2026-08-27) and show the app palette ignoring the system
-   scheme, with one legibility regression in the codec picker's selection.
-   The automatic and local-override embedded-output paths are already
-   byte-proven; TheAudioDB remains explicitly opt-in.
+1. R72/R73's selector evidence is complete (DPI 2026-08-26, high contrast
+   2026-08-27) and D14 is resolved (B): the custom palette stays, and the
+   codec picker's selection now comes entirely from it. The automatic and
+   local-override embedded-output paths are already byte-proven; TheAudioDB
+   remains explicitly opt-in.
 2. Retain the source-bound hosted receipts recorded in
    `2026-07-29-live-release-evidence.md` and compare future runner-image updates
    against them.
