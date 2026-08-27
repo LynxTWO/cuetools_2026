@@ -47,6 +47,13 @@ Buckets: **A** safe to do now (behavior-preserving / additive / docs), **B** app
   name mapped and no downgrade, and gnudb moved to https in the same change.
   Parity downloads stay plaintext behind the repair CRC and syndrome gate
   because `p.cuetools.net` has no TLS endpoint. Details under D2.
+- **Live on the rip path, 2026-08-27:** the first salvage Test & Copy of the
+  damaged disc in K: after that change read for 1,628 seconds and then failed
+  at the post-read CTDB contact with `UriFormatException`, because the
+  repeat-lookup overload stripped a fixed seven-character scheme from the
+  base URL. #86 binds the endpoint once and builds every lookup from it. The
+  re-run's Test pass completed with a real lookup response over TLS
+  (`ctdb_conf=0/237`). Receipts in `docs/evidence/2026-08-27-k-salvage-testcopy/`.
 - **Done:** filed LynxTWO/cuetools_2026 issue #1 requesting TLS for
   `db.cuetools.net`. Revisit `CUEToolsDB.cs` when the server answers HTTPS; no
   insecure client-side inference or forced switch is appropriate before then.
@@ -3271,6 +3278,27 @@ step before any fix.
   falls below a quarter of its calibrated maximum is named as probably
   wedged, with the tray-cycle remedy, before the read begins. Ripper 59/59,
   WPF 472/472, legacy lanes green.
+
+### R126. Tray watcher logs same-process lease contention as another job - bucket A, risk low
+
+- **Area or slice:** `OpticalDriveLease.TryAcquire`, `DriveService.GetTrayState`.
+- **Why it matters (live 2026-08-27):** with exactly one CUETools process on
+  the machine, the log carried seven `drive K: already owned by another
+  CUETools job` warnings in four minutes. The 2-second tray-state poll takes
+  the drive lease under a fresh owner id, so it loses every race against any
+  other lease holder in the same process (disc read, details query, the
+  running job), and the message blames a second job that does not exist. The
+  lease itself is correct: the lock files under
+  `%LOCALAPPDATA%\CUETools2026\drive-leases` are held by open handles, so a
+  dead process leaves nothing stale.
+- **Evidence found:** log `...p39500...`, warnings at 17:14:10 through
+  17:17:49 while `Get-Process` showed one `CUETools.Wpf` and both lock files
+  opened freely from another process.
+- **Confidence:** verified. **Approval needed:** no.
+- **Status:** open. Fix shape: `TryAcquireKeys` already knows whether it lost
+  to a same-process owner or to a foreign handle; surface that distinction so
+  the poll path stays quiet on same-process contention and the warning is
+  kept for a real second process.
 
 ### R125. Album-level Verify & Repair workspace - DONE 2026-08-08, risk medium
 
