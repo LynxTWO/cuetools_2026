@@ -1,6 +1,6 @@
 # Unknowns: Adversarial Pass
 
-Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
+Current-state refresh: 2026-08-27 (K: salvage Test & Copy receipts).
 
 ## Entries
 
@@ -23,11 +23,17 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   data-in pass-through and log a named counter; run one full H:/K: session and
   retain the counter evidence.
 - **Risk level:** high.
-- **Status:** in progress. 2026-08-01: the exact-length guard and
-  `ShortPayloadTransferCount` counter landed (R112); the payload path now
-  fails loudly instead of silently consuming stale bytes. Remaining: one live
-  H:/K: session retaining the counter (expected zero) to prove the guard
-  passes on real hardware.
+- **Status:** resolved for K: on 2026-08-27; H: not exercised. 2026-08-01:
+  the exact-length guard and `ShortPayloadTransferCount` counter landed
+  (R112); the payload path now fails loudly instead of silently consuming
+  stale bytes. 2026-08-27: four complete salvage reads of the damaged disc
+  on the ASUS BW-16D1HT (1,628 s, 2,023 s, 1,946 s, and 1,822 s; C2 mode 3,
+  cache defeat on) retained `short_payload_transfers=0` across 30,123,
+  36,792, 35,253, and 33,030 extended-timeout reads plus every ordinary
+  read, so the guard passes on this SATA drive with no false positives. A GOOD-status underrun on this
+  hardware would now be a loud fatal read, not a silent vote entry. The H:
+  drive has not run since the guard landed; its receipt is the only thing
+  still missing. Receipts in `docs/evidence/2026-08-27-k-salvage-testcopy/`.
 
 ### Deep-recovery pass counts vs 8-bit vote accumulators
 
@@ -128,7 +134,14 @@ Current-state refresh: 2026-08-01 (damaged-disc recovery addendum).
   Commit `17d984e` then completed a 2,275-second Test & Copy and a verified
   six-sector CTDB repair, crossing the former Copy failure boundary. That run
   recorded zero wake attempts, readiness retries, indeterminate-readiness
-  continuations, command retries, and chunk fallbacks.
+  continuations, command retries, and chunk fallbacks. 2026-08-27: four more
+  complete salvage reads of the same disc on the same drive (a 1,628 s Test
+  pass, then a full 5,792 s Test & Copy of three reads at the pinned 4x
+  minimum that ended Held with three disagreeing tracks) again recorded zero
+  for every wake, readiness, communication-retry, and chunk-fallback
+  counter, and `cache_defeat_unresponsive_signature=False` on every read.
+  The dormant transition has not recurred in any full session since the
+  bounded build; nothing here forced it.
 - **Confidence:** unknown.
 - **Likely owner:** repo owner.
 - **Next best check:** if the exact dormant transition recurs, retain the
