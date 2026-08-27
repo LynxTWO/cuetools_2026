@@ -166,7 +166,27 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
 
 ## Open decisions
 
-### D14. High contrast: honour the system scheme, or keep the custom palette and fix the one mixed spot - OPEN 2026-08-27
+None right now. Every decision below has been made; the records are kept
+byte-for-byte under Resolved / actioned.
+
+## Resolved / actioned
+
+### D14. High contrast: keep the custom palette, fix the picker's mixed selection - RESOLVED 2026-08-27 (B)
+
+- **User chose (B):** the custom dark/light palette is the deliberate look under high contrast;
+  fix only the codec picker's selection so its text and background come from one source.
+- **Done the same day.** The row's stock template painted selection with the Classic theme's
+  `SystemColors.HighlightBrush` from a template trigger, which outranks the style trigger that
+  set palette `Face`. `CodecPickerWindow.xaml` now gives `ListViewItem` an explicit template, so
+  background, border, and text all resolve through the palette in every theme dictionary.
+  `CodecPickerLayoutTests` pins the template and forbids `SystemColors` in it. After-fix
+  captures under high contrast, both themes, are in
+  `docs/evidence/2026-08-27-selector-high-contrast/fixed/`; a normal-mode capture is visually
+  identical to the earlier archive. The artwork browser needed no change.
+
+Original decision record:
+
+### D14 (original). High contrast: honour the system scheme, or keep the custom palette and fix the one mixed spot - OPEN 2026-08-27
 
 - **Ask:** the app has no high-contrast handling at all (no `SystemParameters.HighContrast`
   references). Decide whether it should adopt system colours when Windows high contrast is on,
@@ -186,10 +206,6 @@ boundary; only the explicitly recorded vendor/legal boundaries remain external.
   overriding the ListView's selection brushes so text and background come from the same source.
   Small, contained, and the browser already works this way.
 - **Not decided here.** Nothing was changed; the captures record what ships today.
-
-
-
-## Resolved / actioned
 
 
 ### D12. Mutation harness: restore the unlanded test half - RESOLVED 2026-08-24 (A)

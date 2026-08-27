@@ -50,3 +50,21 @@ at all. That is decision **D14** in `docs/review/decisions-needed.md`: adopt `Sy
 under high contrast, or keep the custom palette on purpose and fix only the picker's mixed
 selection so its text and background come from the same source. Nothing was changed for this
 capture; it records what ships today.
+
+## D14 decided the same day: option B, and the picker is fixed
+
+The owner chose to keep the custom palette on purpose and fix only the mixed spot. The cause was
+precedence: under high contrast WPF loads its Classic theme dictionary, whose stock
+`ListViewItem` template paints selection with `SystemColors.HighlightBrush` from a template
+trigger, and template triggers outrank the style trigger that set the palette `Face`. The codec
+picker's row now owns an explicit template (`CodecPickerWindow.xaml`), so selection background,
+border, and text all come from the palette in every theme dictionary; `CodecPickerLayoutTests`
+pins the template and forbids any `SystemColors` reference in it.
+
+`fixed/100pct-dark-codec-picker.png` and `fixed/100pct-light-codec-picker.png` are the same
+capture after the fix, high contrast on: the selected row is palette `Face` with the teal border
+in both themes, white text on the dark surface and black on the light. A normal-mode capture
+after the change was compared against the earlier archive and is visually identical, so the
+explicit template changed nothing outside high contrast. The four original captures above stay
+as the record D14 was decided on. The artwork browser needed no change.
+
