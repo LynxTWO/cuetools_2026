@@ -118,24 +118,28 @@ namespace CUETools.CTDB
 		public void ContactDB(bool ctdb, bool fuzzy, CTDBMetadataSearch metadataSearch)
 		{
 			this.total = 0;
-
-			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(LookupUrl(ctdb, fuzzy, metadataSearch));
-			req.Method = "GET";
-			req.Proxy = proxy;
-			req.UserAgent = this.userAgent;
-			req.Timeout = connectTimeout;
-			req.ReadWriteTimeout = socketTimeout;
-			req.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
-
-			if (uploadHelper.onProgress != null)
-				uploadHelper.onProgress(this, new UploadProgressEventArgs(req.RequestUri.AbsoluteUri, 0));
-
             this.subResult = null;
             this.entries = new List<DBEntry>();
             this.metadata = new List<CTDBResponseMeta>();
-			currentReq = req;
+
 			try
 			{
+				// Building the request is part of the query. A configured server name that cannot be
+				// parsed into a URL is a failed lookup like any other, recorded in QueryExceptionStatus
+				// - never an exception through the caller, which at the end of a rip would discard a
+				// complete read over a database that had nothing to say.
+				HttpWebRequest req = (HttpWebRequest)WebRequest.Create(LookupUrl(ctdb, fuzzy, metadataSearch));
+				req.Method = "GET";
+				req.Proxy = proxy;
+				req.UserAgent = this.userAgent;
+				req.Timeout = connectTimeout;
+				req.ReadWriteTimeout = socketTimeout;
+				req.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
+
+				if (uploadHelper.onProgress != null)
+					uploadHelper.onProgress(this, new UploadProgressEventArgs(req.RequestUri.AbsoluteUri, 0));
+
+				currentReq = req;
 				using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
 				{
 					this.QueryExceptionStatus = WebExceptionStatus.ProtocolError;
@@ -191,20 +195,23 @@ namespace CUETools.CTDB
 
         public bool FetchFile(string url, Stream output)
         {
-            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-            req.Method = "GET";
-            req.Proxy = proxy;
-            req.UserAgent = this.userAgent;
-            req.Timeout = connectTimeout;
-            req.ReadWriteTimeout = socketTimeout;
-            req.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
-
-            if (uploadHelper.onProgress != null)
-                uploadHelper.onProgress(url, new UploadProgressEventArgs(req.RequestUri.AbsoluteUri, 0.0));
-
-            currentReq = req;
+            // The url here comes from a CTDB response (artwork and parity locations), so a
+            // malformed one is untrusted input, not a bug: build the request inside the try and
+            // report it as a failed fetch.
             try
             {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Proxy = proxy;
+                req.UserAgent = this.userAgent;
+                req.Timeout = connectTimeout;
+                req.ReadWriteTimeout = socketTimeout;
+                req.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
+
+                if (uploadHelper.onProgress != null)
+                    uploadHelper.onProgress(url, new UploadProgressEventArgs(req.RequestUri.AbsoluteUri, 0.0));
+
+                currentReq = req;
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                 {
                     if (resp.StatusCode != HttpStatusCode.OK)
@@ -243,20 +250,23 @@ namespace CUETools.CTDB
 		// breaks resumed fetches quietly.
 		public ushort[,] FetchDB(DBEntry entry, int npar, ushort[,] syn)
 		{
-			string url = entry.hasParity[0] == '/' ? urlbase + entry.hasParity : entry.hasParity;
-			HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-            int prevLen = syn == null ? 0 : syn.GetLength(1) * entry.stride * 2;
-			req.Method = "GET";
-			req.Proxy = proxy;
-			req.UserAgent = this.userAgent;
-			req.Timeout = connectTimeout;
-			req.ReadWriteTimeout = socketTimeout;
-			req.AutomaticDecompression = DecompressionMethods.None;
-            req.AddRange(prevLen, npar * entry.stride * 2 - 1);
-
-			currentReq = req;
+            // entry.hasParity is a location the server chose. Parse and range-build it inside
+            // the try so a malformed or empty one reports a failed fetch through entry.httpStatus,
+            // the same as an unreachable mirror.
             try
             {
+                string url = entry.hasParity[0] == '/' ? urlbase + entry.hasParity : entry.hasParity;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                int prevLen = syn == null ? 0 : syn.GetLength(1) * entry.stride * 2;
+                req.Method = "GET";
+                req.Proxy = proxy;
+                req.UserAgent = this.userAgent;
+                req.Timeout = connectTimeout;
+                req.ReadWriteTimeout = socketTimeout;
+                req.AutomaticDecompression = DecompressionMethods.None;
+                req.AddRange(prevLen, npar * entry.stride * 2 - 1);
+
+                currentReq = req;
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                 {
                     if (resp.StatusCode != HttpStatusCode.OK && resp.StatusCode != HttpStatusCode.PartialContent)
@@ -317,6 +327,12 @@ namespace CUETools.CTDB
                     entry.httpStatus = ((HttpWebResponse)ex.Response).StatusCode;
                 else
                     entry.httpStatus = HttpStatusCode.BadRequest;
+            }
+            catch (Exception)
+            {
+                // A location that will not parse, or an empty one, is a bad request all the
+                // same. DoVerify stops on any non-OK status, so repair never runs on nothing.
+                entry.httpStatus = HttpStatusCode.BadRequest;
             }
 			finally
 			{
@@ -395,11 +411,6 @@ namespace CUETools.CTDB
                 maxId = Math.Max(maxId, e.id);
             }
 
-            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(urlbase + "/submit2.php");
-            req.Proxy = proxy;
-            req.UserAgent = this.userAgent;
-            req.Timeout = connectTimeout;
-            req.ReadWriteTimeout = socketTimeout;
             NameValueCollection form = new NameValueCollection();
             int offset = 0;
             if (confirm != null)
@@ -451,9 +462,14 @@ namespace CUETools.CTDB
             if (artist != null && artist != "") form.Add("artist", artist);
             if (title != null && title != "") form.Add("title", title);
 
-            currentReq = req;
             try
             {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(urlbase + "/submit2.php");
+                req.Proxy = proxy;
+                req.UserAgent = this.userAgent;
+                req.Timeout = connectTimeout;
+                req.ReadWriteTimeout = socketTimeout;
+                currentReq = req;
                 using (HttpWebResponse resp = uploadHelper.Upload(req, files.ToArray(), form))
                 {
                     if (resp.StatusCode == HttpStatusCode.OK)
