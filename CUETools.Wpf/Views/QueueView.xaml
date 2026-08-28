@@ -12,7 +12,7 @@
     <Border Grid.Row="0" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,11">
       <DockPanel LastChildFill="False">
         <TextBlock DockPanel.Dock="Left" Text="Action" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
-        <ComboBox DockPanel.Dock="Left" Width="100" VerticalAlignment="Center" ItemsSource="{Binding Actions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}"/>
+        <ListBox DockPanel.Dock="Left" Style="{StaticResource BankCompact}" VerticalAlignment="Center" ItemsSource="{Binding Actions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}"/>
         <Button DockPanel.Dock="Left" Width="220" MinWidth="140"
                 VerticalAlignment="Center" Margin="8,0,0,0"
                 Click="CodecPicker_Click" IsEnabled="{Binding CodecPickerEnabled}"
