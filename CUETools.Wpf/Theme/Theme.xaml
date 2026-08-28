@@ -396,19 +396,43 @@
     </Setter>
   </Style>
 
-  <!-- dark dropdown to match the panel buttons -->
+  <!-- ROWS IN THE OPEN LIST. A lit pip beside the engaged one: the same detent language the key
+       bank uses, so "this is the one" reads the same wherever it appears. The row itself only
+       lifts to Glass under the pointer. -->
   <Style TargetType="ComboBoxItem">
-    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
-    <Setter Property="Padding" Value="10,6"/>
+    <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+    <Setter Property="Padding" Value="0,5,8,5"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBoxItem">
-          <Border x:Name="b" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="5">
-            <ContentPresenter/>
+          <ControlTemplate.Resources>
+            <DropShadowEffect x:Key="PipGlow" Color="{DynamicResource LampHalo}"
+                              BlurRadius="7" ShadowDepth="0" Opacity="0.63"/>
+          </ControlTemplate.Resources>
+          <Border x:Name="rowFace" Background="Transparent" CornerRadius="4"
+                  Padding="{TemplateBinding Padding}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Border x:Name="rowPip" Width="3" Height="13" CornerRadius="1.5"
+                      Margin="6,0,8,0" VerticalAlignment="Center" Opacity="0.35"
+                      Background="{DynamicResource Line}"/>
+              <ContentPresenter x:Name="rowContent" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
           </Border>
           <ControlTemplate.Triggers>
-            <Trigger Property="IsHighlighted" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource TealSoft}"/>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="rowFace" Property="Background" Value="{DynamicResource Glass}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+              <Setter Property="FontWeight" Value="SemiBold"/>
+              <Setter TargetName="rowFace" Property="Background" Value="{DynamicResource ButtonFace}"/>
+              <Setter TargetName="rowPip" Property="Background" Value="{DynamicResource StatusAccent}"/>
+              <Setter TargetName="rowPip" Property="Opacity" Value="1"/>
+              <Setter TargetName="rowPip" Property="Effect" Value="{StaticResource PipGlow}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -416,11 +440,20 @@
     </Setter>
   </Style>
 
+  <!-- THE MACHINED WINDOW. A recessed glass window showing the current value, with a ridged
+       thumbwheel on its right edge. The wheel is the part that says there is more than one value;
+       a chevron says "menu", a wheel says "there are others behind this one".
+
+       A template restyle of ComboBox, not a new control, so opening, keyboard handling and the
+       accessible role are untouched. The old fixed Height="30" is gone: it would crush the glass
+       and wheel into each other, and the housing sizes itself from its content. -->
   <Style TargetType="ComboBox">
     <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="FontSize" Value="12.5"/>
-    <Setter Property="Height" Value="30"/>
+    <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="FocusVisualStyle" Value="{StaticResource KeyFocusVisual}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBox">
@@ -429,26 +462,64 @@
                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
               <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
-                  <Border x:Name="face" CornerRadius="7" BorderThickness="1" BorderBrush="{DynamicResource GlassLine}" Background="{DynamicResource ButtonFace}">
+                  <ControlTemplate.Resources>
+                    <DropShadowEffect x:Key="WindowStandbyGlow" Color="{DynamicResource KeyStandbyGlowColor}"
+                                      BlurRadius="5" ShadowDepth="0" Opacity="0.2"/>
+                  </ControlTemplate.Resources>
+                  <Border x:Name="winHousing" CornerRadius="7" BorderThickness="1" Padding="2"
+                          BorderBrush="{DynamicResource ButtonEdge}"
+                          Background="{DynamicResource ButtonPressed}">
                     <Grid>
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="22"/>
+                        <ColumnDefinition Width="Auto"/>
                       </Grid.ColumnDefinitions>
-                      <!-- force the selected-item text colour: this ContentPresenter lives inside a
-                           plain ToggleButton whose default style sets Foreground=black, which would
-                           otherwise beat the ComboBox's inherited Ink and render black on dark. -->
-                      <ContentPresenter Grid.Column="0" Margin="11,0,0,0" VerticalAlignment="Center"
-                                        TextElement.Foreground="{DynamicResource Ink}"
-                                        Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                        ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
-                      <Path Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Data="M0,0 L8,0 L4,5 Z" Fill="{DynamicResource Muted}"/>
+                      <!-- The glass: the lit window the value shows through. The explicit
+                           Foreground is not decoration - this ContentPresenter sits inside a plain
+                           ToggleButton whose default style sets black, which would otherwise beat
+                           the ComboBox's inherited Ink and render black on a dark face. -->
+                      <Border x:Name="winGlass" Background="{DynamicResource ButtonFace}"
+                              CornerRadius="5,0,0,5" Padding="10,4,8,4">
+                        <ContentPresenter x:Name="winValue" VerticalAlignment="Center"
+                                          TextElement.Foreground="{DynamicResource Ink}"
+                                          Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                          ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                      </Border>
+                      <!-- The thumbwheel. Dark down both vertical edges and clear through the
+                           middle, which is what makes a flat rectangle read as a cylinder. -->
+                      <Border x:Name="winWheel" Grid.Column="1" Width="20" CornerRadius="0,5,5,0">
+                        <Border.Background>
+                          <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource KeyShoulderEdgeColor}" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.3"/>
+                            <GradientStop Color="#00000000" Offset="0.7"/>
+                            <GradientStop Color="{DynamicResource KeyShoulderEdgeColor}" Offset="1"/>
+                          </LinearGradientBrush>
+                        </Border.Background>
+                        <StackPanel VerticalAlignment="Center">
+                          <Border Height="1" Width="11" Opacity="0.5" Margin="0,0,0,2"
+                                  HorizontalAlignment="Center" Background="{DynamicResource Line}"/>
+                          <Border Height="1" Width="11" Margin="0,0,0,2"
+                                  HorizontalAlignment="Center" Background="{DynamicResource Line}"/>
+                          <Border Height="1" Width="11" Margin="0,0,0,2"
+                                  HorizontalAlignment="Center" Background="{DynamicResource Line}"/>
+                          <Border Height="1" Width="11" Margin="0,0,0,2"
+                                  HorizontalAlignment="Center" Background="{DynamicResource Line}"/>
+                          <Border Height="1" Width="11" Opacity="0.5"
+                                  HorizontalAlignment="Center" Background="{DynamicResource Line}"/>
+                        </StackPanel>
+                      </Border>
                     </Grid>
                   </Border>
                   <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
-                      <Setter TargetName="face" Property="BorderBrush" Value="{StaticResource Teal}"/>
+                      <Setter TargetName="winHousing" Property="BorderBrush" Value="{DynamicResource ControlBorder}"/>
+                    </Trigger>
+                    <!-- A dead window keeps its value readable at standby, like a dead key's
+                         legend. IsEnabled propagates from the ComboBox, so this catches both. -->
+                    <Trigger Property="IsEnabled" Value="False">
+                      <Setter TargetName="winValue" Property="TextElement.Foreground" Value="{DynamicResource KeyStandby}"/>
+                      <Setter TargetName="winValue" Property="Effect" Value="{StaticResource WindowStandbyGlow}"/>
                     </Trigger>
                   </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -456,13 +527,23 @@
             </ToggleButton>
             <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
                    AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-              <Border Margin="0,4,0,0" CornerRadius="8" Background="{DynamicResource Face}" BorderBrush="{DynamicResource GlassLine}" BorderThickness="1"
-                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Padding="4">
-                <Border.Effect><DropShadowEffect Color="{DynamicResource ControlShadowColor}" BlurRadius="14" ShadowDepth="3" Opacity="0.35"/></Border.Effect>
+              <Border x:Name="winList" Margin="0,3,0,0" CornerRadius="6" Padding="2"
+                      Background="{DynamicResource Panel}"
+                      BorderBrush="{DynamicResource ButtonEdge}" BorderThickness="1"
+                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                <Border.Effect>
+                  <DropShadowEffect Color="{DynamicResource ControlShadowColor}"
+                                    BlurRadius="18" ShadowDepth="6" Direction="270" Opacity="0.44"/>
+                </Border.Effect>
                 <ScrollViewer MaxHeight="260"><ItemsPresenter/></ScrollViewer>
               </Border>
             </Popup>
           </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -695,6 +776,17 @@
                   <GradientStop Color="{DynamicResource LampEdge}" Offset="1"/>
                 </RadialGradientBrush>
               </Border.Background>
+              <!-- The plastic thickens toward the rim, so the light must die out before any edge
+                   or corner. A vignette mask takes the glow to zero INSIDE the housing rather than
+                   letting the border clip it, which is what produced the hard stop at the corners
+                   the owner reported on the Linux head. -->
+              <Border.OpacityMask>
+                <RadialGradientBrush GradientOrigin="0.38,0.5" Center="0.38,0.5" RadiusX="0.64" RadiusY="0.72">
+                  <GradientStop Color="#FFFFFFFF" Offset="0"/>
+                  <GradientStop Color="#FFFFFFFF" Offset="0.42"/>
+                  <GradientStop Color="#00FFFFFF" Offset="0.97"/>
+                </RadialGradientBrush>
+              </Border.OpacityMask>
               <Border.Effect><DropShadowEffect Color="{DynamicResource LampHalo}" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/></Border.Effect>
             </Border>
 
