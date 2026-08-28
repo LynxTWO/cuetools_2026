@@ -1,8 +1,8 @@
-# The machined key: first slice of the analog control port, 2026-08-28
+# The machined key and the lamp checkbox, 2026-08-28
 
-The WPF button is now the Linux head's machined console key. This is the first slice of the
-control-theme port the owner approved on 2026-08-28, and it is the slice that proves the
-mechanisms every later control needs.
+The WPF button is now the Linux head's machined console key, and the checkbox is its lamp. These
+are the first two slices of the control-theme port the owner approved on 2026-08-28; the key is
+the slice that proves the mechanisms every later control needs.
 
 ## What changed
 
@@ -32,7 +32,8 @@ animation**. The triggers themselves were exercised live (below).
 
 ## Results
 
-`key-states-dark.png` and `key-states-light.png`, nine states each.
+`key-states-dark.png` and `key-states-light.png`, thirteen states each: nine for the key, four for
+the lamp.
 
 | State | What it shows |
 | --- | --- |
@@ -45,6 +46,29 @@ animation**. The triggers themselves were exercised live (below).
 | transport | The backlit legend strip, unlit. |
 | transport lit | The primary key's legend, lit and blooming. |
 | transport off | The legend goes grey and stops blooming. |
+| lamp off | The recessed housing, its specular cap highlight, and a tick etched into it - present but unlit. |
+| lamp on | The lens lights, the tick darkens against it, and the housing takes a teal halo. Warms in 0.18s, cools in 0.34s, the way a filament does. |
+| lamp off, dead | The label drops to standby. |
+| lamp on, dead | The lens stays lit and the halo goes out. The lens carries state, so a disabled option still says whether it is on; the halo carries power, so it goes, exactly as a dead key's seam lamp does. |
+
+### The lamp checkbox
+
+Until this slice the app had **no** CheckBox style at all: its two checkboxes rendered OS default,
+and they are the pair recorded in `docs/evidence/2026-08-27-selector-high-contrast` as adopting
+Windows high-contrast styling inside an otherwise palette-coloured window. D14 chose to keep the
+custom palette on purpose, so one explicit template settles both of those and the new ones together.
+
+Two departures from the Linux head, both because it only ever renders this control on a dark
+console: the housing reuses the switch's own palette tokens rather than hardcoded darks, so the
+light theme gets a light housing instead of a black hole in a pale panel; and the tick's two
+colours became `LampTickOff` and `LampTickOn` tokens for the same reason.
+
+The Rip page's cue, log and cover-art options moved from switch rows to this lamp, wrapping
+horizontally with readable labels (the owner's option C). A switch says "this state is on now",
+which belongs on a settings page where the other 53 live; a lamp says "include this in what I am
+about to do", which is what these three are. It also costs the rail about 44 vertical pixels
+instead of about 91, on the page that already fought clipping. The labels stay readable rather than
+dropping to the Linux head's `cue` and `log`, which save twelve pixels and cost the reader a guess.
 
 ## Live check
 
@@ -85,8 +109,7 @@ or named a single part.
 
 ## Still to come in this port
 
-The transport keys, `CheckBox.lit` (option C: lamps with readable labels, wrapping), the
-`ComboBox.window` with its thumbwheel, the `ListBox.bank`, and the `OpacityMask` vignette the
+The `ComboBox.window` with its thumbwheel, the `ListBox.bank`, and the `OpacityMask` vignette the
 `Switch` glow is missing. The DPI sweep and the 1200-pixel Rip page captures need re-taking once
 control metrics settle; the rail and queue column tests assert measured constants rather than
 measuring, so a metric change there goes wrong without going red.

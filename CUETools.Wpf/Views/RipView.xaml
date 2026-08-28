@@ -138,24 +138,20 @@
           <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="11" Padding="13">
             <StackPanel>
               <TextBlock Text="OPTIONS" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="0,0,0,8"/>
-              <DockPanel Margin="0,3,0,0">
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding CreateCue}"/>
-                <TextBlock Text="Create .cue sheet" ToolTip="Create .cue sheet"
-                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
-                           VerticalAlignment="Center" TextWrapping="Wrap"/>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding WriteLog}"/>
-                <TextBlock Text="Write rip log" ToolTip="Write rip log"
-                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
-                           VerticalAlignment="Center" TextWrapping="Wrap"/>
-              </DockPanel>
-              <DockPanel Margin="0,8,0,0">
-                <ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding EmbedArt}"/>
-                <TextBlock Text="Embed cover art" ToolTip="Embed cover art"
-                           Foreground="{DynamicResource InkDim}" FontSize="12.5"
-                           VerticalAlignment="Center" TextWrapping="Wrap"/>
-              </DockPanel>
+              <!-- These three are options on the rip about to start, not persistent app settings,
+                   which is what a lamp says and a switch does not. They also sit on a rail that
+                   has to survive 860 pixels: three full-width switch rows cost about 91 vertical
+                   pixels, this wrapping bank of lamps about 44. Labels stay readable rather than
+                   dropping to the Linux head's "cue" and "log", which save twelve pixels and cost
+                   the reader a guess. -->
+              <WrapPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox Content="cue sheet" IsChecked="{Binding CreateCue}"
+                          Margin="0,3,14,3" ToolTip="Create a .cue sheet beside the tracks."/>
+                <CheckBox Content="rip log" IsChecked="{Binding WriteLog}"
+                          Margin="0,3,14,3" ToolTip="Write the rip log beside the tracks."/>
+                <CheckBox Content="cover art" IsChecked="{Binding EmbedArt}"
+                          Margin="0,3,0,3" ToolTip="Embed the selected cover art in every track."/>
+              </WrapPanel>
               <!-- The preview is also the accessible entrypoint to the release-bound candidate
                    browser. The selected master is frozen and resized before a job starts. -->
               <StackPanel Margin="0,10,0,0" Visibility="{Binding ArtEnabled, Converter={StaticResource BoolVis}}">

@@ -124,6 +124,9 @@ public sealed class ThemeService
         ["KeyLipTopColor"] = "#26FFFFFF", ["KeyLipBottomColor"] = "#59000000",
         ["AccentKeyTopColor"] = "#3BD8C9", ["AccentKeyBottomColor"] = "#27A99C",
         ["AccentKeyText"] = "#0C0F0D",
+        // The lamp checkbox's tick: barely there against the unlit housing, dark against the lit
+        // lens. The Linux head hardcodes both, which only works on a dark console.
+        ["LampTickOff"] = "#39433A", ["LampTickOn"] = "#0A2A24",
         ["ControlShadowColor"] = "#000000", ["SwitchHousingBorder"] = "#0A0F0B",
         ["SwitchHousingTopColor"] = "#0A0E0B", ["SwitchHousingBottomColor"] = "#131A14",
         ["SwitchChannelTopColor"] = "#B0000000", ["SwitchChannelMidColor"] = "#40000000",
@@ -158,6 +161,7 @@ public sealed class ThemeService
         ["KeyLipTopColor"] = "#59FFFFFF", ["KeyLipBottomColor"] = "#33000000",
         ["AccentKeyTopColor"] = "#087067", ["AccentKeyBottomColor"] = "#065850",
         ["AccentKeyText"] = "#F4F7EF",
+        ["LampTickOff"] = "#B7C0B2", ["LampTickOn"] = "#0A2A24",
         ["ControlShadowColor"] = "#536057", ["SwitchHousingBorder"] = "#9DAA98",
         ["SwitchHousingTopColor"] = "#D4DBCE", ["SwitchHousingBottomColor"] = "#EEF2E9",
         ["SwitchChannelTopColor"] = "#66747D70", ["SwitchChannelMidColor"] = "#33747D70",

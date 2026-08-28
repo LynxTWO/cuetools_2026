@@ -289,6 +289,113 @@
     </Style.Triggers>
   </Style>
 
+  <!-- THE LAMP CHECKBOX. The lit-panel model at checkbox scale: a recessed housing with a lamp
+       behind a lens, and an etched tick that the lamp lights from beneath. Checked warms fast
+       (0.18s) and unchecked cools slow (0.34s), the way a filament does.
+
+       Implicit, because until now this app had no CheckBox style at all and its two checkboxes
+       rendered OS default - which is also the pair that adopted Windows high-contrast styling
+       inside an otherwise palette-coloured window (see docs/evidence/2026-08-27-selector-high-
+       contrast). One template settles both.
+
+       The housing reuses the switch's own tokens rather than the Linux head's hardcoded darks, so
+       the light theme gets a light housing instead of a black hole in a pale panel. -->
+  <Style TargetType="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+    <Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="FocusVisualStyle" Value="{StaticResource KeyFocusVisual}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <ControlTemplate.Resources>
+            <DropShadowEffect x:Key="LampGlow" Color="{DynamicResource LampHalo}"
+                              BlurRadius="10" ShadowDepth="0" Opacity="0.63"/>
+          </ControlTemplate.Resources>
+          <Grid ClipToBounds="False">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border x:Name="housing" Width="22" Height="22" CornerRadius="6" BorderThickness="1"
+                    BorderBrush="{DynamicResource SwitchHousingBorder}">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="{DynamicResource SwitchHousingTopColor}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource SwitchHousingBottomColor}" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+              <Grid>
+                <Border x:Name="lens" CornerRadius="5" Margin="1" Opacity="0">
+                  <Border.Background>
+                    <RadialGradientBrush GradientOrigin="0.5,0.42" Center="0.5,0.42"
+                                         RadiusX="0.7" RadiusY="0.7">
+                      <GradientStop Color="{DynamicResource LampCore}" Offset="0"/>
+                      <GradientStop Color="{DynamicResource LampLight}" Offset="0.62"/>
+                      <GradientStop Color="{DynamicResource LampCapEdge}" Offset="1"/>
+                    </RadialGradientBrush>
+                  </Border.Background>
+                </Border>
+                <!-- Etched into the cap, so it reads as part of the housing when the lamp is out
+                     and as a shadow on the lens when it is lit. -->
+                <Path x:Name="tick" Data="M 5,11 L 9.5,15.5 L 17,6.5"
+                      Stroke="{DynamicResource LampTickOff}" StrokeThickness="2.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                <!-- The specular on the lens cap. -->
+                <Border Width="12" Height="3" CornerRadius="2" VerticalAlignment="Top"
+                        HorizontalAlignment="Center" Margin="0,2.5,0,0"
+                        Background="{DynamicResource SwitchSheen}"/>
+              </Grid>
+            </Border>
+            <ContentPresenter Grid.Column="1" Margin="8,0,0,0"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                              RecognizesAccessKey="True"/>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="tick" Property="Stroke" Value="{DynamicResource LampTickOn}"/>
+              <Setter TargetName="housing" Property="Effect" Value="{StaticResource LampGlow}"/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="lens" Storyboard.TargetProperty="Opacity"
+                                     To="1" Duration="0:0:0.18">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="lens" Storyboard.TargetProperty="Opacity"
+                                     To="0" Duration="0:0:0.34">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="housing" Property="BorderBrush" Value="{DynamicResource ControlBorder}"/>
+            </Trigger>
+            <!-- Unpowered, not blanked: the same standby treatment every dead control gets. The
+                 lens stays lit because it carries STATE - a disabled option the user cannot change
+                 must still say whether it is on - but the housing halo goes out, exactly as a dead
+                 key's seam lamp does while its legend stays readable. -->
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource KeyStandby}"/>
+              <Setter Property="Cursor" Value="Arrow"/>
+              <Setter TargetName="housing" Property="Effect" Value="{x:Null}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- dark dropdown to match the panel buttons -->
   <Style TargetType="ComboBoxItem">
     <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
