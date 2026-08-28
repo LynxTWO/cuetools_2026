@@ -1,8 +1,8 @@
-# The machined key and the lamp checkbox, 2026-08-28
+# The analog control port: key, lamp and window, 2026-08-28
 
-The WPF button is now the Linux head's machined console key, and the checkbox is its lamp. These
-are the first two slices of the control-theme port the owner approved on 2026-08-28; the key is
-the slice that proves the mechanisms every later control needs.
+The WPF button is now the Linux head's machined console key, the checkbox is its lamp, and the
+combo box is its machined window. These are the first three slices of the control-theme port the
+owner approved on 2026-08-28; the key is the slice that proves the mechanisms the others need.
 
 ## What changed
 
@@ -32,8 +32,8 @@ animation**. The triggers themselves were exercised live (below).
 
 ## Results
 
-`key-states-dark.png` and `key-states-light.png`, thirteen states each: nine for the key, four for
-the lamp.
+`key-states-dark.png` and `key-states-light.png`, nineteen states each: nine for the key, four for
+the lamp, two for the window, two for its list rows, and two for the switch.
 
 | State | What it shows |
 | --- | --- |
@@ -107,9 +107,35 @@ attached-property mechanism, the accent key inheriting the one template, the RUN
 both palettes carrying every new token. Before it, no test in this suite walked a control template
 or named a single part.
 
+### The machined window
+
+A recessed glass panel showing the current value, with a ridged thumbwheel on its right edge. The
+wheel is the affordance that matters: a chevron says "menu", a wheel says "there are other values
+behind this one". Five one-pixel ridges over a horizontal gradient that darkens both vertical
+edges are what make a flat rectangle read as a cylinder.
+
+The old fixed `Height="30"` is gone. It would have crushed the glass and the wheel into each other,
+and the housing sizes itself from its content. Nothing else depended on that height.
+
+List rows carry the same detent language as the key bank: a pip beside the engaged row, lit teal
+and blooming, with the row face lifting to `ButtonFace`. Before this the open list had **no**
+selected state at all - only a hover highlight - so the current value was invisible once the list
+was open.
+
+The `.counted` tape readout was deliberately not ported. It is opt-in on the Linux head and has no
+consumer here; porting it would mean a multi-value converter and an attached property for markup
+nothing asks for yet.
+
+### The switch lamp's vignette
+
+A one-line fix the WPF head was missing. The Linux head added an `OpacityMask` to its switch glow
+after the owner reported the light stopping hard at the housing corners: the plastic thickens
+toward the rim, so the light has to die out inside the housing rather than be clipped square at
+its border. WPF had the same five-stop lamp gradient and the same halo, without the mask.
+
 ## Still to come in this port
 
-The `ComboBox.window` with its thumbwheel, the `ListBox.bank`, and the `OpacityMask` vignette the
-`Switch` glow is missing. The DPI sweep and the 1200-pixel Rip page captures need re-taking once
+The `ListBox.bank`, which is the one slice with real call-site churn: six to eight ComboBoxes
+become bank ListBoxes, and several tests pin that markup literally. The DPI sweep and the 1200-pixel Rip page captures need re-taking once
 control metrics settle; the rail and queue column tests assert measured constants rather than
 measuring, so a metric change there goes wrong without going red.
