@@ -51,9 +51,15 @@ internal class OpticalDriveLease : IDisposable
     internal char Drive { get; }
     internal string PhysicalIdentity { get; }
 
+    /// <param name="reportDenial">
+    /// False for passive observers that re-ask on a timer. The 2-second tray watcher loses a
+    /// race with this window's own rip every so often and re-asks two seconds later; saying so
+    /// each time buries the real events without describing a problem.
+    /// </param>
     internal static OpticalDriveLease? TryAcquire(
         char drive,
-        IDiagnosticLog log)
+        IDiagnosticLog log,
+        bool reportDenial = true)
     {
         char normalized = char.ToUpperInvariant(drive);
         string root = DefaultRoot();
@@ -65,10 +71,12 @@ internal class OpticalDriveLease : IDisposable
             normalized,
             "",
             root,
-            new[] { letterKey });
+            new[] { letterKey },
+            out LeaseDenial letterDenial);
         if (letter == null)
         {
-            log.Warn("drive", $"drive {normalized}: already owned by another CUETools job");
+            if (reportDenial)
+                ReportDenial(log, normalized, letterDenial, "");
             return null;
         }
 
@@ -80,22 +88,66 @@ internal class OpticalDriveLease : IDisposable
             normalized,
             physical,
             root,
-            new[] { "device-" + physical });
+            new[] { "device-" + physical },
+            out LeaseDenial deviceDenial);
         if (complete == null)
         {
             letter.Dispose();
-            log.Warn("drive",
-                $"drive {normalized}: physical device is already owned by another CUETools job");
+            if (reportDenial)
+                ReportDenial(log, normalized, deviceDenial, "physical device ");
             return null;
         }
 
         return new CompositeOpticalDriveLease(letter, complete);
     }
 
+    /// <summary>Why a claim was refused. Both outcomes deny the drive; they do not describe the
+    /// same situation, and the log must not name a second CUETools window that does not exist.
+    /// </summary>
+    internal enum LeaseDenial
+    {
+        None,
+
+        /// <summary>Another operation in this process holds the drive: a running rip against the
+        /// tray watcher, say. Expected, transient, and resolved by the holder finishing.</summary>
+        SameProcess,
+
+        /// <summary>A handle outside this process holds it - the real second-claimant case the
+        /// process-per-drive design exists for.</summary>
+        AnotherProcess,
+    }
+
+    private static void ReportDenial(
+        IDiagnosticLog log,
+        char drive,
+        LeaseDenial denial,
+        string scope)
+    {
+        if (denial == LeaseDenial.SameProcess)
+        {
+            // Not a warning: this window already owns the hardware, and the operation that owns
+            // it is the one the user started.
+            log.Info("drive",
+                $"drive {drive}: {scope}held by another operation in this window");
+            return;
+        }
+
+        log.Warn("drive",
+            $"drive {drive}: {scope}already owned by another CUETools job");
+    }
+
     /// <summary>Test seam: acquire one caller-supplied key under an isolated root.</summary>
     internal static OpticalDriveLease? TryAcquireForTest(
         string key,
-        string rootDirectory)
+        string rootDirectory) =>
+        TryAcquireForTest(key, rootDirectory, out _);
+
+    /// <summary>Test seam: acquire one caller-supplied key under an isolated root, reporting why
+    /// a refusal happened.</summary>
+    internal static OpticalDriveLease? TryAcquireForTest(
+        string key,
+        string rootDirectory,
+        out LeaseDenial denial)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("A lease key is required.", nameof(key));
@@ -103,7 +155,8 @@ internal class OpticalDriveLease : IDisposable
             '\0',
             key,
             rootDirectory,
-            new[] { "test-" + key });
+            new[] { "test-" + key },
+            out denial);
     }
 
     internal static string GetLockPathForTest(
@@ -115,8 +168,10 @@ internal class OpticalDriveLease : IDisposable
         char drive,
         string physicalIdentity,
         string rootDirectory,
-        IReadOnlyList<string> keys)
+        IReadOnlyList<string> keys,
+        out LeaseDenial denial)
     {
+        denial = LeaseDenial.None;
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
         {
             // Cross-process exclusion is real on Windows (sharing modes) and
@@ -146,6 +201,9 @@ internal class OpticalDriveLease : IDisposable
                 {
                     if (sameProcess.Owner != owner)
                     {
+                        // This process already holds the key under a different logical owner.
+                        // No foreign handle is involved, whatever the caller reports.
+                        denial = LeaseDenial.SameProcess;
                         CloseOpened(opened);
                         return null;
                     }
@@ -174,6 +232,7 @@ internal class OpticalDriveLease : IDisposable
                         }
                         catch (IOException)
                         {
+                            denial = LeaseDenial.AnotherProcess;
                             stream.Dispose();
                             CloseOpened(opened);
                             return null;
@@ -184,6 +243,9 @@ internal class OpticalDriveLease : IDisposable
                 }
                 catch (IOException ex) when (IsSharingViolation(ex))
                 {
+                    // A sharing violation means a handle outside this process holds the file:
+                    // in-process holders are caught by the Held table above.
+                    denial = LeaseDenial.AnotherProcess;
                     CloseOpened(opened);
                     return null;
                 }
