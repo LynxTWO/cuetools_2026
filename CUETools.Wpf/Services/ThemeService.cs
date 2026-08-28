@@ -112,6 +112,18 @@ public sealed class ThemeService
         ["Glass"] = "#0E1311", ["GlassLine"] = "#243029", ["ButtonPressed"] = "#0C110E",
         ["ButtonFaceTop"] = "#1B221C", ["ButtonFaceBot"] = "#121813",
         ["ControlBorder"] = "#42FFFFFF", ["ButtonEdge"] = "#0A0E0B",
+        // The machined key. KeySeam is the housing lamp seen through the gap around the cap;
+        // Shoulder/Crown/Lip are the three layers that make the cap read as a domed solid rather
+        // than a flat panel. KeyStandby is a dead key's legend at standby current: deliberately
+        // 3.2:1 to 3.8:1, the floor of its own contract, because WCAG 1.4.3 exempts inactive
+        // controls and the structural Line it replaced measured 1.2:1 on a key face.
+        ["KeyStandby"] = "#42786F", ["KeySeamColor"] = "#F0A24A",
+        ["KeyStandbyGlowColor"] = "#34CFC0",
+        ["KeyShoulderMidColor"] = "#2E000000", ["KeyShoulderEdgeColor"] = "#5A000000",
+        ["KeyCrownCoreColor"] = "#24FFFFFF", ["KeyCrownMidColor"] = "#12FFFFFF",
+        ["KeyLipTopColor"] = "#26FFFFFF", ["KeyLipBottomColor"] = "#59000000",
+        ["AccentKeyTopColor"] = "#3BD8C9", ["AccentKeyBottomColor"] = "#27A99C",
+        ["AccentKeyText"] = "#0C0F0D",
         ["ControlShadowColor"] = "#000000", ["SwitchHousingBorder"] = "#0A0F0B",
         ["SwitchHousingTopColor"] = "#0A0E0B", ["SwitchHousingBottomColor"] = "#131A14",
         ["SwitchChannelTopColor"] = "#B0000000", ["SwitchChannelMidColor"] = "#40000000",
@@ -136,6 +148,16 @@ public sealed class ThemeService
         ["Glass"] = "#E4E9DD", ["GlassLine"] = "#CAD2C2", ["ButtonPressed"] = "#D6DDCC",
         ["ButtonFaceTop"] = "#FBFDF7", ["ButtonFaceBot"] = "#E9EEE1",
         ["ControlBorder"] = "#6676816F", ["ButtonEdge"] = "#B8C2B2",
+        // Machined-key tokens, light. The seam lamp is warmer and darker here because it is read
+        // against a bright console rather than a dark one, and the crown/lip highlights are
+        // stronger because a light cap catches more of the bench light.
+        ["KeyStandby"] = "#577F79", ["KeySeamColor"] = "#C9762A",
+        ["KeyStandbyGlowColor"] = "#087067",
+        ["KeyShoulderMidColor"] = "#1A000000", ["KeyShoulderEdgeColor"] = "#33000000",
+        ["KeyCrownCoreColor"] = "#34FFFFFF", ["KeyCrownMidColor"] = "#14FFFFFF",
+        ["KeyLipTopColor"] = "#59FFFFFF", ["KeyLipBottomColor"] = "#33000000",
+        ["AccentKeyTopColor"] = "#087067", ["AccentKeyBottomColor"] = "#065850",
+        ["AccentKeyText"] = "#F4F7EF",
         ["ControlShadowColor"] = "#536057", ["SwitchHousingBorder"] = "#9DAA98",
         ["SwitchHousingTopColor"] = "#D4DBCE", ["SwitchHousingBottomColor"] = "#EEF2E9",
         ["SwitchChannelTopColor"] = "#66747D70", ["SwitchChannelMidColor"] = "#33747D70",
