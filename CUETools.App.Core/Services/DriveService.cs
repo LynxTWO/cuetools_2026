@@ -454,8 +454,12 @@ public sealed class DriveService : IDriveService
         // polled every 2s by the tray watcher - a throw here would spam the crash handler
         try
         {
+            // Passive observer on a 2-second timer: it loses a race with this window's own rip
+            // every so often and re-asks two seconds later. Reporting each loss buries the real
+            // events without describing a problem, so this caller stays silent and returns
+            // Unknown, which the watcher already treats as "no reading this time".
             using OpticalDriveLease? lease =
-                OpticalDriveLease.TryAcquire(drive, _log);
+                OpticalDriveLease.TryAcquire(drive, _log, reportDenial: false);
             if (lease == null)
                 return DriveTrayState.Unknown;
             lock (_scsiGate) { return DriveInspector.GetTray(drive); }

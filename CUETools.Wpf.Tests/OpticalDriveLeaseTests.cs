@@ -27,12 +27,15 @@ public sealed class OpticalDriveLeaseTests
 
         OpticalDriveLease competing = null;
         Exception threadFailure = null;
+        var competingDenial = OpticalDriveLease.LeaseDenial.None;
         var thread = new Thread(() =>
         {
             try
             {
-                competing =
-                    OpticalDriveLease.TryAcquireForTest("drive-a", sandbox.Path);
+                competing = OpticalDriveLease.TryAcquireForTest(
+                    "drive-a",
+                    sandbox.Path,
+                    out competingDenial);
             }
             catch (Exception ex)
             {
@@ -45,6 +48,10 @@ public sealed class OpticalDriveLeaseTests
         Assert.IsNull(
             competing,
             "A different operation in this process must not inherit drive ownership.");
+        Assert.AreEqual(
+            OpticalDriveLease.LeaseDenial.SameProcess,
+            competingDenial,
+            "This process holds the key, so the refusal must not name another CUETools job.");
     }
 
     [TestMethod]
@@ -143,8 +150,15 @@ public sealed class OpticalDriveLeaseTests
                     await helper.StandardError.ReadToEndAsync());
 
             using OpticalDriveLease denied =
-                OpticalDriveLease.TryAcquireForTest("drive-b", sandbox.Path);
+                OpticalDriveLease.TryAcquireForTest(
+                    "drive-b",
+                    sandbox.Path,
+                    out OpticalDriveLease.LeaseDenial denial);
             Assert.IsNull(denied);
+            Assert.AreEqual(
+                OpticalDriveLease.LeaseDenial.AnotherProcess,
+                denial,
+                "A handle outside this process is the case the warning exists for.");
 
             File.WriteAllText(releasePath, "release");
             await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -162,6 +176,29 @@ public sealed class OpticalDriveLeaseTests
                 helper.WaitForExit(5000);
             }
         }
+    }
+
+    [TestMethod]
+    public void TheTrayWatcherDoesNotReportItsOwnLostRaces()
+    {
+        // GetTrayState is polled every two seconds for the life of a job. It competes with the
+        // rip that owns the drive and loses sometimes, which is expected and self-correcting: on
+        // 2026-08-27 that produced seven "already owned by another CUETools job" warnings in four
+        // minutes with exactly one CUETools process running (R126). The watcher is an ancillary
+        // observer, so it asks silently and reports Unknown.
+        string root = DeadSwitchAnalyzer.FindRepoRoot(AppContext.BaseDirectory);
+        string source = File.ReadAllText(Path.Combine(
+            root, "CUETools.App.Core", "Services", "DriveService.cs"));
+        int tray = source.IndexOf("public DriveTrayState GetTrayState(", StringComparison.Ordinal);
+        Assert.IsTrue(tray > 0, "GetTrayState should still be the tray poll entry point");
+        int nextMethod = source.IndexOf("public void OpenTray(", tray, StringComparison.Ordinal);
+        Assert.IsTrue(nextMethod > tray, "expected OpenTray to follow GetTrayState");
+
+        string body = source.Substring(tray, nextMethod - tray);
+        StringAssert.Contains(
+            body,
+            "TryAcquire(drive, _log, reportDenial: false)",
+            "the tray poll must claim the drive silently");
     }
 
     [TestMethod]

@@ -3279,7 +3279,7 @@ step before any fix.
   wedged, with the tray-cycle remedy, before the read begins. Ripper 59/59,
   WPF 472/472, legacy lanes green.
 
-### R126. Tray watcher logs same-process lease contention as another job - bucket A, risk low
+### R126. Tray watcher logs same-process lease contention as another job - DONE 2026-08-28, risk low
 
 - **Area or slice:** `OpticalDriveLease.TryAcquire`, `DriveService.GetTrayState`.
 - **Why it matters (live 2026-08-27):** with exactly one CUETools process on
@@ -3295,10 +3295,14 @@ step before any fix.
   17:17:49 while `Get-Process` showed one `CUETools.Wpf` and both lock files
   opened freely from another process.
 - **Confidence:** verified. **Approval needed:** no.
-- **Status:** open. Fix shape: `TryAcquireKeys` already knows whether it lost
-  to a same-process owner or to a foreign handle; surface that distinction so
-  the poll path stays quiet on same-process contention and the warning is
-  kept for a real second process.
+- **Status:** fixed 2026-08-28. `TryAcquireKeys` now reports which of the two
+  it was: `SameProcess` when this process already holds the key under another
+  logical owner, `AnotherProcess` when a foreign handle does. Only the second
+  keeps the warning; the first is an Info line that says the drive is held by
+  another operation in this window. The tray poll asks with
+  `reportDenial: false` because it re-asks two seconds later and its losses
+  describe no problem. Tests cover both verdicts, the foreign one against a
+  real second process, plus a source contract keeping the poll silent.
 
 ### R125. Album-level Verify & Repair workspace - DONE 2026-08-08, risk medium
 
