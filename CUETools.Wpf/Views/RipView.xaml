@@ -446,14 +446,20 @@
                     Padding="9,6" Margin="0,0,10,6" VerticalAlignment="Center"
                     Click="EncoderSettings_Click" IsEnabled="{Binding CodecUnlocked}"
                     ToolTip="Encoder settings for the selected format: compression / quality mode and every advanced option the codec exposes, each with an explanation."/>
+            <!-- The RUN group is a bank of transport keys: dark faces carrying backlit legend
+                 strips, with the primary key told apart by its lit legend rather than by a
+                 different colour. Accent is for keys that commit a dialog, not for these. -->
             <Button Content="Test &amp; Copy" Command="{Binding TestCopyCommand}"
+                    ctl:KeyStyle.Role="Transport"
                     Padding="18,9" Margin="0,0,10,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"
                     ToolTip="Read the disc twice (a third time on a mismatch) and write only tracks two independent reads agree on bit-for-bit. First use calibrates the drive automatically; cached re-reads are flushed. Slower (2-3x reads). Best for discs not in AccurateRip."/>
-            <Button Content="Rip" Command="{Binding RipCommand}" Style="{StaticResource Accent}"
+            <Button Content="Rip" Command="{Binding RipCommand}"
+                    ctl:KeyStyle.Role="TransportPrimary"
                     Padding="18,9" Margin="0,0,10,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
             <Button Content="Verify" Command="{Binding VerifyCommand}" Padding="18,9"
+                    ctl:KeyStyle.Role="Transport"
                     Margin="0,0,0,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
             <!-- A live job stays pinned to its immutable drive snapshot. Start another drive
@@ -471,7 +477,8 @@
                       Padding="11,7"
                       ToolTip="Open an isolated CUETools drive window. Both drives can rip at once; same-drive use is blocked."/>
             </StackPanel>
-            <Button Content="Stop" Command="{Binding StopCommand}" Style="{StaticResource Accent}"
+            <Button Content="Stop" Command="{Binding StopCommand}"
+                    ctl:KeyStyle.Role="Transport"
                     Padding="18,9" Margin="0,0,0,6"
                     Visibility="{Binding IsRipping, Converter={StaticResource BoolVis}}"
                     ToolTip="Stop the rip or verify. It finishes the current block, then stops cleanly."/>

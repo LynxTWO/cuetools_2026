@@ -32,132 +32,261 @@
   <FontFamily x:Key="Serif">Sitka Text, Cambria, Georgia, serif</FontFamily>
   <FontFamily x:Key="Mono">Consolas, Cascadia Mono, monospace</FontFamily>
 
-  <!-- Panel button: reads like a milled bench-gear key. Dark brushed face, hairline edge that
-       lights teal on hover, sinks on press. Implicit, so every plain Button picks it up. -->
-  <!-- 3D rubber button. Physical, like a real backlit rubber cap sitting proud of the panel: a
-       raised FACE layer floats 6px above a darker EDGE layer (the visible thickness/side), grounded
-       by a cast SHADOW. The face is the lit rubber (body gradient via TemplateBinding Background so
-       the accent style only swaps that brush; inner teal CORE glow; top SHEEN; rim). The BendyButton
-       behaviour animates the FACE (named 'face'): lifts on hover, drops INTO the edge on press and
-       tilts toward the exact point clicked (press a corner, that corner dips more), springing back
-       with rubber-hose overshoot. The EDGE colour rides in Tag so the accent can darken-teal it. -->
+  <!-- The keyboard-only focus ring, drawn on the adorner layer over the key. Defined before the
+       key style because StaticResource resolves backwards through the dictionary. -->
+  <Style x:Key="KeyFocusVisual">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border CornerRadius="7" BorderThickness="1" SnapsToDevicePixels="True"
+                  BorderBrush="{DynamicResource StatusAccent}"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- THE MACHINED KEY. A console key sits flush IN its housing, it does not float above the
+       panel. Five layers, back to front: the recess it sits in; the housing lamp seen through the
+       seam around the cap; the cap itself; the cap's own dome (shoulder, crown, lip); and the
+       label with its legend strip. Pressing sinks the cap 1.2px and takes the housing lamp up.
+
+       Hover and press are told by LIGHT, not by an outline. An outline is a UI convention wearing
+       a console's clothes; a real key in a lit housing shows more of that light as it moves.
+
+       Corner radius is fixed at 7 rather than TemplateBound: WPF's Button, unlike Avalonia's, has
+       no CornerRadius property. Every layer that rounds must repeat the number.
+
+       Ported from the Linux head's Theme/AnalogControls.axaml, whose comments carry the reasoning
+       for each layer. The floating rubber cap and its BendyButton squash that stood here before
+       modelled a different object and could not be reconciled with this one. -->
   <Style TargetType="Button">
     <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     <Setter Property="FontSize" Value="12.5"/>
-    <Setter Property="Padding" Value="14,6"/>
+    <Setter Property="Padding" Value="12,6"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="ctl:BendyButton.Enabled" Value="True"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorder}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource ButtonEdge}"/>
+    <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
-    <!-- Tag = the edge (side) brush: a horizontal dark-mid-dark gradient for the extruded look -->
-    <Setter Property="Tag" Value="{DynamicResource ButtonEdge}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <!-- Keyboard-only ring. WPF draws FocusVisualStyle only when the most recent input device was
+         the keyboard, which is exactly what Avalonia's :focus-visible means; a trigger on
+         IsKeyboardFocused would light after every mouse click too. -->
+    <Setter Property="FocusVisualStyle" Value="{StaticResource KeyFocusVisual}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <!-- ClipToBounds false so the transform-lifted face can rise above the cell; the top +
-               bottom margins reserve room for the raised face and the revealed edge sliver. All
-               layers just FILL this cell (no cross-element size bindings - those loop and blank). -->
-          <Grid ClipToBounds="False" Margin="0,3,0,7">
-            <!-- cast shadow: grounds the button on the panel -->
-            <Border x:Name="shadow" CornerRadius="10" Margin="4,5,4,-2" Background="{DynamicResource ButtonEdge}" Opacity="0.5">
-              <Border.Effect><BlurEffect Radius="13"/></Border.Effect>
-            </Border>
-
-            <!-- backlight halo bleeding through the rubber -->
-            <Border x:Name="halo" CornerRadius="11" Margin="-2" Opacity="0.42">
+          <ControlTemplate.Resources>
+            <DropShadowEffect x:Key="KeyFaceShadow" Color="#000000"
+                              BlurRadius="4" ShadowDepth="1.5" Direction="270" Opacity="0.31"/>
+            <DropShadowEffect x:Key="KeyFaceShadowPressed" Color="#000000"
+                              BlurRadius="1.5" ShadowDepth="0.5" Direction="270" Opacity="0.31"/>
+            <!-- Light coming THROUGH the legend, not grey ink sitting on it: zero depth, same
+                 recipe as the lit rail glyphs. -->
+            <DropShadowEffect x:Key="LegendGlow" Color="{DynamicResource StatusAccentColor}"
+                              BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
+            <DropShadowEffect x:Key="StandbyGlow" Color="{DynamicResource KeyStandbyGlowColor}"
+                              BlurRadius="5" ShadowDepth="0" Opacity="0.2"/>
+          </ControlTemplate.Resources>
+          <!-- Nothing here may clip: the seam lamp's bloom spills outside the cap by design, and a
+               clip would cut it square at the bounds. -->
+          <Grid ClipToBounds="False">
+            <!-- The housing wall behind the cap. Invisible while the cap fills its own bounds. -->
+            <Border x:Name="keyRecess" CornerRadius="7" Opacity="0" IsHitTestVisible="False"
+                    Background="{DynamicResource ButtonEdge}"/>
+            <!-- The housing lamp, seen through the gap around the cap's skirt. The zero-x-offset
+                 shadow is its spill onto the console. -->
+            <Border x:Name="keySeam" CornerRadius="7" Opacity="0" IsHitTestVisible="False">
               <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.5,0.6" Center="0.5,0.6" RadiusX="0.72" RadiusY="0.9">
-                  <GradientStop Color="#DFFFFB" Offset="0"/>
-                  <GradientStop Color="#8F5FE0D3" Offset="0.32"/>
-                  <GradientStop Color="#3327A99C" Offset="0.62"/>
-                  <GradientStop Color="#0034CFC0" Offset="1"/>
-                </RadialGradientBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="{DynamicResource KeySeamColor}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource KeySeamColor}" Offset="1"/>
+                </LinearGradientBrush>
               </Border.Background>
-              <Border.Effect><BlurEffect Radius="9"/></Border.Effect>
+              <Border.Effect>
+                <DropShadowEffect Color="{DynamicResource KeySeamColor}"
+                                  BlurRadius="19" ShadowDepth="1" Direction="270" Opacity="0.9"/>
+              </Border.Effect>
             </Border>
-
-            <!-- EDGE: the rubber's side/thickness. The face lifts to reveal its lower sliver. -->
-            <Border x:Name="edge" CornerRadius="10" Background="{TemplateBinding Tag}"/>
-
-            <!-- FACE: the lit rubber top. Raised above the edge by the behaviour's transform. -->
-            <Grid x:Name="face">
-              <Border x:Name="body" CornerRadius="10" BorderThickness="1"
-                      Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"/>
-              <Border x:Name="core" CornerRadius="10" Margin="1" Opacity="0.3">
-                <Border.Background>
-                  <RadialGradientBrush GradientOrigin="0.5,0.72" Center="0.5,0.72" RadiusX="0.62" RadiusY="0.85">
-                    <GradientStop Color="#7034CFC0" Offset="0"/>
-                    <GradientStop Color="#0034CFC0" Offset="1"/>
-                  </RadialGradientBrush>
-                </Border.Background>
-              </Border>
-              <Border x:Name="sheen" CornerRadius="9,9,14,14" Margin="3,2,3,14" VerticalAlignment="Top" Height="15" Opacity="0.44">
-                <Border.Background>
-                  <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#EEFFFFFF" Offset="0"/>
-                    <GradientStop Color="#00FFFFFF" Offset="1"/>
-                  </LinearGradientBrush>
-                </Border.Background>
-              </Border>
-              <Border x:Name="rim" CornerRadius="10,10,2,2" Height="13" VerticalAlignment="Top" Margin="1.5,1,1.5,0"
-                      BorderThickness="0,1.2,0,0" Opacity="0.68">
-                <Border.BorderBrush>
-                  <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                    <GradientStop Color="#7AD8FFF6" Offset="0"/>
-                    <GradientStop Color="#00FFFFFF" Offset="1"/>
-                  </LinearGradientBrush>
-                </Border.BorderBrush>
-              </Border>
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
-            </Grid>
+            <Border x:Name="keyFace" CornerRadius="7"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    Effect="{StaticResource KeyFaceShadow}">
+              <Border.RenderTransform>
+                <TranslateTransform Y="0"/>
+              </Border.RenderTransform>
+              <Grid>
+                <!-- The cap is a DOMED piece, not a flat panel. (a) shoulder: curvature falloff,
+                     so it turns away and darkens toward every edge. (b) crown: the bulge catching
+                     the bench light, high and off-centre upward. (c) lip: a bright hairline along
+                     the top edge and a shadow along the bottom, the cap's own thickness edge on. -->
+                <Border x:Name="keyShoulder" CornerRadius="7" IsHitTestVisible="False">
+                  <Border.Background>
+                    <RadialGradientBrush GradientOrigin="0.5,0.45" Center="0.5,0.45"
+                                         RadiusX="0.62" RadiusY="0.78">
+                      <GradientStop Color="#00000000" Offset="0"/>
+                      <GradientStop Color="#00000000" Offset="0.55"/>
+                      <GradientStop Color="{DynamicResource KeyShoulderMidColor}" Offset="0.88"/>
+                      <GradientStop Color="{DynamicResource KeyShoulderEdgeColor}" Offset="1"/>
+                    </RadialGradientBrush>
+                  </Border.Background>
+                </Border>
+                <Border x:Name="keyCrown" CornerRadius="7" IsHitTestVisible="False">
+                  <Border.Background>
+                    <RadialGradientBrush GradientOrigin="0.5,0.22" Center="0.5,0.22"
+                                         RadiusX="0.58" RadiusY="0.62">
+                      <GradientStop Color="{DynamicResource KeyCrownCoreColor}" Offset="0"/>
+                      <GradientStop Color="{DynamicResource KeyCrownMidColor}" Offset="0.5"/>
+                      <GradientStop Color="#00FFFFFF" Offset="1"/>
+                    </RadialGradientBrush>
+                  </Border.Background>
+                </Border>
+                <Border x:Name="keyLip" CornerRadius="7" IsHitTestVisible="False"
+                        BorderThickness="0,1,0,1">
+                  <Border.BorderBrush>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                      <GradientStop Color="{DynamicResource KeyLipTopColor}" Offset="0"/>
+                      <GradientStop Color="{DynamicResource KeyLipBottomColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                  </Border.BorderBrush>
+                </Border>
+                <StackPanel Margin="{TemplateBinding Padding}" VerticalAlignment="Center">
+                  <ContentPresenter x:Name="keyContent"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    RecognizesAccessKey="True"/>
+                  <!-- The backlit legend strip. Transport keys reveal it. -->
+                  <Border x:Name="legend" Height="3" MinWidth="34" CornerRadius="1.5"
+                          Margin="0,4,0,0" HorizontalAlignment="Center" Visibility="Collapsed"
+                          Background="{DynamicResource StatusAccent}" Opacity="0.45"/>
+                </StackPanel>
+              </Grid>
+            </Border>
           </Grid>
           <ControlTemplate.Triggers>
-            <!-- hover: backlight warms, rim lights teal (the LIFT is the behaviour's job) -->
+            <!-- Approaching the key brings the lamp up to a low glow. -->
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="halo" Property="Opacity" Value="0.72"/>
-              <Setter TargetName="core" Property="Opacity" Value="0.4"/>
-              <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource Teal}"/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="keySeam"
+                                     Storyboard.TargetProperty="Opacity"
+                                     To="0.34" Duration="0:0:0.16">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="keySeam"
+                                     Storyboard.TargetProperty="Opacity"
+                                     To="0" Duration="0:0:0.16">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
-            <!-- pressed: rubber squeezed toward the light (never a dark fill); sheen dims -->
+            <!-- Pressing it takes the lamp up and sinks the cap into the housing. -->
             <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="halo" Property="Opacity" Value="0.98"/>
-              <Setter TargetName="core" Property="Opacity" Value="0.62"/>
-              <Setter TargetName="sheen" Property="Opacity" Value="0.14"/>
-              <Setter TargetName="shadow" Property="Opacity" Value="0.32"/>
+              <Setter TargetName="keyFace" Property="Background" Value="{DynamicResource ButtonPressed}"/>
+              <Setter TargetName="keyFace" Property="Effect" Value="{StaticResource KeyFaceShadowPressed}"/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="keySeam"
+                                     Storyboard.TargetProperty="Opacity"
+                                     To="0.85" Duration="0:0:0.16">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="keyFace"
+                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                     To="1.2" Duration="0:0:0.08"/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="keySeam"
+                                     Storyboard.TargetProperty="Opacity"
+                                     To="0" Duration="0:0:0.16">
+                      <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="keyFace"
+                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                     To="0" Duration="0:0:0.08"/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
+            <!-- Transport keys carry the legend strip; the primary one is lit. -->
+            <Trigger Property="ctl:KeyStyle.Role" Value="Transport">
+              <Setter TargetName="legend" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="ctl:KeyStyle.Role" Value="TransportPrimary">
+              <Setter TargetName="legend" Property="Visibility" Value="Visible"/>
+              <Setter TargetName="legend" Property="Opacity" Value="1"/>
+              <Setter TargetName="legend" Property="Effect" Value="{StaticResource LegendGlow}"/>
+            </Trigger>
+            <!-- A dead key is unpowered, not blanked. The legend on a console key is a translucent
+                 window with a bulb behind it; turning the key off turns that bulb down to standby
+                 rather than out, so the label still carries a faint light and stays readable.
+                 WCAG 1.4.3 exempts inactive controls; every ENABLED state keeps its contrast. -->
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Opacity" Value="0.4"/>
+              <Setter Property="Foreground" Value="{DynamicResource KeyStandby}"/>
+              <Setter TargetName="keySeam" Property="Opacity" Value="0"/>
+              <Setter TargetName="keyContent" Property="Effect" Value="{StaticResource StandbyGlow}"/>
             </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="ctl:KeyStyle.Role" Value="Transport"/>
+                <Condition Property="IsEnabled" Value="False"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="legend" Property="Background" Value="{DynamicResource Line}"/>
+              <Setter TargetName="legend" Property="Opacity" Value="1"/>
+              <Setter TargetName="legend" Property="Effect" Value="{x:Null}"/>
+            </MultiTrigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="ctl:KeyStyle.Role" Value="TransportPrimary"/>
+                <Condition Property="IsEnabled" Value="False"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="legend" Property="Background" Value="{DynamicResource Line}"/>
+              <Setter TargetName="legend" Property="Opacity" Value="1"/>
+              <Setter TargetName="legend" Property="Effect" Value="{x:Null}"/>
+            </MultiTrigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
-  <!-- Accent button (Rip, Verify, Convert): the same 3D rubber template, but the rubber (and its
-       edge) are teal - a glowing lens cap standing proud of the panel. -->
+  <!-- The accent key: the same machined cap in the accent metal. Setters only - no second
+       template, so state behaviour cannot drift between the two. -->
   <Style x:Key="Accent" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-    <Setter Property="Foreground" Value="#04110F"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentKeyText}"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
-    <Setter Property="BorderBrush" Value="#7BFFFFFF"/>
     <Setter Property="Background">
       <Setter.Value>
         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-          <GradientStop Color="#63E6D9" Offset="0"/>
-          <GradientStop Color="#33C7B9" Offset="1"/>
+          <GradientStop Color="{DynamicResource AccentKeyTopColor}" Offset="0"/>
+          <GradientStop Color="{DynamicResource AccentKeyBottomColor}" Offset="1"/>
         </LinearGradientBrush>
       </Setter.Value>
     </Setter>
-    <Setter Property="Tag">
-      <Setter.Value>
-        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-          <GradientStop Color="#12554D" Offset="0"/>
-          <GradientStop Color="#1F8C82" Offset="0.5"/>
-          <GradientStop Color="#12554D" Offset="1"/>
-        </LinearGradientBrush>
-      </Setter.Value>
-    </Setter>
+    <Style.Triggers>
+      <!-- An unpowered accent key is not a teal key with dim text: it is off, so it returns to the
+           ordinary face and its label drops to standby with every other dead key. -->
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Background" Value="{DynamicResource ButtonFace}"/>
+        <Setter Property="Foreground" Value="{DynamicResource KeyStandby}"/>
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <!-- dark dropdown to match the panel buttons -->
