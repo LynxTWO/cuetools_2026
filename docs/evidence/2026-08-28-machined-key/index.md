@@ -32,8 +32,8 @@ animation**. The triggers themselves were exercised live (below).
 
 ## Results
 
-`key-states-dark.png` and `key-states-light.png`, nineteen states each: nine for the key, four for
-the lamp, two for the window, two for its list rows, and two for the switch.
+`key-states-dark.png` and `key-states-light.png`, twenty-one states each: nine for the key, four for
+the lamp, two for the window, two for its list rows, two for the switch, and two for the bank.
 
 | State | What it shows |
 | --- | --- |
@@ -63,12 +63,20 @@ console: the housing reuses the switch's own palette tokens rather than hardcode
 light theme gets a light housing instead of a black hole in a pale panel; and the tick's two
 colours became `LampTickOff` and `LampTickOn` tokens for the same reason.
 
-The Rip page's cue, log and cover-art options moved from switch rows to this lamp, wrapping
-horizontally with readable labels (the owner's option C). A switch says "this state is on now",
-which belongs on a settings page where the other 53 live; a lamp says "include this in what I am
-about to do", which is what these three are. It also costs the rail about 44 vertical pixels
-instead of about 91, on the page that already fought clipping. The labels stay readable rather than
-dropping to the Linux head's `cue` and `log`, which save twelve pixels and cost the reader a guess.
+The Rip page's cue, log and cover-art options moved from switch rows to this lamp, in a wrapping
+panel with readable labels (the owner's option C). A switch says "this state is on now", which
+belongs on a settings page where the other 53 live; a lamp says "include this in what I am about to
+do", which is what these three are. The labels stay readable rather than dropping to the Linux
+head's `cue` and `log`, which save twelve pixels and cost the reader a guess.
+
+**Correcting a claim made when this slice landed.** It was written up as costing the rail about 44
+vertical pixels instead of about 91. Measured on the live page afterwards, the OPTIONS panel ends
+at y=527 with switches and y=504 with lamps: **23 pixels, not 47**. The right rail is about 160
+pixels wide, so the three lamps wrap to one per line rather than sitting side by side, and the
+saving comes from a lamp row being shorter than a switch row and from "Embed cover art" no longer
+wrapping onto two lines - not from horizontal layout. The horizontal gain only appears on a wider
+rail. The control is still the right one here for what it says, but the space argument was
+overstated.
 
 ## Live check
 
@@ -133,9 +141,43 @@ after the owner reported the light stopping hard at the housing corners: the pla
 toward the rim, so the light has to die out inside the housing rather than be clipped square at
 its border. WPF had the same five-stop lamp gradient and the same halo, without the mask.
 
+### The key bank
+
+For a short fixed set of choices whose labels fit side by side, every option is visible and one
+press away instead of hidden behind a menu. It stays a `ListBox`, so arrow-key selection, the
+per-item accessible selected state, and the `ItemsSource` / `SelectedItem` / `SelectedIndex` trio
+all come for free.
+
+Selection and touch are two different questions, so they get two different lights: the teal detent
+pip says "this is the engaged one", the amber seam lamp says "your pointer is here". The seam
+deliberately does not light the selected key. A dead bank keeps its raised face and drops the pip
+to standby, so a disabled control still says which mode is selected.
+
+Seven call sites converted, chosen by whether the set is fixed and short:
+
+| View | Choice | Why a bank |
+| --- | --- | --- |
+| Rip | Burst / Secure / Paranoid / Salvage | Four fixed modes; the one the user most wants to see at a glance |
+| Rip | Tracks / Image + embedded CUE | Two fixed layouts |
+| Advanced | Album art search | None / Primary / Extensive |
+| Advanced | Metadata search | None / Fast / Default / Extensive |
+| Advanced | Proxy mode | None / System / Custom |
+| Queue | Verify / Convert | Two fixed actions |
+| Settings | Rip output layout | Same two fixed layouts |
+
+The drive, parallel-drive and release selectors stayed windows: their contents are discovered at
+runtime, which is exactly what the window is for. So did the codec, encoder, mode and naming-preset
+lists.
+
+The item style is **keyed** and applied through `ItemContainerStyle`, never implicitly. An implicit
+`ListBoxItem` style would restyle the left navigation rail into a keypad; `KeyBankTests` asserts
+that no implicit one exists.
+
 ## Still to come in this port
 
-The `ListBox.bank`, which is the one slice with real call-site churn: six to eight ComboBoxes
-become bank ListBoxes, and several tests pin that markup literally. The DPI sweep and the 1200-pixel Rip page captures need re-taking once
+Nothing in the control inventory. The remaining work is evidence: the DPI sweep and the
+high-contrast selector set were captured against the old controls and should be re-taken now that
+metrics have settled. Note that `RailColumnWidthTests` and `QueueColumnLayoutTests` assert measured
+constants rather than measuring, so a metric change there goes wrong without going red. The DPI sweep and the 1200-pixel Rip page captures need re-taking once
 control metrics settle; the rail and queue column tests assert measured constants rather than
 measuring, so a metric change there goes wrong without going red.

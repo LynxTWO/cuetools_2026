@@ -396,6 +396,131 @@
     </Setter>
   </Style>
 
+  <!-- THE KEY BANK. For a short fixed set of choices whose labels fit side by side: every option
+       is visible and one press away, instead of hidden behind a menu. The window (ComboBox) keeps
+       the lists that are genuinely lists, or whose labels are too long to lay out in a row.
+
+       It stays a ListBox, so arrow-key selection, the per-item accessible selected state, and the
+       ItemsSource / SelectedItem / SelectedIndex trio all come for free.
+
+       The item style is KEYED and applied through ItemContainerStyle, never implicitly: an
+       implicit ListBoxItem style would restyle the left navigation rail into a keypad.
+
+       Selection and touch are two different questions, so they get two different lights. The teal
+       detent pip says "this is the engaged one"; the amber seam lamp says "your pointer is here".
+       The seam deliberately does NOT light the selected key. -->
+  <Style x:Key="BankKey" TargetType="ListBoxItem">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Padding" Value="12,5"/>
+    <Setter Property="Margin" Value="0,1,2,1"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <ControlTemplate.Resources>
+            <DropShadowEffect x:Key="BankSeamGlow" Color="{DynamicResource KeySeamColor}"
+                              BlurRadius="12" ShadowDepth="1" Direction="270" Opacity="0.9"/>
+            <DropShadowEffect x:Key="BankKeyShadow" Color="#000000"
+                              BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.33"/>
+            <DropShadowEffect x:Key="BankPipGlow" Color="{DynamicResource LampHalo}"
+                              BlurRadius="8" ShadowDepth="0" Opacity="0.63"/>
+          </ControlTemplate.Resources>
+          <Grid ClipToBounds="False">
+            <!-- Tighter and dimmer than a button's seam: these keys sit two pixels apart. -->
+            <Border x:Name="bankSeam" CornerRadius="5" Opacity="0" IsHitTestVisible="False"
+                    Effect="{StaticResource BankSeamGlow}">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="{DynamicResource KeySeamColor}" Offset="0"/>
+                  <GradientStop Color="{DynamicResource KeySeamColor}" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+            </Border>
+            <Border x:Name="bankKey" CornerRadius="5" BorderThickness="1"
+                    Background="Transparent" BorderBrush="Transparent"
+                    Padding="{TemplateBinding Padding}">
+              <StackPanel>
+                <ContentPresenter x:Name="bankKeyContent" HorizontalAlignment="Center"/>
+                <Border x:Name="bankPip" Height="3" Width="20" CornerRadius="1.5" Margin="0,3,0,0"
+                        HorizontalAlignment="Center" Opacity="0.55"
+                        Background="{DynamicResource Line}"/>
+              </StackPanel>
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="bankSeam" Property="Opacity" Value="0.26"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+              <Setter Property="FontWeight" Value="SemiBold"/>
+              <Setter TargetName="bankKey" Property="Background" Value="{DynamicResource ButtonFace}"/>
+              <Setter TargetName="bankKey" Property="Effect" Value="{StaticResource BankKeyShadow}"/>
+              <Setter TargetName="bankPip" Property="Background" Value="{DynamicResource StatusAccent}"/>
+              <Setter TargetName="bankPip" Property="Opacity" Value="1"/>
+              <Setter TargetName="bankPip" Property="Effect" Value="{StaticResource BankPipGlow}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource KeyStandby}"/>
+              <Setter Property="Cursor" Value="Arrow"/>
+              <Setter TargetName="bankSeam" Property="Opacity" Value="0"/>
+            </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsSelected" Value="True"/>
+                <Condition Property="IsEnabled" Value="False"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="bankPip" Property="Background" Value="{DynamicResource KeyStandby}"/>
+              <Setter TargetName="bankPip" Property="Effect" Value="{x:Null}"/>
+            </MultiTrigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="BankKeyCompact" TargetType="ListBoxItem" BasedOn="{StaticResource BankKey}">
+    <Setter Property="Padding" Value="8,5"/>
+    <Setter Property="FontSize" Value="11.5"/>
+  </Style>
+
+  <Style x:Key="Bank" TargetType="ListBox">
+    <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+    <Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+    <Setter Property="HorizontalAlignment" Value="Left"/>
+    <Setter Property="ItemContainerStyle" Value="{StaticResource BankKey}"/>
+    <Setter Property="ItemsPanel">
+      <Setter.Value>
+        <!-- A four-key bank does not always fit on one line in a narrow rail, and wrapping is
+             better than clipping the last position. -->
+        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBox">
+          <Border x:Name="bankHousing" CornerRadius="7" BorderThickness="1" Padding="2"
+                  Background="{DynamicResource ButtonPressed}"
+                  BorderBrush="{DynamicResource ButtonEdge}">
+            <ItemsPresenter/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="bankHousing" Property="BorderBrush" Value="{DynamicResource StatusAccent}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="BankCompact" TargetType="ListBox" BasedOn="{StaticResource Bank}">
+    <Setter Property="ItemContainerStyle" Value="{StaticResource BankKeyCompact}"/>
+  </Style>
+
   <!-- ROWS IN THE OPEN LIST. A lit pip beside the engaged one: the same detent language the key
        bank uses, so "this is the one" reads the same wherever it appears. The row itself only
        lifts to Glass under the pointer. -->

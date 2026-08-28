@@ -418,14 +418,15 @@
                final fallback. Stop replaces the primary actions while a read is active. -->
           <WrapPanel x:Name="RipActionWrap" Grid.Row="1" Margin="0,10,0,0"
                      HorizontalAlignment="Right">
-            <ComboBox Width="104" Margin="0,0,10,6" SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}"
+            <ListBox Style="{StaticResource BankCompact}" Margin="0,0,10,6"
+                      SelectedIndex="{Binding CorrectionQuality, Mode=TwoWay}"
                       IsEnabled="{Binding ControlsUnlocked}" VerticalAlignment="Center"
                       ToolTip="Burst: fast, single pass - windows the vote flags still re-read up to 16 passes, but deep recovery never runs. Secure: read twice + compare, with deep recovery. Paranoid: deepest re-reads. Salvage: for defective-by-design discs - Test &amp; Copy at Burst quality with C2 off at minimum speed; agreement proves the drive's output is stable, and the result is labeled salvaged, never verified.">
-              <ComboBoxItem>Burst</ComboBoxItem>
-              <ComboBoxItem>Secure</ComboBoxItem>
-              <ComboBoxItem>Paranoid</ComboBoxItem>
-              <ComboBoxItem>Salvage</ComboBoxItem>
-            </ComboBox>
+              <ListBoxItem>Burst</ListBoxItem>
+              <ListBoxItem>Secure</ListBoxItem>
+              <ListBoxItem>Paranoid</ListBoxItem>
+              <ListBoxItem>Salvage</ListBoxItem>
+            </ListBox>
             <Button Width="210" MinWidth="150" Margin="0,0,6,6"
                     VerticalAlignment="Center" IsEnabled="{Binding CodecUnlocked}"
                     Click="CodecPicker_Click" ToolTip="{Binding SelectedCodecTooltip}"
@@ -433,7 +434,7 @@
               <TextBlock Text="{Binding SelectedCodecLabel}"
                          TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
             </Button>
-            <ComboBox Width="176" Margin="0,0,6,6" VerticalAlignment="Center"
+            <ListBox Style="{StaticResource BankCompact}" Margin="0,0,6,6" VerticalAlignment="Center"
                       ItemsSource="{Binding OutputLayouts}"
                       SelectedItem="{Binding SelectedOutputLayout, Mode=TwoWay}"
                       IsEnabled="{Binding ControlsUnlocked}"

@@ -75,7 +75,7 @@
       <Border Style="{StaticResource Row}" ToolTip="Always save the .cue sheet as UTF-8 (rather than the system code page) so non-Latin titles survive."><DockPanel><ToggleButton DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AlwaysWriteUtf8Cue}"/><TextBlock Style="{StaticResource RowLabel}" Text="Always write .cue as UTF-8"/></DockPanel></Border>
       <Border Style="{StaticResource Row}" ToolTip="Tracks is the compatible default. Image + embedded CUE writes one continuous audio file and stores the complete disc layout inside it.">
         <DockPanel>
-          <ComboBox DockPanel.Dock="Right" Width="190"
+          <ListBox DockPanel.Dock="Right" Style="{StaticResource BankCompact}"
                     ItemsSource="{Binding RipOutputLayouts}"
                     SelectedItem="{Binding RipOutputLayoutChoice, Mode=TwoWay}"/>
           <TextBlock Style="{StaticResource RowLabel}" Text="Default rip layout"/>
