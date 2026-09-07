@@ -1,0 +1,59 @@
+name: ADC installation
+
+on:
+  pull_request:
+    paths:
+      - '.agents/skills/anti-dark-code/**'
+      - '.claude/skills/anti-dark-code/**'
+      - '.github/workflows/adc-installation.yml'
+  push:
+    branches: [master, agent/upstream-contribution-plan]
+    paths:
+      - '.agents/skills/anti-dark-code/**'
+      - '.claude/skills/anti-dark-code/**'
+      - '.github/workflows/adc-installation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-adc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ADC_VERSION: 2026.09.07-unified.13
+      ADC_CORE_SHA256: 25b37209c351a6e8331bf4db4545f5d58d7158571c02309b99fa98acedb4b5b4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Verify the installed bytes against the published core digest
+        run: |
+          python -B - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          skill = Path('.agents/skills/anti-dark-code').resolve()
+          manifest = json.loads((skill / '.adc-managed.json').read_text())
+          assert manifest['source_version'] == os.environ['ADC_VERSION']
+          assert manifest['source_core_sha256'] == os.environ['ADC_CORE_SHA256']
+          assert (skill / 'VERSION').read_text().strip() == os.environ['ADC_VERSION']
+          digest = hashlib.sha256()
+          assert manifest['files']
+          for relative, expected in sorted(manifest['files'].items()):
+              path = (skill / relative).resolve()
+              assert path.is_relative_to(skill), relative
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              assert actual == expected, relative
+              digest.update(relative.encode('utf-8') + b'\0' + bytes.fromhex(actual))
+          assert digest.hexdigest() == os.environ['ADC_CORE_SHA256']
+          print('Published managed-core digest verified')
+          PY
+      - name: Validate installed integrity and repository calibration binding
+        run: python -B .agents/skills/anti-dark-code/scripts/adc.py validate --skill .agents/skills/anti-dark-code --mode installed
