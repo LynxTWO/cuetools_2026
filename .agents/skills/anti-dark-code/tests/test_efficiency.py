@@ -10,6 +10,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+# macOS puts temporary directories under /var, which is a symlink to /private/var.
+# The managed-path guards in this skill refuse to write through a link-like path
+# component, by design, so every test that builds a repository in the default temp
+# root fails there for a reason unrelated to the behaviour under test. Resolve the
+# temp root once, so the guards police the real path. A no-op where the platform's
+# temp directory is already canonical.
+tempfile.tempdir = str(Path(tempfile.gettempdir()).resolve())
+
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "adc_efficiency.py"
 SPEC = importlib.util.spec_from_file_location("adc_efficiency", SCRIPT)
@@ -45,6 +53,8 @@ class EfficiencyReceiptTests(unittest.TestCase):
         efficiency.write_json_atomic(summary_path, empty)
         efficiency.write_json_atomic(docs_summary, empty)
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        # Detached maintenance can race TemporaryDirectory cleanup after a commit.
+        self.git(repo, "config", "maintenance.auto", "false")
         self.git(repo, "config", "user.email", "tests@example.invalid")
         self.git(repo, "config", "user.name", "ADC Tests")
         self.git(repo, "config", "core.autocrlf", "false")
@@ -414,6 +424,7 @@ class EfficiencyReceiptTests(unittest.TestCase):
             efficiency.write_json_atomic(summary_path, empty)
             efficiency.write_json_atomic(docs_summary, empty)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            self.git(repo, "config", "maintenance.auto", "false")
             subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(repo), "config", "user.name", "ADC Tests"], check=True)
             subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
@@ -479,6 +490,7 @@ class EfficiencyReceiptTests(unittest.TestCase):
             efficiency.write_json_atomic(summary_path, efficiency.empty_summary())
             efficiency.write_json_atomic(docs_summary, efficiency.empty_summary())
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            self.git(repo, "config", "maintenance.auto", "false")
             subprocess.run(["git", "-C", str(repo), "config", "user.email", "tests@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(repo), "config", "user.name", "ADC Tests"], check=True)
             subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
@@ -548,6 +560,49 @@ class EfficiencyReceiptTests(unittest.TestCase):
                 errors,
                 ["a receipt PR must add one ledger receipt and update only the two generated summaries"],
             )
+
+    def test_validate_ledger_pr_passes_a_change_that_never_touches_the_ledger(self) -> None:
+        # Reproduces a real CI refusal: a release branch that edited the workflow
+        # alongside twenty-two other files triggered this validator and was told it
+        # "must add exactly one public ledger receipt". The old carve-out accepted
+        # only a changeset equal to {efficiency-ledger.yml}, so any combined change
+        # was rejected, including one that also edited the sibling intake workflow.
+        # Reverting to that exact-set comparison turns both subtests below red.
+        combined = {
+            "workflow-only": [".github/workflows/efficiency-ledger.yml"],
+            "workflow-plus-release": [
+                ".github/workflows/efficiency-ledger.yml",
+                ".github/workflows/proposal-intake.yml",
+                "CHANGELOG.md",
+                "anti-dark-code/references/07-adversarial-review.md",
+            ],
+        }
+        for case, paths in combined.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                _, _, _, base = self.initialize_receipt_repo(repo)
+                for rel in paths:
+                    target = repo / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(f"touched by {case}\n", encoding="utf-8")
+                self.git(repo, "add", ".")
+                self.git(repo, "commit", "-qm", case)
+                errors, additions = efficiency.validate_ledger_pr(repo=repo, changed_from=base)
+                self.assertEqual(errors, [], case)
+                self.assertEqual(additions, 0, case)
+
+    def test_validate_ledger_pr_still_rejects_ledger_edits_without_a_new_receipt(self) -> None:
+        # The security property the widened rule must keep: touching ledger data or
+        # a generated summary without adding a receipt is exactly the case to refuse.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _, summary_path, _, base = self.initialize_receipt_repo(repo)
+            summary_path.write_text('{"hand": "edited"}\n', encoding="utf-8")
+            self.git(repo, "add", ".")
+            self.git(repo, "commit", "-qm", "hand-edited summary")
+            errors, additions = efficiency.validate_ledger_pr(repo=repo, changed_from=base)
+            self.assertEqual(additions, 0)
+            self.assertEqual(errors, ["a receipt PR must add exactly one public ledger receipt"])
 
     def test_validate_ledger_pr_rejects_tampering_missing_and_stale_summaries(self) -> None:
         cases = ("tampered-receipt", "missing-summary", "stale-summary", "wrong-filename")

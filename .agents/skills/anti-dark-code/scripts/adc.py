@@ -14,10 +14,12 @@ import datetime as dt
 import fnmatch
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
 import signal
+import tarfile
 import shutil
 import subprocess
 import sys
@@ -25,9 +27,11 @@ import tempfile
 import textwrap
 import time
 import unicodedata
+from collections.abc import Mapping
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Sequence
+from types import MappingProxyType
+from typing import Any, NamedTuple, Sequence
 from urllib.parse import urlsplit
 
 SCHEMA_VERSION = 1
@@ -35,6 +39,8 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = SKILL_ROOT / "assets" / "verification-capabilities.json"
 CALIBRATION_TEMPLATE_DIR = SKILL_ROOT / "assets" / "templates" / "calibration"
 VERSION = (SKILL_ROOT / "VERSION").read_text(encoding="utf-8").strip() if (SKILL_ROOT / "VERSION").exists() else "unknown"
+PROBE_METHOD_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+PROBE_RUNTIME = {"executable": sys.executable, "version": sys.version, "platform": sys.platform}
 SOURCE_SCOPE_FILENAME = "SOURCE-SCOPE.json"
 SOURCE_SCOPE_KIND = "anti-dark-code-core"
 SOURCE_SCOPE_VALUE = "universal"
@@ -59,13 +65,31 @@ SOURCE_EXTENSIONS = {
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java",
     ".kt", ".kts", ".cs", ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".swift",
     ".rb", ".php", ".scala", ".ex", ".exs", ".fs", ".fsx", ".dart", ".lua", ".gd",
-    ".sh", ".bash", ".zsh", ".ps1", ".sql", ".tf", ".hcl", ".vue", ".svelte",
+    ".sh", ".bash", ".zsh", ".ps1", ".sql", ".tf", ".hcl", ".vue", ".svelte", ".vb",
 }
 
 TEXT_EXTENSIONS = SOURCE_EXTENSIONS | {
     ".json", ".jsonc", ".yaml", ".yml", ".toml", ".xml", ".md", ".txt", ".ini",
     ".cfg", ".conf", ".properties", ".gradle", ".graphql", ".gql", ".proto", ".csproj",
+    ".vbproj", ".fsproj", ".vcxproj",
     ".sln", ".props", ".targets", ".html", ".css", ".scss", ".less", ".csv",
+}
+
+# Extensions the profiler knows are not source and never counts as such. A file
+# whose extension is in none of SOURCE_EXTENSIONS, TEXT_EXTENSIONS, or this set is
+# unrecognized. A large unrecognized residue is reported in the profile as an
+# unknown, because silently dropping it reads as a confident inventory.
+KNOWN_NON_SOURCE_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp", ".tif", ".tiff", ".psd", ".pdf",
+    ".ttf", ".otf", ".woff", ".woff2", ".eot", ".mp3", ".mp4", ".wav", ".ogg", ".webm", ".mov", ".flac",
+    ".zip", ".7z", ".gz", ".tgz", ".tar", ".rar", ".dll", ".exe", ".so", ".dylib", ".lib", ".a", ".o",
+    ".pdb", ".bin", ".dat", ".db", ".sqlite", ".pyc", ".class", ".jar", ".nupkg", ".snupkg", ".p7s",
+    ".tlog", ".idb", ".ipch", ".ilk", ".exp", ".res", ".resx", ".resources", ".manifest", ".user",
+    ".suo", ".cache", ".lock", ".log", ".map", ".snap", ".bak", ".tmp", ".orig", ".rej", ".patch",
+    ".diff", ".rtf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".lnk", ".url",
+    ".plist", ".pem", ".crt", ".key", ".pub", ".sig", ".asc", ".md5", ".sha1", ".sha256", ".po",
+    ".pot", ".mo", ".strings", ".resw", ".xlf", ".xliff", ".ipynb", ".sample", ".example",
+    ".myapp", ".settings", ".datasource", ".nuspec", ".pfx", ".snk", ".cer",
 }
 
 LANGUAGE_BY_EXT = {
@@ -77,7 +101,7 @@ LANGUAGE_BY_EXT = {
     ".ex": "Elixir", ".exs": "Elixir", ".fs": "F#", ".fsx": "F#", ".dart": "Dart",
     ".lua": "Lua", ".gd": "GDScript", ".sh": "Shell", ".bash": "Shell", ".zsh": "Shell",
     ".ps1": "PowerShell", ".sql": "SQL", ".tf": "Terraform", ".hcl": "HCL",
-    ".vue": "Vue", ".svelte": "Svelte",
+    ".vue": "Vue", ".svelte": "Svelte", ".vb": "Visual Basic .NET",
 }
 
 MANIFEST_NAMES = {
@@ -87,6 +111,7 @@ MANIFEST_NAMES = {
     "settings.gradle.kts", "Gemfile", "composer.json", "mix.exs", "pubspec.yaml", "Package.swift",
     "CMakeLists.txt", "Makefile", "Justfile", "Taskfile.yml", "Dockerfile", "docker-compose.yml",
     "docker-compose.yaml", "project.godot", "ProjectVersion.txt", "*.uproject", "*.sln", "*.csproj",
+    "*.vbproj", "*.fsproj",
 }
 
 STEERING_NAMES = {
@@ -106,15 +131,25 @@ HOST_SKILL_TREE_PREFIXES = {
     (".gemini", "skills"),
     (".codex", "skills"),
 }
+# Linked worktrees an agent harness keeps inside the repository. Each is a full
+# second checkout of some branch, so profiling one describes a different tree.
+HOST_WORKTREE_TREE_PREFIXES = {
+    (".claude", "worktrees"),
+}
 TOOLING_PATH_PREFIXES = (
     ".agents/skills/",
     ".claude/skills/",
+    ".claude/worktrees/",
     ".gemini/skills/",
     ".codex/skills/",
     ".anti-dark-code/",
 )
 
 VALIDATION_MODES = ("auto", "distribution", "universal", "installed")
+
+# The catalog size is asserted in several places. Keep it here so a future
+# capability changes one line rather than five that can drift apart.
+CAPABILITY_COUNT = 22
 
 CONTENT_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "stateful": (re.compile(r"\b(state|store|reducer|transaction|workflow|state machine)\b", re.I),),
@@ -273,6 +308,26 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+PDF_TIMESTAMP_PATTERN = re.compile(rb"(/(?:CreationDate|ModDate)\s*\()D:[^)]*(\))")
+PDF_EPOCH_STAMP = rb"\g<1>D:00000000000000+00'00'\g<2>"
+
+
+def normalize_pdf_bytes(data: bytes) -> bytes:
+    """Blank a PDF's generation timestamps so two renders of one source compare equal.
+
+    A print-to-PDF engine stamps /CreationDate and /ModDate from the wall clock,
+    so the raw digest of a regenerated document never reproduces its predecessor
+    even when every other byte matches. That makes the stored digest an identity
+    for one artifact rather than a reproducibility claim about the source. Zeroing
+    only those two values leaves a digest a later re-render can actually match.
+    """
+    return PDF_TIMESTAMP_PATTERN.sub(PDF_EPOCH_STAMP, data)
+
+
+def normalized_pdf_sha256(path: Path) -> str:
+    return sha256_bytes(normalize_pdf_bytes(path.read_bytes()))
 
 
 def normalized_json_hash(data: Any, volatile_keys: set[str] | None = None) -> str:
@@ -522,7 +577,14 @@ def compute_repository_binding(repo: Path) -> dict[str, Any]:
     roots = sorted({line.strip() for line in (roots_raw or "").splitlines() if line.strip()})
     is_git = git_output(repo, ["rev-parse", "--is-inside-work-tree"]) == "true"
     normalized_path = os.path.normcase(str(repo))
-    path_hash = sha256_bytes(normalized_path.encode("utf-8"))
+    # os.fsencode, not str.encode("utf-8"). Under an ASCII filesystem encoding
+    # (LC_ALL=C) a repository path outside that encoding decodes to surrogates,
+    # and encoding those back strictly raises "surrogates not allowed", so the
+    # binding cannot be computed at all for a repository under a non-ASCII
+    # directory. fsencode reverses the same transform the path arrived through.
+    # For a path the platform could represent, this produces identical bytes, so
+    # existing bindings keep their digests.
+    path_hash = sha256_bytes(os.fsencode(normalized_path))
 
     components: dict[str, Any] = {
         "origin_present": bool(origin),
@@ -535,15 +597,21 @@ def compute_repository_binding(repo: Path) -> dict[str, Any]:
 
     if origin:
         normalized_origin = normalize_git_remote(origin)
-        components["origin_sha256"] = sha256_bytes(normalized_origin.encode("utf-8"))
+        # surrogateescape to match how git_output decoded it; a remote URL that is
+        # not valid UTF-8 round-trips to its original bytes instead of raising.
+        components["origin_sha256"] = sha256_bytes(normalized_origin.encode("utf-8", "surrogateescape"))
     if roots:
         roots_text = "\n".join(roots)
         components["root_commits_sha256"] = sha256_bytes(roots_text.encode("utf-8"))
 
     if origin:
-        # The canonical remote is the stable identity. Root commits remain hashed
-        # evidence, but they do not change the binding after a first commit or
-        # ordinary history maintenance.
+        # The canonical remote is the exclusivity signal, so it alone keys the
+        # binding. Root commits are the more durable signal but forks share them
+        # by design, so anchoring identity there would accept an upstream
+        # repository's calibration inside every fork of it. Root commits stay
+        # hashed in identity_components and are read by binding_mismatch_detail,
+        # which uses them to tell a move, fork, or rename apart from foreign
+        # calibration. They explain a mismatch; they never overrule one.
         identity_payload = {
             "kind": "git-origin",
             "origin_sha256": components["origin_sha256"],
@@ -615,6 +683,29 @@ def assess_repository_binding(repo: Path, calibration: Path) -> dict[str, Any]:
         "current": current,
         "binding": binding,
     }
+
+
+def binding_mismatch_detail(assessment: dict[str, Any]) -> str:
+    """Name which identity component failed so a reviewed move or fork is distinguishable from foreign calibration."""
+    stored = (assessment.get("binding") or {}).get("identity_components") or {}
+    current = (assessment.get("current") or {}).get("identity_components") or {}
+    parts: list[str] = []
+    roots_match = False
+    for key, label in (("origin_sha256", "remote identity"), ("root_commits_sha256", "root commits")):
+        stored_value = stored.get(key)
+        current_value = current.get(key)
+        if not stored_value or not current_value:
+            parts.append(f"{label}: unknown")
+        elif stored_value == current_value:
+            parts.append(f"{label}: match")
+            if key == "root_commits_sha256":
+                roots_match = True
+        else:
+            parts.append(f"{label}: differ")
+    detail = "; ".join(parts)
+    if roots_match:
+        detail += "; matching root commits suggest a move, fork, or rename rather than foreign calibration"
+    return f" ({detail})"
 
 
 def write_repository_binding(
@@ -781,6 +872,15 @@ def validate_calibration_templates(template_dir: Path) -> list[str]:
     return errors
 
 
+def owner_execution_confirmed(config: Any) -> bool:
+    """Recognize only literal JSON true in the owner-controlled execution record."""
+    if not isinstance(config, dict):
+        return False
+    policy = config.get("execution_policy")
+    return (isinstance(policy, dict)
+            and policy.get("owner_confirmed_safe_to_execute") is True)
+
+
 def inspect_gate_config_for_migration(path: Path) -> dict[str, Any]:
     result = {
         "present": path.exists(),
@@ -804,7 +904,7 @@ def inspect_gate_config_for_migration(path: Path) -> dict[str, Any]:
     if duplicate_ids:
         result.update({"valid": False, "error": f"gates.json contains duplicate ids: {', '.join(duplicate_ids)}"})
         return result
-    result["owner_confirmed"] = bool(data.get("execution_policy", {}).get("owner_confirmed_safe_to_execute"))
+    result["owner_confirmed"] = owner_execution_confirmed(data)
     for gate in data.get("gates", []):
         if not isinstance(gate, dict):
             result.update({"valid": False, "error": "gates.json contains a non-object gate"})
@@ -927,17 +1027,68 @@ def is_host_skill_tree_parts(parts: Sequence[str]) -> bool:
     return any(tuple(parts[:len(prefix)]) == prefix for prefix in HOST_SKILL_TREE_PREFIXES)
 
 
+def is_host_worktree_tree_parts(parts: Sequence[str]) -> bool:
+    return any(tuple(parts[:len(prefix)]) == prefix for prefix in HOST_WORKTREE_TREE_PREFIXES)
+
+
 def is_ignored(path: Path, root: Path) -> bool:
     try:
         parts = path.relative_to(root).parts
     except ValueError:
         parts = path.parts
-    if is_host_skill_tree_parts(parts):
+    if is_host_skill_tree_parts(parts) or is_host_worktree_tree_parts(parts):
         return True
     return any(part in IGNORED_DIRS for part in parts[:-1])
 
 
-def iter_repo_files(root: Path, max_files: int = 50_000) -> tuple[list[Path], bool]:
+def normalize_exclusions(entries: Sequence[str] | None) -> list[str]:
+    """Normalize requested scan exclusions to repo-relative POSIX paths or globs.
+
+    An exclusion can only narrow the scan. Absolute paths, drive-qualified paths,
+    and parent references are refused so a request cannot point outside the
+    repository or be mistaken for one that does.
+    """
+    normalized: set[str] = set()
+    for raw in entries or ():
+        original = str(raw).strip().replace("\\", "/")
+        if not original:
+            continue
+        if original.startswith("/") or original[1:2] == ":" or ".." in original.split("/"):
+            raise SystemExit(f"Refused scan exclusion outside the repository: {raw}")
+        entry = original
+        while entry.startswith("./"):
+            entry = entry[2:]
+        entry = entry.strip("/")
+        if entry:
+            normalized.add(entry)
+    return sorted(normalized)
+
+
+def matches_exclusion(rel_posix: str, exclusions: Sequence[str]) -> bool:
+    """Return whether a repo-relative path is covered by a requested exclusion.
+
+    A plain entry covers itself and everything beneath it. An entry with glob
+    characters is matched against the whole relative path, and, when it names no
+    directory, against the base name as well so `*.log` reads the way people write it.
+    """
+    base = rel_posix.rsplit("/", 1)[-1]
+    for pattern in exclusions:
+        if rel_posix == pattern or rel_posix.startswith(pattern + "/"):
+            return True
+        if any(char in pattern for char in "*?["):
+            if fnmatch.fnmatch(rel_posix, pattern):
+                return True
+            if "/" not in pattern and fnmatch.fnmatch(base, pattern):
+                return True
+    return False
+
+
+def iter_repo_files(
+    root: Path,
+    max_files: int = 50_000,
+    exclusions: Sequence[str] = (),
+    skipped_nested_repositories: list[str] | None = None,
+) -> tuple[list[Path], bool]:
     files: list[Path] = []
     truncated = False
     for current, dirs, names in os.walk(root, followlinks=False):
@@ -946,15 +1097,30 @@ def iter_repo_files(root: Path, max_files: int = 50_000) -> tuple[list[Path], bo
             current_parts = current_path.relative_to(root).parts
         except ValueError:
             current_parts = current_path.parts
-        dirs[:] = sorted(
-            d for d in dirs
-            if d not in IGNORED_DIRS
-            and not is_host_skill_tree_parts((*current_parts, d))
-            and not path_is_linklike(current_path / d)
-        )
+        kept: list[str] = []
+        for d in sorted(dirs):
+            child_parts = (*current_parts, d)
+            child_rel = "/".join(child_parts)
+            if d in IGNORED_DIRS or is_host_skill_tree_parts(child_parts) or is_host_worktree_tree_parts(child_parts):
+                continue
+            if path_is_linklike(current_path / d):
+                continue
+            if exclusions and matches_exclusion(child_rel, exclusions):
+                continue
+            # A directory below the root that carries its own .git entry, file or
+            # directory, is another repository: a vendored clone, a submodule, or a
+            # linked worktree. Its files describe that tree, not this one.
+            if (current_path / d / ".git").exists():
+                if skipped_nested_repositories is not None:
+                    skipped_nested_repositories.append(child_rel + "/")
+                continue
+            kept.append(d)
+        dirs[:] = kept
         for name in sorted(names):
             path = current_path / name
             if path_is_linklike(path) or is_ignored(path, root):
+                continue
+            if exclusions and matches_exclusion(rel(path, root), exclusions):
                 continue
             files.append(path)
             if len(files) >= max_files:
@@ -979,8 +1145,30 @@ def likely_test(path: Path) -> bool:
 
 
 def git_output(repo: Path, args: Sequence[str]) -> str | None:
+    """Read git's stdout as UTF-8, never as whatever the machine's locale happens to be.
+
+    text=True alone decodes with locale.getpreferredencoding(), which is cp1252 on a
+    default Windows install and ASCII under LC_ALL=C. Git emits UTF-8. core.quotepath
+    hides that for paths by escaping them, but not for a branch name, a tag name, a
+    repository path from rev-parse --show-toplevel, or diff content, so a repository
+    under a non-ASCII directory decodes wrong or not at all. On Windows the failure is
+    especially quiet: the decode raises inside subprocess's reader thread, stdout comes
+    back None while returncode is 0, and the caller crashes on None.strip().
+
+    surrogateescape rather than replace, because these values are compared and hashed:
+    a lossy decode would make two different repositories look identical. Surrogates
+    round-trip back to the original bytes.
+    """
     try:
-        proc = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=15, check=False)
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
+            timeout=15,
+            check=False,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
     if proc.returncode != 0:
@@ -1006,12 +1194,20 @@ def git_paths(repo: Path, args: Sequence[str]) -> list[str] | None:
 
 
 def current_source_identity(repo: Path) -> dict[str, Any]:
-    commit = git_output(repo, ["rev-parse", "HEAD"])
-    branch = git_output(repo, ["rev-parse", "--abbrev-ref", "HEAD"])
+    # A routed run compares the fingerprint verified at preflight with the
+    # identity immediately before launch. `git status` normally refreshes the
+    # index stat cache, which changes that fingerprint even though repository
+    # bytes did not. Keep this diagnostic read from writing the index.
+    read_only = ["--no-optional-locks"]
+    commit = git_output(repo, [*read_only, "rev-parse", "HEAD"])
+    branch = git_output(
+        repo, [*read_only, "rev-parse", "--abbrev-ref", "HEAD"])
     status_raw = git_bytes(repo, [
-        "status", "--porcelain=v1", "--untracked-files=all", "-z", "--", ".",
+        *read_only, "status", "--porcelain=v1", "--untracked-files=all",
+        "-z", "--", ".",
         ":(exclude).agents/skills/**",
         ":(exclude).claude/skills/**",
+        ":(exclude).claude/worktrees/**",
         ":(exclude).gemini/skills/**",
         ":(exclude).codex/skills/**",
         ":(exclude).anti-dark-code/**",
@@ -1055,11 +1251,41 @@ def js_run_argv(runner: str, script_name: str) -> list[str]:
     return [runner, "run", script_name]
 
 
-def add_evidence(signals: dict[str, dict[str, Any]], signal: str, evidence: str, limit: int = 12) -> None:
-    entry = signals.setdefault(signal, {"present": False, "evidence": []})
+# Where a piece of signal evidence came from. Prose describes intentions, risks,
+# other systems, and things that were ruled out; source and configuration describe
+# what runs. The planner treats a signal backed only by prose as a question.
+PROSE_EXTENSIONS = {".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm"}
+
+
+def evidence_class_for(path: Path) -> str:
+    if path.name in STEERING_NAMES or path.suffix.lower() in PROSE_EXTENSIONS:
+        return "prose"
+    if path.suffix.lower() in SOURCE_EXTENSIONS:
+        return "source"
+    return "config"
+
+
+def add_evidence(
+    signals: dict[str, dict[str, Any]],
+    signal: str,
+    evidence: str,
+    limit: int = 12,
+    evidence_class: str = "structure",
+) -> None:
+    entry = signals.setdefault(signal, {"present": False, "evidence": [], "evidence_classes": {}})
     entry["present"] = True
+    classes = entry.setdefault("evidence_classes", {})
+    if evidence not in entry["evidence"]:
+        classes[evidence_class] = classes.get(evidence_class, 0) + 1
     if evidence not in entry["evidence"] and len(entry["evidence"]) < limit:
         entry["evidence"].append(evidence)
+
+
+def signal_is_documentation_only(entry: dict[str, Any]) -> bool:
+    if not entry.get("present"):
+        return False
+    classes = entry.get("evidence_classes") or {}
+    return bool(classes) and set(classes) == {"prose"}
 
 
 def parse_package_json(path: Path, repo: Path, profile: dict[str, Any]) -> None:
@@ -1137,13 +1363,13 @@ def parse_package_json(path: Path, repo: Path, profile: dict[str, Any]) -> None:
 
     for dep in dep_names:
         if any(term in dep for term in ("zod", "joi", "yup", "ajv", "pydantic", "jsonschema")):
-            add_evidence(profile["signals"], "schema_validation_present", package_rel)
+            add_evidence(profile["signals"], "schema_validation_present", package_rel, evidence_class="config")
         if any(term in dep for term in ("dependency-cruiser", "madge", "eslint-plugin-boundaries", "archunit")):
-            add_evidence(profile["signals"], "architecture_tool_present", package_rel)
+            add_evidence(profile["signals"], "architecture_tool_present", package_rel, evidence_class="config")
         if any(term in dep for term in ("stryker", "mutmut", "pitest", "cargo-mutants")):
-            add_evidence(profile["signals"], "mutation_tool_present", package_rel)
+            add_evidence(profile["signals"], "mutation_tool_present", package_rel, evidence_class="config")
         if any(term in dep for term in ("fast-check", "hypothesis", "quickcheck", "proptest")):
-            add_evidence(profile["signals"], "property_tool_present", package_rel)
+            add_evidence(profile["signals"], "property_tool_present", package_rel, evidence_class="config")
 
 
 def add_conventional_commands(
@@ -1182,11 +1408,11 @@ def add_conventional_commands(
              "source":"conventional candidate from go.mod", "confidence":"inferred", "timeout_seconds":900,
              "resource_class":"heavy", "cwd":".", "include_globs":[], "exclude_globs":[]},
             [item for item in manifest_paths if Path(item).name == "go.mod"])
-    if any(name.endswith(".sln") or name.endswith(".csproj") for name in manifests):
+    if any(name.endswith((".sln", ".csproj", ".vbproj", ".fsproj")) for name in manifests):
         add({"id":"dotnet-test", "level":3, "argv":["dotnet", "test"], "enabled":False,
              "source":"conventional candidate from .NET manifest", "confidence":"inferred", "timeout_seconds":1200,
              "resource_class":"heavy", "cwd":".", "include_globs":[], "exclude_globs":[]},
-            [item for item in manifest_paths if item.endswith((".sln", ".csproj"))])
+            [item for item in manifest_paths if item.endswith((".sln", ".csproj", ".vbproj", ".fsproj"))])
     if terraform_paths or "terraform" in profile.get("repo_types", []):
         add({"id":"terraform-fmt", "level":0, "argv":["terraform", "fmt", "-check", "-recursive"], "enabled":False,
              "source":"conventional candidate from Terraform files", "confidence":"inferred", "timeout_seconds":180,
@@ -1194,12 +1420,24 @@ def add_conventional_commands(
             terraform_paths)
 
 
-def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_000) -> dict[str, Any]:
+def probe_repo(
+    repo: Path,
+    max_files: int = 50_000,
+    content_scan_limit: int = 4_000,
+    exclude: Sequence[str] | None = None,
+) -> dict[str, Any]:
     repo = repo.resolve()
     if not repo.exists() or not repo.is_dir():
         raise SystemExit(f"Repo directory not found: {repo}")
 
-    files, truncated = iter_repo_files(repo, max_files=max_files)
+    exclusions = normalize_exclusions(exclude)
+    skipped_nested: list[str] = []
+    files, truncated = iter_repo_files(
+        repo,
+        max_files=max_files,
+        exclusions=exclusions,
+        skipped_nested_repositories=skipped_nested,
+    )
     ext_counts: collections.Counter[str] = collections.Counter()
     lang_counts: collections.Counter[str] = collections.Counter()
     source_count = 0
@@ -1211,6 +1449,8 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
     profile: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "generated_by": f"anti-dark-code {VERSION} adc.py probe",
+        "probe_method_sha256": PROBE_METHOD_SHA256,
+        "probe_runtime": dict(PROBE_RUNTIME),
         "generated_at_utc": utc_now(),
         "repo_root": ".",
         "source_identity": current_source_identity(repo),
@@ -1222,6 +1462,9 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
             "content_scan_limit": content_scan_limit,
             "ignored_directories": sorted(IGNORED_DIRS),
             "ignored_skill_trees": sorted("/".join(parts) + "/" for parts in HOST_SKILL_TREE_PREFIXES),
+            "ignored_worktree_trees": sorted("/".join(parts) + "/" for parts in HOST_WORKTREE_TREE_PREFIXES),
+            "skipped_nested_repositories": sorted(skipped_nested),
+            "requested_exclusions": exclusions,
         },
         "repo_types": [],
         "languages": [],
@@ -1300,9 +1543,10 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
             continue
         scanned += 1
         r = rel(path, repo)
+        evidence_class = evidence_class_for(path)
         for signal, patterns in CONTENT_PATTERNS.items():
             if any(pattern.search(text) for pattern in patterns):
-                add_evidence(signals, signal, r)
+                add_evidence(signals, signal, r, evidence_class=evidence_class)
     profile["scan"]["files_scanned_for_indicators"] = scanned
     if scanned >= content_scan_limit and len(files) > scanned:
         profile["notes"].append("Indicator content scan reached its bound. Signals are evidence of presence, not proof of absence.")
@@ -1315,7 +1559,7 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
 
     if "pnpm-workspace.yaml" in manifest_basenames or any(name in manifest_basenames for name in {"turbo.json", "nx.json"}) or sum(1 for m in manifests if m.endswith("package.json")) > 2:
         type_hints.add("monorepo")
-    if "project.godot" in manifest_basenames or any(name.endswith(".uproject") for name in manifest_basenames) or "ProjectSettings/ProjectVersion.txt" in all_rel or "assets" in top_parts:
+    if "project.godot" in manifest_basenames or any(name.endswith(".uproject") for name in manifest_basenames) or "ProjectSettings/ProjectVersion.txt" in all_rel:
         type_hints.add("game-simulation")
     if any(path.suffix.lower() == ".tf" for path in files) or any(r.startswith(("terraform/", "infra/", "infrastructure/", "k8s/", "helm/")) for r in all_rel):
         type_hints.add("infra-as-code")
@@ -1344,6 +1588,27 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
         "total_bytes": total_bytes,
         "extensions": dict(ext_counts.most_common(30)),
     }
+    # An allow-list inventory must say what it declined to count. An unlisted
+    # extension that outnumbers every recognized language is a language the
+    # profiler cannot see, and the classification above is incomplete without it.
+    largest_recognized = max(lang_counts.values(), default=0)
+    residue_threshold = max(10, largest_recognized)
+    unrecognized = {
+        ext: count for ext, count in ext_counts.most_common()
+        if ext != "<none>"
+        and count >= residue_threshold
+        and ext not in SOURCE_EXTENSIONS
+        and ext not in TEXT_EXTENSIONS
+        and ext not in KNOWN_NON_SOURCE_EXTENSIONS
+    }
+    if unrecognized:
+        profile["counts"]["unrecognized_source_extensions"] = unrecognized
+        listed = ", ".join(f"{ext} ({count})" for ext, count in unrecognized.items())
+        profile["notes"].append(
+            f"Unrecognized extension(s) with large counts were not counted as source: {listed}. "
+            "Language and repo-type classification are incomplete until the profiler recognizes them "
+            "or an owner confirms they are not source."
+        )
 
     # Add conventional candidates only after type classification.
     terraform_paths = sorted(rel(path, repo) for path in files if path.suffix.lower() == ".tf")
@@ -1353,6 +1618,9 @@ def probe_repo(repo: Path, max_files: int = 50_000, content_scan_limit: int = 4_
     # Normalize signals. Absence is unknown under a bounded scan, not verified false.
     for name in sorted(set(CONTENT_PATTERNS) | {"has_tests", "has_ci", "large_repo", "schema_validation_present", "architecture_tool_present", "mutation_tool_present", "property_tool_present"}):
         profile["signals"].setdefault(name, {"present": False, "evidence": []})
+    for entry in profile["signals"].values():
+        entry.setdefault("evidence_classes", {})
+        entry["documentation_only"] = signal_is_documentation_only(entry)
     profile["signals"] = {name: profile["signals"][name] for name in sorted(profile["signals"])}
     return profile
 
@@ -1409,6 +1677,9 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
         selection = cap["selection"]
         matched_signals = [s for s in selection.get("signals_any", []) if signals.get(s, {}).get("present")]
         matched_risks = [s for s in selection.get("risks_any", []) if signals.get(s, {}).get("present")]
+        # A signal backed only by documentation is a question, not an observation.
+        prose_only = [s for s in matched_signals + matched_risks if signal_is_documentation_only(signals.get(s, {}))]
+        code_backed = [s for s in matched_signals + matched_risks if s not in prose_only]
         evidence: list[str] = []
         for name in matched_signals + matched_risks:
             for item in signals.get(name, {}).get("evidence", []):
@@ -1420,10 +1691,19 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
             reason = "Core capability for a maintained repo. Use the light repo-fit form."
             if cap["id"] == "V17" and not high_risk_present and source_count < 25:
                 reason = "Selected in light form. One deterministic verifier is enough for low-risk work; add independent agent roles when risk rises."
-        elif matched_signals or matched_risks:
+        elif code_backed:
             status = "selected"
-            matched = ", ".join(matched_signals + matched_risks)
+            matched = ", ".join(code_backed)
             reason = f"Selected because the deterministic profile observed: {matched}."
+            if prose_only:
+                reason += f" Documentation alone also mentions: {', '.join(prose_only)}."
+        elif prose_only:
+            status = "candidate"
+            matched = ", ".join(prose_only)
+            reason = (
+                f"Candidate. Only documentation mentions: {matched}. "
+                "Confirm the behavior in source or configuration before selecting."
+            )
         elif primary == "small-new" and cap.get("cost") == "high":
             status = "deferred"
             reason = "Deferred for the small or new repo profile until the named trigger appears."
@@ -1477,7 +1757,7 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
         "confidence_levels": catalog["confidence_levels"],
         "capabilities": capabilities,
         "notes": [
-            "All 20 capabilities were evaluated. Status does not authorize dependency installation or repo-code execution.",
+            f"All {CAPABILITY_COUNT} capabilities were evaluated. Status does not authorize dependency installation or repo-code execution.",
             "Re-run after architecture, risk, test, CI, or runtime boundaries change."
         ],
     }
@@ -1725,7 +2005,7 @@ def managed_source_files(source: Path) -> dict[str, Path]:
     for current, dirs, names in os.walk(source, followlinks=False):
         current_path = Path(current)
         rel_dir = current_path.relative_to(source)
-        excluded_here = {"__pycache__", ".git"}
+        excluded_here = {"__pycache__", ".pytest_cache", ".git"}
         if not rel_dir.parts:
             excluded_here.update({"calibration", "incoming"})
         dirs[:] = sorted(
@@ -1745,6 +2025,164 @@ def managed_source_files(source: Path) -> dict[str, Path]:
                 continue
             files[r] = path
     return files
+
+
+def only_version_churn(repo: Path, previous: str, tag: str, path: str, versions: set[str]) -> bool:
+    """True when every changed line in a file carries a release version string."""
+    if not versions:
+        return False
+    diff = git_output(repo, ["diff", "--unified=0", f"{previous}..{tag}", "--", path]) or ""
+    changed = [
+        line for line in diff.splitlines()
+        if line[:1] in {"+", "-"} and not line.startswith(("+++", "---"))
+    ]
+    if not changed:
+        return True
+    return all(any(version in line for version in versions) for line in changed)
+
+
+def changelog_section(text: str, version: str) -> str | None:
+    """Return the notes for one version, from its heading to the next same-level heading."""
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if line.strip() == f"## {version}":
+            start = index + 1
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start, len(lines)):
+        if lines[index].startswith("## "):
+            end = index
+            break
+    return "\n".join(lines[start:end])
+
+
+def release_check(
+    repo: Path,
+    tag: str,
+    expect_core_digest: str | None = None,
+    previous_tag: str | None = None,
+) -> dict[str, Any]:
+    """Gate a release on its own tag rather than on the working tree that produced it.
+
+    Three questions the tag must answer for itself: does extracting it reproduce the
+    digest the release publishes, does that extract pass distribution validation, and
+    does every reference or asset it changed since the previous tag get named in its
+    own notes. The extract is read-only here; running a test suite inside the directory
+    under validation would create artifacts that fail it.
+    """
+    repo = repo.resolve()
+    findings: dict[str, Any] = {
+        "tag": tag,
+        "previous_tag": previous_tag,
+        "core_digest": None,
+        "digest_expected": expect_core_digest.strip().lower() if expect_core_digest else None,
+        "digest_match": None,
+        "distribution_valid": None,
+        "distribution_errors": [],
+        "undescribed_files": [],
+        "errors": [],
+        "ok": False,
+    }
+    if not git_output(repo, ["rev-parse", "--verify", f"{tag}^{{commit}}"]):
+        findings["errors"].append(f"tag is not present in the repository: {safe_diagnostic_label(tag)}")
+        return findings
+
+    with tempfile.TemporaryDirectory() as tmp:
+        extract = Path(tmp) / "tag"
+        extract.mkdir()
+        archive = git_bytes(repo, ["archive", tag], timeout=120)
+        if archive is None:
+            findings["errors"].append("could not extract the tag for verification")
+            return findings
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+                bundle.extractall(extract, filter="data")
+        except (tarfile.TarError, OSError) as exc:
+            findings["errors"].append(f"could not read the tag archive: {exc.__class__.__name__}")
+            return findings
+
+        core = extract / "anti-dark-code"
+        if not (core / "VERSION").exists():
+            findings["errors"].append("the tag does not contain a distributable core at anti-dark-code/")
+            return findings
+
+        findings["core_digest"] = core_digest(managed_source_files(core))
+        if findings["digest_expected"] is not None:
+            findings["digest_match"] = findings["core_digest"] == findings["digest_expected"]
+
+        errors, _warnings = validate_skill(core, "distribution")
+        findings["distribution_valid"] = not errors
+        findings["distribution_errors"] = list(errors)
+
+        version = (core / "VERSION").read_text(encoding="utf-8").strip()
+        findings["version"] = version
+        changelog = extract / "CHANGELOG.md"
+        section = changelog_section(changelog.read_text(encoding="utf-8"), version) if changelog.exists() else None
+        if section is None:
+            findings["errors"].append(f"CHANGELOG.md has no section for version {version}")
+        else:
+            previous = previous_tag or git_output(repo, ["describe", "--tags", "--abbrev=0", f"{tag}^"])
+            findings["previous_tag"] = previous
+            if previous:
+                changed = git_output(
+                    repo,
+                    ["diff", "--name-only", f"{previous}..{tag}", "--",
+                     "anti-dark-code/references", "anti-dark-code/assets"],
+                ) or ""
+                previous_version = None
+                previous_core_version = git_output(repo, ["show", f"{previous}:anti-dark-code/VERSION"])
+                if previous_core_version:
+                    previous_version = previous_core_version.strip()
+                version_tokens = {token for token in (version, previous_version) if token}
+                for path in sorted({line.strip() for line in changed.splitlines() if line.strip()}):
+                    relative = path.split("anti-dark-code/", 1)[-1]
+                    if relative in section or Path(relative).name in section:
+                        continue
+                    # A mechanical version bump is not a change the notes owe the
+                    # reader; flagging it would train reviewers to ignore this gate.
+                    if only_version_churn(repo, previous, tag, path, version_tokens):
+                        continue
+                    findings["undescribed_files"].append(relative)
+
+    findings["ok"] = (
+        not findings["errors"]
+        and not findings["undescribed_files"]
+        and bool(findings["distribution_valid"])
+        and findings["digest_match"] is not False
+    )
+    return findings
+
+
+def assess_source_provenance(source: Path) -> dict[str, Any]:
+    """Classify how immutable an installation source is, and digest what it would ship.
+
+    A working tree can move; a tag and a plain extract cannot. Installing from a
+    branch tip records a version string the tag no longer reproduces, which makes
+    the recorded version a claim rather than evidence. Callers use `kind` to refuse
+    a moving source and `core_digest` to bind the install to a published release.
+    """
+    source = source.resolve()
+    digest = core_digest(managed_source_files(source))
+    if not git_output(source, ["rev-parse", "--show-toplevel"]):
+        return {"kind": "non-git", "tag": None, "dirty": False, "core_digest": digest}
+    # Only shipped bytes make a source dirty. `calibration/` and `incoming/` are
+    # excluded from the managed core, so local calibration or a work-in-progress
+    # proposal cannot change what an install carries. Reporting those as dirty would
+    # block a maintainer sitting on a clean tag for a reason that does not affect the
+    # install, and a guard that cries wolf gets overridden out of habit.
+    if git_output(source, [
+        "status", "--porcelain", "--", str(source),
+        f":(exclude){source / 'calibration'}",
+        f":(exclude){source / 'incoming'}",
+    ]):
+        return {"kind": "git-dirty", "tag": None, "dirty": True, "core_digest": digest}
+    tag = git_output(source, ["describe", "--tags", "--exact-match", "HEAD"])
+    if tag:
+        return {"kind": "git-tag", "tag": tag, "dirty": False, "core_digest": digest}
+    return {"kind": "git-untagged", "tag": None, "dirty": False, "core_digest": digest}
 
 
 def core_digest(files: dict[str, Path]) -> str:
@@ -1844,6 +2282,8 @@ def install_skill(
     allow_unsafe_source: bool = False,
     accept_unbound_calibration: bool = False,
     rebind_calibration: bool = False,
+    allow_untagged_source: bool = False,
+    expect_core_digest: str | None = None,
 ) -> dict[str, Any]:
     repo = repo.resolve()
     source = source.resolve()
@@ -1905,7 +2345,28 @@ def install_skill(
     )
     legacy_gate_review = inspect_gate_config_for_migration(binding_source / "gates.json")
 
+    provenance = assess_source_provenance(source)
+    expected = expect_core_digest.strip().lower() if expect_core_digest else None
+    provenance["digest_expected"] = expected
+    provenance["digest_expected_match"] = None if expected is None else provenance["core_digest"] == expected
+
     blocked_reasons: list[str] = []
+    if provenance["kind"] in {"git-untagged", "git-dirty"} and not allow_untagged_source:
+        detail = (
+            "its working tree has uncommitted changes"
+            if provenance["kind"] == "git-dirty"
+            else "its checkout is not at a release tag"
+        )
+        blocked_reasons.append(
+            f"installation source is not at a release tag ({detail}); a moving source records a version "
+            "string the tag does not reproduce. Install from a tag or a clean extract of one, or pass "
+            "--allow-untagged-source after review"
+        )
+    if provenance["digest_expected_match"] is False:
+        blocked_reasons.append(
+            "installation source does not match the expected release digest; "
+            f"source is {provenance['core_digest']}"
+        )
     if source_inspection["fatal_issues"]:
         blocked_reasons.extend(f"invalid installation source: {item}" for item in source_inspection["fatal_issues"])
     if source_inspection["template_errors"]:
@@ -1927,7 +2388,9 @@ def install_skill(
         )
     if binding["status"] == "mismatch" and not rebind_calibration:
         blocked_reasons.append(
-            "existing calibration is bound to a different repository identity; do not import it unless this is a reviewed move or fork, then use --rebind-calibration"
+            "existing calibration is bound to a different repository identity"
+            + binding_mismatch_detail(binding)
+            + "; do not import it unless this is a reviewed move or fork, then use --rebind-calibration"
         )
     if gate_reset_required and legacy_gate_review["present"] and not legacy_gate_review["valid"]:
         blocked_reasons.append(
@@ -1984,6 +2447,7 @@ def install_skill(
         "conflicts": sorted(set(conflicts)),
         "blocked": bool(blocked_reasons),
         "blocked_reasons": blocked_reasons,
+        "source_provenance": provenance,
         "source_scope": {
             "marker_valid": source_inspection["marker_valid"],
             "marker_error": source_inspection["marker_error"],
@@ -2095,7 +2559,14 @@ def ensure_run_gitignore(repo: Path) -> None:
     require_no_symlink_components(root / "runs", repo, "run-artifact setup")
     root.mkdir(parents=True, exist_ok=True)
     path = root / ".gitignore"
-    required_entries = ("runs/", "efficiency/", "flowback/")
+    # D-122: the store's ignore file ignores itself. Without the fourth entry
+    # the file this function writes is the one path under the store that git
+    # still reports, so every written receipt carried it as an untracked,
+    # unmapped fact and forced full for a file the tool had just created.
+    # Ignoring `.anti-dark-code/` in the repository's own ignore file would
+    # have hidden a real change to `.anti-dark-code/calibration/` as well,
+    # and excluding the store inside the router would reopen D-089.
+    required_entries = ("runs/", "efficiency/", "flowback/", ".gitignore")
     desired = "".join(f"{entry}\n" for entry in required_entries)
     if not path.exists():
         write_text_atomic(path, desired)
@@ -2302,12 +2773,291 @@ def terminate_gate_process_tree(proc: subprocess.Popen[Any], grace_seconds: floa
     return result
 
 
-def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None, keep_going: bool) -> int:
+def check_route_level(route_minimum: int,
+                      requested: int | None) -> tuple[bool, int]:
+    """Return whether a requested level preserves the receipt's minimum."""
+    if requested is None:
+        return True, route_minimum
+    if requested < route_minimum:
+        return False, route_minimum
+    return True, requested
+
+
+def obligations_are_covered(
+    obligations: dict[str, Sequence[str]] | Any,
+    approved_gate_ids: set[str],
+    outcomes: dict[str, str],
+) -> bool:
+    """Whether every required capability has an approved passing gate.
+
+    An empty mapping is not evidence of coverage, and only the closed `pass`
+    outcome can satisfy an obligation. In particular, a zero exit code whose
+    repository identity moved is `stale` and satisfies nothing.
+    """
+    return bool(obligations) and all(
+        bool(gate_ids) and any(
+            gate_id in approved_gate_ids and outcomes.get(gate_id) == "pass"
+            for gate_id in gate_ids)
+        for gate_ids in obligations.values())
+
+
+KNOWN_GATE_OUTCOMES = frozenset({
+    "pass", "fail", "config-error", "stale", "not-run", "skipped",
+})
+
+
+def _is_candidate_route(value: Any) -> bool:
+    provenance = (value.get("provenance")
+                  if isinstance(value, Mapping)
+                  else getattr(value, "provenance", None))
+    return provenance == "candidate-shadow"
+
+
+def shadow_result(
+    authoritative_payload: Mapping[str, Any],
+    candidate: Any | None,
+    gate_results: dict[str, str],
+) -> dict[str, Any]:
+    """Compare candidate omissions with outcomes from the authoritative run."""
+    route_payload = authoritative_payload.get("route", {})
+    authoritative_ids = route_payload.get("selected_gate_ids", [])
+    if (not isinstance(authoritative_ids, Sequence)
+            or isinstance(authoritative_ids, (str, bytes))
+            or not all(isinstance(gate, str) for gate in authoritative_ids)):
+        raise ValueError("authoritative route has invalid selected_gate_ids")
+
+    unknown = sorted(set(gate_results.values()) - KNOWN_GATE_OUTCOMES)
+    if unknown:
+        raise ValueError(f"unrecognised gate outcomes: {unknown}")
+
+    if candidate is None:
+        return {
+            "schema_version": 2,
+            "measurable": False,
+            "reason": "snapshot incomplete",
+            "authoritative": {
+                "selected_gate_ids": sorted(authoritative_ids)},
+            "candidate": None,
+            "gate_results": dict(sorted(gate_results.items())),
+        }
+    if not _is_candidate_route(candidate):
+        raise TypeError("shadow_result requires a CandidateRoute or None")
+
+    selected = set(candidate.selected_gate_ids())
+    omitted = {gate_id: outcome for gate_id, outcome in gate_results.items()
+               if gate_id not in selected}
+    missed = sorted(gate_id for gate_id, outcome in omitted.items()
+                    if outcome != "pass")
+    selected_all_passed = bool(selected) and all(
+        gate_results.get(gate_id) == "pass" for gate_id in selected)
+    return {
+        "schema_version": 2,
+        "measurable": True,
+        "route_class": {
+            "matched_rule_ids": sorted(candidate.matched_rule_ids),
+            "force_full": candidate.force_full,
+        },
+        "authoritative": {
+            "selected_gate_ids": sorted(authoritative_ids)},
+        "candidate": candidate.as_payload(),
+        "gate_results": dict(sorted(gate_results.items())),
+        "omitted_gate_results": dict(sorted(omitted.items())),
+        "missed_gate_ids": missed,
+        "selected_all_passed": selected_all_passed,
+        "routing_miss": bool(missed) and selected_all_passed,
+    }
+
+
+def write_shadow(repo: Path, run_id: str,
+                 record: dict[str, Any]) -> Path:
+    target = repo / ".anti-dark-code" / "runs" / run_id / "shadow.json"
+    if not target.parent.is_dir():
+        raise RuntimeError(
+            f"gate run directory does not exist for shadow record: {run_id}")
+    write_json_atomic(target, record)
+    return target
+
+
+def _read_route_receipt(path: Path) -> dict[str, Any]:
+    """Read one receipt object once; all later consumers use these bytes."""
+    if not path.is_file():
+        raise ValueError(f"REFUSED: no routing receipt at {path}")
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"REFUSED: invalid routing receipt: {exc}") from exc
+    if not isinstance(receipt, dict):
+        raise ValueError("REFUSED: routing receipt must be an object")
+    payload = receipt.get("authoritative")
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "REFUSED: routing receipt has no authoritative payload")
+    if not isinstance(payload.get("binding"), dict):
+        raise ValueError("REFUSED: routing receipt binding is not an object")
+    if not isinstance(payload.get("route"), dict):
+        raise ValueError("REFUSED: routing receipt has no authoritative route")
+    if not isinstance(receipt.get("run_id"), str):
+        raise ValueError("REFUSED: routing receipt has no string run_id")
+    return receipt
+
+
+def _receipt_route(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    route = payload.get("route")
+    if not isinstance(route, Mapping):
+        raise ValueError("REFUSED: routing receipt has no authoritative route")
+    if _is_candidate_route(route):
+        raise ValueError(
+            "REFUSED: candidate shadow data cannot become an authoritative route")
+    minimum = route.get("minimum_level")
+    if type(minimum) is not int or minimum not in (0, 1, 2, 3):
+        raise ValueError(
+            "REFUSED: routing receipt has no valid authoritative minimum_level")
+    if type(route.get("force_full")) is not bool:
+        raise ValueError(
+            "REFUSED: routing receipt has no valid authoritative force_full flag")
+    return route
+
+
+def select_route_gates(
+    config: dict[str, Any],
+    configured_gates: list[dict[str, Any]],
+    route: Any | None,
+    *,
+    level: int,
+    force_full: bool,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Select only from authoritative route data; reject candidates by type."""
+    if _is_candidate_route(route):
+        raise TypeError("CandidateRoute cannot select executable gates")
+    if route is not None:
+        if not isinstance(route, Mapping):
+            raise TypeError("gate selection requires authoritative route data")
+        routed_force_full = route.get("force_full")
+        if type(routed_force_full) is not bool:
+            raise TypeError("authoritative route has no boolean force_full")
+        force_full = force_full or routed_force_full
+
+    if force_full:
+        # R-022: the canonical set is named directly. Applicability globs and
+        # unrelated enabled gates cannot shrink or enlarge the full recipe.
+        full_set = config.get("canonical_full_set")
+        obligations = (full_set.get("obligations")
+                       if isinstance(full_set, dict) else None)
+        if not isinstance(obligations, dict) or not obligations:
+            raise ValueError("force-full routing requires canonical obligations")
+        canonical_ids = {
+            gate_id for gate_ids in obligations.values()
+            if isinstance(gate_ids, list)
+            for gate_id in gate_ids if isinstance(gate_id, str)}
+        present = {str(gate.get("id")) for gate in configured_gates}
+        missing = sorted(canonical_ids - present)
+        if not canonical_ids or missing:
+            detail = ", ".join(missing) if missing else "no canonical gate ids"
+            raise ValueError(f"canonical full set is incomplete: {detail}")
+        return ([gate for gate in configured_gates
+                 if str(gate.get("id")) in canonical_ids], True)
+    return ([gate for gate in configured_gates
+             if gate.get("enabled") and gate_level(gate) <= level], False)
+
+
+class GateRunResult(int):
+    """An exit code that keeps the executed run summary available to callers."""
+
+    summary: dict[str, Any]
+
+    def __new__(cls, code: int, summary: dict[str, Any]):
+        result = int.__new__(cls, code)
+        result.summary = summary
+        return result
+
+
+def _freeze_json(value: Any) -> Any:
+    """Own an immutable copy of receipt data after verification."""
+    if isinstance(value, dict):
+        return MappingProxyType({
+            key: _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+class VerifiedRouteReceipt(NamedTuple):
+    """The exact authoritative receipt object that passed freshness checks."""
+
+    run_id: str
+    authoritative: Mapping[str, Any]
+    route: Mapping[str, Any]
+    expected_worktree_identity: str
+    validated_policy: Any
+    gate_configuration_json: bytes
+
+
+def rebind_gate(repo: Path, gate_id: str, note: str) -> int:
+    """Recompute one approved gate's source binding after a reviewed drift.
+
+    This is the targeted repair the drift refusal names. It keeps the previous
+    digest, appends the owner's note to the trust record, and touches nothing
+    else: no profile, no plan, no other gate. Rerunning the planner also rebinds,
+    and also replaces the repo profile and the verification plan, which is the
+    wider loss this command exists to avoid.
+    """
+    repo = repo.resolve()
+    if not gate_id or not str(note or "").strip():
+        print("REFUSED: --rebind needs --note saying why the bound files changed; the note becomes part of the trust record")
+        return 2
+    config_path = safe_calibration_dir(repo, "gate rebind") / "gates.json"
+    if not config_path.exists():
+        print(f"REFUSED: gate config not found: {config_path}")
+        return 2
+    binding = assess_repository_binding(repo, config_path.parent)
+    if binding.get("status") != "match":
+        print(f"REFUSED: calibration binding is {binding.get('status')}; rebind only inside the bound repository")
+        return 2
+    config = read_json(config_path)
+    gates = config.get("gates") if isinstance(config, dict) else None
+    if not isinstance(gates, list):
+        print(f"REFUSED: invalid gate config structure: {config_path}")
+        return 2
+    gate = next((item for item in gates if isinstance(item, dict) and item.get("id") == gate_id), None)
+    if gate is None:
+        print(f"REFUSED: no gate named {gate_id} in {config_path}")
+        return 2
+    source_files = gate.get("source_files")
+    if not isinstance(source_files, list) or not source_files:
+        print(f"REFUSED: {gate_id} has no source-file binding to rebind")
+        return 2
+    try:
+        actual = source_set_hash(repo, [str(item) for item in source_files])
+    except (OSError, ValueError) as exc:
+        print(f"REFUSED: {exc}")
+        return 2
+    previous = gate.get("source_definition_sha256")
+    if actual == previous:
+        print(f"NO CHANGE: {gate_id} is already bound to the current source files; nothing to rebind")
+        return 2
+    gate["previous_definition_sha256"] = previous
+    gate["source_definition_sha256"] = actual
+    entry = f"{utc_now()} rebind: {str(note).strip()}"
+    existing = str(gate.get("owner_notes") or "").strip()
+    gate["owner_notes"] = f"{existing} {entry}".strip() if existing else entry
+    write_json_atomic(config_path, config)
+    print(f"REBOUND {gate_id}: {str(previous)[:12]} -> {actual[:12]}; previous digest kept, note recorded, profile and plan untouched")
+    return 0
+
+
+def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None,
+              keep_going: bool, force_full: bool = False,
+              route: Any | None = None,
+              expected_worktree_identity: str | None = None,
+              verified_receipt_run_id: str | None = None,
+              verified_gate_configuration_json: bytes | None = None) -> int:
     repo = repo.resolve()
     config_path = safe_calibration_dir(repo, "gate configuration read") / "gates.json"
     if not config_path.exists():
         raise SystemExit(f"Gate config not found: {config_path}")
-    config = read_json(config_path)
+    config = (json.loads(verified_gate_configuration_json)
+              if verified_gate_configuration_json is not None
+              else read_json(config_path))
     if not isinstance(config, dict) or not isinstance(config.get("gates", []), list):
         raise SystemExit(f"Invalid gate config structure: {config_path}")
     duplicate_ids = duplicate_gate_ids(config.get("gates", []))
@@ -2325,12 +3075,18 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         print("REFUSED: gate planning and execution cannot use unbound, invalid, or foreign calibration.")
         return 2
 
-    candidates = [
-        g for g in config.get("gates", [])
-        if isinstance(g, dict) and g.get("enabled") and gate_level(g) <= level
-    ]
+    configured_gates = [
+        gate for gate in config.get("gates", []) if isinstance(gate, dict)]
+    try:
+        candidates, force_full = select_route_gates(
+            config, configured_gates, route,
+            level=level, force_full=force_full)
+    except ValueError as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     changed = changed_files(repo, changed_from) if changed_from else None
-    candidates = [g for g in candidates if gate_applies(g, changed)]
+    if not force_full:
+        candidates = [g for g in candidates if gate_applies(g, changed)]
     blocked: list[tuple[dict[str, Any], str]] = []
     gates: list[dict[str, Any]] = []
     runtime_environments: dict[int, tuple[dict[str, str], dict[str, Any], list[str]]] = {}
@@ -2353,7 +3109,13 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         print(f"BLOCKED: {len(blocked)} enabled gate(s) need review:")
         for gate, reason in blocked:
             print(f"  {gate.get('id', 'unnamed')}: {reason}")
-        print("REFUSED: rerun the planner after source changes, then approve each command and reconfirm execution safety.")
+        # A refusal must name a repair that does not destroy something else. The
+        # targeted rebind refreshes one binding; the planner also replaces the
+        # reviewed profile and plan, so it is named second.
+        drifted = [gate for gate, reason in blocked if reason == "conventional gate source files changed after approval"]
+        for gate in drifted:
+            print(f"  repair: gates --repo . --rebind {gate.get('id', 'unnamed')} --note \"why the bound files changed\"")
+        print("REFUSED: refresh a drifted binding with --rebind after reviewing the change; rerun the planner only when no reviewed plan exists; then approve each command and reconfirm execution safety.")
         return 2
 
     if not gates:
@@ -2374,13 +3136,19 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         print("DRY RUN: add --allow-exec only after command behavior, repo ownership, and machine cost are reviewed.")
         return 0
 
-    owner_confirmed = bool(config.get("execution_policy", {}).get("owner_confirmed_safe_to_execute"))
+    owner_confirmed = owner_execution_confirmed(config)
     if not owner_confirmed:
         print("REFUSED: gates.json does not record owner confirmation. Review commands, then set execution_policy.owner_confirmed_safe_to_execute to true.")
         return 2
 
     ensure_run_gitignore(repo)
     require_no_symlink_components(repo / ".anti-dark-code" / "runs", repo, "gate run creation")
+    route_module, receipt_module = load_router_helpers()
+    # Routed verification requires Git. Preserve the pre-existing unversioned
+    # gate-runner mode, but once a run starts inside a repository every capture
+    # must succeed; a later Git failure is a refusal, never a disabled check.
+    monitor_identity = (
+        git_output(repo, ["rev-parse", "--is-inside-work-tree"]) == "true")
     source_identity = current_source_identity(repo)
     gate_material = [
         {
@@ -2395,6 +3163,9 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
     run_dir = repo / ".anti-dark-code" / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     failures: list[dict[str, Any]] = []
+    stale: list[dict[str, Any]] = []
+    outcomes: dict[str, str] = {}
+    identity_refusal: str | None = None
     passed = 0
     started_all = time.monotonic()
 
@@ -2420,6 +3191,7 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         packet_path = run_dir / f"{failure_id}.json"
         write_json_atomic(packet_path, packet)
         failures.append({"gate_id": gate_id, "failure_id": failure_id, "packet": rel(packet_path, repo), "config_error": message})
+        outcomes[gate_id] = "config-error"
         print(f"FAIL {gate_id} config={message} packet={rel(packet_path, repo)}")
 
     for gate in gates:
@@ -2460,31 +3232,63 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         launch_error: str | None = None
         timeout_termination: dict[str, Any] | None = None
         proc: subprocess.Popen[Any] | None = None
+        identity_before: str | None = None
+        lifecycle_before: str | None = None
+        stale_before_launch = False
         try:
             raw_path.touch(mode=0o600, exist_ok=False)
             with raw_path.open("w", encoding="utf-8", newline="\n") as raw_log:
-                proc = subprocess.Popen(
-                    argv,
-                    cwd=cwd,
-                    env=process_env,
-                    stdout=raw_log,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    **gate_popen_kwargs(),
-                )
-                try:
-                    exit_code = proc.wait(timeout=timeout_seconds)
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    timeout_termination = terminate_gate_process_tree(proc)
-                    exit_code = 124
+                if monitor_identity:
+                    # Immediately before Popen: bounded-log setup is complete,
+                    # and no executable repository code has run.
+                    #
+                    # Two identities, because two different questions are being
+                    # asked. The first is receipt-comparable and answers "is
+                    # this the tree the receipt bound". The second includes
+                    # timestamps and answers "did anything touch the tree while
+                    # this gate ran", which the first cannot see through a
+                    # write-and-restore. See D-077.
+                    identity_before = receipt_module.worktree_identity(
+                        repo, route_module)
+                    lifecycle_before = receipt_module.lifecycle_identity(
+                        repo, route_module)
+                stale_before_launch = (
+                    expected_worktree_identity is not None
+                    and identity_before != expected_worktree_identity)
+                if stale_before_launch:
                     raw_log.write(
-                        f"\n[anti-dark-code] TIMEOUT after {timeout_seconds}s; "
-                        f"termination={timeout_termination['strategy']}\n"
+                        "[anti-dark-code] STALE before launch: repository "
+                        "identity differs from the verified receipt\n")
+                else:
+                    proc = subprocess.Popen(
+                        argv,
+                        cwd=cwd,
+                        env=process_env,
+                        stdout=raw_log,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        **gate_popen_kwargs(),
                     )
-                except KeyboardInterrupt:
-                    terminate_gate_process_tree(proc)
-                    raise
+                    try:
+                        exit_code = proc.wait(timeout=timeout_seconds)
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        timeout_termination = terminate_gate_process_tree(proc)
+                        exit_code = 124
+                        raw_log.write(
+                            f"\n[anti-dark-code] TIMEOUT after {timeout_seconds}s; "
+                            f"termination={timeout_termination['strategy']}\n"
+                        )
+                    except KeyboardInterrupt:
+                        terminate_gate_process_tree(proc)
+                        raise
+        except receipt_module.ReceiptError as exc:
+            identity_refusal = str(exc)
+            exit_code = 125
+            if raw_path.exists():
+                write_text_atomic(
+                    raw_path,
+                    f"[anti-dark-code] REFUSED before gate launch: {exc}\n")
         except FileNotFoundError as exc:
             exit_code = 127
             launch_error = str(exc)
@@ -2501,8 +3305,64 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
                     raw_path.unlink(missing_ok=True)
 
         duration = round(time.monotonic() - started, 3)
+        if identity_refusal is not None:
+            print(f"REFUSED: {identity_refusal}")
+            break
+
+        if stale_before_launch:
+            stale.append({
+                "gate_id": gate_id,
+                "phase": "before-launch",
+                "expected_identity": expected_worktree_identity,
+                "identity_before": identity_before,
+                "identity_after": None,
+                "exit_code": None,
+            })
+            outcomes[gate_id] = "stale"
+            print(f"STALE {gate_id} before launch ({duration:.3f}s)")
+            break
+
+        identity_after: str | None = None
+        lifecycle_after: str | None = None
+        if monitor_identity:
+            try:
+                # After redaction and before pass/fail classification. The run
+                # store is excluded, so retaining the log cannot stale itself.
+                identity_after = receipt_module.worktree_identity(
+                    repo, route_module)
+                lifecycle_after = receipt_module.lifecycle_identity(
+                    repo, route_module)
+            except receipt_module.ReceiptError as exc:
+                identity_refusal = str(exc)
+                identity_after = "<unreadable>"
+                lifecycle_after = "<unreadable>"
+
+        # Either signal is enough. The bound identity catches a change that
+        # survives the gate; the lifecycle identity catches one the gate undid
+        # before exiting, which R-018 names and the bound identity cannot see.
+        if identity_before != identity_after or lifecycle_before != lifecycle_after:
+            stale.append({
+                "gate_id": gate_id,
+                "phase": "during-gate",
+                "expected_identity": expected_worktree_identity,
+                "identity_before": identity_before,
+                "identity_after": identity_after,
+                # Recorded separately so a reader can tell a change that
+                # survived the gate from one the gate put back.
+                "lifecycle_before": lifecycle_before,
+                "lifecycle_after": lifecycle_after,
+                "restored_during_gate": (identity_before == identity_after),
+                "exit_code": exit_code,
+            })
+            outcomes[gate_id] = "stale"
+            print(f"STALE {gate_id} exit={exit_code} ({duration:.3f}s)")
+            # --keep-going governs failing gates, not a repository that moved
+            # underneath the evidence boundary.
+            break
+
         if exit_code == 0:
             passed += 1
+            outcomes[gate_id] = "pass"
             print(f"PASS {gate_id} ({duration:.3f}s)")
             continue
 
@@ -2545,6 +3405,7 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         packet_path = run_dir / f"{failure_id}.json"
         write_json_atomic(packet_path, packet)
         failures.append({"gate_id": gate_id, "failure_id": failure_id, "packet": rel(packet_path, repo), "exit_code": exit_code})
+        outcomes[gate_id] = "fail"
         print(f"FAIL {gate_id} exit={exit_code} packet={rel(packet_path, repo)}")
         if not keep_going:
             break
@@ -2553,6 +3414,8 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
     summary = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
+        "verified_receipt_run_id": verified_receipt_run_id,
+        "expected_worktree_identity": expected_worktree_identity,
         "level": level,
         "source_identity": source_identity,
         "environment_identities": [
@@ -2561,17 +3424,30 @@ def run_gates(repo: Path, level: int, allow_exec: bool, changed_from: str | None
         ],
         "changed_from": changed_from,
         "changed_files": changed or [],
+        "planned": len(gates),
+        "planned_gate_ids": [
+            str(g.get("id") or "unnamed") for g in gates],
         "passed": passed,
         "failed": len(failures),
+        "outcomes": outcomes,
+        "stale": stale,
         "duration_seconds": duration_all,
         "failures": failures,
     }
     write_json_atomic(run_dir / "summary.json", summary)
+    if stale or identity_refusal is not None:
+        detail = (f", refusal={identity_refusal}"
+                  if identity_refusal is not None else "")
+        print(
+            f"RESULT: {passed} passed, {len(failures)} failed, "
+            f"{len(stale)} stale{detail}, {duration_all:.3f}s. "
+            f"Redacted artifacts: {rel(run_dir, repo)}")
+        return GateRunResult(2, summary)
     if failures:
         print(f"RESULT: {passed} passed, {len(failures)} failed, {duration_all:.3f}s. Redacted artifacts: {rel(run_dir, repo)}")
-        return 1
+        return GateRunResult(1, summary)
     print(f"RESULT: {passed} passed, 0 failed, {duration_all:.3f}s. Redacted artifacts: {rel(run_dir, repo)}")
-    return 0
+    return GateRunResult(0, summary)
 
 
 def parse_candidates(path: Path) -> list[dict[str, str]]:
@@ -2586,8 +3462,18 @@ def parse_candidates(path: Path) -> list[dict[str, str]]:
         body = text[start:end]
         fields: dict[str, str] = {"id": match.group(1).strip(), "title": match.group(2).strip(), "body": body.strip()}
         for field in ("Status", "Scope", "Lesson", "Evidence", "Limits", "Proposed target", "Proposed change"):
-            field_match = re.search(rf"^-\s+{re.escape(field)}:\s*(.*)$", body, flags=re.M | re.I)
-            fields[field.lower().replace(" ", "_")] = field_match.group(1).strip() if field_match else ""
+            # Capture wrapped continuation lines until a blank line, the next
+            # bullet, or a heading; a first-line-only capture silently truncates
+            # multi-line fields when the proposal is staged.
+            field_match = re.search(
+                rf"^-\s+{re.escape(field)}:\s*(.*(?:\n(?!\s*$)(?!-\s)(?!#).*)*)",
+                body,
+                flags=re.M | re.I,
+            )
+            raw_value = field_match.group(1) if field_match else ""
+            fields[field.lower().replace(" ", "_")] = " ".join(
+                part.strip() for part in raw_value.splitlines() if part.strip()
+            )
         candidates.append(fields)
     return candidates
 
@@ -2859,7 +3745,16 @@ def validate_incoming(
             ["diff", "--name-only", "--diff-filter=ACMRTUXB", f"{changed_from}...HEAD"],
         )
         if added is None or changed is None or live_changed is None:
-            return [f"could not compare candidate repository with {safe_diagnostic_label(changed_from)}"], []
+            # The usual cause is a bounded checkout: these comparisons are
+            # three-dot and need a merge base, which a shallow candidate whose
+            # branch point predates the fetch window does not have. Fails closed
+            # either way; name the remedy so the contributor is not left guessing
+            # at what looks like an unexplained refusal.
+            return [
+                f"could not compare candidate repository with {safe_diagnostic_label(changed_from)}: "
+                "no merge base is reachable, which usually means the branch point is older than the "
+                "checkout depth. Rebase the proposal on a recent base, or deepen the checkout."
+            ], []
         prefix = f"{skill_rel}/incoming/"
         new_incoming = sorted(path for path in added if path.startswith(prefix))
         changed_incoming = sorted(path for path in live_changed if path.startswith(prefix))
@@ -2903,8 +3798,9 @@ def flowback(
     calibration = safe_calibration_dir(repo, "flow-back calibration read/write")
     binding = assess_repository_binding(repo, calibration)
     if binding["status"] != "match":
+        mismatch_detail = binding_mismatch_detail(binding) if binding["status"] == "mismatch" else ""
         raise SystemExit(
-            f"Flow-back refused because calibration is {binding['status']} for this repository. "
+            f"Flow-back refused because calibration is {binding['status']}{mismatch_detail} for this repository. "
             "Complete migration or an explicit rebind first."
         )
     candidate_path = calibration / "upstream-candidates.md"
@@ -3274,13 +4170,13 @@ def validate_skill(skill: Path, mode: str = "auto") -> tuple[list[str], list[str
         catalog = read_json(catalog_path)
         caps = catalog.get("capabilities", []) if isinstance(catalog, dict) else []
         ids = [c.get("id") for c in caps if isinstance(c, dict)]
-        if len(caps) != 20:
-            errors.append(f"Capability catalog contains {len(caps)} entries, expected 20")
+        if len(caps) != CAPABILITY_COUNT:
+            errors.append(f"Capability catalog contains {len(caps)} entries, expected {CAPABILITY_COUNT}")
         if len(set(ids)) != len(ids):
             errors.append("Capability catalog contains duplicate ids")
-        expected = {f"V{i:02d}" for i in range(1, 21)}
+        expected = {f"V{i:02d}" for i in range(1, CAPABILITY_COUNT + 1)}
         if set(ids) != expected:
-            errors.append(f"Capability ids differ from V01..V20: {sorted(set(ids) ^ expected)}")
+            errors.append(f"Capability ids differ from V01..V{CAPABILITY_COUNT:02d}: {sorted(set(ids) ^ expected)}")
         repo_types = catalog.get("repo_types", []) if isinstance(catalog, dict) else []
         required = {"id", "slug", "name", "category", "default_level", "cost", "purpose", "local_work", "agent_work", "adaptations", "selection"}
         for cap in caps:
@@ -3338,7 +4234,12 @@ def validate_skill(skill: Path, mode: str = "auto") -> tuple[list[str], list[str
 
 def command_probe(args: argparse.Namespace) -> int:
     repo = Path(args.repo).expanduser().resolve()
-    profile = probe_repo(repo, max_files=args.max_files, content_scan_limit=args.content_scan_limit)
+    profile = probe_repo(
+        repo,
+        max_files=args.max_files,
+        content_scan_limit=args.content_scan_limit,
+        exclude=getattr(args, "exclude", None),
+    )
     if args.write:
         path = write_profile(repo, profile)
         print(f"WROTE {path}")
@@ -3353,6 +4254,10 @@ def command_probe(args: argparse.Namespace) -> int:
 
 
 def profile_is_fresh(repo: Path, profile: dict[str, Any]) -> bool:
+    if (profile.get("generated_by") != f"anti-dark-code {VERSION} adc.py probe"
+            or profile.get("probe_method_sha256") != PROBE_METHOD_SHA256
+            or profile.get("probe_runtime") != PROBE_RUNTIME):
+        return False
     recorded = profile.get("source_identity")
     if not isinstance(recorded, dict):
         return False
@@ -3361,24 +4266,48 @@ def profile_is_fresh(repo: Path, profile: dict[str, Any]) -> bool:
     # than treating old absence evidence as current truth.
     if current.get("git_commit") is None:
         return False
+    # Porcelain records paths and states, not dirty file contents. Matching
+    # status hashes cannot prove that an already-dirty or untracked file is
+    # unchanged; only reuse profiles captured from and compared with clean trees.
+    if (recorded.get("worktree_clean") is not True
+            or current.get("worktree_clean") is not True):
+        return False
     return (
         recorded.get("git_commit") == current.get("git_commit")
         and recorded.get("worktree_status_sha256") == current.get("worktree_status_sha256")
     )
 
 
-def load_or_probe(repo: Path) -> dict[str, Any]:
+def recorded_exclusions(profile: dict[str, Any]) -> list[str]:
+    scan = profile.get("scan")
+    recorded = scan.get("requested_exclusions") if isinstance(scan, dict) else None
+    if not isinstance(recorded, list):
+        return []
+    return normalize_exclusions([str(item) for item in recorded])
+
+
+def load_or_probe(repo: Path, exclude: Sequence[str] | None = None) -> dict[str, Any]:
+    """Return the stored profile while it is fresh, otherwise re-probe.
+
+    A re-probe reuses the exclusions the stored profile was made with unless the
+    caller names new ones, so a plan does not silently widen the scan the owner
+    narrowed. Naming different exclusions makes the stored profile stale by intent.
+    """
     path = safe_calibration_dir(repo, "repository profile read") / "repo-profile.json"
+    requested = normalize_exclusions(exclude) if exclude is not None else None
     if path.exists():
         data = read_json(path)
-        if data.get("generated_at_utc") and profile_is_fresh(repo, data):
+        recorded = recorded_exclusions(data)
+        effective = recorded if requested is None else requested
+        if data.get("generated_at_utc") and profile_is_fresh(repo, data) and effective == recorded:
             return data
-    return probe_repo(repo)
+        return probe_repo(repo, exclude=effective)
+    return probe_repo(repo, exclude=requested or [])
 
 
 def command_plan(args: argparse.Namespace) -> int:
     repo = Path(args.repo).expanduser().resolve()
-    profile = load_or_probe(repo)
+    profile = load_or_probe(repo, exclude=getattr(args, "exclude", None))
     plan = build_plan(profile)
     if args.write:
         write_profile(repo, profile)
@@ -3408,6 +4337,8 @@ def command_install(args: argparse.Namespace) -> int:
         allow_unsafe_source=args.allow_unsafe_source,
         accept_unbound_calibration=args.accept_unbound_calibration,
         rebind_calibration=args.rebind_calibration,
+        allow_untagged_source=getattr(args, "allow_untagged_source", False),
+        expect_core_digest=getattr(args, "expect_core_digest", None),
     )
     print(json.dumps(plan, indent=2))
     if not args.apply:
@@ -3492,7 +4423,12 @@ def command_bootstrap(args: argparse.Namespace) -> int:
         rebind_calibration=args.rebind_calibration,
     )
     if not args.apply:
-        profile = probe_repo(repo, max_files=args.max_files, content_scan_limit=args.content_scan_limit)
+        profile = probe_repo(
+            repo,
+            max_files=args.max_files,
+            content_scan_limit=args.content_scan_limit,
+            exclude=getattr(args, "exclude", None),
+        )
         install_plan["bootstrap_calibration_preview"] = preview_bootstrap_calibration(
             repo,
             source.resolve(),
@@ -3503,7 +4439,12 @@ def command_bootstrap(args: argparse.Namespace) -> int:
         print("DRY RUN: bootstrap did not write or execute repo code. Add --apply to install and generate calibration.")
         return 0
     print(json.dumps(install_plan, indent=2))
-    profile = probe_repo(repo, max_files=args.max_files, content_scan_limit=args.content_scan_limit)
+    profile = probe_repo(
+        repo,
+        max_files=args.max_files,
+        content_scan_limit=args.content_scan_limit,
+        exclude=getattr(args, "exclude", None),
+    )
     profile_path = write_profile(repo, profile)
     plan = build_plan(profile)
     plan_path, gate_path, added = write_plan(repo, profile, plan, add_gate_suggestions=True)
@@ -3514,8 +4455,108 @@ def command_bootstrap(args: argparse.Namespace) -> int:
     return 0
 
 
+def _candidate_shadow_context(
+    payload: Mapping[str, Any],
+    validated_policy: Any,
+    route_module: Any,
+) -> tuple[Mapping[str, Any], Any | None]:
+    fact_rows = payload.get("emitted_facts")
+    if (not isinstance(fact_rows, Sequence)
+            or isinstance(fact_rows, (str, bytes))):
+        raise ValueError("routing receipt has no emitted_facts array")
+    snapshot_complete = payload.get("snapshot_complete")
+    if type(snapshot_complete) is not bool:
+        raise ValueError("routing receipt has no boolean snapshot_complete")
+
+    try:
+        facts = tuple(route_module.ChangeFact(**row) for row in fact_rows
+                      if isinstance(row, Mapping))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"routing receipt has invalid emitted facts: {exc}") from exc
+    if len(facts) != len(fact_rows):
+        raise ValueError("routing receipt has a non-object emitted fact")
+    candidate = route_module.build_candidate_route(
+        facts, validated_policy, snapshot_ok=snapshot_complete)
+    return payload, candidate
+
+
 def command_gates(args: argparse.Namespace) -> int:
-    return run_gates(Path(args.repo), level=args.level, allow_exec=args.allow_exec, changed_from=args.changed_from, keep_going=args.keep_going)
+    repo = Path(args.repo).resolve()
+    if getattr(args, "rebind", None):
+        return rebind_gate(repo, args.rebind, getattr(args, "note", None) or "")
+    requested = args.level
+    force_full = False
+    route_data: Mapping[str, Any] | None = None
+    shadow_context: tuple[Mapping[str, Any], Any | None] | None = None
+    verified_receipt: VerifiedRouteReceipt | None = None
+    if args.route:
+        receipt_path = Path(args.route)
+        route_module, receipt_module = load_router_helpers()
+        if args.allow_exec:
+            # This file is itself fingerprinted. Complete run-store setup
+            # before freshness preflight so the runner cannot stale its own
+            # receipt between verification and the first gate.
+            ensure_run_gitignore(repo)
+            require_no_symlink_components(
+                repo / ".anti-dark-code" / "runs", repo,
+                "gate run creation")
+        calibration = safe_calibration_dir(
+            repo, "routing receipt verification")
+        verify_args = argparse.Namespace(
+            repo=str(repo), calibration=str(calibration),
+            verify=str(receipt_path))
+        try:
+            receipt = _read_route_receipt(receipt_path)
+        except ValueError as exc:
+            print(exc)
+            return 2
+        verdict, verified_receipt = _verify_loaded_route_receipt(
+            verify_args, repo, route_module, receipt_module, receipt)
+        if verdict != 0:
+            return 2
+        if verified_receipt is None:
+            print("REFUSED: fresh receipt verification returned no authority")
+            return 2
+        route_data = verified_receipt.route
+        try:
+            shadow_context = _candidate_shadow_context(
+                verified_receipt.authoritative,
+                verified_receipt.validated_policy, route_module)
+        except (TypeError, ValueError) as exc:
+            print(f"REFUSED: {exc}")
+            return 2
+        minimum = route_data["minimum_level"]
+        force_full = route_data["force_full"]
+        accepted, level = check_route_level(minimum, requested)
+        if not accepted:
+            print(
+                f"REFUSED: requested Level {requested} would lower the routed "
+                f"verification; route minimum is {minimum}.")
+            return 2
+    else:
+        level = 0 if requested is None else requested
+    result = run_gates(
+        repo, level=level, allow_exec=args.allow_exec,
+        changed_from=args.changed_from, keep_going=args.keep_going,
+        force_full=force_full, route=route_data,
+        expected_worktree_identity=(
+            verified_receipt.expected_worktree_identity
+            if verified_receipt is not None else None),
+        verified_receipt_run_id=(
+            verified_receipt.run_id if verified_receipt is not None else None),
+        verified_gate_configuration_json=(
+            verified_receipt.gate_configuration_json
+            if verified_receipt is not None else None))
+    if shadow_context is not None and isinstance(result, GateRunResult):
+        payload, candidate = shadow_context
+        gate_results = {
+            gate_id: result.summary["outcomes"].get(gate_id, "not-run")
+            for gate_id in result.summary["planned_gate_ids"]
+        }
+        record = shadow_result(payload, candidate, gate_results)
+        written = write_shadow(repo, result.summary["run_id"], record)
+        print(f"SHADOW: {written}")
+    return int(result)
 
 
 def command_flowback(args: argparse.Namespace) -> int:
@@ -3596,6 +4637,58 @@ def command_efficiency(args: argparse.Namespace) -> int:
     return int(load_efficiency_helper().main(forwarded, suppress_injected_identity_help=True))
 
 
+def load_shadow_helper() -> Any:
+    helper_path = Path(__file__).with_name("adc_shadow.py")
+    spec = importlib.util.spec_from_file_location("adc_shadow", helper_path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"Could not load shadow helper: {helper_path}")
+    module = importlib.util.module_from_spec(spec)
+    previous_bytecode_setting = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous_bytecode_setting
+    return module
+
+
+def command_shadow(args: argparse.Namespace) -> int:
+    """Delegate to the shadow helper, handing it this module.
+
+    Passing the loaded module rather than letting the helper import adc.py by
+    path keeps one instance of the record's comparator, `shadow_result`, in
+    the process. Two loaded copies of it is exactly the second implementation
+    D-093 refuses elsewhere.
+    """
+    forwarded = list(args.shadow_args)
+    if not forwarded:
+        print("Usage: adc.py shadow {record} ...")
+        return 2
+    return int(load_shadow_helper().main(forwarded, adc_module=sys.modules[__name__]))
+
+
+def command_release_check(args: argparse.Namespace) -> int:
+    findings = release_check(
+        Path(args.repo).expanduser(),
+        args.tag,
+        expect_core_digest=args.expect_core_digest,
+        previous_tag=args.previous_tag,
+    )
+    print(json.dumps(findings, indent=2))
+    if findings["ok"]:
+        print(f"RELEASE OK: {args.tag} reproduces its core and describes its own changes")
+        return 0
+    for item in findings["errors"]:
+        print(f"ERROR {item}")
+    if findings["digest_match"] is False:
+        print(f"ERROR tag core digest {findings['core_digest']} does not match the expected release digest")
+    for item in findings["distribution_errors"]:
+        print(f"ERROR distribution validation: {item}")
+    for item in findings["undescribed_files"]:
+        print(f"ERROR changed but not described in the release notes: {item}")
+    return 1
+
+
 def command_validate(args: argparse.Namespace) -> int:
     skill = Path(args.skill).expanduser() if args.skill else SKILL_ROOT
     mode = resolve_validation_mode(skill, args.mode)
@@ -3611,6 +4704,293 @@ def command_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+_ROUTER_HELPERS: tuple[Any, Any] | None = None
+
+
+def load_router_helpers() -> tuple[Any, Any]:
+    """Load the pure router and the receipt writer, once.
+
+    Same shape as load_efficiency_helper, including the bytecode guard: writing
+    __pycache__ into the skill tree is exactly what universal validation
+    reports, and a helper that dirties the tree it is about to audit produces a
+    finding about itself.
+
+    Cached, and not as an optimization. load_policy records which module
+    validated a policy and build_route refuses one from anywhere else, so a
+    second load of adc_route produces a second ValidatedPolicy type and the two
+    do not recognize each other. Calling this twice in one command raised
+    "requires a ValidatedPolicy from load_policy, not ValidatedPolicy", which
+    is the provenance guard working correctly on a caller that was wrong.
+    """
+    global _ROUTER_HELPERS
+    if _ROUTER_HELPERS is not None:
+        return _ROUTER_HELPERS
+    modules = []
+    for name in ("adc_route", "adc_receipt"):
+        helper_path = Path(__file__).with_name(f"{name}.py")
+        spec = importlib.util.spec_from_file_location(name, helper_path)
+        if spec is None or spec.loader is None:
+            raise SystemExit(f"Could not load router helper: {helper_path}")
+        module = importlib.util.module_from_spec(spec)
+        previous_bytecode_setting = sys.dont_write_bytecode
+        # Register before executing. Dataclasses resolve field annotations
+        # through sys.modules, and both helpers define them.
+        sys.modules[spec.name] = module
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous_bytecode_setting
+        modules.append(module)
+    _ROUTER_HELPERS = (modules[0], modules[1])
+    return _ROUTER_HELPERS
+
+
+ROUTE_CALIBRATION = Path(".agents") / "skills" / "anti-dark-code" / "calibration"
+
+
+def _route_calibration_dir(args: argparse.Namespace) -> Path:
+    if getattr(args, "calibration", None):
+        return Path(args.calibration)
+    return Path(args.repo) / ROUTE_CALIBRATION
+
+
+def _load_route_inputs(args: argparse.Namespace) -> tuple[Any, dict, dict, list[Path]]:
+    """Read policy, gates, and the canonical full set, or refuse.
+
+    Refusing is the point. A missing or invalid policy does not fall back to a
+    cheap route or to no route: it blocks, because the failure mode this whole
+    subsystem exists to prevent is running less verification than a change
+    deserved. See the fail-closed rule in the EDD.
+    """
+    route_module, _ = load_router_helpers()
+    calibration = _route_calibration_dir(args)
+    policy_path = calibration / "routing-policy.json"
+    gates_path = calibration / "gates.json"
+    for path in (policy_path, gates_path):
+        if not path.is_file():
+            raise SystemExit(
+                f"REFUSED: no {path.name} at {path}. The router will not route "
+                "without a reviewed policy and gate configuration.")
+    try:
+        policy_source = json.loads(policy_path.read_text(encoding="utf-8"))
+        gates_source = json.loads(gates_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        print(f"REFUSED: {error}")
+        raise SystemExit(2) from error
+
+    if not isinstance(policy_source, dict):
+        print("REFUSED: routing-policy.json must contain an object")
+        raise SystemExit(2)
+    if not isinstance(gates_source, dict):
+        print("REFUSED: gates.json must contain an object")
+        raise SystemExit(2)
+
+    full_set = gates_source.get("canonical_full_set")
+    if not isinstance(full_set, dict) or not full_set.get("passes"):
+        raise SystemExit(
+            "REFUSED: gates.json has no canonical_full_set with passes. The "
+            "routing policy is checked against it and cannot supply it.")
+
+    catalog_path = Path(__file__).resolve().parents[1] / "assets" / "verification-capabilities.json"
+    capability_ids = [c["id"] for c in
+                      json.loads(catalog_path.read_text(encoding="utf-8"))["capabilities"]]
+    try:
+        validated = route_module.load_policy(
+            policy_source, gates_source, capability_ids, full_set)
+    except route_module.PolicyError as error:
+        raise SystemExit(f"REFUSED: invalid routing policy: {error}") from error
+
+    calibration_paths = sorted(
+        p for p in calibration.glob("*") if p.is_file()) if calibration.is_dir() else []
+    return validated, policy_source, gates_source, calibration_paths
+
+
+def command_route(args: argparse.Namespace) -> int:
+    route_module, receipt_module = load_router_helpers()
+    repo = Path(args.repo).resolve()
+
+    if args.verify:
+        return _route_verify(args, repo, route_module, receipt_module)
+
+    if args.write:
+        # This path is itself an acquired fact and part of the repository
+        # binding. Create it before acquisition so facts and identity describe
+        # one state even on the first receipt write.
+        ensure_run_gitignore(repo)
+
+    validated, policy_source, gates_source, calibration_paths = _load_route_inputs(args)
+
+    snapshot = route_module.read_change_inputs(repo, args.base)
+    facts = route_module.collect_change_facts(snapshot, validated.classifier_map())
+    route = route_module.build_route(facts, validated, snapshot_ok=snapshot.complete)
+
+    def identity(ref: str) -> str | None:
+        done = subprocess.run(["git", "-C", str(repo), "rev-parse", ref],
+                              capture_output=True, text=True, timeout=30)
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    try:
+        binding = receipt_module.collect_binding(
+            repo, route_module,
+            base_identity=identity(args.base), head_identity=identity("HEAD"),
+            policy_source=policy_source, gates_source=gates_source,
+            calibration_paths=calibration_paths,
+            repo_binding_identity=_route_binding_identity(
+                _route_calibration_dir(args)))
+    except receipt_module.ReceiptError as error:
+        print(f"REFUSED: {error}")
+        return 2
+
+    payload = receipt_module.authoritative_payload(
+        route, facts, snapshot, binding, gates_source)
+    receipt = receipt_module.build_receipt(payload, {
+        "written_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "tool": "adc.py route",
+    })
+
+    gates = payload["route"]["selected_gate_ids"]
+    print(
+        f"ROUTE level={route.minimum_level} "
+        f"passes={','.join(sorted(route.passes)) or '-'} "
+        f"gates={','.join(gates) or '-'} "
+        f"rules={','.join(sorted(route.matched_rule_ids)) or '-'} "
+        f"force_full={str(route.force_full).lower()} "
+        f"complete={str(snapshot.complete).lower()} "
+        f"run={receipt['run_id'][:12]}")
+    if snapshot.problems:
+        # Not a footnote. An incomplete snapshot is why the route is heavy, and
+        # a reader who does not see it will think the router is being cautious
+        # for no reason.
+        print(f"  snapshot incomplete: {', '.join(sorted(snapshot.problems))}")
+    unsupported = sorted(binding.unsupported_paths)
+    if unsupported:
+        # Printed on the read-only path too, not only before a write. A reader
+        # who runs `route` and sees a plausible line has been told the route is
+        # trustworthy, and for this tree it is the freshness binding, not the
+        # route, that cannot be trusted. See D-072.
+        print(f"  unbindable paths: {', '.join(unsupported)}")
+    for capability, gate_ids in sorted(route.obligations.items()):
+        print(f"  {capability}: {', '.join(sorted(gate_ids))}")
+
+    if args.write:
+        if unsupported:
+            # A receipt that cannot go stale is worse than no receipt: it is a
+            # standing claim that the tree has not moved. Refuse to write one
+            # rather than leave a file that always verifies fresh.
+            print("REFUSED: this tree contains a path the freshness binding "
+                  "cannot hold, so a receipt written here could not go stale: "
+                  + ", ".join(unsupported))
+            return 2
+        runs = repo / ".anti-dark-code" / "runs"
+        runs.mkdir(parents=True, exist_ok=True)
+        target = runs / f"{receipt['run_id']}.json"
+        target.write_bytes(receipt_module.receipt_bytes(receipt))
+        print(f"  receipt: {target}")
+    return 0
+
+
+def _route_binding_identity(calibration: Path) -> str | None:
+    binding_path = calibration / "repo-binding.json"
+    if not binding_path.is_file():
+        return None
+    try:
+        data = json.loads(binding_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    value = data.get("repo_identity") or data.get("identity")
+    return value if isinstance(value, str) else None
+
+
+def _route_verify(args: argparse.Namespace, repo: Path,
+                  route_module: Any, receipt_module: Any) -> int:
+    receipt_path = Path(args.verify)
+    try:
+        receipt = _read_route_receipt(receipt_path)
+    except ValueError as exc:
+        print(exc)
+        return 2
+    verdict, _ = _verify_loaded_route_receipt(
+        args, repo, route_module, receipt_module, receipt)
+    return verdict
+
+
+def _verify_loaded_route_receipt(
+    args: argparse.Namespace,
+    repo: Path,
+    route_module: Any,
+    receipt_module: Any,
+    receipt: Mapping[str, Any],
+) -> tuple[int, VerifiedRouteReceipt | None]:
+    """Verify one already-read receipt and return immutable authority."""
+    payload = receipt.get("authoritative")
+    if not isinstance(payload, Mapping):
+        print("REFUSED: routing receipt has no authoritative payload")
+        return 2, None
+    recorded = payload.get("binding")
+    if not isinstance(recorded, Mapping):
+        print("REFUSED: routing receipt binding is not an object")
+        return 2, None
+
+    validated, policy_source, gates_source, calibration_paths = (
+        _load_route_inputs(args))
+
+    def identity(ref: str) -> str | None:
+        done = subprocess.run(["git", "-C", str(repo), "rev-parse", ref],
+                              capture_output=True, text=True, timeout=30)
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    try:
+        current = receipt_module.collect_binding(
+            repo, route_module,
+            # The base the receipt was written against, not a fresh guess.
+            # Verifying against a different base would report the receipt stale
+            # for a reason unrelated to repository movement.
+            base_identity=recorded.get("base_identity"),
+            head_identity=identity("HEAD"),
+            policy_source=policy_source, gates_source=gates_source,
+            calibration_paths=calibration_paths,
+            repo_binding_identity=_route_binding_identity(
+                _route_calibration_dir(args)))
+    except receipt_module.ReceiptError as error:
+        print(f"REFUSED: {error}")
+        return 2, None
+
+    try:
+        verdict = receipt_module.verify_receipt(receipt, current)
+    except receipt_module.ReceiptError as error:
+        print(f"REFUSED: {error}")
+        return 2, None
+    if verdict.fresh:
+        run_id = receipt.get("run_id")
+        if not isinstance(run_id, str):
+            print("REFUSED: routing receipt has no string run_id")
+            return 2, None
+        if not isinstance(current.worktree_identity, str):
+            print("REFUSED: fresh receipt has no repository identity")
+            return 2, None
+        frozen_payload = _freeze_json(dict(payload))
+        try:
+            route = _receipt_route(frozen_payload)
+        except ValueError as exc:
+            print(exc)
+            return 2, None
+        print(f"FRESH {run_id[:12]}", flush=True)
+        return 0, VerifiedRouteReceipt(
+            run_id=run_id,
+            authoritative=frozen_payload,
+            route=route,
+            expected_worktree_identity=current.worktree_identity,
+            validated_policy=validated,
+            gate_configuration_json=json.dumps(
+                gates_source, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False).encode("utf-8"))
+    print(f"STALE {receipt.get('run_id', '')[:12]}")
+    for code, detail in verdict.reasons:
+        print(f"  {code} {detail}")
+    return verdict.exit_code, None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="adc.py", description="Deterministic helpers for the Anti-Dark-Code skill")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -3621,13 +5001,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="Print full JSON")
     p.add_argument("--max-files", type=int, default=50_000)
     p.add_argument("--content-scan-limit", type=int, default=4_000)
+    p.add_argument("--exclude", action="append", metavar="PATH_OR_GLOB", help="Repo-relative path or glob to leave out of the scan. Repeatable. Recorded in the profile and reused when the plan re-probes.")
     p.set_defaults(func=command_probe)
 
-    p = sub.add_parser("plan", help="Evaluate all 20 verification capabilities")
+    p = sub.add_parser("plan", help=f"Evaluate all {CAPABILITY_COUNT} verification capabilities")
     p.add_argument("--repo", default=".")
     p.add_argument("--write", action="store_true", help="Write verification plan and proposed gates")
     p.add_argument("--json", action="store_true", help="Print full JSON")
     p.add_argument("--no-gate-suggestions", action="store_true")
+    p.add_argument("--exclude", action="append", metavar="PATH_OR_GLOB", help="Repo-relative path or glob to leave out of the scan. Repeatable. Recorded in the profile and reused when the plan re-probes.")
     p.set_defaults(func=command_plan)
 
     p = sub.add_parser("install", help="Install or update the managed core in a repo")
@@ -3638,6 +5020,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-unsafe-source", action="store_true", help="Allow a reviewed legacy or repo-local source. Source calibration is still ignored.")
     p.add_argument("--accept-unbound-calibration", action="store_true", help="Bind reviewed legacy calibration to this repository.")
     p.add_argument("--rebind-calibration", action="store_true", help="Rebind calibration after a reviewed repo move, fork, or remote identity change.")
+    p.add_argument("--allow-untagged-source", action="store_true", help="Install from a working tree that is not at a release tag. A moving source records a version the tag does not reproduce.")
+    p.add_argument("--expect-core-digest", help="Refuse the install unless the source core hashes to this published release digest.")
     p.add_argument("--hosts", choices=("auto", "all", "none"), default="auto")
     p.set_defaults(func=command_install)
 
@@ -3649,17 +5033,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-unsafe-source", action="store_true", help="Allow a reviewed legacy or repo-local source. Source calibration is still ignored.")
     p.add_argument("--accept-unbound-calibration", action="store_true", help="Bind reviewed legacy calibration to this repository.")
     p.add_argument("--rebind-calibration", action="store_true", help="Rebind calibration after a reviewed repo move, fork, or remote identity change.")
+    p.add_argument("--allow-untagged-source", action="store_true", help="Install from a working tree that is not at a release tag. A moving source records a version the tag does not reproduce.")
+    p.add_argument("--expect-core-digest", help="Refuse the install unless the source core hashes to this published release digest.")
     p.add_argument("--hosts", choices=("auto", "all", "none"), default="auto")
     p.add_argument("--max-files", type=int, default=50_000)
     p.add_argument("--content-scan-limit", type=int, default=4_000)
+    p.add_argument("--exclude", action="append", metavar="PATH_OR_GLOB", help="Repo-relative path or glob to leave out of the scan. Repeatable. Recorded in the profile and reused when the plan re-probes.")
     p.set_defaults(func=command_bootstrap)
 
     p = sub.add_parser("gates", help="Dry-run or execute reviewed deterministic gates")
     p.add_argument("--repo", default=".")
-    p.add_argument("--level", type=int, choices=(0, 1, 2, 3), default=0)
+    p.add_argument("--level", type=int, choices=(0, 1, 2, 3))
+    p.add_argument("--route", help="Routing receipt whose minimum level may only be raised")
     p.add_argument("--allow-exec", action="store_true")
     p.add_argument("--changed-from")
     p.add_argument("--keep-going", action="store_true")
+    p.add_argument("--rebind", metavar="GATE", help="Recompute one approved gate's source binding after a reviewed drift. Keeps the previous digest, requires --note, touches nothing else.")
+    p.add_argument("--note", help="Why the bound files changed; appended to the gate's owner_notes. Required with --rebind.")
     p.set_defaults(func=command_gates)
 
     p = sub.add_parser("flowback", help="Stage ready repo lessons as a proposal")
@@ -3682,6 +5072,25 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("efficiency", help="Create opt-in local usage receipts and controlled token comparisons")
     p.add_argument("efficiency_args", nargs=argparse.REMAINDER)
     p.set_defaults(func=command_efficiency)
+
+    p = sub.add_parser("shadow", help="Build and read shadow evidence records for the routing campaign")
+    p.add_argument("shadow_args", nargs=argparse.REMAINDER)
+    p.set_defaults(func=command_shadow)
+
+    p = sub.add_parser("route", help="Route one change to the verification it needs, and bind the result to a receipt")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--base", default="HEAD", help="Comparison base for the change")
+    p.add_argument("--calibration", help="Calibration directory holding routing-policy.json and gates.json")
+    p.add_argument("--write", action="store_true", help="Write the receipt under .anti-dark-code/runs/")
+    p.add_argument("--verify", help="Verify an existing receipt instead of routing; exits 2 when stale")
+    p.set_defaults(func=command_route)
+
+    p = sub.add_parser("release-check", help="Verify a release tag reproduces its core and describes its own changes")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--tag", required=True)
+    p.add_argument("--expect-core-digest")
+    p.add_argument("--previous-tag")
+    p.set_defaults(func=command_release_check)
 
     p = sub.add_parser("validate", help="Validate a distribution, live universal core, or installed repo copy")
     p.add_argument("--skill")
