@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ADC_VERSION: 2026.09.07-unified.13
-      ADC_CORE_SHA256: 25b37209c351a6e8331bf4db4545f5d58d7158571c02309b99fa98acedb4b5b4
+      ADC_VERSION: 2026.09.07-unified.14
+      ADC_CORE_SHA256: 6bf235f6e826c0ac9dbf4bfedadf241540b9d20ddb24dae32ddb9aa24f25a1ae
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
