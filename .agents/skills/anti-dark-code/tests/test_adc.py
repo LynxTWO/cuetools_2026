@@ -3042,7 +3042,7 @@ class AntiDarkCodeToolsTests(unittest.TestCase):
 
     def test_source_release_surfaces_match_canonical_version(self) -> None:
         skill_root = Path(__file__).resolve().parents[1]
-        package_root = skill_root.parent
+        package_root = skill_root.parents[1] if skill_root.parent.name == "skills" else skill_root.parent
         changelog = package_root / "CHANGELOG.md"
         readme = package_root / "README.md"
         if not changelog.exists() and not readme.exists():
@@ -3107,6 +3107,106 @@ class AntiDarkCodeToolsTests(unittest.TestCase):
             self.assertIn(".claude/worktrees/", profile["scan"]["ignored_worktree_trees"])
             evidence = [item for signal in profile["signals"].values() for item in signal.get("evidence", [])]
             self.assertFalse(any("noise" in item or "feature-branch" in item for item in evidence))
+
+    def test_probe_records_manifests_it_could_not_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "package.json").write_text(json.dumps({"name": "root", "scripts": {"test": "vitest run"}}), encoding="utf-8")
+            broken = repo / "packages" / "broken"
+            broken.mkdir(parents=True)
+            # A trailing comma is the everyday way a hand-edited manifest stops parsing.
+            (broken / "package.json").write_text('{"name": "broken", "scripts": {"lint": "eslint .",}}\n', encoding="utf-8")
+            (repo / "pyproject.toml").write_text('[project]\nname = "tool"\nscripts = { run =\n', encoding="utf-8")
+
+            profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
+
+            self.assertEqual(profile["scan"]["unparsed_manifests"], ["packages/broken/package.json", "pyproject.toml"])
+            note = next(note for note in profile["notes"] if "could not be parsed" in note)
+            self.assertIn("packages/broken/package.json", note)
+            scripts = [item["source"] for item in profile["exact_commands"] if "#scripts." in item["source"]]
+            self.assertEqual(scripts, ["package.json#scripts.test"])
+
+    def test_probe_records_a_non_object_package_json_as_unparsed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "package.json").write_text("[]\n", encoding="utf-8")
+            profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
+            self.assertEqual(profile["scan"]["unparsed_manifests"], ["package.json"])
+            self.assertEqual(profile["exact_commands"], [])
+
+    def test_probe_cli_warns_for_each_unparsed_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "package.json").write_text('{"scripts": {"test": "jest",}}\n', encoding="utf-8")
+            args = argparse.Namespace(repo=str(repo), max_files=1000, content_scan_limit=1000,
+                                      exclude=None, write=False, json=False)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(adc.command_probe(args), 0)
+            self.assertIn("WARN manifest could not be parsed; its scripts were not read: package.json", out.getvalue())
+
+    def test_probe_skips_mutation_tool_sandboxes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            manifest = json.dumps({"name": "app", "scripts": {"test": "vitest run"}}, indent=2)
+            (repo / "package.json").write_text(manifest, encoding="utf-8")
+            (repo / "src").mkdir()
+            (repo / "src" / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+            # Mutation tools copy the whole project into a sandbox inside the repository.
+            sandbox = repo / ".stryker-tmp" / "sandbox-4f2a"
+            (sandbox / "src").mkdir(parents=True)
+            (sandbox / "package.json").write_text(manifest.replace("vitest run", "vitest run --bail"), encoding="utf-8")
+            (sandbox / "src" / "app.ts").write_text("export const value = 2;\n", encoding="utf-8")
+            (sandbox / "AGENTS.md").write_text("# copied steering\n", encoding="utf-8")
+
+            profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
+
+            self.assertIn(".stryker-tmp", profile["scan"]["ignored_directories"])
+            self.assertEqual(profile["counts"]["source_files"], 1)
+            self.assertEqual(profile["manifests"], ["package.json"])
+            self.assertEqual(profile["steering_files"], [])
+            self.assertEqual([item["cwd"] for item in profile["exact_commands"]], ["."])
+
+    def test_probe_skips_in_tree_repository_copies_and_records_them(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            manifest = json.dumps({"name": "app", "version": "1.0.0", "scripts": {"test": "vitest run"}}, indent=2)
+            (repo / "package.json").write_text(manifest, encoding="utf-8")
+            (repo / "src").mkdir()
+            (repo / "src" / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+            # A copy made by a tool no ignore rule names: no .git, same root manifest bytes.
+            copy = repo / "tool-cache" / "run-7" / "workspace"
+            (copy / "src").mkdir(parents=True)
+            (copy / "package.json").write_text(manifest, encoding="utf-8")
+            (copy / "src" / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+
+            profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
+
+            self.assertEqual(profile["scan"]["skipped_repository_copies"], ["tool-cache/run-7/workspace/"])
+            self.assertEqual(profile["counts"]["source_files"], 1)
+            self.assertEqual(profile["manifests"], ["package.json"])
+            self.assertTrue(any("tool-cache/run-7/workspace/" in note for note in profile["notes"]))
+
+    def test_probe_keeps_workspace_packages_and_tiny_identical_manifests(self) -> None:
+        cases = {
+            "distinct workspace package": ({"name": "root", "private": True, "workspaces": ["packages/*"]},
+                                           {"name": "@root/a", "version": "1.0.0"}),
+            "tiny identical manifests": ({}, {}),
+        }
+        for label, (root_manifest, package_manifest) in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                (repo / "package.json").write_text(json.dumps(root_manifest), encoding="utf-8")
+                package = repo / "packages" / "a"
+                package.mkdir(parents=True)
+                (package / "package.json").write_text(json.dumps(package_manifest), encoding="utf-8")
+                (package / "index.ts").write_text("export const a = 1;\n", encoding="utf-8")
+
+                profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
+
+                self.assertEqual(profile["scan"]["skipped_repository_copies"], [])
+                self.assertIn("packages/a/package.json", profile["manifests"])
+                self.assertEqual(profile["counts"]["source_files"], 1)
 
     def test_probe_exclude_prunes_requested_paths_and_records_them(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3245,7 +3345,7 @@ class AntiDarkCodeToolsTests(unittest.TestCase):
             self.assertEqual(signal["evidence_classes"], {"prose": 1})
             self.assertTrue(signal["documentation_only"])
 
-            (repo / "src" / "pay.py").write_text("def charge(): return 'billing'\n", encoding="utf-8")
+            (repo / "src" / "pay.py").write_text("def billing(payment): return payment\n", encoding="utf-8")
             profile = adc.probe_repo(repo, max_files=1000, content_scan_limit=1000)
             signal = profile["signals"]["financial_or_entitlement"]
 
@@ -3267,7 +3367,7 @@ class AntiDarkCodeToolsTests(unittest.TestCase):
             self.assertIn("documentation", by_id["V14"]["reason"].lower())
             self.assertIn("emergent_or_simulation", by_id["V14"]["reason"])
 
-            (repo / "src" / "world.py").write_text("def step(): return 'simulation tick'\n", encoding="utf-8")
+            (repo / "src" / "world.py").write_text("def simulation(tick): return tick + 1\n", encoding="utf-8")
             plan = adc.build_plan(adc.probe_repo(repo, max_files=1000, content_scan_limit=1000))
             by_id = {item["id"]: item for item in plan["capabilities"]}
 

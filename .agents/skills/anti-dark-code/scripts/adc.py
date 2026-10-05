@@ -8,11 +8,14 @@ or execution flag is supplied.
 from __future__ import annotations
 
 import argparse
+import ast
 import collections
 import copy
 import datetime as dt
+import difflib
 import fnmatch
 import hashlib
+from html.parser import HTMLParser
 import importlib.util
 import io
 import json
@@ -26,6 +29,7 @@ import sys
 import tempfile
 import textwrap
 import time
+import tomllib
 import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
@@ -59,7 +63,19 @@ IGNORED_DIRS = {
     "node_modules", "bower_components", "vendor", "dist", "build", "out", ".next",
     ".nuxt", ".turbo", "coverage", "target", "bin", "obj", ".gradle", ".terraform",
     "Library", "Temp", "Logs", "DerivedData", "Pods", "__pycache__", ".anti-dark-code",
+    ".stryker-tmp",
 }
+
+# A subdirectory holding a byte-identical copy of one of these root manifests is a
+# copy of this repository made by a tool (a mutation or coverage sandbox, a
+# snapshot, an unpacked archive), not part of it. These files name the project, so
+# a real workspace package does not match its root byte for byte; the minimum size
+# keeps near-empty manifests from matching by accident.
+REPOSITORY_COPY_SIGNATURES = (
+    "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "composer.json",
+    "pubspec.yaml", "mix.exs", "Package.swift",
+)
+MIN_COPY_SIGNATURE_BYTES = 64
 
 SOURCE_EXTENSIONS = {
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java",
@@ -72,7 +88,7 @@ TEXT_EXTENSIONS = SOURCE_EXTENSIONS | {
     ".json", ".jsonc", ".yaml", ".yml", ".toml", ".xml", ".md", ".txt", ".ini",
     ".cfg", ".conf", ".properties", ".gradle", ".graphql", ".gql", ".proto", ".csproj",
     ".vbproj", ".fsproj", ".vcxproj",
-    ".sln", ".props", ".targets", ".html", ".css", ".scss", ".less", ".csv",
+    ".sln", ".props", ".targets", ".html", ".htm", ".css", ".scss", ".less", ".csv",
 }
 
 # Extensions the profiler knows are not source and never counts as such. A file
@@ -1083,14 +1099,44 @@ def matches_exclusion(rel_posix: str, exclusions: Sequence[str]) -> bool:
     return False
 
 
+def repository_copy_signatures(root: Path) -> dict[str, tuple[int, str]]:
+    signatures: dict[str, tuple[int, str]] = {}
+    for name in REPOSITORY_COPY_SIGNATURES:
+        path = root / name
+        if path_is_linklike(path) or not path.is_file():
+            continue
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        if len(data) >= MIN_COPY_SIGNATURE_BYTES:
+            signatures[name] = (len(data), sha256_bytes(data))
+    return signatures
+
+
+def is_repository_copy(directory: Path, signatures: Mapping[str, tuple[int, str]]) -> bool:
+    for name, (size, digest) in signatures.items():
+        path = directory / name
+        try:
+            if path_is_linklike(path) or not path.is_file() or path.stat().st_size != size:
+                continue
+            if sha256_bytes(path.read_bytes()) == digest:
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def iter_repo_files(
     root: Path,
     max_files: int = 50_000,
     exclusions: Sequence[str] = (),
     skipped_nested_repositories: list[str] | None = None,
+    skipped_repository_copies: list[str] | None = None,
 ) -> tuple[list[Path], bool]:
     files: list[Path] = []
     truncated = False
+    signatures = repository_copy_signatures(root) if skipped_repository_copies is not None else {}
     for current, dirs, names in os.walk(root, followlinks=False):
         current_path = Path(current)
         try:
@@ -1113,6 +1159,9 @@ def iter_repo_files(
             if (current_path / d / ".git").exists():
                 if skipped_nested_repositories is not None:
                     skipped_nested_repositories.append(child_rel + "/")
+                continue
+            if skipped_repository_copies is not None and signatures and is_repository_copy(current_path / d, signatures):
+                skipped_repository_copies.append(child_rel + "/")
                 continue
             kept.append(d)
         dirs[:] = kept
@@ -1258,11 +1307,112 @@ PROSE_EXTENSIONS = {".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm"
 
 
 def evidence_class_for(path: Path) -> str:
+    parts = {part.lower() for part in path.parts}
+    if parts & {"tests", "test", "fixtures", "__tests__", "testdata", "mutants", "evals", "evaluations"} or likely_test(path):
+        return "test"
+    if parts & {"examples", "example", "samples", "demo", "demos"}:
+        return "example"
+    if "catalog" in path.stem.lower() or "catalogs" in parts or path.name == "verification-capabilities.json":
+        return "catalog"
     if path.name in STEERING_NAMES or path.suffix.lower() in PROSE_EXTENSIONS:
         return "prose"
     if path.suffix.lower() in SOURCE_EXTENSIONS:
         return "source"
     return "config"
+
+
+class HTMLSignals(HTMLParser):
+    """Partition a bounded HTML container; never fetch scripts or execute markup.
+
+    This is advisory lexical evidence, not a browser parse or reachability proof.
+    Template contents and unknown script types need source confirmation.
+    """
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.segments: dict[str, list[str]] = collections.defaultdict(list)
+        self.script_class: str | None = None
+        self.template_depth = 0
+        self.interactive = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "template":
+            self.template_depth += 1
+        if self.template_depth:
+            self.segments["inert"].append(self.get_starttag_text())
+            return
+        if tag == "script":
+            kind = (attrs.get("type") or "").strip().lower().split(";", 1)[0]
+            executable = kind in {"", "module", "text/javascript", "application/javascript",
+                                   "text/ecmascript", "application/ecmascript"}
+            self.script_class = "source" if executable and not attrs.get("src") else "inert"
+            if executable:
+                self.interactive = True
+                self.segments["config"].append("script " + (attrs.get("src") or ""))
+            return
+        if tag in {"button", "input", "select", "textarea", "form", "dialog", "details"} or "contenteditable" in attrs:
+            self.interactive = True
+            self.segments["source"].append("ui " + tag)
+        for name, value in attrs.items():
+            if name.startswith("on") and value:
+                self.interactive = True
+                self.segments["source"].append(value)
+            elif name in {"href", "action"} and value and value.lstrip().lower().startswith("javascript:"):
+                self.interactive = True
+                self.segments["source"].append(value)
+
+    def handle_endtag(self, tag):
+        if tag == "template":
+            self.template_depth = max(0, self.template_depth - 1)
+        elif tag == "script":
+            self.script_class = None
+
+    def handle_data(self, data):
+        kind = "inert" if self.template_depth else self.script_class or "prose"
+        self.segments[kind].append(data)
+
+    def handle_comment(self, data):
+        self.segments["prose"].append(data)
+
+
+def runtime_signal(entry: dict[str, Any]) -> bool:
+    classes = entry.get("evidence_classes")
+    # Older profiles did not classify evidence. Preserve their vocabulary while
+    # freshness checks require re-probing with the changed method digest.
+    return bool(entry.get("present") and (not classes or set(classes) & {"source", "config", "structure"}))
+
+
+def python_cli_entrypoint(text: str) -> bool:
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError):
+        return False
+    imports = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+    imports.update(node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
+    guard = any(isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__"
+        and len(node.test.ops) == 1 and isinstance(node.test.ops[0], ast.Eq)
+        and len(node.test.comparators) == 1 and isinstance(node.test.comparators[0], ast.Constant)
+        and node.test.comparators[0].value == "__main__" for node in tree.body)
+    return guard and bool(imports & {"argparse", "click", "typer", "sys"})
+
+
+def python_signal_segments(text: str) -> dict[str, str]:
+    """Keep quoted examples, regex catalogs and docstrings out of code evidence.
+
+    SQL and other executable strings still need call-site interpretation. Retain
+    them as candidate evidence rather than guessing their meaning from keywords.
+    """
+    try:
+        tree = ast.parse(text)
+        literals = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+        class WithoutText(ast.NodeTransformer):
+            def visit_Constant(self, node):
+                return ast.copy_location(ast.Constant(value=""), node) if isinstance(node.value, str) else node
+        code = ast.unparse(WithoutText().visit(tree))
+        return {"source": code, "source_text": "\n".join(literals)}
+    except (SyntaxError, ValueError, RecursionError):
+        return {"uncertain": text}
 
 
 def add_evidence(
@@ -1275,10 +1425,18 @@ def add_evidence(
     entry = signals.setdefault(signal, {"present": False, "evidence": [], "evidence_classes": {}})
     entry["present"] = True
     classes = entry.setdefault("evidence_classes", {})
-    if evidence not in entry["evidence"]:
-        classes[evidence_class] = classes.get(evidence_class, 0) + 1
-    if evidence not in entry["evidence"] and len(entry["evidence"]) < limit:
-        entry["evidence"].append(evidence)
+    by_class = entry.setdefault("evidence_by_class", {})
+    locators = by_class.setdefault(evidence_class, [])
+    # Callers aggregate a file's segments per class before adding it. Counts are
+    # file/class observations, not matching words or distinct runtime features.
+    classes[evidence_class] = classes.get(evidence_class, 0) + 1
+    if evidence not in locators and len(locators) < limit:
+        locators.append(evidence)
+    ordered = sorted(by_class, key=lambda key: (key not in {"source", "config", "structure"}, key))
+    representative = list(dict.fromkeys(by_class[key][0] for key in ordered if by_class[key]))
+    for key in ordered:
+        representative.extend(item for item in by_class[key] if item not in representative)
+    entry["evidence"] = representative[:limit]
 
 
 def signal_is_documentation_only(entry: dict[str, Any]) -> bool:
@@ -1289,9 +1447,14 @@ def signal_is_documentation_only(entry: dict[str, Any]) -> bool:
 
 
 def parse_package_json(path: Path, repo: Path, profile: dict[str, Any]) -> None:
+    # An unreadable manifest is recorded, not skipped: silence would read as a
+    # package with no scripts, when its gates are unknown rather than absent.
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        data = None
+    if not isinstance(data, dict):
+        profile["scan"]["unparsed_manifests"].append(rel(path, repo))
         return
     deps: dict[str, Any] = {}
     for key in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
@@ -1432,11 +1595,13 @@ def probe_repo(
 
     exclusions = normalize_exclusions(exclude)
     skipped_nested: list[str] = []
+    skipped_copies: list[str] = []
     files, truncated = iter_repo_files(
         repo,
         max_files=max_files,
         exclusions=exclusions,
         skipped_nested_repositories=skipped_nested,
+        skipped_repository_copies=skipped_copies,
     )
     ext_counts: collections.Counter[str] = collections.Counter()
     lang_counts: collections.Counter[str] = collections.Counter()
@@ -1464,6 +1629,8 @@ def probe_repo(
             "ignored_skill_trees": sorted("/".join(parts) + "/" for parts in HOST_SKILL_TREE_PREFIXES),
             "ignored_worktree_trees": sorted("/".join(parts) + "/" for parts in HOST_WORKTREE_TREE_PREFIXES),
             "skipped_nested_repositories": sorted(skipped_nested),
+            "skipped_repository_copies": sorted(skipped_copies),
+            "unparsed_manifests": [],
             "requested_exclusions": exclusions,
         },
         "repo_types": [],
@@ -1543,15 +1710,53 @@ def probe_repo(
             continue
         scanned += 1
         r = rel(path, repo)
-        evidence_class = evidence_class_for(path)
-        for signal, patterns in CONTENT_PATTERNS.items():
-            if any(pattern.search(text) for pattern in patterns):
-                add_evidence(signals, signal, r, evidence_class=evidence_class)
+        evidence_class = evidence_class_for(Path(r))
+        segments = {evidence_class: text}
+        if path.suffix.lower() in {".html", ".htm"}:
+            html = HTMLSignals()
+            html.feed(text)
+            html.close()
+            if evidence_class not in {"test", "example", "catalog"}:
+                segments = {kind: "\n".join(values) for kind, values in html.segments.items()}
+                if html.interactive:
+                    profile["_type_hints"].add("frontend")
+                    segments["source"] = "ui\n" + segments.get("source", "")
+        if evidence_class == "source" and path.suffix.lower() == ".py":
+            segments = python_signal_segments(text)
+            if python_cli_entrypoint(text):
+                profile["_type_hints"].add("cli-desktop")
+                add_evidence(signals, "cli_entrypoint", r, evidence_class="source")
+        if evidence_class == "config" and path.name == "pyproject.toml":
+            try:
+                project = tomllib.loads(text).get("project", {})
+                if isinstance(project, dict) and isinstance(project.get("scripts"), dict) and project["scripts"]:
+                    profile["_type_hints"].add("cli-desktop")
+                    add_evidence(signals, "cli_entrypoint", r, evidence_class="config")
+            except tomllib.TOMLDecodeError:
+                profile["scan"]["unparsed_manifests"].append(r)
+            except AttributeError:
+                pass
+        for kind, segment in segments.items():
+            for signal, patterns in CONTENT_PATTERNS.items():
+                if any(pattern.search(segment) for pattern in patterns):
+                    add_evidence(signals, signal, r, evidence_class=kind)
     profile["scan"]["files_scanned_for_indicators"] = scanned
     if scanned >= content_scan_limit and len(files) > scanned:
         profile["notes"].append("Indicator content scan reached its bound. Signals are evidence of presence, not proof of absence.")
     if truncated:
         profile["notes"].append("File enumeration reached its bound. Counts and absence claims are partial.")
+    unparsed = sorted(set(profile["scan"]["unparsed_manifests"]))
+    profile["scan"]["unparsed_manifests"] = unparsed
+    if unparsed:
+        profile["notes"].append(
+            f"{len(unparsed)} manifest(s) could not be parsed, so their scripts and dependencies are unknown "
+            "rather than absent: " + ", ".join(unparsed) + ".")
+    if skipped_copies:
+        profile["notes"].append(
+            "Skipped in-tree copies of this repository, each holding a byte-identical root manifest, such as "
+            "a mutation or coverage sandbox: " + ", ".join(sorted(skipped_copies)) + ". Their files describe a "
+            "copy, not this tree. Review the list: a real package whose manifest matches the root byte for "
+            "byte is skipped too.")
 
     manifest_basenames = {Path(m).name for m in manifests}
     type_hints: set[str] = profile.pop("_type_hints")
@@ -1577,6 +1782,14 @@ def probe_repo(
         type_hints.add("mixed")
 
     profile["repo_types"] = sorted(type_hints)
+    profile["characteristics"] = {
+        "runtime_families": sorted(type_hints - {"small-new", "mixed", "monorepo"}),
+        "size_band": "small" if source_count < 25 else "large" if source_count > 250 else "medium",
+        "size_basis": "recognized source-file count; not complexity or age",
+        "maturity": "unknown",
+        "maintenance_evidence": sorted(set(ci_files + [r for r in all_rel if Path(r).name.lower().startswith("changelog")])),
+    }
+    profile["notes"].append("Runtime families and domain keywords are advisory. Confirm entrypoints and domain behavior semantically; size does not establish maturity.")
     profile["languages"] = [{"name": name, "source_files": count} for name, count in lang_counts.most_common()]
     profile["manifests"] = sorted(set(manifests))
     profile["ci_files"] = sorted(set(ci_files))
@@ -1621,6 +1834,7 @@ def probe_repo(
     for entry in profile["signals"].values():
         entry.setdefault("evidence_classes", {})
         entry["documentation_only"] = signal_is_documentation_only(entry)
+        entry["runtime_evidence"] = runtime_signal(entry)
     profile["signals"] = {name: profile["signals"][name] for name in sorted(profile["signals"])}
     return profile
 
@@ -1666,7 +1880,7 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
     repo_types = profile.get("repo_types") or ["mixed"]
     primary = select_primary_repo_type(repo_types)
     source_count = int(profile.get("counts", {}).get("source_files", 0) or 0)
-    high_risk_present = any(signals.get(name, {}).get("present") for name in (
+    high_risk_present = any(runtime_signal(signals.get(name, {})) for name in (
         "security_sensitive", "financial_or_entitlement", "persistence", "release_sensitive",
         "emergent_or_simulation", "external_dependencies"
     ))
@@ -1679,9 +1893,19 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
         matched_risks = [s for s in selection.get("risks_any", []) if signals.get(s, {}).get("present")]
         # A signal backed only by documentation is a question, not an observation.
         prose_only = [s for s in matched_signals + matched_risks if signal_is_documentation_only(signals.get(s, {}))]
-        code_backed = [s for s in matched_signals + matched_risks if s not in prose_only]
+        code_backed = [s for s in matched_signals + matched_risks if runtime_signal(signals.get(s, {}))]
+        contextual = [s for s in matched_signals + matched_risks if s not in code_backed]
         evidence: list[str] = []
-        for name in matched_signals + matched_risks:
+        evidence_by_signal = {}
+        for name in code_backed + contextual:
+            entry = signals.get(name, {})
+            representatives = {kind: values[0] for kind, values in entry.get("evidence_by_class", {}).items() if values}
+            evidence_by_signal[name] = representatives
+            for kind in sorted(representatives, key=lambda key: key not in {"source", "config", "structure"}):
+                item = representatives[kind]
+                if item not in evidence and len(evidence) < 12:
+                    evidence.append(item)
+        for name in code_backed + contextual:
             for item in signals.get(name, {}).get("evidence", []):
                 if item not in evidence and len(evidence) < 12:
                     evidence.append(item)
@@ -1697,16 +1921,16 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
             reason = f"Selected because the deterministic profile observed: {matched}."
             if prose_only:
                 reason += f" Documentation alone also mentions: {', '.join(prose_only)}."
-        elif prose_only:
+        elif contextual:
             status = "candidate"
-            matched = ", ".join(prose_only)
+            matched = ", ".join(contextual)
             reason = (
-                f"Candidate. Only documentation mentions: {matched}. "
-                "Confirm the behavior in source or configuration before selecting."
+                f"Candidate. Only documentation, test/example, catalog, quoted or unresolved content mentions: {matched}. "
+                "Confirm application behavior in source or runtime configuration before selecting."
             )
         elif primary == "small-new" and cap.get("cost") == "high":
             status = "deferred"
-            reason = "Deferred for the small or new repo profile until the named trigger appears."
+            reason = "Deferred for the small unclassified repo profile until the named trigger appears; maturity is unknown."
         elif selection.get("candidate_if_missing"):
             status = "candidate"
             reason = "Candidate. Confirm the needed workflow, oracle, boundary, or risk before adding tooling."
@@ -1740,6 +1964,7 @@ def build_plan(profile: dict[str, Any]) -> dict[str, Any]:
             "repo_type": primary,
             "adaptation": cap.get("adaptations", {}).get(primary) or cap.get("adaptations", {}).get("mixed"),
             "evidence": evidence,
+            "evidence_by_signal": evidence_by_signal,
             "deterministic_work": cap["local_work"],
             "agent_judgment": cap["agent_work"],
             "dependency_policy": "Do not install tools automatically. Prefer existing repo tooling; propose additions for human review.",
@@ -2027,11 +2252,15 @@ def managed_source_files(source: Path) -> dict[str, Path]:
     return files
 
 
-def only_version_churn(repo: Path, previous: str, tag: str, path: str, versions: set[str]) -> bool:
+def only_version_churn(repo: Path, previous: str, tag: str, path: str, versions: set[str], previous_path: str | None = None) -> bool:
     """True when every changed line in a file carries a release version string."""
     if not versions:
         return False
-    diff = git_output(repo, ["diff", "--unified=0", f"{previous}..{tag}", "--", path]) or ""
+    before = git_output(repo, ["show", f"{previous}:{previous_path or path}"])
+    after = git_output(repo, ["show", f"{tag}:{path}"])
+    if before is None or after is None:
+        return False
+    diff = "\n".join(difflib.unified_diff(before.splitlines(), after.splitlines(), n=0))
     changed = [
         line for line in diff.splitlines()
         if line[:1] in {"+", "-"} and not line.startswith(("+++", "---"))
@@ -2059,11 +2288,29 @@ def changelog_section(text: str, version: str) -> str | None:
     return "\n".join(lines[start:end])
 
 
+def distribution_core(repo: Path) -> Path:
+    """New plugin source layout, with read compatibility for historical tags."""
+    core = repo / "skills" / "anti-dark-code"
+    return core if core.exists() or (repo / "plugin.json").exists() else repo / "anti-dark-code"
+
+
+def load_packaging_helper() -> Any:
+    # Load the reviewed helper beside this verifier, never code from the tag.
+    path = SKILL_ROOT / "scripts" / "adc_packaging.py"
+    spec = importlib.util.spec_from_file_location("adc_packaging", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("plugin packaging helper unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def release_check(
     repo: Path,
     tag: str,
     expect_core_digest: str | None = None,
     previous_tag: str | None = None,
+    host_checks: bool = False,
 ) -> dict[str, Any]:
     """Gate a release on its own tag rather than on the working tree that produced it.
 
@@ -2082,6 +2329,9 @@ def release_check(
         "digest_match": None,
         "distribution_valid": None,
         "distribution_errors": [],
+        "packaging_valid": None,
+        "packaging_errors": [],
+        "host_checks": [],
         "undescribed_files": [],
         "errors": [],
         "ok": False,
@@ -2104,9 +2354,9 @@ def release_check(
             findings["errors"].append(f"could not read the tag archive: {exc.__class__.__name__}")
             return findings
 
-        core = extract / "anti-dark-code"
+        core = distribution_core(extract)
         if not (core / "VERSION").exists():
-            findings["errors"].append("the tag does not contain a distributable core at anti-dark-code/")
+            findings["errors"].append("the tag does not contain a distributable core at skills/anti-dark-code/ or legacy anti-dark-code/")
             return findings
 
         findings["core_digest"] = core_digest(managed_source_files(core))
@@ -2116,6 +2366,13 @@ def release_check(
         errors, _warnings = validate_skill(core, "distribution")
         findings["distribution_valid"] = not errors
         findings["distribution_errors"] = list(errors)
+
+        if core.parent.name == "skills":
+            packaging_errors = load_packaging_helper().validate_package(extract)
+            findings["packaging_valid"] = not packaging_errors
+            findings["packaging_errors"] = packaging_errors
+            if host_checks and not packaging_errors and not errors:
+                findings["host_checks"] = load_packaging_helper().check_hosts(extract)
 
         version = (core / "VERSION").read_text(encoding="utf-8").strip()
         findings["version"] = version
@@ -2127,23 +2384,32 @@ def release_check(
             previous = previous_tag or git_output(repo, ["describe", "--tags", "--abbrev=0", f"{tag}^"])
             findings["previous_tag"] = previous
             if previous:
+                previous_prefix = "skills/anti-dark-code"
+                previous_core_version = git_output(repo, ["show", f"{previous}:{previous_prefix}/VERSION"])
+                if previous_core_version is None:
+                    previous_prefix = "anti-dark-code"
+                    previous_core_version = git_output(repo, ["show", f"{previous}:{previous_prefix}/VERSION"])
+                current_prefix = core.relative_to(extract).as_posix()
                 changed = git_output(
-                    repo,
-                    ["diff", "--name-only", f"{previous}..{tag}", "--",
-                     "anti-dark-code/references", "anti-dark-code/assets"],
+                    repo, ["diff", "--name-only", f"{previous}..{tag}", "--",
+                           "anti-dark-code/references", "anti-dark-code/assets",
+                           "skills/anti-dark-code/references", "skills/anti-dark-code/assets"],
                 ) or ""
-                previous_version = None
-                previous_core_version = git_output(repo, ["show", f"{previous}:anti-dark-code/VERSION"])
-                if previous_core_version:
-                    previous_version = previous_core_version.strip()
-                version_tokens = {token for token in (version, previous_version) if token}
-                for path in sorted({line.strip() for line in changed.splitlines() if line.strip()}):
-                    relative = path.split("anti-dark-code/", 1)[-1]
+                version_tokens = {token for token in (version, previous_core_version) if token}
+                relatives = {line.split("anti-dark-code/", 1)[-1]
+                             for line in changed.splitlines() if line.strip()}
+                for relative in sorted(relatives):
+                    before_path = f"{previous_prefix}/{relative}"
+                    after_path = f"{current_prefix}/{relative}"
+                    before = git_bytes(repo, ["show", f"{previous}:{before_path}"])
+                    after = git_bytes(repo, ["show", f"{tag}:{after_path}"])
+                    # A path-only move is documented once in MIGRATION.md; it
+                    # must not hide any substantive edit made during that move.
+                    if before is not None and before == after:
+                        continue
                     if relative in section or Path(relative).name in section:
                         continue
-                    # A mechanical version bump is not a change the notes owe the
-                    # reader; flagging it would train reviewers to ignore this gate.
-                    if only_version_churn(repo, previous, tag, path, version_tokens):
+                    if only_version_churn(repo, previous, tag, after_path, version_tokens, before_path):
                         continue
                     findings["undescribed_files"].append(relative)
 
@@ -2151,6 +2417,8 @@ def release_check(
         not findings["errors"]
         and not findings["undescribed_files"]
         and bool(findings["distribution_valid"])
+        and findings["packaging_valid"] is not False
+        and not any(check["status"] == "failed" for check in findings["host_checks"])
         and findings["digest_match"] is not False
     )
     return findings
@@ -4225,6 +4493,12 @@ def validate_skill(skill: Path, mode: str = "auto") -> tuple[list[str], list[str
     return errors, warnings
 
 
+def print_profile_warnings(profile: Mapping[str, Any]) -> None:
+    scan = profile.get("scan") if isinstance(profile.get("scan"), Mapping) else {}
+    for path in scan.get("unparsed_manifests") or []:
+        print(f"WARN manifest could not be parsed; its scripts were not read: {path}")
+
+
 def command_probe(args: argparse.Namespace) -> int:
     repo = Path(args.repo).expanduser().resolve()
     profile = probe_repo(
@@ -4243,6 +4517,7 @@ def command_probe(args: argparse.Namespace) -> int:
         print(f"PROFILE types={','.join(profile['repo_types'])} source_files={profile['counts']['source_files']} tests={profile['counts']['test_like_files']} manifests={len(profile['manifests'])} signals={','.join(present)}")
         if not profile["scan"]["complete"]:
             print("LIMIT: file scan was partial")
+        print_profile_warnings(profile)
     return 0
 
 
@@ -4315,6 +4590,7 @@ def command_plan(args: argparse.Namespace) -> int:
         print("PLAN " + " ".join(f"{k}={v}" for k, v in summary.items()) + f" primary={plan['primary_repo_type']}")
         for cap in plan["capabilities"]:
             print(f"  {cap['id']} {cap['status']}: {cap['name']} - {cap['reason']}")
+        print_profile_warnings(profile)
     return 0
 
 
@@ -4430,6 +4706,7 @@ def command_bootstrap(args: argparse.Namespace) -> int:
         )
         print(json.dumps(install_plan, indent=2))
         print("DRY RUN: bootstrap did not write or execute repo code. Add --apply to install and generate calibration.")
+        print_profile_warnings(profile)
         return 0
     print(json.dumps(install_plan, indent=2))
     profile = probe_repo(
@@ -4445,6 +4722,7 @@ def command_bootstrap(args: argparse.Namespace) -> int:
     print(f"WROTE {plan_path}")
     print(f"UPDATED {gate_path} with {added} gate proposal change(s)")
     print("No repo code was executed and no dependency was installed.")
+    print_profile_warnings(profile)
     return 0
 
 
@@ -4565,7 +4843,7 @@ def command_flowback(args: argparse.Namespace) -> int:
 
 def command_validate_incoming(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
-    skill = Path(args.skill) if args.skill else repo / "anti-dark-code"
+    skill = Path(args.skill) if args.skill else distribution_core(repo)
     errors, paths = validate_incoming(
         repo,
         skill,
@@ -4682,6 +4960,7 @@ def command_release_check(args: argparse.Namespace) -> int:
         args.tag,
         expect_core_digest=args.expect_core_digest,
         previous_tag=args.previous_tag,
+        host_checks=getattr(args, "host_checks", False),
     )
     print(json.dumps(findings, indent=2))
     if findings["ok"]:
@@ -5107,6 +5386,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tag", required=True)
     p.add_argument("--expect-core-digest")
     p.add_argument("--previous-tag")
+    p.add_argument("--host-checks", action="store_true", help="Run available read-only plugin validators on the extracted tag")
     p.set_defaults(func=command_release_check)
 
     p = sub.add_parser("validate", help="Validate a distribution, live universal core, or installed repo copy")

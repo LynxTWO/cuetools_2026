@@ -19,7 +19,16 @@ The test for the class is the falsifying input: name the concrete, producible in
 
 Sweep the whole verification surface once the class is named, and re-sweep after remediating it.
 
-The exception is a deliberate restatement of a property already proven elsewhere. Such a restatement must cite the probe that proves it, at the restatement. Deterministic gates share this rule; see the gate-authoring cautions in `14-deterministic-verification.md`.
+The exception is a deliberate restatement of a property already proven elsewhere. Such a restatement must cite the probe that proves it, at the restatement. Deterministic gates share this rule; see the local cautions in [the exact gate contract](specialist-exact-gate-contract.md).
+
+## Effects slower than the test window
+
+A change whose observable effect takes longer than any test or engine window (a decay, a cooldown, a clamped catch-up pass, a multi-day horizon) leaves every gate green. That reads as "nothing changed" when nothing could have been seen, so a byte-identical suite does not prove the change is inert. Gather two kinds of evidence and say which one carries the claim:
+
+- assert the intermediate values the change actually moves, so the cause is checked inside the window;
+- where chaining is affordable, run one long-horizon probe past the window's clamp and diff it against the parent to observe the effect at least once.
+
+Where the long run is not affordable, the intermediate assertions are the whole proof; state that.
 
 ## Canonical output
 
@@ -27,8 +36,8 @@ Ordering keyed on a parsed or normalized value is not total over raw representat
 
 ## Equality and handoffs
 
-Collection-bearing records may compare references instead of contents. Compare canonical serialized forms or elements; retain a structurally equal, reference-distinct fixture. Child process/container/shell results must cross the boundary as an artifact, exit code, or serialized stream. Prove the handoff fails when its artifact is missing.
+Collection-bearing equality and child-context handoff follow the cautions in [the exact gate contract](specialist-exact-gate-contract.md). For falsifiability, retain a structurally equal, reference-distinct fixture, and prove the handoff fails when its artifact is missing.
 
 Detector thresholds need clean and known-bad fixtures, a documented separating rationale, and a positive fixture that crosses the threshold. Review threshold changes as behavior changes.
 
-Result: every check has a concrete producible falsifier, negative fixtures exercise comparisons and missing handoffs, and canonical-output tests include equal parsed values with distinct raw forms.
+Result: every check has a concrete producible falsifier, slow effects are shown through their cause or a long-horizon probe, negative fixtures exercise comparisons and missing handoffs, and canonical-output tests include equal parsed values with distinct raw forms.
