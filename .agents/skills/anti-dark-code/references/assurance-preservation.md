@@ -4,8 +4,6 @@ Trigger: repair, import, migration, multi-file generation, or output publication
 
 Apply the [core contract](../SKILL.md) and [evidence rules](../SKILL.md#evidence). This recipe inherits the active task and grants no additional authority.
 
-Use this section for repair, import, output publication, multi-file generation, migrations, or any operation advertised as atomic.
-
 - Resolve canonical source, stage, quarantine, backup, and destination paths. Enforce containment and reject traversal or link-like surprises where the threat model requires it.
 - State the coordination domain: thread, process, session, host, or shared filesystem. A process-local lock does not serialize another process that reaches the same resource.
 - Inventory every shared physical resource, setting, cache, history record, log, stage, and destination. Require identity-bound ownership, same-resource denial, independent cancellation, crash release, and collision-safe publication before claiming safe parallel work.
@@ -23,6 +21,7 @@ Use this section for repair, import, output publication, multi-file generation, 
 - Bound stored and decoded or expanded bytes before parsing. Validate the complete object graph before republishing it.
 - Write completion markers after validation. Publish into an absent destination with the platform's proven atomic primitive.
 - Never replace a pre-existing destination by name alone. Require an ownership receipt that binds the exact tree.
+- When destination identity protects writes, bind them to a verified held directory handle or platform equivalent. Prove the actual child retains and uses that binding; test replacement or unmount after validation, including tools that recreate missing paths on another filesystem.
 - Write a recovery journal before moving an owned destination aside. Bind stage, backup, cleanup, and journal actions to one transaction token; validate publication before deleting backup.
 - Name the commit point. Cleanup, callbacks, reservation release, and diagnostics after it must not reclassify success as failure.
 - Preserve source and independent evidence on failure or cancellation. Remove only owned incomplete state.

@@ -10,7 +10,7 @@ Claim or changed behavior, source identity, runtime/platform tuple, test and con
 
 1. Inspect existing gates and dependencies. Prefer a deterministic check that can falsify the claim. A configured script proves configuration only. Confirm test discovery and path reachability before interpreting green output.
 2. When trusted bundled tooling is available and useful, use read-only `scripts/adc.py plan --repo <target>` from the skill directory. It screens the machine catalog. Comprehensive plans reconcile every catalog ID and disposition; inspect selected/candidate entries and risk-material exclusions. Focused tasks state their smaller claim and omitted capabilities. Static planning cannot discover every runtime obligation.
-3. Load [verification planning](../14-deterministic-verification.md) for capability selection or gate plans, [maintenance harness](../10-maintenance-harness.md) when defining a harness, and the matching [assurance contract](../assurance-contracts.md) before accepting broader guarantees such as atomicity, availability, repair, readiness, or audited-set completeness.
+3. Load [verification planning](../14-deterministic-verification.md) for capability selection or gate plans, [maintenance harness](../10-maintenance-harness.md) when defining a harness, and the matching [assurance contract](../assurance-contracts.md) before accepting broader guarantees such as atomicity, availability, repair, readiness, or audited-set completeness. Bound each guarantee by its [consequence class](../proportionality.md).
 4. If prerequisites are unavailable, inspect manifests, tests, and target branches manually. Name missing Python/runtime/SDK/permission/format and unperformed checks. Installation is not required to plan. Missing observations leave live claims inferred or unknown.
 5. Before repository execution, inspect exact argv, working directory, environment, input paths, dependency hooks, network/persistent effects, and timeout/cleanup. Bind review to current command and source. Carry existing authorization while bindings match; otherwise propose the concrete command and stop for missing execution or protected-effect approval.
 6. Preserve dry-run defaults and approval locks. Existing `route` selects verification for a change and binds evidence to a receipt; it is not a task-card selector. Unknown impact requires conservative checks. Do not enable selective execution merely to shorten a run.
@@ -18,9 +18,17 @@ Claim or changed behavior, source identity, runtime/platform tuple, test and con
 
 ## Evidence and output
 
+For product journeys verify truthful status, consent/refusal, relevant keyboard
+and assistive-technology interaction, recoverable mistakes and exit/data-control
+paths. Tie these obligations to the [product contract](../../assets/templates/product-contract.md)
+and existing capabilities. Keep static, simulated, browser, device, participant
+and provider evidence distinct; one cannot silently substitute for another.
+
 Return proposed and executed commands separately, capability dispositions, tested scope, observations, limits, and next checks. Cite obligation-specific evidence and source identity for guarantees. Record unavailable targets instead of extrapolating across hosts. Managed wrappers cannot prove native behavior without reaching the native implementation.
 
 Keep exploration reproducible with a seed or trace and named oracle. Preserve mutation restoration and cleanup evidence. A hash or receipt binds recorded inputs; it is neither an owner signature nor correctness proof.
+
+For expensive property suites, distinguish requested case counts, observed valid cases, rejected inputs and completed properties. Confirm configuration precedence in the pinned runner instead of assuming an environment override won or lost. Diagnose setup/constructor cost separately from per-case work before changing the test domain. A budget stop leaves unfinished properties incomplete; retained partial successes do not turn the suite green. Generate eligible inputs directly only when the original relation and separate edge-case coverage remain intact.
 
 ## Stop conditions
 
